@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AUTOCARE System Planning Deliverable</title>
+  <style>
+    :root {
+      --bg: #f5efe6;
+      --surface: rgba(255, 251, 245, 0.92);
+      --surface-strong: #fffdf8;
+      --ink: #2d221d;
+      --muted: #69584d;
+      --line: #d7c5b3;
+      --accent: #b3541e;
+      --accent-soft: #f4d7bf;
+      --main: #14532d;
+      --main-soft: #d8f3dc;
+      --commerce: #1d4ed8;
+      --commerce-soft: #dbeafe;
+      --queue: #7c3aed;
+      --queue-soft: #ede9fe;
+      --warn: #92400e;
+      --warn-soft: #fde68a;
+      --shadow: 0 18px 45px rgba(45, 34, 29, 0.12);
+      --radius-lg: 24px;
+      --radius-md: 18px;
+      --radius-sm: 12px;
+      --mono: "Cascadia Code", "Fira Code", Consolas, monospace;
+      --sans: "Segoe UI", "Trebuchet MS", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(179, 84, 30, 0.16), transparent 28%),
+        radial-gradient(circle at top right, rgba(29, 78, 216, 0.1), transparent 24%),
+        linear-gradient(180deg, #fbf5ee 0%, #f3eadf 100%);
+      min-height: 100vh;
+    }
+
+    .shell { width: min(1480px, calc(100% - 32px)); margin: 24px auto 36px; }
+    .hero {
+      background: linear-gradient(140deg, rgba(255, 252, 247, 0.95), rgba(250, 240, 228, 0.9));
+      border: 1px solid rgba(215, 197, 179, 0.9);
+      border-radius: 30px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -8% -40% auto;
+      width: 360px;
+      height: 360px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(20, 83, 45, 0.14), transparent 65%);
+      pointer-events: none;
+    }
+    .hero-grid { display: grid; grid-template-columns: 1.65fr 1fr; gap: 28px; padding: 34px; }
+    .eyebrow {
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+    h1, h2, h3 { margin: 0 0 12px; line-height: 1.08; }
+    h1 { font-size: clamp(2.2rem, 4vw, 4rem); letter-spacing: -0.04em; max-width: 13ch; }
+    h2 { font-size: 1.6rem; letter-spacing: -0.03em; }
+    h3 { font-size: 1.05rem; letter-spacing: -0.02em; }
+    p { margin: 0 0 12px; line-height: 1.7; color: var(--muted); }
+    .hero p { font-size: 1.02rem; max-width: 70ch; }
+    .pill-row, .chip-row, .tag-row, .legend, .tabs { display: flex; gap: 10px; flex-wrap: wrap; }
+    .pill, .chip, .tag, .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+    .pill, .chip, .tag { padding: 9px 14px; font-size: 0.9rem; }
+    .badge { padding: 7px 10px; font-size: 0.77rem; font-weight: 800; }
+    .pill.main, .badge.main { background: var(--main-soft); color: var(--main); border-color: rgba(20, 83, 45, 0.14); }
+    .pill.commerce, .badge.commerce { background: var(--commerce-soft); color: var(--commerce); border-color: rgba(29, 78, 216, 0.16); }
+    .pill.queue, .badge.queue { background: var(--queue-soft); color: var(--queue); border-color: rgba(124, 58, 237, 0.16); }
+    .pill.warn { background: var(--warn-soft); color: var(--warn); border-color: rgba(146, 64, 14, 0.16); }
+    .stat-card, .panel, .entity, .flow-step, .note, .snippet {
+      background: var(--surface);
+      border: 1px solid rgba(215, 197, 179, 0.9);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 10px 24px rgba(45, 34, 29, 0.06);
+    }
+    .stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .stat-card { padding: 18px; }
+    .stat-card strong { display: block; font-size: 1.85rem; line-height: 1; margin-bottom: 8px; color: var(--ink); }
+    .tabs { margin: 22px 0 18px; }
+    .tab-button {
+      border: 1px solid rgba(215, 197, 179, 0.95);
+      background: rgba(255, 251, 245, 0.72);
+      border-radius: 999px;
+      padding: 12px 16px;
+      color: var(--muted);
+      font-weight: 800;
+      cursor: pointer;
+      transition: 160ms ease;
+    }
+    .tab-button:hover, .tab-button:focus-visible { transform: translateY(-1px); border-color: rgba(179, 84, 30, 0.5); outline: none; }
+    .tab-button.active {
+      background: linear-gradient(135deg, #b3541e, #d97706);
+      color: #fffdf8;
+      border-color: transparent;
+      box-shadow: 0 12px 26px rgba(179, 84, 30, 0.22);
+    }
+    .tab-panel { display: none; animation: rise 220ms ease; }
+    .tab-panel.active { display: block; }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .panel { padding: 24px; margin-bottom: 18px; }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .grid-2, .grid-3, .grid-4 { display: grid; gap: 16px; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card {
+      background: rgba(255, 253, 248, 0.88);
+      border: 1px solid rgba(215, 197, 179, 0.8);
+      border-radius: var(--radius-md);
+      padding: 18px;
+    }
+    ul, ol { margin: 0; padding-left: 18px; color: var(--muted); }
+    li { margin-bottom: 8px; line-height: 1.6; }
+    .domain-band { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 16px; }
+    .domain-box {
+      padding: 20px;
+      border-radius: 22px;
+      border: 1px solid rgba(215, 197, 179, 0.85);
+      background: rgba(255, 251, 245, 0.88);
+    }
+    .domain-box.main { background: linear-gradient(180deg, rgba(216, 243, 220, 0.58), rgba(255, 255, 255, 0.82)); }
+    .domain-box.commerce { background: linear-gradient(180deg, rgba(219, 234, 254, 0.62), rgba(255, 255, 255, 0.82)); }
+    .flow-column { position: relative; }
+    .flow-column::before {
+      content: "";
+      position: absolute;
+      top: 14px;
+      bottom: 14px;
+      left: 16px;
+      width: 2px;
+      background: linear-gradient(180deg, rgba(179, 84, 30, 0.28), rgba(179, 84, 30, 0.05));
+    }
+    .flow-step { position: relative; padding: 18px 18px 18px 44px; margin-bottom: 14px; }
+    .flow-step::before {
+      content: "";
+      position: absolute;
+      left: 10px;
+      top: 22px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 6px rgba(179, 84, 30, 0.14);
+    }
+    .flow-step h3 { margin-bottom: 8px; }
+    .svg-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: 22px;
+      border: 1px solid rgba(215, 197, 179, 0.85);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(249, 241, 232, 0.78));
+      padding: 12px;
+    }
+    svg { width: 100%; height: auto; display: block; min-width: 980px; font-family: var(--sans); }
+    .entity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .entity { padding: 18px; }
+    .entity h3 { margin-bottom: 8px; }
+    .entity code, .note code, .snippet code {
+      font-family: var(--mono);
+      background: rgba(45, 34, 29, 0.06);
+      padding: 2px 6px;
+      border-radius: 8px;
+      color: var(--ink);
+      font-size: 0.92em;
+    }
+    .entity ul { margin-top: 10px; }
+    .table-wrap { overflow-x: auto; border-radius: 18px; border: 1px solid rgba(215, 197, 179, 0.85); }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; background: rgba(255, 253, 248, 0.92); }
+    th, td { padding: 14px 16px; border-bottom: 1px solid rgba(215, 197, 179, 0.75); text-align: left; vertical-align: top; line-height: 1.6; }
+    th { background: rgba(244, 215, 191, 0.42); color: var(--ink); font-size: 0.84rem; text-transform: uppercase; letter-spacing: 0.08em; }
+    tr:last-child td { border-bottom: none; }
+    .note, .snippet { padding: 18px; overflow: hidden; }
+    pre {
+      margin: 14px 0 0;
+      padding: 16px;
+      border-radius: 18px;
+      background: #201a18;
+      color: #fef7ed;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+    .foot { padding: 20px 8px 0; text-align: center; color: var(--muted); font-size: 0.92rem; }
+    @media (max-width: 1100px) {
+      .hero-grid, .grid-2, .grid-3, .grid-4, .entity-grid, .domain-band { grid-template-columns: 1fr; }
+      .shell { width: min(100% - 20px, 1480px); }
+    }
+    @media (max-width: 720px) {
+      .hero-grid, .panel, .hero { padding: 0; }
+      .hero-grid { padding: 24px; }
+      h1 { max-width: none; }
+      .tab-button { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="hero-grid">
+        <div>
+          <div class="eyebrow">System Planning Deliverable</div>
+          <h1>AUTOCARE Service Management and Customer Engagement System</h1>
+          <p>
+            This standalone planning page is based primarily on the updated AUTOCARE paper for Cruisers Crib Auto Care Center. It translates
+            the paper into an implementation-ready product map covering service management, customer engagement, integrated vehicle lifecycle
+            tracking, e-commerce ordering, insurance inquiry tracking, administrative monitoring, and technical architecture for a NestJS +
+            Drizzle + PostgreSQL + NextJS stack.
+          </p>
+          <div class="pill-row">
+            <span class="pill main">Main Service: service, lifecycle, insurance, admin</span>
+            <span class="pill commerce">E-Commerce Service: product, inventory, invoice orders</span>
+            <span class="pill queue">BullMQ + RabbitMQ event ecosystem</span>
+            <span class="pill warn">Paper-aligned limits: tracking-focused, no automated payment verification</span>
+          </div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card"><strong>13</strong><p>Major feature groups covered including inspections and back jobs.</p></div>
+          <div class="stat-card"><strong>44+</strong><p>Explicit entities captured in the ERD coverage model.</p></div>
+          <div class="stat-card"><strong>2</strong><p>Backend domains with separated ownership and integration events.</p></div>
+          <div class="stat-card"><strong>7</strong><p>Documentation tabs in one self-contained HTML artifact.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="tabs" role="tablist" aria-label="Planning tabs">
+      <button class="tab-button active" role="tab" aria-selected="true" aria-controls="overview" data-tab="overview">Overview</button>
+      <button class="tab-button" role="tab" aria-selected="false" aria-controls="flow" data-tab="flow">System Flow</button>
+      <button class="tab-button" role="tab" aria-selected="false" aria-controls="erd" data-tab="erd">ERD</button>
+      <button class="tab-button" role="tab" aria-selected="false" aria-controls="use-cases" data-tab="use-cases">Use Case Diagram</button>
+      <button class="tab-button" role="tab" aria-selected="false" aria-controls="architecture" data-tab="architecture">Architecture</button>
+      <button class="tab-button" role="tab" aria-selected="false" aria-controls="notes" data-tab="notes">Detailed Notes</button>
+      <button class="tab-button" role="tab" aria-selected="false" aria-controls="snippets" data-tab="snippets">Implementation Snippets</button>
+    </div>
+
+    <main>
+      <!-- OVERVIEW -->
+      <section id="overview" class="tab-panel active" role="tabpanel">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Business Scope and Platform Framing</h2>
+              <p>The updated paper frames the system as a service management and customer engagement platform centered on vehicle-based lifecycle tracking. The primary value lies in booking management, service and insurance monitoring, customer interaction, product ordering, inventory visibility, and decision support through a centralized platform.</p>
+            </div>
+            <div class="legend">
+              <span class="badge main">Main Service Ownership</span>
+              <span class="badge commerce">E-Commerce Ownership</span>
+              <span class="badge queue">Async / Integration Layer</span>
+            </div>
+          </div>
+
+          <div class="grid-3">
+            <div class="card">
+              <h3>Primary Objective</h3>
+              <p>Streamline service operations, enhance customer interaction, and improve business efficiency through centralized booking, product transactions, insurance inquiries, and vehicle-based record monitoring.</p>
+            </div>
+            <div class="card">
+              <h3>Core System Lens</h3>
+              <p>Use a vehicle-centric model so service history, bookings, and insurance-related transactions appear in a unified timeline for both administrators and customers.</p>
+            </div>
+            <div class="card">
+              <h3>Critical Principle</h3>
+              <p>Use explicit service ownership. The main service may aggregate or proxy e-commerce data to the frontend, but products, inventory, invoice orders, and payment tracking state remain under the e-commerce backend.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Feature Map From the TXT File</h2>
+              <p>Every feature below is represented again in the flow, use cases, ERD, and architecture sections.</p>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="domain-box main">
+              <h3>Main Service Feature Groups</h3>
+              <ul>
+                <li>Customer account management with profile and vehicle records</li>
+                <li>Integrated vehicle lifecycle tracking with service history, bookings, insurance activities, and verified inspection milestones in one timeline</li>
+                <li>Auto-care service booking with service selection, time slots, and appointment status tracking</li>
+                <li>Vehicle inspection management for intake, pre-repair, completion, and return/back-job verification</li>
+                <li>Insurance inquiry and tracking with optional uploads and quotation progress monitoring</li>
+                <li>Smart reminders for booking updates, service schedules, and insurance renewals</li>
+                <li>Loyalty and rewards with point accrual, balances, and redemptions</li>
+                <li>Administrative dashboard and analytics for bookings, customer activity, service trends, and inquiry status</li>
+                <li>Appointment and job monitoring aligned with the existing job order and job board workflow</li>
+                <li>Back job management for return/rework cases linked to original service or repair work</li>
+                <li>Rule-based chatbot for customer inquiries with guided responses</li>
+              </ul>
+            </div>
+            <div class="domain-box commerce">
+              <h3>E-Commerce Feature Groups</h3>
+              <ul>
+                <li>Product browsing and filtering for car care items</li>
+                <li>Cart management, invoice-based checkout lifecycle, and purchase history</li>
+                <li>Order tracking with payment monitoring limited to statuses such as pending, partial, and paid</li>
+                <li>Inventory management for automotive products and service-related materials</li>
+                <li>Order-completed events published back to the main service for loyalty, analytics, and customer activity aggregation</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Core Assumptions</h2>
+              <p>These assumptions shape the proposed architecture and data model.</p>
+            </div>
+          </div>
+          <div class="grid-4">
+            <div class="note">
+              <h3>Inspection-Backed Accuracy</h3>
+              <p>Vehicle lifecycle entries may be system-generated for transactional events, but condition-sensitive milestones should be backed by staff inspection records so the timeline remains credible.</p>
+            </div>
+            <div class="note">
+              <h3>Job Monitoring Scope</h3>
+              <p>The system monitors service progress in line with the existing job order and job board workflow. It does not replace the client’s established operational process with autonomous job-order generation.</p>
+            </div>
+            <div class="note">
+              <h3>Insurance Boundaries</h3>
+              <p>The insurance module supports quotation inquiry intake and tracking. It does not directly integrate with insurance providers, generate policies, or automate approvals.</p>
+            </div>
+            <div class="note">
+              <h3>Payment Boundaries</h3>
+              <p>E-commerce payment handling is invoice-based and tracking-focused. The system monitors statuses such as pending, partial, and paid, without automated verification or bank integration.</p>
+            </div>
+            <div class="note">
+              <h3>Platform Split</h3>
+              <p>The system remains a web-based administrative platform plus a customer-facing mobile application. Operational analytics come from the main domain, while commerce summaries arrive through service APIs or events.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FLOW -->
+      <section id="flow" class="tab-panel" role="tabpanel">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>End-to-End System Flow</h2>
+              <p>The flow below now follows the updated paper plus the approved update for inspection-backed lifecycle accuracy and back-job handling.</p>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="flow-column">
+              <div class="flow-step">
+                <h3>1. Account Creation and Customer Profile Setup</h3>
+                <p>User registers, logs in, fills profile details, and adds one or more vehicles with plate number, type, and model. These become the base context for service history, booking records, insurance activity, and personalized vehicle lifecycle monitoring.</p>
+              </div>
+              <div class="flow-step">
+                <h3>2. Service Discovery and Booking Creation</h3>
+                <p>Customer browses available auto-care services such as car wash, detailing, and PMS, selects the target vehicle, chooses real-time or scheduled booking, and reserves a time slot.</p>
+              </div>
+              <div class="flow-step">
+                <h3>3. Booking Validation and Confirmation</h3>
+                <p>Main service validates slot availability, records the booking, stores selected services, and issues confirmation. A booking status history entry is written for traceability, while the vehicle lifecycle timeline is updated with the new administrative milestone.</p>
+              </div>
+              <div class="flow-step">
+                <h3>4. Intake Inspection and Job Monitoring</h3>
+                <p>When the vehicle arrives, staff can record an intake inspection to verify the vehicle&apos;s actual condition, complaint context, and service scope. Admin or staff then monitors service progress in alignment with the existing job order and job board workflow.</p>
+              </div>
+              <div class="flow-step">
+                <h3>5. Reminder and Notification Triggering</h3>
+                <p>Once a booking is confirmed, background jobs schedule email and SMS reminders. Separate rules also generate insurance renewal alerts and service reminders based on vehicle history and previous transactions.</p>
+              </div>
+              <div class="flow-step">
+                <h3>6. Completion Inspection and Loyalty Accrual</h3>
+                <p>Before the work is treated as fully verified, staff can record a completion inspection. After that, the booking status is updated, customer activity is logged, points are credited to the loyalty account, and the vehicle timeline is extended with a verified completion event.</p>
+              </div>
+            </div>
+
+            <div class="flow-column">
+              <div class="flow-step">
+                <h3>7. Insurance Inquiry Intake</h3>
+                <p>Customer can submit insurance quotation requests with optional document uploads. The inquiry moves through tracking statuses while uploaded files are linked and auditable, without requiring direct insurer integration.</p>
+              </div>
+              <div class="flow-step">
+                <h3>8. Vehicle Lifecycle Tracking Access</h3>
+                <p>Both customer and admin can view a consolidated vehicle timeline that combines service history, booking records, insurance-related activities, and inspection-backed condition milestones in one organized record-monitoring view.</p>
+              </div>
+              <div class="flow-step">
+                <h3>9. Back Job Intake and Return Inspection</h3>
+                <p>If a customer returns after a repair or service, staff can open a back job linked to the original work, inspect the returning issue, determine whether it is related rework or a new concern, and track resolution status through the same operational workflow.</p>
+              </div>
+              <div class="flow-step">
+                <h3>10. Chatbot-Guided Inquiry Handling</h3>
+                <p>The customer-facing side includes a rule-based chatbot that responds to common service, booking, insurance, back-job, and product questions using guided flows rather than AI-generated answers.</p>
+              </div>
+              <div class="flow-step">
+                <h3>11. E-Commerce Order Journey</h3>
+                <p>Customer browses products, adds items to cart, generates an invoice-based order, tracks the order, and later reviews purchase history. The e-commerce service owns products, carts, orders, payment-status tracking, and inventory data.</p>
+              </div>
+              <div class="flow-step">
+                <h3>12. Inventory and Payment Tracking Updates</h3>
+                <p>Order creation updates inventory reservations and creates payment-tracking records with invoice-oriented states such as pending, partial, and paid. Manual verification and manager-side confirmation may still exist outside full automation.</p>
+              </div>
+              <div class="flow-step">
+                <h3>13. Admin Dashboard and Reporting</h3>
+                <p>Dashboard views combine booking volumes, customer activity, service trends, inquiry workload, inspection turnaround, back-job counts, repeat issues, and commerce summaries. Aggregation jobs can run asynchronously to keep read performance stable.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Flow Coverage Matrix</h2>
+              <p>This matrix shows where each TXT requirement lands in the operational flow.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>TXT Feature</th>
+                  <th>Main Flow Touchpoints</th>
+                  <th>Primary Data Ownership</th>
+                  <th>Async / Event Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Customer Account Management</td>
+                  <td>Registration, login, profile setup, vehicle CRUD, history access</td>
+                  <td>Main service</td>
+                  <td>Triggers welcome notifications and starts vehicle-centric history</td>
+                </tr>
+                <tr>
+                  <td>Auto-Care Service Booking</td>
+                  <td>Service selection, time slot reservation, status tracking, confirmations, and linked inspection points</td>
+                  <td>Main service</td>
+                  <td>BullMQ handles reminder scheduling and appointment follow-up jobs</td>
+                </tr>
+                <tr>
+                  <td>Vehicle Inspection Management</td>
+                  <td>Intake inspection, pre-repair assessment, completion verification, return/back-job inspection</td>
+                  <td>Main service</td>
+                  <td>Inspection completion can refresh verified lifecycle events</td>
+                </tr>
+                <tr>
+                  <td>E-Commerce Module</td>
+                  <td>Catalog browsing, cart, invoice checkout, order tracking, purchase history</td>
+                  <td>E-commerce service</td>
+                  <td>RabbitMQ publishes order lifecycle events to other services</td>
+                </tr>
+                <tr>
+                  <td>Insurance Inquiry Management</td>
+                  <td>Quotation inquiry form, upload, status monitoring, optional record view</td>
+                  <td>Main service</td>
+                  <td>Background reminders for renewals and pending follow-ups</td>
+                </tr>
+                <tr>
+                  <td>Reminder and Notification System</td>
+                  <td>Booking reminders, renewal alerts, service reminders, delivery logs</td>
+                  <td>Main service</td>
+                  <td>BullMQ processes scheduled notification jobs</td>
+                </tr>
+                <tr>
+                  <td>Loyalty and Rewards</td>
+                  <td>Points accumulation, reward redemption, tracking</td>
+                  <td>Main service</td>
+                  <td>Cross-domain purchase points are awarded via commerce events</td>
+                </tr>
+                <tr>
+                  <td>Admin Dashboard and Analytics</td>
+                  <td>Operational summaries, sales overview, peak-hour analysis</td>
+                  <td>Main service for read models</td>
+                  <td>Aggregation jobs and event-fed snapshots keep reports current</td>
+                </tr>
+                <tr>
+                  <td>Appointment and Job Monitoring</td>
+                  <td>Daily schedule, booking decisions, service progress monitoring</td>
+                  <td>Main service</td>
+                  <td>Operational progress refresh and SLA alerts can run as background workers</td>
+                </tr>
+                <tr>
+                  <td>Vehicle Lifecycle Tracking</td>
+                  <td>Unified service history, bookings, insurance timeline, and verified inspection milestones per vehicle</td>
+                  <td>Main service</td>
+                  <td>Read model can be recomputed after major transaction events</td>
+                </tr>
+                <tr>
+                  <td>Back Job Management</td>
+                  <td>Return/rework intake, inspection, status tracking, and closure linked to original work</td>
+                  <td>Main service</td>
+                  <td>Resolution and repeat-issue metrics can be aggregated asynchronously</td>
+                </tr>
+                <tr>
+                  <td>Chatbot for Inquiries</td>
+                  <td>Guided customer responses for service, product, and insurance questions</td>
+                  <td>Main service</td>
+                  <td>Rule-based response flows can be cached or preloaded</td>
+                </tr>
+                <tr>
+                  <td>Inventory Management</td>
+                  <td>Stock monitoring for products and service-related materials</td>
+                  <td>E-commerce service</td>
+                  <td>Inventory updates can emit low-stock or order-reserved events</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ERD -->
+      <section id="erd" class="tab-panel" role="tabpanel">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>ERD Overview</h2>
+              <p>This ERD representation captures the updated paper’s scope, grouped by service ownership. Cross-domain interactions are shown as integration events instead of direct foreign keys across service databases.</p>
+            </div>
+            <div class="legend">
+              <span class="badge main">Main Service Database</span>
+              <span class="badge commerce">E-Commerce Database</span>
+              <span class="badge queue">Event / Async Link</span>
+            </div>
+          </div>
+
+          <div class="svg-wrap">
+            <svg viewBox="0 0 1600 940" aria-label="High level ERD overview">
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c3aed"></path>
+                </marker>
+                <marker id="linearrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#7a685a"></path>
+                </marker>
+              </defs>
+
+              <rect x="24" y="24" width="760" height="892" rx="28" fill="#eefbf1" stroke="#14532d" stroke-width="2"/>
+              <text x="56" y="64" font-size="28" font-weight="800" fill="#14532d">Main Service Domain</text>
+
+              <rect x="816" y="24" width="760" height="892" rx="28" fill="#eff6ff" stroke="#1d4ed8" stroke-width="2"/>
+              <text x="848" y="64" font-size="28" font-weight="800" fill="#1d4ed8">E-Commerce Domain</text>
+
+              <g font-size="16" fill="#2d221d" font-weight="700">
+                <rect x="56" y="100" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="76" y="130">users</text><text x="76" y="155" font-weight="500">user_profiles, vehicles</text>
+                <rect x="300" y="100" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="320" y="130">bookings</text><text x="320" y="155" font-weight="500">booking_services, history</text>
+                <rect x="544" y="100" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="564" y="130">services</text><text x="564" y="155" font-weight="500">service_categories, time_slots</text>
+
+                <rect x="56" y="236" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="76" y="266">vehicle_timeline_events</text><text x="76" y="291" font-weight="500">service + insurance lifecycle</text>
+                <rect x="300" y="236" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="320" y="266">insurance_inquiries</text><text x="320" y="291" font-weight="500">documents, records</text>
+                <rect x="544" y="236" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="564" y="266">notifications</text><text x="564" y="291" font-weight="500">preferences, rules</text>
+
+                <rect x="56" y="372" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="76" y="402">loyalty_accounts</text><text x="76" y="427" font-weight="500">transactions, redemptions</text>
+                <rect x="300" y="372" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="320" y="402">vehicle_inspections</text><text x="320" y="427" font-weight="500">condition verification</text>
+                <rect x="544" y="372" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="564" y="402">customer_activity_logs</text><text x="564" y="427" font-weight="500">analytics feed</text>
+
+                <rect x="56" y="508" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="76" y="538">job_orders</text><text x="76" y="563" font-weight="500">service progress tracking</text>
+                <rect x="300" y="508" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="320" y="538">back_jobs</text><text x="320" y="563" font-weight="500">return / rework cases</text>
+                <rect x="544" y="508" width="210" height="82" rx="18" fill="#ffffff" stroke="#7bb68f"/><text x="564" y="538">audit_logs</text><text x="564" y="563" font-weight="500">file_uploads</text>
+
+                <rect x="868" y="130" width="230" height="86" rx="18" fill="#ffffff" stroke="#86a7f0"/><text x="888" y="162">products</text><text x="888" y="187" font-weight="500">product_categories, inventory_items</text>
+                <rect x="1140" y="130" width="230" height="86" rx="18" fill="#ffffff" stroke="#86a7f0"/><text x="1160" y="162">carts</text><text x="1160" y="187" font-weight="500">cart_items</text>
+                <rect x="1400" y="130" width="140" height="86" rx="18" fill="#ffffff" stroke="#86a7f0"/><text x="1420" y="162">addresses</text><text x="1420" y="187" font-weight="500">billing/delivery</text>
+
+                <rect x="948" y="300" width="230" height="86" rx="18" fill="#ffffff" stroke="#86a7f0"/><text x="968" y="332">orders</text><text x="968" y="357" font-weight="500">order_items, invoice_payments</text>
+                <rect x="1220" y="300" width="230" height="86" rx="18" fill="#ffffff" stroke="#86a7f0"/><text x="1240" y="332">purchase history</text><text x="1240" y="357" font-weight="500">derived from orders</text>
+
+                <rect x="918" y="520" width="460" height="120" rx="22" fill="#f4f0ff" stroke="#7c3aed" stroke-width="2"/><text x="948" y="565" fill="#7c3aed">Integration Events</text><text x="948" y="595" font-weight="500">order.completed, loyalty.points_requested, analytics.order_summary,</text><text x="948" y="620" font-weight="500">customer.activity.logged, inventory.low_stock</text>
+              </g>
+
+              <g stroke="#7a685a" stroke-width="2" fill="none" marker-end="url(#linearrow)">
+                <path d="M 266 142 L 300 142"/>
+                <path d="M 510 142 L 544 142"/>
+                <path d="M 405 182 L 405 236"/>
+                <path d="M 650 182 L 650 236"/>
+                <path d="M 161 182 L 161 236"/>
+                <path d="M 405 318 L 405 372"/>
+                <path d="M 161 318 L 161 372"/>
+                <path d="M 650 318 L 650 372"/>
+                <path d="M 405 454 L 405 508"/>
+                <path d="M 161 454 L 161 508"/>
+                <path d="M 650 454 L 650 508"/>
+                <path d="M 1098 173 L 1140 173"/>
+                <path d="M 1255 216 L 1255 300"/>
+                <path d="M 1470 216 L 1470 300"/>
+              </g>
+
+              <g stroke="#7c3aed" stroke-width="3" fill="none" marker-end="url(#arrow)">
+                <path d="M 754 413 C 830 413, 860 460, 960 520"/>
+                <path d="M 1178 386 C 1178 440, 1178 455, 1178 520"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Main Service Entities</h2>
+              <p>These entities cover all operational, customer, insurance, lifecycle, inspection, back-job, chatbot, notification, analytics, and job-monitoring requirements from the updated paper.</p>
+            </div>
+          </div>
+          <div class="entity-grid">
+            <div class="entity">
+              <span class="badge main">Main Service</span>
+              <h3><code>users</code>, <code>user_profiles</code>, <code>vehicles</code></h3>
+              <p>Core customer identity, profile data, and registered vehicle records.</p>
+              <ul>
+                <li><code>users</code>: credentials, role, auth state</li>
+                <li><code>user_profiles</code>: contact data, preferences, profile details</li>
+                <li><code>vehicles</code>: plate number, model, type, year, owner link</li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge main">Main Service</span>
+              <h3><code>service_categories</code>, <code>services</code>, <code>time_slots</code></h3>
+              <p>Catalog of service offerings and slot availability model for centralized service booking.</p>
+              <ul>
+                <li>Categories organize detailing, wash, PMS, and add-ons</li>
+                <li>Services hold price, duration, availability flags</li>
+                <li>Time slots hold date, capacity, bay/resource references</li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge main">Main Service</span>
+              <h3><code>bookings</code>, <code>booking_services</code>, <code>booking_status_history</code></h3>
+              <p>Structured scheduling backbone for all appointment activity and state transitions.</p>
+              <ul>
+                <li><code>bookings</code>: customer, vehicle, slot, status, source, notes</li>
+                <li><code>booking_services</code>: chosen services per booking</li>
+                <li><code>booking_status_history</code>: audit trail for confirmation, reschedule, completion, decline</li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge main">Main Service</span>
+              <h3><code>vehicle_timeline_events</code>, <code>vehicle_inspections</code></h3>
+              <p>Vehicle-centric consolidated tracking layer that unifies service history, booking records, insurance activities, and verified inspection-backed milestones.</p>
+              <ul>
+                <li><code>vehicle_timeline_events</code> stores timeline entries and verification flags</li>
+                <li><code>vehicle_inspections</code> stores intake, pre-repair, completion, and return inspections</li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge main">Main Service</span>
+              <h3><code>insurance_inquiries</code>, <code>insurance_documents</code>, <code>insurance_records</code></h3>
+              <p>Insurance support module for intake, uploaded documents, status tracking, and optional record mirroring.</p>
+              <ul>
+                <li>Inquiry type includes CTPL and comprehensive</li>
+                <li>Status supports pending, processing, approved, rejected, closed</li>
+                <li>Records may only exist if external data is available</li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge main">Main Service</span>
+              <h3><code>notification_preferences</code>, <code>notifications</code>, <code>reminder_rules</code></h3>
+              <p>Notification orchestration for reminder policies and delivery logs.</p>
+              <ul>
+                <li>Preferences define email/SMS consent and channel choices</li>
+                <li>Notifications store send attempts, statuses, templates, and targets</li>
+                <li>Reminder rules drive service due dates, renewals, and booking reminders</li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge main">Main Service</span>
+              <h3><code>loyalty_accounts</code>, <code>loyalty_transactions</code>, <code>rewards</code>, <code>reward_redemptions</code></h3>
+              <p>Retention model for points, reward inventory, and redemption history.</p>
+              <ul>
+                <li>Accounts carry balances and tier summaries</li>
+                <li>Transactions represent earn, adjust, reverse, redeem</li>
+                <li>Rewards may map to discounts, free services, or bundles</li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge main">Main Service</span>
+              <h3><code>customer_activity_logs</code>, <code>chatbot_flows</code>, <code>chatbot_interactions</code></h3>
+              <p>Behavior tracking and chatbot support data used by the dashboard and inquiry assistant flows.</p>
+              <ul>
+                <li>Activity logs consolidate booking, inquiry, loyalty, and commerce event touchpoints</li>
+                <li>Chatbot tables store predefined intents, guided responses, and interaction logs</li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge main">Main Service</span>
+              <h3><code>job_orders</code>, <code>job_progress_logs</code>, <code>back_jobs</code>, <code>back_job_findings</code>, <code>job_order_items</code>, <code>job_order_technicians</code>, <code>technicians</code></h3>
+              <p>Operational service monitoring model aligned with the existing job order and job board workflow, with explicit support for return/rework cases.</p>
+              <ul>
+                <li>Job orders hold intake-to-completion progress states, monitoring notes, and can carry <code>job_type = normal | back_job</code> plus nullable <code>parent_job_order_id</code></li>
+                <li>Job progress logs capture milestone transitions and board activity</li>
+                <li>Back jobs link a returning issue to the original service or repair record</li>
+                <li>Technician assignments are many-to-many through <code>job_order_technicians</code></li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge main">Main Service</span>
+              <h3><code>audit_logs</code>, <code>file_uploads</code></h3>
+              <p>Cross-cutting compliance entities for change traceability and managed file references.</p>
+              <ul>
+                <li>Audit logs record actor, action, target entity, and diffs</li>
+                <li>File uploads support insurance documents, inspection attachments, and job-monitoring evidence</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>E-Commerce Entities and Integration Boundaries</h2>
+              <p>These entities remain isolated in the e-commerce service database. The main service consumes them through APIs or business events.</p>
+            </div>
+          </div>
+          <div class="entity-grid">
+            <div class="entity">
+              <span class="badge commerce">E-Commerce Service</span>
+              <h3><code>product_categories</code>, <code>products</code>, <code>inventory_items</code></h3>
+              <p>Commerce-side product catalog and stock ownership, including service-related materials if inventory is shared operationally.</p>
+              <ul>
+                <li>Categories organize products by care type or usage</li>
+                <li>Products store price, SKU, status, media, and catalog metadata</li>
+                <li>Inventory tracks stock level, reserve count, reorder threshold</li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge commerce">E-Commerce Service</span>
+              <h3><code>carts</code>, <code>cart_items</code></h3>
+              <p>Session or account-bound shopping cart state.</p>
+              <ul>
+                <li>Cart supports open, converted, abandoned status</li>
+                <li>Cart items link quantity, product snapshot, and pricing state</li>
+              </ul>
+            </div>
+            <div class="entity">
+              <span class="badge commerce">E-Commerce Service</span>
+              <h3><code>orders</code>, <code>order_items</code>, <code>invoice_payments</code>, <code>addresses</code></h3>
+              <p>Invoice-based checkout and fulfillment backbone for online purchases.</p>
+              <ul>
+                <li>Orders track statuses such as placed, invoiced, partially-paid, paid, packed, delivered, cancelled</li>
+                <li>Order items keep product snapshots and quantities</li>
+                <li>Invoice payment records store invoice number, due state, payment status, and manual verification notes</li>
+                <li>Addresses support delivery and billing records</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Relationship and Ownership Table</h2>
+              <p>This table makes service boundaries explicit and avoids accidental cross-domain database coupling.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Relationship</th>
+                  <th>Type</th>
+                  <th>Ownership Rule</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>users</code> 1:N <code>vehicles</code></td>
+                  <td>Direct foreign key</td>
+                  <td>Main service only</td>
+                  <td>Vehicle history is central to bookings, reminders, and lifecycle monitoring.</td>
+                </tr>
+                <tr>
+                  <td><code>bookings</code> N:M <code>services</code> via <code>booking_services</code></td>
+                  <td>Join table</td>
+                  <td>Main service only</td>
+                  <td>Supports multi-service appointments and analytics on most availed services.</td>
+                </tr>
+                <tr>
+                  <td><code>bookings</code> 1:N <code>booking_status_history</code></td>
+                  <td>History table</td>
+                  <td>Main service only</td>
+                  <td>Required for approve, decline, reschedule, and completion traceability.</td>
+                </tr>
+                <tr>
+                  <td><code>vehicles</code> 1:N <code>vehicle_timeline_events</code></td>
+                  <td>Lifecycle event model</td>
+                  <td>Main service only</td>
+                  <td>Supports consolidated tracking of service, booking, and insurance events per vehicle.</td>
+                </tr>
+                <tr>
+                  <td><code>vehicle_inspections</code> N:1 <code>vehicles</code> and optional N:1 <code>bookings</code>/<code>job_orders</code>/<code>back_jobs</code></td>
+                  <td>Verification model</td>
+                  <td>Main service only</td>
+                  <td>Condition-based lifecycle milestones should reference an inspection record when verification is required.</td>
+                </tr>
+                <tr>
+                  <td><code>insurance_inquiries</code> 1:N <code>insurance_documents</code></td>
+                  <td>Direct foreign key</td>
+                  <td>Main service only</td>
+                  <td>Optional document upload is captured without forcing all inquiries to have files.</td>
+                </tr>
+                <tr>
+                  <td><code>loyalty_accounts</code> 1:N <code>loyalty_transactions</code></td>
+                  <td>Ledger model</td>
+                  <td>Main service only</td>
+                  <td>Recommended for balance reconstruction and reversals.</td>
+                </tr>
+                <tr>
+                  <td><code>job_orders</code> N:M <code>technicians</code> via <code>job_order_technicians</code></td>
+                  <td>Join table</td>
+                  <td>Main service only</td>
+                  <td>Separates assignment planning from technician master data.</td>
+                </tr>
+                <tr>
+                  <td><code>back_jobs</code> N:1 <code>job_orders</code> via original job reference</td>
+                  <td>Return/rework linkage</td>
+                  <td>Main service only</td>
+                  <td>Lets the team distinguish a new concern from a return tied to previous work.</td>
+                </tr>
+                <tr>
+                  <td><code>chatbot_flows</code> 1:N <code>chatbot_interactions</code></td>
+                  <td>Guided interaction model</td>
+                  <td>Main service only</td>
+                  <td>Keeps inquiry automation rule-based and auditable.</td>
+                </tr>
+                <tr>
+                  <td><code>products</code> 1:N <code>inventory_items</code></td>
+                  <td>Direct foreign key</td>
+                  <td>E-commerce service only</td>
+                  <td>Stock must stay within commerce ownership to avoid race conditions.</td>
+                </tr>
+                <tr>
+                  <td><code>orders</code> 1:N <code>order_items</code></td>
+                  <td>Direct foreign key</td>
+                  <td>E-commerce service only</td>
+                  <td>Purchase history is derived from orders, not a separate authority table.</td>
+                </tr>
+                <tr>
+                  <td><code>orders</code> 1:N <code>invoice_payments</code></td>
+                  <td>Direct foreign key</td>
+                  <td>E-commerce service only</td>
+                  <td>Payment monitoring is invoice-based and limited to tracking states and notes.</td>
+                </tr>
+                <tr>
+                  <td>Main service loyalty from e-commerce purchases</td>
+                  <td>Event-driven</td>
+                  <td>No cross-service FK</td>
+                  <td>Use <code>order.completed</code> or similar RabbitMQ event payload with customer and amount metadata.</td>
+                </tr>
+                <tr>
+                  <td>Main dashboard sales summary from e-commerce</td>
+                  <td>Event-driven or reporting API</td>
+                  <td>No cross-service FK</td>
+                  <td>Prefer reporting read models or event-fed aggregates.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- USE CASES -->
+      <section id="use-cases" class="tab-panel" role="tabpanel">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Use Case Diagram</h2>
+              <p>The diagram below maps the main actors to the system capabilities requested in the TXT file.</p>
+            </div>
+          </div>
+          <div class="svg-wrap">
+            <svg viewBox="0 0 1600 920" aria-label="Use case diagram">
+              <rect x="340" y="60" width="920" height="780" rx="34" fill="#fffdf9" stroke="#b3541e" stroke-width="3"/>
+              <text x="380" y="110" font-size="30" font-weight="800" fill="#b3541e">Auto-Care + E-Commerce System</text>
+
+              <g fill="#2d221d" font-size="18">
+                <circle cx="130" cy="170" r="28" fill="#f4d7bf"/><line x1="130" y1="198" x2="130" y2="270" stroke="#2d221d" stroke-width="3"/><line x1="98" y1="226" x2="162" y2="226" stroke="#2d221d" stroke-width="3"/><line x1="130" y1="270" x2="102" y2="324" stroke="#2d221d" stroke-width="3"/><line x1="130" y1="270" x2="158" y2="324" stroke="#2d221d" stroke-width="3"/><text x="76" y="360">Customer</text>
+                <circle cx="130" cy="470" r="28" fill="#d8f3dc"/><line x1="130" y1="498" x2="130" y2="570" stroke="#2d221d" stroke-width="3"/><line x1="98" y1="526" x2="162" y2="526" stroke="#2d221d" stroke-width="3"/><line x1="130" y1="570" x2="102" y2="624" stroke="#2d221d" stroke-width="3"/><line x1="130" y1="570" x2="158" y2="624" stroke="#2d221d" stroke-width="3"/><text x="56" y="660">Admin / Staff</text>
+                <circle cx="130" cy="720" r="28" fill="#fde68a"/><line x1="130" y1="748" x2="130" y2="820" stroke="#2d221d" stroke-width="3"/><line x1="98" y1="776" x2="162" y2="776" stroke="#2d221d" stroke-width="3"/><line x1="130" y1="820" x2="102" y2="874" stroke="#2d221d" stroke-width="3"/><line x1="130" y1="820" x2="158" y2="874" stroke="#2d221d" stroke-width="3"/><text x="72" y="906">Technician</text>
+
+                <circle cx="1450" cy="260" r="28" fill="#ede9fe"/><line x1="1450" y1="288" x2="1450" y2="360" stroke="#2d221d" stroke-width="3"/><line x1="1418" y1="316" x2="1482" y2="316" stroke="#2d221d" stroke-width="3"/><line x1="1450" y1="360" x2="1422" y2="414" stroke="#2d221d" stroke-width="3"/><line x1="1450" y1="360" x2="1478" y2="414" stroke="#2d221d" stroke-width="3"/><text x="1388" y="448">Notification Service</text>
+                <circle cx="1450" cy="560" r="28" fill="#dbeafe"/><line x1="1450" y1="588" x2="1450" y2="660" stroke="#2d221d" stroke-width="3"/><line x1="1418" y1="616" x2="1482" y2="616" stroke="#2d221d" stroke-width="3"/><line x1="1450" y1="660" x2="1422" y2="714" stroke="#2d221d" stroke-width="3"/><line x1="1450" y1="660" x2="1478" y2="714" stroke="#2d221d" stroke-width="3"/><text x="1380" y="748">E-Commerce Service</text>
+              </g>
+
+              <g font-size="16" fill="#2d221d">
+                <ellipse cx="550" cy="180" rx="145" ry="36" fill="#fff7ed" stroke="#d97706" stroke-width="2"/><text x="472" y="186">Manage Account & Vehicles</text>
+                <ellipse cx="820" cy="180" rx="145" ry="36" fill="#fff7ed" stroke="#d97706" stroke-width="2"/><text x="736" y="186">Create Service Booking</text>
+                <ellipse cx="1090" cy="180" rx="145" ry="36" fill="#fff7ed" stroke="#d97706" stroke-width="2"/><text x="1008" y="186">Track Booking Status</text>
+
+                <ellipse cx="550" cy="315" rx="145" ry="36" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/><text x="477" y="321">Submit Insurance Inquiry</text>
+                <ellipse cx="820" cy="315" rx="145" ry="36" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/><text x="734" y="321">View Vehicle Timeline</text>
+                <ellipse cx="1090" cy="315" rx="145" ry="36" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/><text x="1018" y="321">Redeem Rewards</text>
+
+                <ellipse cx="550" cy="455" rx="145" ry="36" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/><text x="478" y="461">Manage Daily Schedule</text>
+                <ellipse cx="820" cy="455" rx="145" ry="36" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/><text x="730" y="461">Record Vehicle Inspection</text>
+                <ellipse cx="1090" cy="455" rx="145" ry="36" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/><text x="1011" y="461">Review Dashboard Analytics</text>
+
+                <ellipse cx="550" cy="600" rx="145" ry="36" fill="#fef3c7" stroke="#ca8a04" stroke-width="2"/><text x="478" y="606">Monitor Job Progress</text>
+                <ellipse cx="820" cy="600" rx="145" ry="36" fill="#fef3c7" stroke="#ca8a04" stroke-width="2"/><text x="742" y="606">Manage Back Jobs</text>
+                <ellipse cx="1090" cy="600" rx="145" ry="36" fill="#fef3c7" stroke="#ca8a04" stroke-width="2"/><text x="1012" y="606">Assign Technicians</text>
+
+                <ellipse cx="685" cy="735" rx="175" ry="36" fill="#eef2ff" stroke="#7c3aed" stroke-width="2"/><text x="606" y="741">Send Email / SMS Notifications</text>
+                <ellipse cx="1020" cy="735" rx="175" ry="36" fill="#eef2ff" stroke="#7c3aed" stroke-width="2"/><text x="931" y="741">Browse Products / Checkout</text>
+              </g>
+
+              <g stroke="#7a685a" stroke-width="2.5" fill="none">
+                <line x1="158" y1="190" x2="405" y2="180"/>
+                <line x1="158" y1="210" x2="675" y2="180"/>
+                <line x1="158" y1="230" x2="945" y2="180"/>
+                <line x1="158" y1="250" x2="405" y2="315"/>
+                <line x1="158" y1="270" x2="675" y2="315"/>
+                <line x1="158" y1="290" x2="945" y2="315"/>
+
+                <line x1="158" y1="500" x2="405" y2="455"/>
+                <line x1="158" y1="520" x2="675" y2="455"/>
+                <line x1="158" y1="540" x2="945" y2="455"/>
+                <line x1="158" y1="560" x2="675" y2="600"/>
+
+                <line x1="158" y1="750" x2="405" y2="600"/>
+                <line x1="158" y1="770" x2="945" y2="600"/>
+
+                <line x1="1275" y1="735" x2="1422" y2="590"/>
+                <line x1="860" y1="735" x2="1422" y2="290"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Actor Responsibilities</h2>
+              <p>The use cases align with operational roles and external collaborators.</p>
+            </div>
+          </div>
+          <div class="grid-3">
+            <div class="card">
+              <h3>Customer</h3>
+              <ul>
+                <li>Register, log in, manage profile, and maintain vehicle records</li>
+                <li>Book services, track appointments, browse products, and check order status</li>
+                <li>Submit insurance inquiries and view their vehicle lifecycle timeline</li>
+                <li>Track verified repair milestones and back-job status when they return after service</li>
+                <li>Track loyalty balance and redeem rewards</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Admin / Staff / Manager</h3>
+              <ul>
+                <li>Review bookings, approve, decline, or reschedule appointments</li>
+                <li>Record inspections and verify condition-based lifecycle milestones</li>
+                <li>Track insurance inquiry progress and uploaded documents</li>
+                <li>Monitor job progress, manage back jobs, review analytics, and oversee loyalty/reward policies</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Technician and External Systems</h3>
+              <ul>
+                <li>Technicians consume assignments from approved job orders</li>
+                <li>Notification providers deliver SMS or email messages</li>
+                <li>E-commerce service exposes product and order capabilities to the ecosystem</li>
+                <li>Optional insurer or third-party data source may enrich insurance records</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ARCHITECTURE -->
+      <section id="architecture" class="tab-panel" role="tabpanel">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Recommended System Architecture</h2>
+              <p>A two-domain microservice direction still fits the updated paper because operations/lifecycle management and e-commerce/inventory/payment tracking have different ownership, scaling patterns, and data-change rhythms.</p>
+            </div>
+          </div>
+
+          <div class="svg-wrap">
+            <svg viewBox="0 0 1600 980" aria-label="System architecture diagram">
+              <rect x="38" y="60" width="1524" height="880" rx="34" fill="#fffdf9" stroke="#d7c5b3" stroke-width="2"/>
+
+              <rect x="92" y="120" width="290" height="120" rx="24" fill="#fff7ed" stroke="#b3541e" stroke-width="2.5"/>
+              <text x="126" y="168" font-size="30" font-weight="800" fill="#b3541e">NextJS Frontend</text>
+              <text x="126" y="206" font-size="19" fill="#69584d">Customer portal, admin portal,</text>
+              <text x="126" y="232" font-size="19" fill="#69584d">booking flows, commerce views</text>
+
+              <rect x="468" y="100" width="330" height="180" rx="24" fill="#eefbf1" stroke="#14532d" stroke-width="2.5"/>
+              <text x="500" y="150" font-size="30" font-weight="800" fill="#14532d">Main Service / API Gateway</text>
+              <text x="500" y="188" font-size="19" fill="#69584d">NestJS REST/BFF layer</text>
+              <text x="500" y="214" font-size="19" fill="#69584d">Auth, profile, booking, insurance,</text>
+              <text x="500" y="240" font-size="19" fill="#69584d">lifecycle, inspections, back jobs, chatbot</text>
+              <text x="500" y="266" font-size="19" fill="#69584d">Can proxy commerce reads/writes as needed</text>
+
+              <rect x="882" y="100" width="330" height="180" rx="24" fill="#eff6ff" stroke="#1d4ed8" stroke-width="2.5"/>
+              <text x="922" y="150" font-size="30" font-weight="800" fill="#1d4ed8">E-Commerce Service</text>
+              <text x="922" y="188" font-size="19" fill="#69584d">NestJS product/order backend</text>
+              <text x="922" y="214" font-size="19" fill="#69584d">Catalog, cart, invoice checkout,</text>
+              <text x="922" y="240" font-size="19" fill="#69584d">inventory, order tracking, payment status</text>
+              <text x="922" y="266" font-size="19" fill="#69584d">Owns commerce database and events</text>
+
+              <rect x="356" y="360" width="320" height="160" rx="24" fill="#f4f0ff" stroke="#7c3aed" stroke-width="2.5"/>
+              <text x="394" y="410" font-size="30" font-weight="800" fill="#7c3aed">BullMQ + Redis</text>
+              <text x="394" y="448" font-size="19" fill="#69584d">Delayed reminders, retryable jobs,</text>
+              <text x="394" y="474" font-size="19" fill="#69584d">analytics refresh, lifecycle read models,</text>
+              <text x="394" y="500" font-size="19" fill="#69584d">inspection sync, chatbot preload</text>
+
+              <rect x="760" y="360" width="340" height="160" rx="24" fill="#f4f0ff" stroke="#7c3aed" stroke-width="2.5"/>
+              <text x="804" y="410" font-size="30" font-weight="800" fill="#7c3aed">RabbitMQ Event Bus</text>
+              <text x="804" y="448" font-size="19" fill="#69584d">Cross-service business events</text>
+              <text x="804" y="474" font-size="19" fill="#69584d">order.completed, booking.confirmed,</text>
+              <text x="804" y="500" font-size="19" fill="#69584d">insurance.updated, loyalty.requested</text>
+
+              <rect x="280" y="610" width="320" height="170" rx="24" fill="#eefbf1" stroke="#14532d" stroke-width="2.5"/>
+              <text x="318" y="660" font-size="30" font-weight="800" fill="#14532d">Main PostgreSQL</text>
+              <text x="318" y="698" font-size="19" fill="#69584d">Users, vehicles, bookings, lifecycle,</text>
+              <text x="318" y="724" font-size="19" fill="#69584d">inspections, back jobs, loyalty, chatbot,</text>
+              <text x="318" y="750" font-size="19" fill="#69584d">job monitoring, analytics read models</text>
+
+              <rect x="940" y="610" width="320" height="170" rx="24" fill="#eff6ff" stroke="#1d4ed8" stroke-width="2.5"/>
+              <text x="978" y="660" font-size="30" font-weight="800" fill="#1d4ed8">Commerce PostgreSQL</text>
+              <text x="978" y="698" font-size="19" fill="#69584d">Products, stock, carts, orders,</text>
+              <text x="978" y="724" font-size="19" fill="#69584d">invoice payments, addresses, fulfillment</text>
+              <text x="978" y="750" font-size="19" fill="#69584d">No direct shared schema with main app</text>
+
+              <rect x="1280" y="360" width="220" height="420" rx="24" fill="#fff7ed" stroke="#b3541e" stroke-width="2.5"/>
+              <text x="1310" y="410" font-size="28" font-weight="800" fill="#b3541e">External Integrations</text>
+              <text x="1310" y="462" font-size="18" fill="#69584d">Email provider</text>
+              <text x="1310" y="496" font-size="18" fill="#69584d">SMS provider</text>
+              <text x="1310" y="530" font-size="18" fill="#69584d">Invoice release / manual validation</text>
+              <text x="1310" y="564" font-size="18" fill="#69584d">Insurance data source</text>
+              <text x="1310" y="598" font-size="18" fill="#69584d">Manual review / file handling</text>
+
+              <g stroke-width="3" fill="none">
+                <line x1="382" y1="180" x2="468" y2="180" stroke="#7a685a"/>
+                <line x1="798" y1="180" x2="882" y2="180" stroke="#7a685a"/>
+                <line x1="633" y1="280" x2="516" y2="360" stroke="#7c3aed" stroke-dasharray="10 10"/>
+                <line x1="1047" y1="280" x2="930" y2="360" stroke="#7c3aed" stroke-dasharray="10 10"/>
+                <line x1="633" y1="280" x2="930" y2="360" stroke="#7c3aed"/>
+                <line x1="516" y1="520" x2="440" y2="610" stroke="#14532d"/>
+                <line x1="1047" y1="520" x2="1100" y2="610" stroke="#1d4ed8"/>
+                <line x1="1100" y1="180" x2="1280" y2="420" stroke="#7a685a"/>
+                <line x1="626" y1="180" x2="1280" y2="500" stroke="#7a685a" stroke-dasharray="8 8"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Suggested Service Decomposition</h2>
+              <p>The backend can start as two deployable NestJS services plus dedicated workers, while still sharing consistent contracts and deployment standards.</p>
+            </div>
+          </div>
+          <div class="grid-3">
+            <div class="card">
+              <h3>Main Service Modules</h3>
+              <ul>
+                <li><code>auth</code>, <code>users</code>, <code>vehicles</code></li>
+                <li><code>services</code>, <code>bookings</code>, <code>time-slots</code>, <code>vehicle-lifecycle</code></li>
+                <li><code>inspections</code>, <code>back-jobs</code>, <code>job-monitoring</code></li>
+                <li><code>insurance</code>, <code>uploads</code>, <code>notifications</code></li>
+                <li><code>loyalty</code>, <code>rewards</code>, <code>chatbot</code></li>
+                <li><code>job-orders</code>, <code>analytics</code></li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>E-Commerce Modules</h3>
+              <ul>
+                <li><code>catalog</code>, <code>categories</code>, <code>inventory</code></li>
+                <li><code>carts</code>, <code>invoice-checkout</code>, <code>orders</code></li>
+                <li><code>invoice-payments</code>, <code>addresses</code>, <code>order-tracking</code></li>
+                <li><code>commerce-events</code> for outbound integration</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Worker Responsibilities</h3>
+              <ul>
+                <li>Reminder scheduling and notification delivery</li>
+                <li>Analytics aggregation and dashboard snapshot refresh</li>
+                <li>Vehicle timeline read-model refresh</li>
+                <li>Verified lifecycle updates after inspections and back-job status changes</li>
+                <li>Chatbot intent cache or lookup preparation</li>
+                <li>Retryable external API interactions</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Recommended Communication Pattern</h2>
+              <p>Use the simplest transport that fits the responsibility.</p>
+            </div>
+          </div>
+          <div class="grid-3">
+            <div class="note">
+              <h3>Synchronous HTTP</h3>
+              <p>Use for login, profile reads, slot queries, booking creation, catalog browsing, cart changes, and checkout requests that need immediate client responses.</p>
+            </div>
+            <div class="note">
+              <h3>BullMQ + Redis</h3>
+              <p>Use for delayed or retryable internal jobs: reminders, status follow-ups, vehicle-timeline refresh, analytics rebuilds, chatbot support jobs, and inventory alert processing.</p>
+            </div>
+            <div class="note">
+              <h3>RabbitMQ</h3>
+              <p>Use for cross-domain events where one service publishes business facts and another reacts without tight runtime coupling.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- NOTES -->
+      <section id="notes" class="tab-panel" role="tabpanel">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>What You Should Account For</h2>
+              <p>These are the implementation and design concerns most likely to cause gaps if left implicit under the updated paper.</p>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="note">
+              <h3>Status Lifecycles Must Be Explicit</h3>
+              <ul>
+                <li>Bookings need lifecycle states such as draft, pending, confirmed, rescheduled, in-progress, completed, declined, cancelled, no-show.</li>
+                <li>Insurance inquiries need pending, processing, approved, rejected, closed, or follow-up-needed states.</li>
+                <li>Orders need their own commerce lifecycle and should not reuse booking states.</li>
+              </ul>
+            </div>
+            <div class="note">
+              <h3>History and Auditability Matter</h3>
+              <ul>
+                <li>Write history tables for booking status changes and possibly inquiry status changes.</li>
+                <li>Use audit logs for admin actions, reward adjustments, manual overrides, and manager approval decisions.</li>
+                <li>Do not overwrite important workflow states without preserving a trace.</li>
+              </ul>
+            </div>
+            <div class="note">
+              <h3>Uploads Need Metadata and Security</h3>
+              <ul>
+                <li>Store upload metadata in <code>file_uploads</code> and reference it from insurance documents, vehicle records, or job-monitoring attachments.</li>
+                <li>Validate file type, file size, access ownership, and retention policy.</li>
+                <li>Keep actual file storage decoupled from relational records.</li>
+              </ul>
+            </div>
+            <div class="note">
+              <h3>Lifecycle Tracking Needs a Clear Model</h3>
+              <ul>
+                <li>The paper’s strongest differentiator is the vehicle-centric timeline that merges bookings, services, and insurance activities.</li>
+                <li>Implement it with lifecycle events plus inspection records so condition-based milestones can be marked as verified only after physical inspection.</li>
+                <li>Background queueing via BullMQ is infrastructure, not the same thing as lifecycle/job monitoring.</li>
+              </ul>
+            </div>
+            <div class="note">
+              <h3>Chatbot Must Stay Rule-Based</h3>
+              <ul>
+                <li>The paper specifies a guided-response inquiry bot, not AI automation.</li>
+                <li>Model intents, fallback paths, canned answers, and escalation to manual contact when the flow cannot resolve the question.</li>
+              </ul>
+            </div>
+            <div class="note">
+              <h3>Back Job Needs Explicit Linkage</h3>
+              <ul>
+                <li>Treat a back job as a return or rework case tied to an original completed job or service record, not as an ordinary new visit.</li>
+                <li>Capture complaint, relation to prior work, return inspection findings, resolution status, and closure notes.</li>
+              </ul>
+            </div>
+            <div class="note">
+              <h3>Job Monitoring Should Respect Existing Workflow</h3>
+              <ul>
+                <li>Track progress, milestones, assignees, and status notes without forcing a brand-new autonomous job-generation flow.</li>
+                <li>Make the system compatible with the current job order and job board process already used by the client.</li>
+              </ul>
+            </div>
+            <div class="note">
+              <h3>Loyalty Across Two Domains Needs Contract Discipline</h3>
+              <ul>
+                <li>Do not let the e-commerce service write directly into main-service loyalty tables.</li>
+                <li>Publish a commerce event with customer reference, order amount, and rewardable metadata.</li>
+                <li>Main service calculates and writes the points transaction.</li>
+              </ul>
+            </div>
+            <div class="note">
+              <h3>Inventory and Invoice Tracking Need Operational Discipline</h3>
+              <ul>
+                <li>Inventory applies to automotive products and service-related materials, so the schema should support multiple stock contexts if needed.</li>
+                <li>Invoice payment tracking should support pending, partial, and paid states, due dates, reference numbers, and manual validation notes.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Suggested API Surface</h2>
+              <p>These are practical domain interfaces to guide module and route planning.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Example Routes / Commands</th>
+                  <th>Primary Service</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Auth / Accounts</td>
+                  <td><code>POST /auth/register</code>, <code>POST /auth/login</code>, <code>GET /me</code>, <code>PATCH /profile</code>, <code>/vehicles</code></td>
+                  <td>Main service</td>
+                  <td>Identity and profile should remain the single customer authority.</td>
+                </tr>
+                <tr>
+                  <td>Bookings</td>
+                  <td><code>GET /services</code>, <code>GET /time-slots</code>, <code>POST /bookings</code>, <code>PATCH /bookings/:id/status</code></td>
+                  <td>Main service</td>
+                  <td>Drive lifecycle events, job monitoring views, and reminders off booking transitions.</td>
+                </tr>
+                <tr>
+                  <td>Insurance</td>
+                  <td><code>POST /insurance/inquiries</code>, <code>POST /insurance/inquiries/:id/documents</code>, <code>GET /insurance/inquiries/:id</code></td>
+                  <td>Main service</td>
+                  <td>Record-source boundaries should be clear if external data is mirrored.</td>
+                </tr>
+                <tr>
+                  <td>Loyalty</td>
+                  <td><code>GET /loyalty/account</code>, <code>GET /loyalty/rewards</code>, <code>POST /loyalty/redeem</code></td>
+                  <td>Main service</td>
+                  <td>Transactions should remain append-only as much as possible.</td>
+                </tr>
+                <tr>
+                  <td>Vehicle Lifecycle</td>
+                  <td><code>GET /vehicles/:id/timeline</code>, internal <code>refreshVehicleTimeline</code> job</td>
+                  <td>Main service</td>
+                  <td>Make this a key read model for both admin and customer views.</td>
+                </tr>
+                <tr>
+                  <td>Vehicle Inspections</td>
+                  <td><code>POST /vehicles/:id/inspections</code>, <code>GET /vehicles/:id/inspections</code></td>
+                  <td>Main service</td>
+                  <td>Use this to verify condition-based milestones such as intake, completion, and return checks.</td>
+                </tr>
+                <tr>
+                  <td>Job Monitoring</td>
+                  <td><code>GET /job-orders</code>, <code>PATCH /job-orders/:id/status</code>, <code>POST /job-orders/:id/progress</code></td>
+                  <td>Main service</td>
+                  <td>Track the existing workflow rather than replacing it.</td>
+                </tr>
+                <tr>
+                  <td>Back Jobs</td>
+                  <td><code>POST /back-jobs</code>, <code>GET /back-jobs/:id</code>, <code>PATCH /back-jobs/:id/status</code></td>
+                  <td>Main service</td>
+                  <td>Link return or rework cases to original job orders or completed service records.</td>
+                </tr>
+                <tr>
+                  <td>Chatbot</td>
+                  <td><code>POST /chatbot/message</code>, <code>GET /chatbot/intents</code></td>
+                  <td>Main service</td>
+                  <td>Keep responses guided and deterministic.</td>
+                </tr>
+                <tr>
+                  <td>E-Commerce</td>
+                  <td><code>GET /products</code>, <code>POST /cart/items</code>, <code>POST /checkout/invoice</code>, <code>GET /orders</code></td>
+                  <td>E-commerce service</td>
+                  <td>Main service may proxy some flows but should not own commerce persistence.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- SNIPPETS -->
+      <section id="snippets" class="tab-panel" role="tabpanel">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Context7-Backed Implementation Snippets</h2>
+              <p>These examples reflect the stack direction requested: NestJS, BullMQ, Drizzle ORM, PostgreSQL, and an event-driven integration approach.</p>
+            </div>
+          </div>
+          <div class="grid-3">
+            <div class="snippet">
+              <span class="badge main">NestJS Microservice Pattern</span>
+              <h3>Hybrid Bootstrap / Event Integration</h3>
+              <p>Useful when the main service exposes HTTP while also subscribing to events.</p>
+<pre><code>const app = await NestFactory.create(AppModule);
+
+app.connectMicroservice({
+  transport: Transport.TCP,
+  options: { port: 3001 },
+});
+
+await app.startAllMicroservices();
+await app.listen(3000);
+
+@EventPattern('order_completed')
+handleOrderCompleted(payload: OrderCompletedEvent) {
+  return this.loyaltyService.awardFromOrder(payload);
+}</code></pre>
+            </div>
+
+            <div class="snippet">
+              <span class="badge queue">BullMQ in NestJS</span>
+              <h3>Reminder Queue</h3>
+              <p>Good fit for booking reminders, insurance renewals, and notification retries.</p>
+<pre><code>@Module({
+  imports: [
+    BullModule.forRoot({
+      connection: { host: process.env.REDIS_HOST, port: 6379 },
+    }),
+    BullModule.registerQueue({ name: 'notifications' }),
+  ],
+})
+export class QueueModule {}
+
+@Injectable()
+export class ReminderService {
+  constructor(@InjectQueue('notifications') private queue: Queue) {}
+
+  scheduleBookingReminder(data: ReminderPayload) {
+    return this.queue.add('booking-reminder', data, {
+      delay: data.delayMs,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 1000 },
+    });
+  }
+}</code></pre>
+            </div>
+
+            <div class="snippet">
+              <span class="badge queue">BullMQ Worker</span>
+              <h3>Processor / Worker Host</h3>
+              <p>Use dedicated workers for delivery and analytics jobs to keep the API responsive.</p>
+<pre><code>@Processor('notifications')
+export class NotificationProcessor extends WorkerHost {
+  async process(job: Job&lt;NotificationJob&gt;) {
+    switch (job.name) {
+      case 'booking-reminder':
+        return this.notificationGateway.send(job.data);
+      case 'insurance-renewal':
+        return this.notificationGateway.send(job.data);
+    }
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job, error: Error) {
+    this.logger.error(`Job ${job.id} failed: ${error.message}`);
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="grid-2">
+            <div class="snippet">
+              <span class="badge main">Drizzle ORM + PostgreSQL</span>
+              <h3>Main Service Schema Style</h3>
+              <p>Typed relational schema works well for bookings, vehicles, and history tables.</p>
+<pre><code>export const bookings = pgTable('bookings', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() =&gt; users.id),
+  vehicleId: integer('vehicle_id').notNull().references(() =&gt; vehicles.id),
+  timeSlotId: integer('time_slot_id').references(() =&gt; timeSlots.id),
+  status: varchar('status', { length: 40 }).notNull(),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const bookingStatusHistory = pgTable('booking_status_history', {
+  id: serial('id').primaryKey(),
+  bookingId: integer('booking_id').notNull().references(() =&gt; bookings.id),
+  status: varchar('status', { length: 40 }).notNull(),
+  changedBy: integer('changed_by').references(() =&gt; users.id),
+  changedAt: timestamp('changed_at', { withTimezone: true }).defaultNow().notNull(),
+});</code></pre>
+            </div>
+
+            <div class="snippet">
+              <span class="badge commerce">Cross-Service Event Contract</span>
+              <h3>Order Completed Event Example</h3>
+              <p>Use events instead of direct cross-database joins when the e-commerce service needs to affect loyalty and analytics.</p>
+<pre><code>type OrderCompletedEvent = {
+  event: 'order.completed';
+  orderId: string;
+  customerId: string;
+  totalAmount: number;
+  rewardableAmount: number;
+  orderedAt: string;
+  items: Array&lt;{
+    productId: string;
+    quantity: number;
+    unitPrice: number;
+  }&gt;;
+};</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Source Notes for Snippet Direction</h2>
+              <p>The examples above were shaped from official or primary Context7 documentation patterns for NestJS microservices, NestJS BullMQ integration, and Drizzle PostgreSQL schemas.</p>
+            </div>
+          </div>
+          <div class="grid-3">
+            <div class="note">
+              <h3>NestJS</h3>
+              <p>Context7 guidance shows hybrid apps can attach microservice listeners with <code>connectMicroservice()</code> and handle events with <code>@EventPattern()</code>.</p>
+            </div>
+            <div class="note">
+              <h3>BullMQ</h3>
+              <p>Context7 examples show <code>BullModule.forRoot()</code>, <code>registerQueue()</code>, <code>@InjectQueue()</code>, and <code>@Processor()</code> as the standard NestJS integration path.</p>
+            </div>
+            <div class="note">
+              <h3>Drizzle ORM</h3>
+              <p>Context7 documentation favors explicit <code>pgTable</code> schemas, typed relations, timestamps, and join tables for relational workflows like bookings and order items.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="foot">
+      Built as a standalone planning artifact for the proposed features document. No external CSS, JS, or diagram libraries are required.
+    </div>
+  </div>
+
+  <script>
+    const buttons = Array.from(document.querySelectorAll('.tab-button'));
+    const panels = Array.from(document.querySelectorAll('.tab-panel'));
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const target = button.dataset.tab;
+        buttons.forEach((btn) => {
+          btn.classList.toggle('active', btn === button);
+          btn.setAttribute('aria-selected', btn === button ? 'true' : 'false');
+        });
+        panels.forEach((panel) => {
+          panel.classList.toggle('active', panel.id === target);
+        });
+      });
+    });
+  </script>
+</body>
+</html>
