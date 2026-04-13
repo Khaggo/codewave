@@ -8,3 +8,4 @@ export * from '@main-modules/inspections/schemas/inspections.schema';
 export * from '@main-modules/insurance/schemas/insurance.schema';
 export * from '@main-modules/notifications/schemas/notifications.schema';
 export * from '@main-modules/vehicle-lifecycle/schemas/vehicle-lifecycle.schema';
+export * from '@main-modules/quality-gates/schemas/quality-gates.schema';

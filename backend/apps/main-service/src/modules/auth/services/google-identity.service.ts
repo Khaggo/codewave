@@ -14,6 +14,15 @@ type VerifiedGoogleIdentity = {
   lastName: string;
 };
 
+type GoogleTokenPayload = {
+  email?: string;
+  sub?: string;
+  email_verified?: boolean;
+  given_name?: string;
+  family_name?: string;
+  name?: string;
+};
+
 @Injectable()
 export class GoogleIdentityService {
   private readonly client: OAuth2Client;
@@ -28,7 +37,7 @@ export class GoogleIdentityService {
       throw new InternalServerErrorException('Google identity verification is not configured');
     }
 
-    let payload: Awaited<ReturnType<OAuth2Client['verifyIdToken']>>['payload'];
+    let payload: GoogleTokenPayload | undefined;
     try {
       const ticket = await this.client.verifyIdToken({
         idToken: googleIdToken,

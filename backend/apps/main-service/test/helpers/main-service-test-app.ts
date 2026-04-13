@@ -80,6 +80,15 @@ import {
 } from '../../src/modules/notifications/schemas/notifications.schema';
 import { NotificationsService } from '../../src/modules/notifications/services/notifications.service';
 import { SmtpMailService } from '../../src/modules/notifications/services/smtp-mail.service';
+import { QualityGatesController } from '../../src/modules/quality-gates/controllers/quality-gates.controller';
+import { QualityGatesRepository } from '../../src/modules/quality-gates/repositories/quality-gates.repository';
+import { QUALITY_GATES_QUEUE_NAME } from '../../src/modules/quality-gates/quality-gates.constants';
+import {
+  qualityGateFindingGateEnum,
+  qualityGateFindingSeverityEnum,
+  qualityGateStatusEnum,
+} from '../../src/modules/quality-gates/schemas/quality-gates.schema';
+import { QualityGatesService } from '../../src/modules/quality-gates/services/quality-gates.service';
 import { VehicleLifecycleController } from '../../src/modules/vehicle-lifecycle/controllers/vehicle-lifecycle.controller';
 import { AppendVehicleTimelineEventDto } from '../../src/modules/vehicle-lifecycle/dto/append-vehicle-timeline-event.dto';
 import { VehicleLifecycleRepository } from '../../src/modules/vehicle-lifecycle/repositories/vehicle-lifecycle.repository';
@@ -376,6 +385,41 @@ type JobOrderInvoiceRecord = {
   updatedAt: Date;
 };
 
+type QualityGateStatus = (typeof qualityGateStatusEnum.enumValues)[number];
+type QualityGateFindingGate = (typeof qualityGateFindingGateEnum.enumValues)[number];
+type QualityGateFindingSeverity = (typeof qualityGateFindingSeverityEnum.enumValues)[number];
+
+type QualityGateRecord = {
+  id: string;
+  jobOrderId: string;
+  status: QualityGateStatus;
+  riskScore: number;
+  blockingReason: string | null;
+  lastAuditRequestedAt: Date;
+  lastAuditCompletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type QualityGateFindingRecord = {
+  id: string;
+  qualityGateId: string;
+  gate: QualityGateFindingGate;
+  severity: QualityGateFindingSeverity;
+  code: string;
+  message: string;
+  createdAt: Date;
+};
+
+type QualityGateOverrideRecord = {
+  id: string;
+  qualityGateId: string;
+  actorUserId: string;
+  actorRole: UserRole;
+  reason: string;
+  createdAt: Date;
+};
+
 type BackJobStatus = (typeof backJobStatusEnum.enumValues)[number];
 type BackJobFindingSeverity = (typeof backJobFindingSeverityEnum.enumValues)[number];
 
@@ -590,6 +634,28 @@ const cloneJobOrder = (
       invoiceRecords
         .filter((record) => record.jobOrderId === jobOrder.id)
         .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0] ?? null,
+  };
+};
+
+const cloneQualityGate = (
+  qualityGate: QualityGateRecord | null | undefined,
+  findings: QualityGateFindingRecord[],
+  overrides: QualityGateOverrideRecord[],
+) => {
+  if (!qualityGate) {
+    return qualityGate ?? null;
+  }
+
+  return {
+    ...qualityGate,
+    findings: findings
+      .filter((finding) => finding.qualityGateId === qualityGate.id)
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+      .map((finding) => ({ ...finding })),
+    overrides: overrides
+      .filter((override) => override.qualityGateId === qualityGate.id)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((override) => ({ ...override })),
   };
 };
 
@@ -1486,6 +1552,117 @@ class InMemoryJobOrdersRepository {
   }
 }
 
+class InMemoryQualityGatesRepository {
+  private readonly qualityGates = new Map<string, QualityGateRecord>();
+  private readonly findings: QualityGateFindingRecord[] = [];
+  private readonly overrides: QualityGateOverrideRecord[] = [];
+
+  async findByJobOrderId(jobOrderId: string) {
+    const gate = Array.from(this.qualityGates.values()).find((entry) => entry.jobOrderId === jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    return cloneQualityGate(gate, this.findings, this.overrides);
+  }
+
+  async findOptionalByJobOrderId(jobOrderId: string) {
+    const gate = Array.from(this.qualityGates.values()).find((entry) => entry.jobOrderId === jobOrderId);
+    return cloneQualityGate(gate, this.findings, this.overrides);
+  }
+
+  async upsertPending(jobOrderId: string) {
+    const existing = Array.from(this.qualityGates.values()).find((entry) => entry.jobOrderId === jobOrderId);
+    const now = new Date();
+
+    if (existing) {
+      const updatedGate: QualityGateRecord = {
+        ...existing,
+        status: 'pending',
+        riskScore: 0,
+        blockingReason: null,
+        lastAuditRequestedAt: now,
+        lastAuditCompletedAt: null,
+        updatedAt: now,
+      };
+
+      this.qualityGates.set(existing.id, updatedGate);
+      for (let index = this.findings.length - 1; index >= 0; index -= 1) {
+        if (this.findings[index].qualityGateId === existing.id) {
+          this.findings.splice(index, 1);
+        }
+      }
+
+      return this.findByJobOrderId(jobOrderId);
+    }
+
+    const createdGate: QualityGateRecord = {
+      id: randomUUID(),
+      jobOrderId,
+      status: 'pending',
+      riskScore: 0,
+      blockingReason: null,
+      lastAuditRequestedAt: now,
+      lastAuditCompletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.qualityGates.set(createdGate.id, createdGate);
+    return this.findByJobOrderId(jobOrderId);
+  }
+
+  async completeAudit(
+    jobOrderId: string,
+    payload: {
+      status: QualityGateStatus;
+      riskScore: number;
+      blockingReason?: string | null;
+      findings: Array<{
+        gate: QualityGateFindingGate;
+        severity: QualityGateFindingSeverity;
+        code: string;
+        message: string;
+      }>;
+    },
+  ) {
+    const gate = Array.from(this.qualityGates.values()).find((entry) => entry.jobOrderId === jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    const now = new Date();
+    this.qualityGates.set(gate.id, {
+      ...gate,
+      status: payload.status,
+      riskScore: payload.riskScore,
+      blockingReason: payload.blockingReason ?? null,
+      lastAuditCompletedAt: now,
+      updatedAt: now,
+    });
+
+    for (let index = this.findings.length - 1; index >= 0; index -= 1) {
+      if (this.findings[index].qualityGateId === gate.id) {
+        this.findings.splice(index, 1);
+      }
+    }
+
+    payload.findings.forEach((finding) => {
+      this.findings.push({
+        id: randomUUID(),
+        qualityGateId: gate.id,
+        gate: finding.gate,
+        severity: finding.severity,
+        code: finding.code,
+        message: finding.message,
+        createdAt: now,
+      });
+    });
+
+    return this.findByJobOrderId(jobOrderId);
+  }
+}
+
 class InMemoryBackJobsRepository {
   private readonly backJobs = new Map<string, BackJobRecord>();
   private readonly findings: BackJobFindingRecord[] = [];
@@ -1872,6 +2049,23 @@ class InMemoryNotificationsQueue {
   }
 }
 
+class InMemoryQualityGatesQueue {
+  readonly jobs: Array<{
+    name: string;
+    payload: Record<string, unknown>;
+    options?: Record<string, unknown>;
+  }> = [];
+
+  async add(name: string, payload: Record<string, unknown>, options?: Record<string, unknown>) {
+    this.jobs.push({ name, payload, options });
+    return {
+      name,
+      data: payload,
+      opts: options,
+    };
+  }
+}
+
 class InMemoryNotificationsRepository {
   private readonly preferences = new Map<string, NotificationPreferenceRecord>();
   private readonly notifications = new Map<string, NotificationRecord>();
@@ -2108,6 +2302,8 @@ export async function createMainServiceTestApp(): Promise<{
   const insuranceRepository = new InMemoryInsuranceRepository();
   const notificationsRepository = new InMemoryNotificationsRepository();
   const notificationsQueue = new InMemoryNotificationsQueue();
+  const qualityGatesRepository = new InMemoryQualityGatesRepository();
+  const qualityGatesQueue = new InMemoryQualityGatesQueue();
   const googleIdentityService = new FakeGoogleIdentityService();
   const smtpMailService = new FakeSmtpMailService();
   const inspectionsRepository = new InMemoryInspectionsRepository();
@@ -2125,6 +2321,7 @@ export async function createMainServiceTestApp(): Promise<{
       InsuranceController,
       NotificationsController,
       JobOrdersController,
+      QualityGatesController,
       InspectionsController,
       VehicleLifecycleController,
     ],
@@ -2140,6 +2337,7 @@ export async function createMainServiceTestApp(): Promise<{
       InsuranceService,
       NotificationsService,
       JobOrdersService,
+      QualityGatesService,
       InspectionsService,
       VehicleLifecycleService,
       { provide: GoogleIdentityService, useValue: googleIdentityService },
@@ -2166,9 +2364,11 @@ export async function createMainServiceTestApp(): Promise<{
       { provide: BackJobsRepository, useValue: backJobsRepository },
       { provide: InsuranceRepository, useValue: insuranceRepository },
       { provide: NotificationsRepository, useValue: notificationsRepository },
+      { provide: QualityGatesRepository, useValue: qualityGatesRepository },
       { provide: InspectionsRepository, useValue: inspectionsRepository },
       { provide: VehicleLifecycleRepository, useValue: vehicleLifecycleRepository },
       { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
+      { provide: getQueueToken(QUALITY_GATES_QUEUE_NAME), useValue: qualityGatesQueue },
     ],
   }).compile();
 

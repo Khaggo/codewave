@@ -20,5 +20,11 @@ This folder contains human-readable handoff packs for slices that need frontend 
 
 - `T105-bookings-operations-and-queue.md`
 - `T106-job-orders-core.md`
+- `T107-job-order-progress-and-photo-evidence.md`
+- `T108-invoice-generation-from-job-orders.md`
 - `T109-back-jobs-review-and-validation.md`
 - `T110-insurance-inquiry-core.md`
+- `T111-notifications-reminders-core.md`
+- `T116-quality-gates-foundation.md`
+- `T120-google-signup-and-sms-otp-customer-enrollment.md`
+- `T121-staff-pending-activation-google-sms.md`

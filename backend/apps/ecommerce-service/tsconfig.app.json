@@ -5,7 +5,8 @@
   },
   "include": [
     "src/**/*.ts",
-    "../../shared/**/*.ts"
+    "../../shared/**/*.ts",
+    "../../types/**/*.d.ts"
   ],
   "exclude": [
     "test",

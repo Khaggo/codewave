@@ -1,6 +1,24 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
+
+const nodemailer = require('nodemailer') as {
+  createTransport: (options: {
+    host: string;
+    port: number;
+    secure: boolean;
+    auth: {
+      user: string;
+      pass: string;
+    };
+  }) => {
+    sendMail: (payload: {
+      from: string;
+      to: string;
+      subject: string;
+      text: string;
+    }) => Promise<{ messageId?: string | null }>;
+  };
+};
 
 type SendMailInput = {
   to: string;
@@ -10,7 +28,7 @@ type SendMailInput = {
 
 @Injectable()
 export class SmtpMailService {
-  private readonly transporter: nodemailer.Transporter;
+  private readonly transporter: ReturnType<typeof nodemailer.createTransport>;
   private readonly from: string;
 
   constructor(private readonly configService: ConfigService) {
@@ -33,7 +51,7 @@ export class SmtpMailService {
     this.transporter = nodemailer.createTransport({
       host,
       port,
-      secure,
+      secure: secure ?? false,
       auth: {
         user,
         pass,
@@ -41,7 +59,7 @@ export class SmtpMailService {
     });
   }
 
-  async sendMail(payload: SendMailInput) {
+  async sendMail(payload: SendMailInput): Promise<{ messageId?: string | null }> {
     return this.transporter.sendMail({
       from: this.from,
       to: payload.to,

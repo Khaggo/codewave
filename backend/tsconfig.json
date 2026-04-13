@@ -5,6 +5,7 @@
     "apps/**/*.d.ts",
     "shared/**/*.ts",
     "shared/**/*.d.ts",
+    "types/**/*.d.ts",
     "scripts/**/*.ts",
     "scripts/**/*.d.ts"
   ],

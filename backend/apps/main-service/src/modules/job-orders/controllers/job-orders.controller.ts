@@ -158,7 +158,7 @@ export class JobOrdersController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('service_adviser', 'super_admin')
-  @ApiOperation({ summary: 'Generate an invoice-ready record from a finalized job order.' })
+  @ApiOperation({ summary: 'Generate an invoice-ready record after QA clears the job order.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
     name: 'id',
@@ -170,7 +170,7 @@ export class JobOrdersController {
     type: JobOrderResponseDto,
   })
   @ApiBadRequestResponse({ description: 'The finalize payload is invalid.' })
-  @ApiConflictResponse({ description: 'The job order is not ready to generate an invoice-ready record.' })
+  @ApiConflictResponse({ description: 'The job order is not ready for invoice generation or QA release is still blocked.' })
   @ApiForbiddenResponse({ description: 'Only the responsible service adviser or a super admin can finalize the job order.' })
   @ApiNotFoundResponse({ description: 'Job order not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })

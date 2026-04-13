@@ -8,6 +8,7 @@ import {
 
 import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jobs.repository';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
+import { QualityGatesService } from '@main-modules/quality-gates/services/quality-gates.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
 
@@ -46,6 +47,7 @@ export class JobOrdersService {
     private readonly backJobsRepository: BackJobsRepository,
     private readonly usersService: UsersService,
     private readonly vehiclesRepository: VehiclesRepository,
+    private readonly qualityGatesService: QualityGatesService,
   ) {}
 
   async create(payload: CreateJobOrderDto, actor: JobOrderActor) {
@@ -128,7 +130,13 @@ export class JobOrdersService {
       }
     }
 
-    return this.jobOrdersRepository.updateStatus(id, payload);
+    const updatedJobOrder = await this.jobOrdersRepository.updateStatus(id, payload);
+
+    if (payload.status === 'ready_for_qa') {
+      await this.qualityGatesService.beginQualityGate(id);
+    }
+
+    return updatedJobOrder;
   }
 
   async addProgressEntry(id: string, payload: AddJobOrderProgressDto, actor: JobOrderActor) {
@@ -209,6 +217,8 @@ export class JobOrdersService {
     if (items.length === 0 || items.some((item) => !item.isCompleted)) {
       throw new ConflictException('All job-order items must be completed before invoice generation');
     }
+
+    await this.qualityGatesService.assertReleaseAllowed(id);
 
     return this.jobOrdersRepository.finalize(id, {
       ...payload,

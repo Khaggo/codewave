@@ -13,6 +13,7 @@ import { InsuranceModule } from '@main-modules/insurance/insurance.module';
 import { InspectionsModule } from '@main-modules/inspections/inspections.module';
 import { JobOrdersModule } from '@main-modules/job-orders/job-orders.module';
 import { NotificationsModule } from '@main-modules/notifications/notifications.module';
+import { QualityGatesModule } from '@main-modules/quality-gates/quality-gates.module';
 import { UsersModule } from '@main-modules/users/users.module';
 import { VehicleLifecycleModule } from '@main-modules/vehicle-lifecycle/vehicle-lifecycle.module';
 import { VehiclesModule } from '@main-modules/vehicles/vehicles.module';
@@ -38,6 +39,7 @@ import { HealthController } from './health.controller';
     InsuranceModule,
     NotificationsModule,
     JobOrdersModule,
+    QualityGatesModule,
     InspectionsModule,
     VehicleLifecycleModule,
   ],

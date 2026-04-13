@@ -56,8 +56,8 @@ This folder is the execution layer derived from the canonical SSoT in `docs/arch
   - `T122-auth-otp-delivery-foundation`
   - `T120-google-signup-and-sms-otp-customer-enrollment`
   - `T121-staff-pending-activation-google-sms`
-- current priority queue:
   - `T116-quality-gates-foundation`
+- current priority queue:
   - `T117-quality-gate1-semantic-resolution-auditor`
   - `T118-quality-gate2-discrepancy-risk-engine`
   - `T119-quality-gate-manual-override`

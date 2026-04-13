@@ -3,6 +3,7 @@ import { BadRequestException, ConflictException, ForbiddenException } from '@nes
 
 import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jobs.repository';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
+import { QualityGatesService } from '@main-modules/quality-gates/services/quality-gates.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
 import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
@@ -75,6 +76,7 @@ describe('JobOrdersService', () => {
         { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn(), linkReworkJobOrder: jest.fn() } },
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: vehiclesRepository },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
       ],
     }).compile();
 
@@ -147,6 +149,7 @@ describe('JobOrdersService', () => {
             findOwnedByUser: jest.fn(),
           },
         },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
       ],
     }).compile();
 
@@ -235,6 +238,7 @@ describe('JobOrdersService', () => {
         { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn(), linkReworkJobOrder: jest.fn() } },
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: vehiclesRepository },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
       ],
     }).compile();
 
@@ -302,6 +306,7 @@ describe('JobOrdersService', () => {
             findOwnedByUser: jest.fn(),
           },
         },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
       ],
     }).compile();
 
@@ -365,6 +370,7 @@ describe('JobOrdersService', () => {
           },
         },
         { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
       ],
     }).compile();
 
@@ -434,6 +440,7 @@ describe('JobOrdersService', () => {
         { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn(), linkReworkJobOrder: jest.fn() } },
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
       ],
     }).compile();
 
@@ -509,6 +516,13 @@ describe('JobOrdersService', () => {
           },
         },
         { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
+        {
+          provide: QualityGatesService,
+          useValue: {
+            beginQualityGate: jest.fn(),
+            assertReleaseAllowed: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 
@@ -585,6 +599,13 @@ describe('JobOrdersService', () => {
           },
         },
         { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
+        {
+          provide: QualityGatesService,
+          useValue: {
+            beginQualityGate: jest.fn(),
+            assertReleaseAllowed: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -702,6 +723,7 @@ describe('JobOrdersService', () => {
         { provide: BackJobsRepository, useValue: backJobsRepository },
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: vehiclesRepository },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
       ],
     }).compile();
 

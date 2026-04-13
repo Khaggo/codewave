@@ -14,7 +14,7 @@ Build the quality-gates foundation.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

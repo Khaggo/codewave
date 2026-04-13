@@ -99,7 +99,13 @@ export const jobOrdersErrorCases: Record<string, ApiErrorResponse[]> = {
     {
       statusCode: 409,
       code: 'CONFLICT',
-      message: 'The job order is not ready to generate an invoice-ready record.',
+      message: 'The job order is not ready for invoice generation or QA release is still blocked.',
+      source: 'swagger',
+    },
+    {
+      statusCode: 409,
+      code: 'CONFLICT',
+      message: 'Quality gate is blocked and must be resolved before invoice generation',
       source: 'swagger',
     },
   ],
