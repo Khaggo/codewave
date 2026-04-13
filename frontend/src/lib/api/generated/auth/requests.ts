@@ -17,6 +17,11 @@ export interface RefreshTokenRequest {
   refreshToken: string;
 }
 
+export interface RegisterVerifyEmailRequest {
+  enrollmentId: string;
+  otp: string;
+}
+
 export interface GoogleSignupStartRequest {
   googleIdToken: string;
 }
@@ -32,7 +37,13 @@ export const authRoutes: Record<string, RouteContract> = {
     path: '/api/auth/register',
     status: 'live',
     source: 'swagger',
-    notes: 'Legacy password-first registration during migration.',
+    notes: 'Starts password-based customer signup and sends an email OTP. Tokens are issued only after /api/auth/register/verify-email succeeds.',
+  },
+  registerVerifyEmail: {
+    method: 'POST',
+    path: '/api/auth/register/verify-email',
+    status: 'live',
+    source: 'swagger',
   },
   login: {
     method: 'POST',

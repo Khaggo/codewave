@@ -223,16 +223,20 @@ describe('JobOrdersController integration', () => {
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const customerRegister = await request(app.getHttpServer()).post('/api/auth/register').send({
+      const customerUser = await seedAuthUser({
         email: 'joborder.auth.customer@example.com',
         password: 'password123',
         firstName: 'Jamie',
         lastName: 'Customer',
       });
-      expect(customerRegister.status).toBe(201);
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customerUser.email,
+        password: 'password123',
+      });
+      expect(customerLogin.status).toBe(200);
 
       const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerRegister.body.user.id,
+        userId: customerUser.id,
         plateNumber: 'JOBDUP',
         make: 'Honda',
         model: 'Civic',
@@ -240,7 +244,7 @@ describe('JobOrdersController integration', () => {
       });
 
       const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerRegister.body.user.id,
+        userId: customerUser.id,
         vehicleId: vehicleResponse.body.id,
         timeSlotId: timeSlotsResponse.body[0].id,
         scheduledDate: '2026-05-06',
@@ -260,7 +264,7 @@ describe('JobOrdersController integration', () => {
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
-          customerUserId: customerRegister.body.user.id,
+          customerUserId: customerUser.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode,
@@ -274,7 +278,7 @@ describe('JobOrdersController integration', () => {
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
-          customerUserId: customerRegister.body.user.id,
+          customerUserId: customerUser.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode,
@@ -284,7 +288,7 @@ describe('JobOrdersController integration', () => {
 
       const customerReadAttempt = await request(app.getHttpServer())
         .get(`/api/job-orders/${createJobOrderResponse.body.id}`)
-        .set('Authorization', `Bearer ${customerRegister.body.accessToken}`);
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
       expect(customerReadAttempt.status).toBe(403);
 
       const unassignedTechnicianReadAttempt = await request(app.getHttpServer())
@@ -303,7 +307,7 @@ describe('JobOrdersController integration', () => {
 
       const customerPhotoAttempt = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
-        .set('Authorization', `Bearer ${customerRegister.body.accessToken}`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
         .send({
           fileName: 'customer-upload.jpg',
           fileUrl: 'https://files.example.com/customer-upload.jpg',

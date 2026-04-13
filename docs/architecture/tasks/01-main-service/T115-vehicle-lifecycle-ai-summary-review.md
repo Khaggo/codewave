@@ -14,7 +14,7 @@ Add review-gated AI summaries to vehicle lifecycle.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

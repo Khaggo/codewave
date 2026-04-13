@@ -1,32 +1,32 @@
-# AUTOCARE Frontend Contract Workspace
+# AUTOCARE Frontend Workspace
 
-This folder is the future home of the frontend codebase and already contains the first shared API contract packs and mock fixtures.
+This folder contains the imported frontend app plus the backend-owned slice contracts and mocks used for integration.
 
-If you are importing a full frontend project from another machine, use the backend helper scripts instead of manually pasting files over this folder:
+## What Stays In Git
 
-```powershell
-cd backend
-npm run frontend:import -- <path-to-frontend-project>
-npm run frontend:inspect
-```
+- application source and config
+- `src/lib/api/generated/` slice contract files
+- `src/mocks/` slice mock fixtures
+- `package.json` and lockfile
+- `.env.example`
 
-The import flow preserves the backend-owned contracts under `src/lib/api/generated/` and the slice mocks under `src/mocks/`.
+## What Stays Local Only
 
-## Purpose
+- `.claude/`
+- `.codex-integration/`
+- `.expo/`
+- `.next/`
+- `node_modules/`
+- local `.env` files
 
-- give frontend work a typed starting point before every backend slice is fully implemented
-- keep generated or curated API assumptions close to the workspace
-- make it obvious which routes are `live` and which are only `planned`
+These local-only folders are tooling or machine-specific metadata and are not part of the application contract.
 
-## Current Structure
+## Integration Workflow
 
-- `src/lib/api/generated/`: slice-based request, response, and error contracts
-- `src/mocks/`: slice-based mock fixtures for UI and integration work
+Use the durable workflow in [`docs/frontend-local-integration.md`](../docs/frontend-local-integration.md).
 
-## Rules
+Current recommended first live slices:
 
-- these files are helpers, not the source of truth
-- business meaning comes from `docs/architecture/domains/...`
-- execution intent comes from `docs/architecture/tasks/...`
-- implemented route truth comes from backend Swagger at `/docs-json`
-- if a contract file says `planned`, frontend should treat it as mock-only until the route is live
+1. `T110` insurance
+2. `T111` notifications
+3. `T109` back jobs

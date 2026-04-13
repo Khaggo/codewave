@@ -54,15 +54,15 @@ This folder is the execution layer derived from the canonical SSoT in `docs/arch
   - `T110-insurance-inquiry-core`
   - `T111-notifications-reminders-core`
   - `T122-auth-otp-delivery-foundation`
-  - `T120-google-signup-and-sms-otp-customer-enrollment`
-  - `T121-staff-pending-activation-google-sms`
+  - `T120-google-signup-and-email-otp-customer-enrollment`
+  - `T121-staff-pending-activation-google-email-otp`
+  - `T115-vehicle-lifecycle-ai-summary-review`
   - `T116-quality-gates-foundation`
-- current priority queue:
   - `T117-quality-gate1-semantic-resolution-auditor`
   - `T118-quality-gate2-discrepancy-risk-engine`
   - `T119-quality-gate-manual-override`
-  - `T115-vehicle-lifecycle-ai-summary-review`
   - `T201-ecommerce-bootstrap`
+- current priority queue:
   - `T202-catalog-v1`
   - `T203-cart-and-invoice-checkout`
   - `T204-order-tracking-and-purchase-history`

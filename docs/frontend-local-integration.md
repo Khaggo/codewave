@@ -48,8 +48,8 @@ npm run frontend:inspect
 ```
 
 4. Install the frontend dependencies using the detected package manager.
-5. Review `frontend/.codex-integration/README.md`.
-6. Keep AI features disabled by env until the first live slices are working.
+5. Keep AI features disabled by env until the first live slices are working.
+6. Treat assistant metadata such as `frontend/.claude/` and `frontend/.codex-integration/` as local-only and do not commit them.
 
 ## AI Default
 

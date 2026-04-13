@@ -11,6 +11,7 @@ This file defines the canonical API strategy for the AUTOCARE backend. Use it to
 - Keep third-party APIs out of scope unless a concrete business requirement is approved.
 - Approved AI provider APIs are one canonical exception, and only through a provider adapter for review-gated Phase 2 features.
 - Approved Google identity-verification APIs and approved SMTP mail delivery through Nodemailer are the other canonical exceptions because they support the target signup and activation security model.
+- SMTP mail delivery is email-only in the current scope. Do not add SMS transports to canonical docs or contracts unless a later approved plan changes the cost model.
 
 ## REST and Swagger Contract
 

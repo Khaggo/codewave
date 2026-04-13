@@ -14,7 +14,7 @@ Implement Gate 2 discrepancy and risk scoring.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "AutoCare Web",
+    "slug": "autocare-web",
+    "version": "1.0.0",
+    "orientation": "default",
+    "assetBundlePatterns": [
+      "**/*"
+    ]
+  }
+}

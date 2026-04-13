@@ -19,8 +19,8 @@ export const qualityGateRoutes: Record<string, RouteContract> = {
   overrideJobOrderQualityGate: {
     method: 'PATCH',
     path: '/api/job-orders/:jobOrderId/qa/override',
-    status: 'planned',
-    source: 'task',
-    notes: 'Planned for T119. Manual override remains a later slice.',
+    status: 'live',
+    source: 'swagger',
+    notes: 'Live route. Only super admins can approve a documented manual QA override.',
   },
 };

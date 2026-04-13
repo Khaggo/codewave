@@ -51,6 +51,19 @@ export const loadLocalEnv = (): NodeJS.ProcessEnv => {
 
 export const getMainServicePort = (env: NodeJS.ProcessEnv) => Number(env.MAIN_SERVICE_PORT ?? '3000');
 
+export const getDatabasePort = (env: NodeJS.ProcessEnv) => {
+  const databaseUrl = env.DATABASE_URL;
+  if (!databaseUrl) {
+    return 5433;
+  }
+
+  try {
+    return Number(new URL(databaseUrl).port || '5433');
+  } catch {
+    return 5433;
+  }
+};
+
 export const getHealthUrl = (env: NodeJS.ProcessEnv) =>
   `http://127.0.0.1:${getMainServicePort(env)}/api/health`;
 

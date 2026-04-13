@@ -54,11 +54,11 @@ Key relations:
 - decide whether a user should receive a notice
 - schedule reminders and retries through BullMQ
 - store delivery status and failures
-- support different channels without changing trigger ownership
-- support operational email and SMS delivery patterns
+- support operational email delivery without changing trigger ownership
 - expose user-facing preference and history endpoints for operational notifications
 - deliver email OTP challenges for signup and staff activation without taking ownership of activation decisions
 - hide internal-only operational events from customer notification streams
+- keep SMS and other paid delivery channels out of the canonical scope unless explicitly reapproved
 
 ## Process Flow
 
@@ -93,8 +93,8 @@ Key relations:
 - user opts out of a channel after a job is already queued
 - reminder jobs remain queued after booking cancellation
 - invoice reminders keep sending after payment is fully recorded
-- email and SMS channel states diverge after a partial delivery failure
-- SMS reminder requests arrive for users without a phone number on file
+- email delivery fails after a reminder has already been scheduled
+- reminder preferences change between queueing time and delivery time
 - auth email OTP expiry and OTP flood control are handled in `auth`
 
 ## Writable Sections

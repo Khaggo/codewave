@@ -234,13 +234,18 @@ describe('BookingsController integration', () => {
         });
       expect(invalidTransition.status).toBe(409);
 
-      const customerLogin = await request(app.getHttpServer()).post('/api/auth/register').send({
+      const customerUser = await seedAuthUser({
         email: 'customer.auth@example.com',
         password: 'password123',
         firstName: 'Jamie',
         lastName: 'Customer',
       });
-      expect(customerLogin.status).toBe(201);
+
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: 'customer.auth@example.com',
+        password: 'password123',
+      });
+      expect(customerLogin.status).toBe(200);
 
       const forbiddenStatusUpdate = await request(app.getHttpServer())
         .patch(`/api/bookings/${firstBooking.body.id}/status`)

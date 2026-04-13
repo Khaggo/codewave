@@ -1,6 +1,7 @@
 import { relations } from 'drizzle-orm';
 import {
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -32,6 +33,23 @@ export const qualityGateFindingSeverityEnum = pgEnum('quality_gate_finding_sever
   'critical',
 ]);
 
+export type QualityGateFindingProvenance = {
+  provider: string;
+  model: string;
+  promptVersion: string;
+  sourceType: 'booking' | 'back_job';
+  ruleId?: string;
+  recommendation: 'supported' | 'review_needed' | 'insufficient_context';
+  confidence: 'high' | 'medium' | 'low';
+  concernSummary: string;
+  completedWorkSummary: string;
+  matchedKeywords: string[];
+  coverageRatio: number;
+  evidenceRefs?: string[];
+  evidenceSummary?: string;
+  riskContribution?: number;
+};
+
 export const jobOrderQualityGates = pgTable(
   'job_order_quality_gates',
   {
@@ -61,6 +79,7 @@ export const qualityGateFindings = pgTable('quality_gate_findings', {
   severity: qualityGateFindingSeverityEnum('severity').notNull().default('warning'),
   code: varchar('code', { length: 80 }).notNull(),
   message: text('message').notNull(),
+  provenance: jsonb('provenance').$type<QualityGateFindingProvenance | null>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

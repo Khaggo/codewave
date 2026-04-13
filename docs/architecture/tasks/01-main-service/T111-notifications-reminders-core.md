@@ -47,7 +47,7 @@ Create the operational reminder and notification foundation for bookings, insura
 
 ## Implementation Notes
 
-- support email and SMS delivery semantics
+- support email-only delivery semantics for the current scope
 - keep source-domain trigger ownership separate
 - keep auth OTP delivery out of this task and in `T122`
 - live public routes:

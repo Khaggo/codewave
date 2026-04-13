@@ -4,7 +4,6 @@ export interface NotificationPreferencesResponse {
   id: string;
   userId: string;
   emailEnabled: boolean;
-  smsEnabled: boolean;
   bookingRemindersEnabled: boolean;
   insuranceUpdatesEnabled: boolean;
   invoiceRemindersEnabled: boolean;

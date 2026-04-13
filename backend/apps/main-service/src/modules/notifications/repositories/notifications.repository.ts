@@ -103,7 +103,6 @@ export class NotificationsRepository extends BaseRepository {
       .update(notificationPreferences)
       .set({
         emailEnabled: payload.emailEnabled ?? existingPreferences.emailEnabled,
-        smsEnabled: payload.smsEnabled ?? existingPreferences.smsEnabled,
         bookingRemindersEnabled:
           payload.bookingRemindersEnabled ?? existingPreferences.bookingRemindersEnabled,
         insuranceUpdatesEnabled:

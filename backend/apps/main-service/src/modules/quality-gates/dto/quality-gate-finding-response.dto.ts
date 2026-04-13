@@ -4,6 +4,7 @@ import {
   qualityGateFindingGateEnum,
   qualityGateFindingSeverityEnum,
 } from '../schemas/quality-gates.schema';
+import { QualityGateFindingProvenanceResponseDto } from './quality-gate-finding-provenance-response.dto';
 
 export class QualityGateFindingResponseDto {
   @ApiProperty({
@@ -37,6 +38,13 @@ export class QualityGateFindingResponseDto {
     example: 'All job-order items must be completed before release can continue.',
   })
   message!: string;
+
+  @ApiProperty({
+    type: () => QualityGateFindingProvenanceResponseDto,
+    required: false,
+    nullable: true,
+  })
+  provenance?: QualityGateFindingProvenanceResponseDto | null;
 
   @ApiProperty({
     example: '2026-05-06T08:00:00.000Z',

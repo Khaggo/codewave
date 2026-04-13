@@ -28,7 +28,7 @@ export class NotificationResponseDto {
 
   @ApiProperty({
     enum: notificationChannelEnum.enumValues,
-    example: 'sms',
+    example: 'email',
   })
   channel!: (typeof notificationChannelEnum.enumValues)[number];
 

@@ -1,4 +1,4 @@
-# Staff Pending Activation Google SMS
+# Staff Pending Activation Google Email OTP
 
 ## Task ID
 

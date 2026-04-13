@@ -95,6 +95,7 @@ Build and maintain a correct, modular, and implementation-ready backend SSoT for
 - Invoice handling remains invoice-only and tracking-oriented; do not imply payment-gateway settlement.
 - Canonical account creation is Google identity verification followed by email OTP activation. Existing password-first registration remains legacy current-state until migration tasks land.
 - `main-service.auth` owns activation state, Google identity linkage, and OTP challenge decisions; `main-service.notifications` owns Nodemailer-backed OTP delivery execution and delivery observability.
+- `main-service.notifications` is email-only in the current canonical scope for both auth OTP and operational reminders. SMS remains backlog-only unless a future approval explicitly reintroduces it.
 - `main-service.chatbot` remains deterministic and FAQ-oriented. Do not merge it with generative AI features.
 - AI is canonical Phase 2, not immediate core delivery. Approved Phase 2 AI scope is limited to lifecycle layman summaries and QA audit assistance with mandatory human review.
 - Prefer vertical-slice delivery where the same task ID, contract pack, backend implementation, and frontend mock mode all describe one feature boundary.

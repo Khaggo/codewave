@@ -1,6 +1,6 @@
 import type { RouteContract } from '../shared';
 
-export type NotificationChannel = 'email' | 'sms';
+export type NotificationChannel = 'email';
 export type NotificationCategory =
   | 'booking_reminder'
   | 'insurance_update'
@@ -10,7 +10,6 @@ export type NotificationStatus = 'queued' | 'sent' | 'failed' | 'skipped' | 'can
 
 export interface UpdateNotificationPreferencesRequest {
   emailEnabled?: boolean;
-  smsEnabled?: boolean;
   bookingRemindersEnabled?: boolean;
   insuranceUpdatesEnabled?: boolean;
   invoiceRemindersEnabled?: boolean;

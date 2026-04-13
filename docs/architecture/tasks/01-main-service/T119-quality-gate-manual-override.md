@@ -14,7 +14,7 @@ Add manual override flow for blocked quality gates.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

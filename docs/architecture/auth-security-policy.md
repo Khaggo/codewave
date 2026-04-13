@@ -8,7 +8,7 @@ This file defines the canonical account-enrollment and activation model for AUTO
 - This policy applies to both customer self-enrollment and staff activation after super-admin provisioning.
 - Two-factor verification is required for signup and activation only. It is not the default rule for every later login.
 - Tokens should be issued only after account activation succeeds.
-- Current password-first signup and login may remain temporarily during migration, but they are legacy current-state behavior rather than the forward product direction.
+- Current password-first signup and login may remain temporarily during migration, but they are legacy compatibility behavior rather than the forward product direction.
 
 ## Google Identity Verification
 
@@ -36,7 +36,10 @@ This file defines the canonical account-enrollment and activation model for AUTO
 
 ## Legacy Login Position
 
-- Current password-based `POST /auth/register`, `POST /auth/login`, and `POST /auth/refresh` remain valid as legacy current-state behavior until the migration tasks land.
+- Current password-based `POST /auth/register`, `POST /auth/register/verify-email`, `POST /auth/login`, and `POST /auth/refresh` remain valid as legacy compatibility behavior until the migration tasks land.
+- `POST /auth/register` must create a pending account and send an email OTP. It must not issue usable tokens by itself.
+- `POST /auth/register/verify-email` activates the pending password-based account and is the point where tokens may first be issued.
+- `POST /auth/login` remains email-and-password only for already activated accounts. OTP is not required as part of normal later login.
 - Canonical docs must not present password-only registration as the target steady state.
 - New implementation work should prioritize Google+email activation flows before expanding password-only behavior.
 - Migration planning should keep refresh-token and bearer-token behavior stable for already activated accounts.

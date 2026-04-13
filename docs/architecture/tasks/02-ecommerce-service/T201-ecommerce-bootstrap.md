@@ -14,7 +14,7 @@ Move `ecommerce-service` from health-only state to domain-ready service foundati
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

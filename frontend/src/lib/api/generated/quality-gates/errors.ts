@@ -23,10 +23,16 @@ export const qualityGatesErrorCases: Record<string, ApiErrorResponse[]> = {
   ],
   overrideJobOrderQualityGate: [
     {
+      statusCode: 403,
+      code: 'FORBIDDEN',
+      message: 'Only super admins can approve manual quality-gate overrides.',
+      source: 'swagger',
+    },
+    {
       statusCode: 409,
       code: 'CONFLICT',
-      message: 'Manual override is planned for a later slice and is not live yet.',
-      source: 'task',
+      message: 'The quality gate is unavailable or is not currently blocked.',
+      source: 'swagger',
     },
   ],
 };

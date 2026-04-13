@@ -9,6 +9,7 @@ import {
   jobOrderQualityGates,
   qualityGateFindings,
   qualityGateFindingGateEnum,
+  QualityGateFindingProvenance,
   qualityGateFindingSeverityEnum,
   qualityGateOverrides,
   qualityGateStatusEnum,
@@ -27,7 +28,14 @@ type CompleteAuditInput = {
     severity: QualityGateFindingSeverity;
     code: string;
     message: string;
+    provenance?: QualityGateFindingProvenance | null;
   }>;
+};
+
+type CreateOverrideInput = {
+  actorUserId: string;
+  actorRole: 'technician' | 'service_adviser' | 'super_admin';
+  reason: string;
 };
 
 @Injectable()
@@ -121,6 +129,7 @@ export class QualityGatesRepository extends BaseRepository {
           severity: finding.severity,
           code: finding.code,
           message: finding.message,
+          provenance: finding.provenance ?? null,
         })),
       );
     }
@@ -135,6 +144,34 @@ export class QualityGatesRepository extends BaseRepository {
         updatedAt: now,
       })
       .where(eq(jobOrderQualityGates.id, gate.id));
+
+    return this.findByJobOrderId(jobOrderId);
+  }
+
+  async createOverride(jobOrderId: string, payload: CreateOverrideInput) {
+    const gate = await this.findOptionalByJobOrderId(jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    const now = new Date();
+
+    await this.db.transaction(async (tx) => {
+      await tx.insert(qualityGateOverrides).values({
+        qualityGateId: gate.id,
+        actorUserId: payload.actorUserId,
+        actorRole: payload.actorRole,
+        reason: payload.reason,
+      });
+
+      await tx
+        .update(jobOrderQualityGates)
+        .set({
+          status: 'overridden',
+          updatedAt: now,
+        })
+        .where(eq(jobOrderQualityGates.id, gate.id));
+    });
 
     return this.findByJobOrderId(jobOrderId);
   }

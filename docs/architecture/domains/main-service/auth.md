@@ -54,7 +54,7 @@ Key relations:
 
 - canonical target flow verifies a Google identity, then verifies email OTP, then activates the account and issues tokens
 - provision pending staff identities for `technician`, `service_adviser`, and `super_admin` accounts that must complete activation before use
-- current implementation still supports legacy email-and-password registration and login while the Google+email migration is pending
+- current implementation still supports legacy email-and-password registration and login while the Google+email migration is pending, but password signup now also enters pending activation and requires email OTP before tokens are issued
 - issue access and refresh tokens
 - rotate to one latest active refresh token per user
 - deactivate or reactivate staff credentials without deleting the user record
@@ -66,12 +66,13 @@ Key relations:
 1. Canonical customer enrollment begins with Google ID token verification and creates or resumes a pending account state linked to `main-service.users`.
 2. Auth requests email OTP delivery through `main-service.notifications`, verifies the submitted OTP, activates the account, and only then issues tokens.
 3. Super-admin staff provisioning creates a pending staff identity, after which the staff member completes Google verification and email OTP before activation.
-4. Current legacy behavior still allows `POST /auth/register` to create password-first customer credentials while the migration tasks are incomplete.
-5. `POST /auth/login` resolves the user by email, validates account activity and password, logs the attempt, and returns tokens for currently activated accounts.
-6. `POST /auth/refresh` verifies the submitted refresh token, checks it against the latest active stored token, and returns a rotated token pair.
-7. `GET /auth/me` uses JWT guard resolution to expose the authenticated identity already present on the request.
-8. Staff activation begins at `POST /auth/staff-activation/google/start`, then `POST /auth/staff-activation/verify-email` activates the staff identity and issues tokens.
-9. Staff-account deactivation updates both the user active flag and auth-account active flag, then revokes active refresh tokens for that identity.
+4. Current legacy behavior still allows `POST /auth/register` to create password-first customer credentials while the migration tasks are incomplete, but that flow now creates a pending account and sends an email OTP instead of issuing tokens immediately.
+5. `POST /auth/register/verify-email` verifies the password-registration OTP, activates the account, and only then issues tokens.
+6. `POST /auth/login` resolves the user by email, validates account activity and password, logs the attempt, and returns tokens for currently activated accounts without requiring OTP again.
+7. `POST /auth/refresh` verifies the submitted refresh token, checks it against the latest active stored token, and returns a rotated token pair.
+8. `GET /auth/me` uses JWT guard resolution to expose the authenticated identity already present on the request.
+9. Staff activation begins at `POST /auth/staff-activation/google/start`, then `POST /auth/staff-activation/verify-email` activates the staff identity and issues tokens.
+10. Staff-account deactivation updates both the user active flag and auth-account active flag, then revokes active refresh tokens for that identity.
 
 ## Use Cases
 
@@ -86,6 +87,7 @@ Key relations:
 ## API Surface
 
 - `POST /auth/register`
+- `POST /auth/register/verify-email`
 - `POST /auth/login`
 - `POST /auth/refresh`
 - `GET /auth/me`

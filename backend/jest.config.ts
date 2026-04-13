@@ -16,6 +16,7 @@ const config: Config = {
   moduleNameMapper: {
     '^@shared/(.*)$': '<rootDir>/shared/$1',
     '^@main-modules/(.*)$': '<rootDir>/apps/main-service/src/modules/$1',
+    '^@ecommerce-modules/(.*)$': '<rootDir>/apps/ecommerce-service/src/modules/$1',
   },
 };
 

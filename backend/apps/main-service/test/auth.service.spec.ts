@@ -11,7 +11,7 @@ import { NotificationsService } from '@main-modules/notifications/services/notif
 import { UsersService } from '@main-modules/users/services/users.service';
 
 describe('AuthService', () => {
-  it('registers a customer and issues tokens', async () => {
+  it('starts customer registration and sends an OTP instead of issuing tokens immediately', async () => {
     const usersService = {
       findByEmail: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue({
@@ -23,18 +23,20 @@ describe('AuthService', () => {
           lastName: 'Doe',
         },
       }),
+      setActivationStatus: jest.fn().mockResolvedValue(undefined),
     };
 
     const authRepository = {
       createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
-      storeRefreshToken: jest.fn().mockResolvedValue({ id: 'refresh-1' }),
+      updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: false }),
+      createOtpChallenge: jest.fn().mockResolvedValue({
+        id: 'challenge-1',
+        userId: 'user-1',
+      }),
     };
 
-    const jwtService = {
-      signAsync: jest
-        .fn()
-        .mockResolvedValueOnce('access-token')
-        .mockResolvedValueOnce('refresh-token'),
+    const notificationsService = {
+      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-1' }),
     };
 
     const configService = {
@@ -53,9 +55,9 @@ describe('AuthService', () => {
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: AuthRepository, useValue: authRepository },
-        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
+        { provide: NotificationsService, useValue: notificationsService },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
-        { provide: JwtService, useValue: jwtService },
+        { provide: JwtService, useValue: {} },
         { provide: ConfigService, useValue: configService },
       ],
     }).compile();
@@ -71,9 +73,23 @@ describe('AuthService', () => {
 
     expect(usersService.create).toHaveBeenCalled();
     expect(authRepository.createAccount).toHaveBeenCalled();
-    expect(authRepository.storeRefreshToken).toHaveBeenCalled();
-    expect(result.accessToken).toBe('access-token');
-    expect(result.refreshToken).toBe('refresh-token');
+    expect(usersService.setActivationStatus).toHaveBeenCalledWith('user-1', false);
+    expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('user-1', false);
+    expect(authRepository.createOtpChallenge).toHaveBeenCalled();
+    expect(notificationsService.enqueueAuthOtpDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        email: 'customer@example.com',
+        activationContext: 'customer_signup',
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        enrollmentId: 'challenge-1',
+        userId: 'user-1',
+        status: 'pending_activation',
+      }),
+    );
   });
 
   it('rejects duplicate registration email', async () => {

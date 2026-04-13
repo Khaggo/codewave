@@ -1,4 +1,4 @@
-# T121 Staff Pending Activation Google Email
+# T121 Staff Pending Activation Google Email OTP
 
 ## Scope
 

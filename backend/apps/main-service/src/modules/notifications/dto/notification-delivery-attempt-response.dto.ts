@@ -25,7 +25,7 @@ export class NotificationDeliveryAttemptResponseDto {
   status!: (typeof notificationAttemptStatusEnum.enumValues)[number];
 
   @ApiPropertyOptional({
-    example: 'sms-provider-message-123',
+    example: 'smtp-message-123',
   })
   providerMessageId?: string | null;
 

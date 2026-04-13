@@ -12,6 +12,14 @@ export interface AuthSessionResponse {
   user: AuthUserResponse;
 }
 
+export interface RegisterStartResponse {
+  enrollmentId: string;
+  userId: string;
+  maskedEmail: string;
+  otpExpiresAt: string;
+  status: string;
+}
+
 export interface AuthenticatedUserResponse {
   userId: string;
   email: string;

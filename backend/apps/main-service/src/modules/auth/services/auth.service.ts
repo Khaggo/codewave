@@ -85,34 +85,12 @@ export class AuthService {
       email: normalizedEmail,
     });
 
-    const otp = this.generateOtp();
-    const otpHash = await bcrypt.hash(otp, 10);
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    const challenge = await this.authRepository.createOtpChallenge({
+    return this.createOtpEnrollment({
       userId: user.id,
+      email: normalizedEmail,
       purpose: 'customer_signup',
-      email: normalizedEmail,
-      otpHash,
-      expiresAt,
-    });
-
-    await this.notificationsService.enqueueAuthOtpDelivery({
-      userId: user.id,
-      otp,
-      email: normalizedEmail,
       activationContext: 'customer_signup',
-      dedupeKey: `auth-otp-${challenge.id}`,
-      sourceId: challenge.id,
     });
-
-    return {
-      enrollmentId: challenge.id,
-      userId: user.id,
-      maskedEmail: this.maskEmail(normalizedEmail),
-      otpExpiresAt: expiresAt.toISOString(),
-      status: 'pending_activation',
-    };
   }
 
   async startStaffActivation(payload: GoogleSignupStartDto) {
@@ -154,34 +132,12 @@ export class AuthService {
       });
     }
 
-    const otp = this.generateOtp();
-    const otpHash = await bcrypt.hash(otp, 10);
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    const challenge = await this.authRepository.createOtpChallenge({
+    return this.createOtpEnrollment({
       userId: user.id,
+      email: normalizedEmail,
       purpose: 'staff_activation',
-      email: normalizedEmail,
-      otpHash,
-      expiresAt,
-    });
-
-    await this.notificationsService.enqueueAuthOtpDelivery({
-      userId: user.id,
-      otp,
-      email: normalizedEmail,
       activationContext: 'staff_activation',
-      dedupeKey: `auth-otp-${challenge.id}`,
-      sourceId: challenge.id,
     });
-
-    return {
-      enrollmentId: challenge.id,
-      userId: user.id,
-      maskedEmail: this.maskEmail(normalizedEmail),
-      otpExpiresAt: expiresAt.toISOString(),
-      status: 'pending_activation',
-    };
   }
 
   async verifyEmailOtp(payload: VerifyEmailOtpDto) {
@@ -293,12 +249,14 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(registerDto.password, 10);
     await this.authRepository.createAccount(user.id, passwordHash);
+    await this.usersService.setActivationStatus(user.id, false);
+    await this.authRepository.updateAccountStatus(user.id, false);
 
-    return this.issueTokens({
-      id: user.id,
+    return this.createOtpEnrollment({
+      userId: user.id,
       email: user.email,
-      role: user.role,
-      profile: user.profile,
+      purpose: 'customer_signup',
+      activationContext: 'customer_signup',
     });
   }
 
@@ -462,6 +420,42 @@ export class AuthService {
       accessToken,
       refreshToken,
       user,
+    };
+  }
+
+  private async createOtpEnrollment(payload: {
+    userId: string;
+    email: string;
+    purpose: 'customer_signup' | 'staff_activation';
+    activationContext: 'customer_signup' | 'staff_activation';
+  }) {
+    const otp = this.generateOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    const challenge = await this.authRepository.createOtpChallenge({
+      userId: payload.userId,
+      purpose: payload.purpose,
+      email: payload.email,
+      otpHash,
+      expiresAt,
+    });
+
+    await this.notificationsService.enqueueAuthOtpDelivery({
+      userId: payload.userId,
+      otp,
+      email: payload.email,
+      activationContext: payload.activationContext,
+      dedupeKey: `auth-otp-${challenge.id}`,
+      sourceId: challenge.id,
+    });
+
+    return {
+      enrollmentId: challenge.id,
+      userId: payload.userId,
+      maskedEmail: this.maskEmail(payload.email),
+      otpExpiresAt: expiresAt.toISOString(),
+      status: 'pending_activation',
     };
   }
 

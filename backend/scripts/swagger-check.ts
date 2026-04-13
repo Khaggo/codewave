@@ -2,6 +2,7 @@ import { getDocsJsonUrl, loadLocalEnv } from './swagger.shared';
 
 const requiredPaths = [
   '/api/auth/register',
+  '/api/auth/register/verify-email',
   '/api/auth/login',
   '/api/auth/refresh',
   '/api/auth/me',
@@ -19,6 +20,7 @@ const requiredSchemas = [
   'UpsertAddressDto',
   'UpdateAddressDto',
   'RegisterDto',
+  'VerifyEmailOtpDto',
   'CreateStaffAccountDto',
   'LoginDto',
   'RefreshTokenDto',
@@ -28,6 +30,7 @@ const requiredSchemas = [
   'UserProfileResponseDto',
   'AuthSessionResponseDto',
   'AuthenticatedUserResponseDto',
+  'GoogleSignupStartResponseDto',
 ] as const;
 
 async function main() {

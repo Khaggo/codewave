@@ -9,6 +9,20 @@ export const authErrorCases: Record<string, ApiErrorResponse[]> = {
       source: 'swagger',
     },
   ],
+  registerVerifyEmail: [
+    {
+      statusCode: 400,
+      code: 'BAD_REQUEST',
+      message: 'Invalid OTP.',
+      source: 'swagger',
+    },
+    {
+      statusCode: 409,
+      code: 'CONFLICT',
+      message: 'OTP has already been used.',
+      source: 'swagger',
+    },
+  ],
   googleSignupStart: [
     {
       statusCode: 401,

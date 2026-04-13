@@ -10,11 +10,6 @@ export class UpdateNotificationPreferencesDto {
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
-  smsEnabled?: boolean;
-
-  @ApiPropertyOptional({ example: true })
-  @IsOptional()
-  @IsBoolean()
   bookingRemindersEnabled?: boolean;
 
   @ApiPropertyOptional({ example: true })

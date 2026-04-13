@@ -13,7 +13,7 @@ import {
 
 import { users } from '@main-modules/users/schemas/users.schema';
 
-export const notificationChannelEnum = pgEnum('notification_channel', ['email', 'sms']);
+export const notificationChannelEnum = pgEnum('notification_channel', ['email']);
 
 export const notificationCategoryEnum = pgEnum('notification_category', [
   'booking_reminder',
@@ -55,7 +55,6 @@ export const notificationPreferences = pgTable('notification_preferences', {
     .references(() => users.id, { onDelete: 'cascade' })
     .unique(),
   emailEnabled: boolean('email_enabled').notNull().default(true),
-  smsEnabled: boolean('sms_enabled').notNull().default(true),
   bookingRemindersEnabled: boolean('booking_reminders_enabled').notNull().default(true),
   insuranceUpdatesEnabled: boolean('insurance_updates_enabled').notNull().default(true),
   invoiceRemindersEnabled: boolean('invoice_reminders_enabled').notNull().default(true),

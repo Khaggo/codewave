@@ -36,15 +36,29 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('auth/register')
-  @ApiOperation({ summary: 'Register a customer account and issue an auth session.' })
+  @ApiOperation({ summary: 'Start password-based customer signup and send an email OTP.' })
   @ApiCreatedResponse({
-    description: 'Registration succeeded and a new auth session was created.',
-    type: AuthSessionResponseDto,
+    description: 'Registration enrollment succeeded and an OTP was sent.',
+    type: GoogleSignupStartResponseDto,
   })
   @ApiBadRequestResponse({ description: 'The registration payload is invalid.' })
   @ApiConflictResponse({ description: 'The email is already registered.' })
   register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
+  }
+
+  @Post('auth/register/verify-email')
+  @ApiOperation({ summary: 'Verify the registration email OTP and activate the customer account.' })
+  @ApiOkResponse({
+    description: 'The account was activated and an auth session was created.',
+    type: AuthSessionResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The OTP payload is invalid or expired.' })
+  @ApiConflictResponse({ description: 'The OTP has already been used.' })
+  @ApiNotFoundResponse({ description: 'OTP enrollment not found.' })
+  @HttpCode(HttpStatus.OK)
+  verifyRegistrationEmail(@Body() payload: VerifyEmailOtpDto) {
+    return this.authService.verifyEmailOtp(payload);
   }
 
   @Post('auth/google/signup/start')

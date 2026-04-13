@@ -84,19 +84,25 @@ import { QualityGatesController } from '../../src/modules/quality-gates/controll
 import { QualityGatesRepository } from '../../src/modules/quality-gates/repositories/quality-gates.repository';
 import { QUALITY_GATES_QUEUE_NAME } from '../../src/modules/quality-gates/quality-gates.constants';
 import {
+  QualityGateFindingProvenance,
   qualityGateFindingGateEnum,
   qualityGateFindingSeverityEnum,
   qualityGateStatusEnum,
 } from '../../src/modules/quality-gates/schemas/quality-gates.schema';
+import { QualityGateDiscrepancyEngineService } from '../../src/modules/quality-gates/services/quality-gate-discrepancy-engine.service';
+import { QualityGateSemanticAuditorService } from '../../src/modules/quality-gates/services/quality-gate-semantic-auditor.service';
 import { QualityGatesService } from '../../src/modules/quality-gates/services/quality-gates.service';
 import { VehicleLifecycleController } from '../../src/modules/vehicle-lifecycle/controllers/vehicle-lifecycle.controller';
 import { AppendVehicleTimelineEventDto } from '../../src/modules/vehicle-lifecycle/dto/append-vehicle-timeline-event.dto';
 import { VehicleLifecycleRepository } from '../../src/modules/vehicle-lifecycle/repositories/vehicle-lifecycle.repository';
 import {
+  vehicleLifecycleSummaryStatusEnum,
+  VehicleLifecycleSummaryProvenance,
   vehicleTimelineEventCategoryEnum,
   vehicleTimelineSourceTypeEnum,
 } from '../../src/modules/vehicle-lifecycle/schemas/vehicle-lifecycle.schema';
 import { VehicleLifecycleService } from '../../src/modules/vehicle-lifecycle/services/vehicle-lifecycle.service';
+import { VehicleLifecycleSummaryProviderService } from '../../src/modules/vehicle-lifecycle/services/vehicle-lifecycle-summary-provider.service';
 import { UsersController } from '../../src/modules/users/controllers/users.controller';
 import { CreateUserDto } from '../../src/modules/users/dto/create-user.dto';
 import { UpdateAddressDto } from '../../src/modules/users/dto/update-address.dto';
@@ -385,6 +391,24 @@ type JobOrderInvoiceRecord = {
   updatedAt: Date;
 };
 
+type VehicleLifecycleSummaryStatus = (typeof vehicleLifecycleSummaryStatusEnum.enumValues)[number];
+
+type VehicleLifecycleSummaryRecord = {
+  id: string;
+  vehicleId: string;
+  requestedByUserId: string;
+  summaryText: string;
+  status: VehicleLifecycleSummaryStatus;
+  customerVisible: boolean;
+  customerVisibleAt: Date | null;
+  reviewNotes: string | null;
+  reviewedByUserId: string | null;
+  reviewedAt: Date | null;
+  provenance: VehicleLifecycleSummaryProvenance;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type QualityGateStatus = (typeof qualityGateStatusEnum.enumValues)[number];
 type QualityGateFindingGate = (typeof qualityGateFindingGateEnum.enumValues)[number];
 type QualityGateFindingSeverity = (typeof qualityGateFindingSeverityEnum.enumValues)[number];
@@ -408,6 +432,7 @@ type QualityGateFindingRecord = {
   severity: QualityGateFindingSeverity;
   code: string;
   message: string;
+  provenance: QualityGateFindingProvenance | null;
   createdAt: Date;
 };
 
@@ -511,7 +536,6 @@ type NotificationPreferenceRecord = {
   id: string;
   userId: string;
   emailEnabled: boolean;
-  smsEnabled: boolean;
   bookingRemindersEnabled: boolean;
   insuranceUpdatesEnabled: boolean;
   invoiceRemindersEnabled: boolean;
@@ -651,7 +675,7 @@ const cloneQualityGate = (
     findings: findings
       .filter((finding) => finding.qualityGateId === qualityGate.id)
       .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
-      .map((finding) => ({ ...finding })),
+      .map((finding) => ({ ...finding, provenance: finding.provenance ? { ...finding.provenance } : null })),
     overrides: overrides
       .filter((override) => override.qualityGateId === qualityGate.id)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
@@ -1623,6 +1647,7 @@ class InMemoryQualityGatesRepository {
         severity: QualityGateFindingSeverity;
         code: string;
         message: string;
+        provenance?: QualityGateFindingProvenance | null;
       }>;
     },
   ) {
@@ -1655,8 +1680,41 @@ class InMemoryQualityGatesRepository {
         severity: finding.severity,
         code: finding.code,
         message: finding.message,
+        provenance: finding.provenance ?? null,
         createdAt: now,
       });
+    });
+
+    return this.findByJobOrderId(jobOrderId);
+  }
+
+  async createOverride(
+    jobOrderId: string,
+    payload: {
+      actorUserId: string;
+      actorRole: 'technician' | 'service_adviser' | 'super_admin';
+      reason: string;
+    },
+  ) {
+    const gate = Array.from(this.qualityGates.values()).find((entry) => entry.jobOrderId === jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    const now = new Date();
+    this.overrides.push({
+      id: randomUUID(),
+      qualityGateId: gate.id,
+      actorUserId: payload.actorUserId,
+      actorRole: payload.actorRole,
+      reason: payload.reason,
+      createdAt: now,
+    });
+
+    this.qualityGates.set(gate.id, {
+      ...gate,
+      status: 'overridden',
+      updatedAt: now,
     });
 
     return this.findByJobOrderId(jobOrderId);
@@ -1829,6 +1887,7 @@ class InMemoryInspectionsRepository {
 
 class InMemoryVehicleLifecycleRepository {
   private readonly events = new Map<string, VehicleTimelineEventRecord>();
+  private readonly summaries = new Map<string, VehicleLifecycleSummaryRecord>();
 
   async replaceForVehicle(vehicleId: string, payload: AppendVehicleTimelineEventDto[]) {
     Array.from(this.events.values())
@@ -1897,6 +1956,92 @@ class InMemoryVehicleLifecycleRepository {
         return left.dedupeKey.localeCompare(right.dedupeKey);
       })
       .map((event) => ({ ...event }));
+  }
+
+  async createSummary(payload: {
+    vehicleId: string;
+    requestedByUserId: string;
+    summaryText: string;
+    provenance: VehicleLifecycleSummaryProvenance;
+  }) {
+    const now = new Date();
+    const record: VehicleLifecycleSummaryRecord = {
+      id: randomUUID(),
+      vehicleId: payload.vehicleId,
+      requestedByUserId: payload.requestedByUserId,
+      summaryText: payload.summaryText,
+      status: 'pending_review',
+      customerVisible: false,
+      customerVisibleAt: null,
+      reviewNotes: null,
+      reviewedByUserId: null,
+      reviewedAt: null,
+      provenance: { ...payload.provenance, evidenceRefs: [...payload.provenance.evidenceRefs] },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.summaries.set(record.id, record);
+    return this.findSummaryById(record.id);
+  }
+
+  async findSummaryById(summaryId: string) {
+    const summary = this.summaries.get(summaryId);
+    if (!summary) {
+      throw new NotFoundException('Vehicle lifecycle summary not found');
+    }
+
+    return {
+      ...summary,
+      provenance: {
+        ...summary.provenance,
+        evidenceRefs: [...summary.provenance.evidenceRefs],
+      },
+    };
+  }
+
+  async listSummariesByVehicleId(vehicleId: string) {
+    return Array.from(this.summaries.values())
+      .filter((summary) => summary.vehicleId === vehicleId)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((summary) => ({
+        ...summary,
+        provenance: {
+          ...summary.provenance,
+          evidenceRefs: [...summary.provenance.evidenceRefs],
+        },
+      }));
+  }
+
+  async reviewSummary(
+    summaryId: string,
+    payload: {
+      status: Extract<VehicleLifecycleSummaryStatus, 'approved' | 'rejected'>;
+      reviewNotes?: string | null;
+      reviewedByUserId: string;
+      reviewedAt: Date;
+      customerVisible: boolean;
+      customerVisibleAt?: Date | null;
+    },
+  ) {
+    const summary = this.summaries.get(summaryId);
+    if (!summary) {
+      throw new NotFoundException('Vehicle lifecycle summary not found');
+    }
+
+    const updatedSummary: VehicleLifecycleSummaryRecord = {
+      ...summary,
+      status: payload.status,
+      reviewNotes: payload.reviewNotes ?? null,
+      reviewedByUserId: payload.reviewedByUserId,
+      reviewedAt: payload.reviewedAt,
+      customerVisible: payload.customerVisible,
+      customerVisibleAt: payload.customerVisibleAt ?? null,
+      updatedAt: new Date(),
+    };
+
+    this.summaries.set(summaryId, updatedSummary);
+    return this.findSummaryById(summaryId);
   }
 }
 
@@ -2083,7 +2228,6 @@ class InMemoryNotificationsRepository {
       id: randomUUID(),
       userId,
       emailEnabled: true,
-      smsEnabled: true,
       bookingRemindersEnabled: true,
       insuranceUpdatesEnabled: true,
       invoiceRemindersEnabled: true,
@@ -2110,7 +2254,6 @@ class InMemoryNotificationsRepository {
     const updatedPreference: NotificationPreferenceRecord = {
       ...existingPreference,
       emailEnabled: payload.emailEnabled ?? existingPreference.emailEnabled,
-      smsEnabled: payload.smsEnabled ?? existingPreference.smsEnabled,
       bookingRemindersEnabled:
         payload.bookingRemindersEnabled ?? existingPreference.bookingRemindersEnabled,
       insuranceUpdatesEnabled:
@@ -2337,8 +2480,11 @@ export async function createMainServiceTestApp(): Promise<{
       InsuranceService,
       NotificationsService,
       JobOrdersService,
+      QualityGateDiscrepancyEngineService,
+      QualityGateSemanticAuditorService,
       QualityGatesService,
       InspectionsService,
+      VehicleLifecycleSummaryProviderService,
       VehicleLifecycleService,
       { provide: GoogleIdentityService, useValue: googleIdentityService },
       { provide: SmtpMailService, useValue: smtpMailService },

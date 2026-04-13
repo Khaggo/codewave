@@ -1,10 +1,12 @@
 import { Test } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
 import { VehicleLifecycleRepository } from '@main-modules/vehicle-lifecycle/repositories/vehicle-lifecycle.repository';
 import { VehicleLifecycleService } from '@main-modules/vehicle-lifecycle/services/vehicle-lifecycle.service';
+import { VehicleLifecycleSummaryProviderService } from '@main-modules/vehicle-lifecycle/services/vehicle-lifecycle-summary-provider.service';
+import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
 
 describe('VehicleLifecycleService', () => {
@@ -77,8 +79,15 @@ describe('VehicleLifecycleService', () => {
             findById: jest.fn().mockResolvedValue({ id: 'vehicle-1' }),
           },
         },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
         { provide: BookingsRepository, useValue: bookingsRepository },
         { provide: InspectionsRepository, useValue: inspectionsRepository },
+        { provide: VehicleLifecycleSummaryProviderService, useValue: { generate: jest.fn() } },
       ],
     }).compile();
 
@@ -121,6 +130,12 @@ describe('VehicleLifecycleService', () => {
           },
         },
         {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        {
           provide: BookingsRepository,
           useValue: {
             findByVehicleId: jest.fn(),
@@ -133,6 +148,7 @@ describe('VehicleLifecycleService', () => {
             findById: jest.fn(),
           },
         },
+        { provide: VehicleLifecycleSummaryProviderService, useValue: { generate: jest.fn() } },
       ],
     }).compile();
 
@@ -169,6 +185,12 @@ describe('VehicleLifecycleService', () => {
           },
         },
         {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        {
           provide: BookingsRepository,
           useValue: {
             findByVehicleId: jest.fn(),
@@ -184,6 +206,7 @@ describe('VehicleLifecycleService', () => {
             }),
           },
         },
+        { provide: VehicleLifecycleSummaryProviderService, useValue: { generate: jest.fn() } },
       ],
     }).compile();
 
@@ -222,6 +245,12 @@ describe('VehicleLifecycleService', () => {
           },
         },
         {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        {
           provide: BookingsRepository,
           useValue: {
             findByVehicleId: jest.fn(),
@@ -233,11 +262,301 @@ describe('VehicleLifecycleService', () => {
             findByVehicleId: jest.fn(),
           },
         },
+        { provide: VehicleLifecycleSummaryProviderService, useValue: { generate: jest.fn() } },
       ],
     }).compile();
 
     const service = moduleRef.get(VehicleLifecycleService);
 
     await expect(service.findByVehicleId('missing-vehicle-id')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('creates pending lifecycle summaries with reviewer-gated visibility', async () => {
+    const vehicleLifecycleRepository = {
+      replaceForVehicle: jest.fn().mockResolvedValue(undefined),
+      createSummary: jest.fn().mockResolvedValue({
+        id: 'summary-1',
+        vehicleId: 'vehicle-1',
+        requestedByUserId: 'reviewer-1',
+        summaryText: 'Summary draft',
+        status: 'pending_review',
+        customerVisible: false,
+        customerVisibleAt: null,
+        reviewNotes: null,
+        reviewedByUserId: null,
+        reviewedAt: null,
+        provenance: {
+          provider: 'local-summary-adapter',
+          model: 'timeline-summary-v1',
+          promptVersion: 'vehicle-lifecycle.summary.v1',
+          evidenceRefs: ['booking:1'],
+          evidenceSummary: 'Safe timeline evidence only.',
+        },
+        createdAt: new Date('2026-05-10T08:30:00.000Z'),
+        updatedAt: new Date('2026-05-10T08:30:00.000Z'),
+      }),
+    };
+
+    const bookingsRepository = {
+      findByVehicleId: jest.fn().mockResolvedValue([
+        {
+          id: 'booking-1',
+          statusHistory: [
+            {
+              id: 'history-1',
+              previousStatus: null,
+              nextStatus: 'pending',
+              reason: 'Booking created',
+              changedByUserId: 'reviewer-1',
+              changedAt: new Date('2026-05-10T08:00:00.000Z'),
+            },
+          ],
+        },
+      ]),
+    };
+
+    const inspectionsRepository = {
+      findByVehicleId: jest.fn().mockResolvedValue([]),
+    };
+
+    const summaryProvider = {
+      generate: jest.fn().mockReturnValue({
+        summaryText: 'Summary draft',
+        provenance: {
+          provider: 'local-summary-adapter',
+          model: 'timeline-summary-v1',
+          promptVersion: 'vehicle-lifecycle.summary.v1',
+          evidenceRefs: ['booking:1'],
+          evidenceSummary: 'Safe timeline evidence only.',
+        },
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        VehicleLifecycleService,
+        { provide: VehicleLifecycleRepository, useValue: vehicleLifecycleRepository },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'vehicle-1',
+              year: 2023,
+              make: 'Toyota',
+              model: 'Vios',
+            }),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'reviewer-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: BookingsRepository, useValue: bookingsRepository },
+        { provide: InspectionsRepository, useValue: inspectionsRepository },
+        { provide: VehicleLifecycleSummaryProviderService, useValue: summaryProvider },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(VehicleLifecycleService);
+
+    const result = await service.generateLifecycleSummary('vehicle-1', {
+      userId: 'reviewer-1',
+      role: 'service_adviser',
+    });
+
+    expect(summaryProvider.generate).toHaveBeenCalled();
+    expect(vehicleLifecycleRepository.createSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vehicleId: 'vehicle-1',
+        requestedByUserId: 'reviewer-1',
+      }),
+    );
+    expect(result.status).toBe('pending_review');
+    expect(result.customerVisible).toBe(false);
+  });
+
+  it('stores review metadata when approving a lifecycle summary', async () => {
+    const vehicleLifecycleRepository = {
+      findSummaryById: jest.fn().mockResolvedValue({
+        id: 'summary-1',
+        vehicleId: 'vehicle-1',
+        status: 'pending_review',
+      }),
+      reviewSummary: jest.fn().mockResolvedValue({
+        id: 'summary-1',
+        vehicleId: 'vehicle-1',
+        requestedByUserId: 'reviewer-1',
+        summaryText: 'Approved summary',
+        status: 'approved',
+        customerVisible: true,
+        customerVisibleAt: new Date('2026-05-10T09:00:00.000Z'),
+        reviewNotes: 'Approved for customer visibility.',
+        reviewedByUserId: 'reviewer-1',
+        reviewedAt: new Date('2026-05-10T09:00:00.000Z'),
+        provenance: {
+          provider: 'local-summary-adapter',
+          model: 'timeline-summary-v1',
+          promptVersion: 'vehicle-lifecycle.summary.v1',
+          evidenceRefs: ['booking:1'],
+          evidenceSummary: 'Safe timeline evidence only.',
+        },
+        createdAt: new Date('2026-05-10T08:30:00.000Z'),
+        updatedAt: new Date('2026-05-10T09:00:00.000Z'),
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        VehicleLifecycleService,
+        { provide: VehicleLifecycleRepository, useValue: vehicleLifecycleRepository },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({ id: 'vehicle-1' }),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'reviewer-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: BookingsRepository, useValue: { findByVehicleId: jest.fn() } },
+        { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn() } },
+        { provide: VehicleLifecycleSummaryProviderService, useValue: { generate: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(VehicleLifecycleService);
+
+    const result = await service.reviewLifecycleSummary(
+      'vehicle-1',
+      'summary-1',
+      {
+        decision: 'approved',
+        reviewNotes: 'Approved for customer visibility.',
+      },
+      {
+        userId: 'reviewer-1',
+        role: 'service_adviser',
+      },
+    );
+
+    expect(vehicleLifecycleRepository.reviewSummary).toHaveBeenCalledWith(
+      'summary-1',
+      expect.objectContaining({
+        status: 'approved',
+        reviewedByUserId: 'reviewer-1',
+        customerVisible: true,
+      }),
+    );
+    expect(result.reviewedByUserId).toBe('reviewer-1');
+    expect(result.customerVisible).toBe(true);
+  });
+
+  it('rejects lifecycle summary generation from non-reviewer roles', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        VehicleLifecycleService,
+        {
+          provide: VehicleLifecycleRepository,
+          useValue: {
+            createSummary: jest.fn(),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'technician-1',
+              role: 'technician',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: BookingsRepository, useValue: { findByVehicleId: jest.fn() } },
+        { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn() } },
+        { provide: VehicleLifecycleSummaryProviderService, useValue: { generate: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(VehicleLifecycleService);
+
+    await expect(
+      service.generateLifecycleSummary('vehicle-1', {
+        userId: 'technician-1',
+        role: 'technician',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects re-reviewing a lifecycle summary that already has a decision', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        VehicleLifecycleService,
+        {
+          provide: VehicleLifecycleRepository,
+          useValue: {
+            findSummaryById: jest.fn().mockResolvedValue({
+              id: 'summary-1',
+              vehicleId: 'vehicle-1',
+              status: 'approved',
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({ id: 'vehicle-1' }),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'reviewer-1',
+              role: 'super_admin',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: BookingsRepository, useValue: { findByVehicleId: jest.fn() } },
+        { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn() } },
+        { provide: VehicleLifecycleSummaryProviderService, useValue: { generate: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(VehicleLifecycleService);
+
+    await expect(
+      service.reviewLifecycleSummary(
+        'vehicle-1',
+        'summary-1',
+        {
+          decision: 'rejected',
+          reviewNotes: 'Needs revision.',
+        },
+        {
+          userId: 'reviewer-1',
+          role: 'super_admin',
+        },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

@@ -5,6 +5,6 @@ export default defineConfig({
   schema: './shared/db/schema/index.ts',
   out: './drizzle',
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? 'postgresql://admin:root@localhost:5432/codewave',
+    url: process.env.DATABASE_URL ?? 'postgresql://admin:root@localhost:5433/codewave',
   },
 });

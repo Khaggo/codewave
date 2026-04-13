@@ -1,12 +1,35 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, eq } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
 import { AppDatabase } from '@shared/db/database.types';
 
 import { AppendVehicleTimelineEventDto } from '../dto/append-vehicle-timeline-event.dto';
-import { vehicleTimelineEvents } from '../schemas/vehicle-lifecycle.schema';
+import {
+  vehicleLifecycleSummaries,
+  VehicleLifecycleSummaryProvenance,
+  vehicleTimelineEvents,
+  vehicleLifecycleSummaryStatusEnum,
+} from '../schemas/vehicle-lifecycle.schema';
+
+type VehicleLifecycleSummaryStatus = (typeof vehicleLifecycleSummaryStatusEnum.enumValues)[number];
+
+type CreateVehicleLifecycleSummaryInput = {
+  vehicleId: string;
+  requestedByUserId: string;
+  summaryText: string;
+  provenance: VehicleLifecycleSummaryProvenance;
+};
+
+type ReviewVehicleLifecycleSummaryInput = {
+  status: Extract<VehicleLifecycleSummaryStatus, 'approved' | 'rejected'>;
+  reviewNotes?: string | null;
+  reviewedByUserId: string;
+  reviewedAt: Date;
+  customerVisible: boolean;
+  customerVisibleAt?: Date | null;
+};
 
 @Injectable()
 export class VehicleLifecycleRepository extends BaseRepository {
@@ -66,5 +89,54 @@ export class VehicleLifecycleRepository extends BaseRepository {
       where: eq(vehicleTimelineEvents.vehicleId, vehicleId),
       orderBy: [asc(vehicleTimelineEvents.occurredAt), asc(vehicleTimelineEvents.dedupeKey)],
     });
+  }
+
+  async createSummary(payload: CreateVehicleLifecycleSummaryInput) {
+    const [createdSummary] = await this.db
+      .insert(vehicleLifecycleSummaries)
+      .values({
+        vehicleId: payload.vehicleId,
+        requestedByUserId: payload.requestedByUserId,
+        summaryText: payload.summaryText,
+        provenance: payload.provenance,
+      })
+      .returning();
+
+    return this.findSummaryById(this.assertFound(createdSummary, 'Vehicle lifecycle summary not found').id);
+  }
+
+  async findSummaryById(summaryId: string, db: AppDatabase = this.db) {
+    const summary = await db.query.vehicleLifecycleSummaries.findFirst({
+      where: eq(vehicleLifecycleSummaries.id, summaryId),
+    });
+
+    return this.assertFound(summary, 'Vehicle lifecycle summary not found');
+  }
+
+  async listSummariesByVehicleId(vehicleId: string, db: AppDatabase = this.db) {
+    return db.query.vehicleLifecycleSummaries.findMany({
+      where: eq(vehicleLifecycleSummaries.vehicleId, vehicleId),
+      orderBy: [desc(vehicleLifecycleSummaries.createdAt), desc(vehicleLifecycleSummaries.id)],
+    });
+  }
+
+  async reviewSummary(summaryId: string, payload: ReviewVehicleLifecycleSummaryInput) {
+    const [updatedSummary] = await this.db
+      .update(vehicleLifecycleSummaries)
+      .set({
+        status: payload.status,
+        reviewNotes: payload.reviewNotes ?? null,
+        reviewedByUserId: payload.reviewedByUserId,
+        reviewedAt: payload.reviewedAt,
+        customerVisible: payload.customerVisible,
+        customerVisibleAt: payload.customerVisibleAt ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(vehicleLifecycleSummaries.id, summaryId))
+      .returning();
+
+    return this.findSummaryById(
+      this.assertFound(updatedSummary, 'Vehicle lifecycle summary not found').id,
+    );
   }
 }

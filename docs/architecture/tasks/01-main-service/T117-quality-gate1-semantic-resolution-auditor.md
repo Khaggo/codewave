@@ -14,7 +14,7 @@ Implement Gate 1 semantic resolution auditing.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

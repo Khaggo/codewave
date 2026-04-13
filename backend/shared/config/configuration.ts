@@ -4,6 +4,9 @@ export type AppConfig = {
     mainService: number;
     ecommerceService: number;
   };
+  cors: {
+    origins: string[];
+  };
   database: {
     url: string;
   };
@@ -39,14 +42,33 @@ const toNumber = (value: string | undefined, fallback: number): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const toStringArray = (value: string | undefined, fallback: string[]): string[] => {
+  if (!value) {
+    return fallback;
+  }
+
+  const values = value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return values.length ? values : fallback;
+};
+
 export default (): AppConfig => ({
   env: process.env.NODE_ENV ?? 'development',
   ports: {
     mainService: toNumber(process.env.MAIN_SERVICE_PORT, 3000),
     ecommerceService: toNumber(process.env.ECOMMERCE_SERVICE_PORT, 3001),
   },
+  cors: {
+    origins: toStringArray(process.env.CORS_ORIGINS, [
+      'http://localhost:3002',
+      'http://127.0.0.1:3002',
+    ]),
+  },
   database: {
-    url: process.env.DATABASE_URL ?? 'postgresql://admin:root@localhost:5432/codewave',
+    url: process.env.DATABASE_URL ?? 'postgresql://admin:root@localhost:5433/codewave',
   },
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET ?? 'change-me-access',

@@ -17,7 +17,7 @@ This file is the one-page routing and dependency map for backend implementation 
 | `main-service.back-jobs` | `domain-worker` | return and rework handling with service-history validation | `main-service.vehicles`, `main-service.inspections`, `main-service.job-orders` | `vehicles`, `inspections`, `job-orders` |
 | `main-service.job-orders` | `domain-worker` | digital job orders, technician assignments, work execution, and invoice readiness | `main-service.bookings`, `main-service.back-jobs`, `main-service.users` | `bookings`, `back-jobs`, `users` |
 | `main-service.quality-gates` | `integration-worker` | AI-assisted release audits and manual override controls | `main-service.bookings`, `main-service.inspections`, `main-service.job-orders`, `main-service.back-jobs` | `bookings`, `inspections`, `job-orders`, `back-jobs` |
-| `main-service.notifications` | `domain-worker` | reminders, outbound notices, and auth OTP email delivery | `main-service.auth`, `main-service.bookings`, `main-service.insurance`, `main-service.back-jobs`, `ecommerce.invoice-payments` | `auth`, `bookings`, `insurance`, `back-jobs`, `invoice-payments` |
+| `main-service.notifications` | `domain-worker` | email-only reminders, outbound notices, and auth OTP delivery | `main-service.auth`, `main-service.bookings`, `main-service.insurance`, `main-service.back-jobs`, `ecommerce.invoice-payments` | `auth`, `bookings`, `insurance`, `back-jobs`, `invoice-payments` |
 | `main-service.chatbot` | `domain-worker` | rule-based inquiry routing | `main-service.bookings`, `main-service.insurance`, `ecommerce.orders` | `bookings`, `insurance`, `orders` |
 | `main-service.analytics` | `integration-worker` | reporting read models and KPIs | cross-domain | load only when reporting or audit behavior changes |
 
@@ -57,6 +57,7 @@ Reference-first domains:
 - `notifications`: consumes operational triggers plus auth OTP email delivery requests
 - `analytics`: must stay derived and rebuildable, not transactional
 - `commerce-events`: owns the asynchronous handoff between e-commerce and main-service
+- SMS remains non-canonical and backlog-only; current reminder and OTP delivery assumptions are email-based
 
 ## Build Order
 

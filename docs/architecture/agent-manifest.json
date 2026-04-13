@@ -1,1288 +1,1284 @@
-﻿{
-    "schemaVersion":  1,
-    "generatedAt":  "2026-04-14T02:19:09.9578042+08:00",
-    "policy":  {
-                   "orchestratorWriteMode":  "proposal-only",
-                   "validatorMode":  "content-strict",
-                   "domainWorkerManifestWrites":  false,
-                   "transactionalReplacement":  true
-               },
-    "files":  [
-                  {
-                      "path":  "agents/docs-worker.md",
-                      "docId":  "agent.docs-worker",
-                      "docType":  "agent-role",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Mission",
-                                               "Allowed Actions",
-                                               "Forbidden Actions",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Handoff Rules",
-                                               "Stop Conditions"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.system-architecture",
-                                                 "control.markdown-contract"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "d9b4045b49c0686b834ef4caec320e3099955c8deabe26018e48ff84698e46cb"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "agents/domain-worker.md",
-                      "docId":  "agent.domain-worker",
-                      "docType":  "agent-role",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Mission",
-                                               "Allowed Actions",
-                                               "Forbidden Actions",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Handoff Rules",
-                                               "Stop Conditions"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.system-architecture",
-                                                 "control.markdown-contract"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "7c89c96563d2f61ff0d678b4afcd9382b78678bb0078fa5b0ea4e526213f7179"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "agents/integration-worker.md",
-                      "docId":  "agent.integration-worker",
-                      "docType":  "agent-role",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Mission",
-                                               "Allowed Actions",
-                                               "Forbidden Actions",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Handoff Rules",
-                                               "Stop Conditions"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.system-architecture",
-                                                 "control.domain-map"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "48d6bc7a5d77c0f4e38ab6d3a16504b25883f8a8255696dd71f8ca27ddc26789"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "agents/operating-rules.md",
-                      "docId":  "agent.operating-rules",
-                      "docType":  "agent-role",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Mission",
-                                               "Allowed Actions",
-                                               "Forbidden Actions",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Handoff Rules",
-                                               "Stop Conditions"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.system-architecture",
-                                                 "control.domain-map"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "a65a0fabf6cc862bf0830815df643d38ba790e55f4eb72d06021eb4f6e2da568"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "agents/orchestrator.md",
-                      "docId":  "agent.orchestrator",
-                      "docType":  "agent-role",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Mission",
-                                               "Allowed Actions",
-                                               "Forbidden Actions",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Handoff Rules",
-                                               "Stop Conditions"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.system-architecture",
-                                                 "control.domain-map"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "8171199182daa23b40e107fe64d182ff8c2ecbf087c45327805b3e3137fba0c4"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "agents/refactor-worker.md",
-                      "docId":  "agent.refactor-worker",
-                      "docType":  "agent-role",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Mission",
-                                               "Allowed Actions",
-                                               "Forbidden Actions",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Handoff Rules",
-                                               "Stop Conditions"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.markdown-contract"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "1c28939cea3baf7c00b63de733d9c1e3b26ea3e97fd86fa8fa47c3d165d53724"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "agents/test-worker.md",
-                      "docId":  "agent.test-worker",
-                      "docType":  "agent-role",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Mission",
-                                               "Allowed Actions",
-                                               "Forbidden Actions",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Handoff Rules",
-                                               "Stop Conditions"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.markdown-contract"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "eb50504ac08b903c9db712df958bc571bc00f326b9cf95386632f7ae13e54aa1"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "agents/validator.md",
-                      "docId":  "agent.validator",
-                      "docType":  "agent-role",
-                      "owningService":  "control-plane",
-                      "owningRole":  "validator",
-                      "requiredHeadings":  [
-                                               "Mission",
-                                               "Allowed Actions",
-                                               "Forbidden Actions",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Handoff Rules",
-                                               "Stop Conditions"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.markdown-contract"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "92b44cdb1b3b57db5c3326f0e4a5960bcac939a792343ff44f7d0ec647b7fbab"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "ai-governance.md",
-                      "docId":  "control.ai-governance",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Approved AI Scope",
-                                               "Provider Strategy",
-                                               "Human Review Requirements",
-                                               "Prompt and Output Rules",
-                                               "Operational Safety"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.api-strategy",
-                                                 "control.system-architecture",
-                                                 "main-service.vehicle-lifecycle",
-                                                 "main-service.quality-gates"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "ab651d7438a0964d3fcb74b7ed032e2c2794ff925426e5fcee2b4f6b943adafe"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "api-strategy.md",
-                      "docId":  "control.api-strategy",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Interaction Model",
-                                               "REST and Swagger Contract",
-                                               "Main-Service REST Surface",
-                                               "E-Commerce REST Surface",
-                                               "RabbitMQ Event Contract",
-                                               "BullMQ Job Contract",
-                                               "Recommendations and Exclusions"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.dto-policy",
-                                                 "control.rbac-policy",
-                                                 "control.auth-security-policy",
-                                                 "control.ai-governance",
-                                                 "control.system-architecture",
-                                                 "control.domain-map",
-                                                 "main-service.auth",
-                                                 "main-service.users"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "d848a7bb4f03e135ff24294dbe844e10c5e1337ec7a3728d5a6bd392912348ae"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domain-map.md",
-                      "docId":  "control.domain-map",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Main Service Domains",
-                                               "E-Commerce Domains",
-                                               "Shared Concerns",
-                                               "Cross-Domain Hotspots",
-                                               "Build Order"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.api-strategy",
-                                                 "control.dto-policy",
-                                                 "control.rbac-policy",
-                                                 "control.auth-security-policy",
-                                                 "control.ai-governance",
-                                                 "control.system-architecture",
-                                                 "control.golden-domain-template"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "ea7add23b4ee7762aef1e8afbbfe348801cc0ba3622c75d22bcf912e09a3cd10"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/ecommerce/cart.md",
-                      "docId":  "ecommerce.cart",
-                      "docType":  "domain",
-                      "owningService":  "ecommerce",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "ecommerce.catalog",
-                                                 "ecommerce.inventory"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "f15552f095374ec825d513b147f069d5f0ebfc828a3e3793907e4c35f6cc0801"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/ecommerce/catalog.md",
-                      "docId":  "ecommerce.catalog",
-                      "docType":  "domain",
-                      "owningService":  "ecommerce",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "2da5ab1ebfbdd3fa2ab7612b63931283f53483e9aa40e49b3da4de9d200d1b59"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/ecommerce/commerce-events.md",
-                      "docId":  "ecommerce.commerce-events",
-                      "docType":  "domain",
-                      "owningService":  "ecommerce",
-                      "owningRole":  "integration-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "ecommerce.orders",
-                                                 "ecommerce.inventory",
-                                                 "ecommerce.invoice-payments"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "e84b699cc6afdc08d6eeea3a5a4599ce093c635d6ce5ce6ef8ee8603907024bf"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/ecommerce/inventory.md",
-                      "docId":  "ecommerce.inventory",
-                      "docType":  "domain",
-                      "owningService":  "ecommerce",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "ecommerce.catalog",
-                                                 "ecommerce.orders"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "ce8989722cb0445940ec3268c8ecb72c9bfacafcb9b1aa3fe61e7d37c750531f"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/ecommerce/invoice-payments.md",
-                      "docId":  "ecommerce.invoice-payments",
-                      "docType":  "domain",
-                      "owningService":  "ecommerce",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "ecommerce.orders"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "3f19ea7b04744c095895b3198851be7091a69a0acd93d59b4ef69da57aab347f"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/ecommerce/orders.md",
-                      "docId":  "ecommerce.orders",
-                      "docType":  "domain",
-                      "owningService":  "ecommerce",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "ecommerce.cart",
-                                                 "ecommerce.inventory",
-                                                 "ecommerce.invoice-payments"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "0c84a7f2a218b5276c4d61e293d0c1af86c4e51c7a0094df4f9562e0ed2aba6b"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/analytics.md",
-                      "docId":  "main-service.analytics",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "integration-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "cross-domain"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "16c76f44c94f37842bff41ea7a602771ca89a577bc6f47d8104c3e87abdf3181"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/auth.md",
-                      "docId":  "main-service.auth",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.users",
-                                                 "main-service.notifications"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "c38d17b8a864712f7bf9cd4af761ee0ab5617c70a1014bf9d694183d0f2cc20c"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/back-jobs.md",
-                      "docId":  "main-service.back-jobs",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.vehicles",
-                                                 "main-service.inspections",
-                                                 "main-service.job-orders"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "aa3aaf966ce49c227caf6dddbc967db0a8c1046539771ef52ace160f628ae28e"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/bookings.md",
-                      "docId":  "main-service.bookings",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.users",
-                                                 "main-service.vehicles"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "28af5def8f1bc264fdead600dc2fcbe450edb0d863a87fa945deb0787d3fd068"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/chatbot.md",
-                      "docId":  "main-service.chatbot",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.bookings",
-                                                 "main-service.insurance",
-                                                 "ecommerce.orders"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "9a00bed7dea90ecd29631e522a6d082146def1d11055f60c527038ff3b80c107"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/inspections.md",
-                      "docId":  "main-service.inspections",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.vehicles",
-                                                 "main-service.bookings",
-                                                 "main-service.job-orders",
-                                                 "main-service.back-jobs"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "a92ca6896137e0abfb7c0c4aea75e5963d899d08288a0f4ac51785417761ac77"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/insurance.md",
-                      "docId":  "main-service.insurance",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.users",
-                                                 "main-service.vehicles"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "65945fef8fb59daeb9e30e92ab10aff90044e2266274fb06fdbc36a8c0815be9"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/job-orders.md",
-                      "docId":  "main-service.job-orders",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.bookings",
-                                                 "main-service.back-jobs",
-                                                 "main-service.users"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "5ca39ff6de7673c7fc81845656a68f2a925e3da128c35497b203292c431ffa7a"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/loyalty.md",
-                      "docId":  "main-service.loyalty",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.users",
-                                                 "main-service.job-orders",
-                                                 "ecommerce.commerce-events"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "b7d60889fb138ed68dff41dac0e3dad46ea3b8ea075ce04a6a07d4cceb12785b"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/notifications.md",
-                      "docId":  "main-service.notifications",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.auth",
-                                                 "main-service.bookings",
-                                                 "main-service.insurance",
-                                                 "main-service.back-jobs",
-                                                 "ecommerce.invoice-payments"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "4841ae7f3cc4155427dc20ad78add0344c22d0aaf9cacd7d56ae2ac8b3708d5f"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/quality-gates.md",
-                      "docId":  "main-service.quality-gates",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "integration-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.bookings",
-                                                 "main-service.inspections",
-                                                 "main-service.job-orders",
-                                                 "main-service.back-jobs"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "4b12abd04bdb4050caa1070e3c00d3f61b46528f0ea1b3a726ab374564aec570"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/users.md",
-                      "docId":  "main-service.users",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "60c4e8bab86bbb496fa413408b069a3503ccb89a374c6fc1a6d5ac1a3c1b26e7"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/vehicle-lifecycle.md",
-                      "docId":  "main-service.vehicle-lifecycle",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.vehicles",
-                                                 "main-service.bookings",
-                                                 "main-service.inspections",
-                                                 "main-service.job-orders",
-                                                 "main-service.quality-gates"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "27b86e9071cc22c16d7f307dda50c3d0fc07cf4837f909ca8126694ccf483d05"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "domains/main-service/vehicles.md",
-                      "docId":  "main-service.vehicles",
-                      "docType":  "domain",
-                      "owningService":  "main-service",
-                      "owningRole":  "domain-worker",
-                      "requiredHeadings":  [
-                                               "Domain ID",
-                                               "Agent Summary",
-                                               "Primary Objective",
-                                               "Inputs",
-                                               "Outputs",
-                                               "Dependencies",
-                                               "Owned Data / ERD",
-                                               "Primary Business Logic",
-                                               "Process Flow",
-                                               "Use Cases",
-                                               "API Surface",
-                                               "Edge Cases",
-                                               "Writable Sections",
-                                               "Out of Scope"
-                                           ],
-                      "directDependencies":  [
-                                                 "main-service.users"
-                                             ],
-                      "summaryMaxWords":  40,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "9816c9b5d4f0f8db839c5f2a6045c5a55bdff453cfd1c2ab836aeb1ed1f9b4f7"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "dto-policy.md",
-                      "docId":  "control.dto-policy",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Policy Goal",
-                                               "Default Rule",
-                                               "Request DTO Policy",
-                                               "Response DTO Policy",
-                                               "Layer Boundaries",
-                                               "Naming Standard",
-                                               "Validation and Swagger",
-                                               "Allowed Exceptions"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.system-architecture",
-                                                 "control.api-strategy",
-                                                 "main-service.auth",
-                                                 "main-service.users"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "847f0eb444d60307857bc87f5b115116889825abf938cb7e7c316bd399ab0ffc"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "frontend-backend-sync.md",
-                      "docId":  "control.frontend-backend-sync",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Shared Slice Workflow",
-                                               "Codex Coordination Model",
-                                               "Contract Artifacts",
-                                               "Contract Pack Rules",
-                                               "Frontend Consumption Rules",
-                                               "Slice Acceptance Workflow"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.readme",
-                                                 "control.system-architecture",
-                                                 "control.api-strategy",
-                                                 "control.dto-policy",
-                                                 "control.golden-domain-template"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "c52ebe6860135fb5e9a947ba239bb0317de84fac5034cbe7d8a424e4bc0ea67b"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "golden-domain-template.md",
-                      "docId":  "control.golden-domain-template",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Reference Purpose",
-                                               "Domain Doc Contract",
-                                               "Code Module Contract",
-                                               "API Documentation Contract",
-                                               "Minimum Test Baseline",
-                                               "Naming and Ownership Rules",
-                                               "Reference Starter Domains"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.api-strategy",
-                                                 "control.dto-policy",
-                                                 "control.frontend-backend-sync",
-                                                 "control.system-architecture",
-                                                 "main-service.users",
-                                                 "main-service.auth"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "b5a4370c1e84fe033f3cb511ce72a58213716d4f27a5f7e1a74e00991baec35b"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "markdown-contract.md",
-                      "docId":  "control.markdown-contract",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "validator",
-                      "requiredHeadings":  [
-                                               "Allowed Heading Names",
-                                               "Required Order",
-                                               "File Rules",
-                                               "Forbidden Patterns",
-                                               "Validation Expectations"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.api-strategy",
-                                                 "control.dto-policy",
-                                                 "control.rbac-policy",
-                                                 "control.auth-security-policy",
-                                                 "control.ai-governance",
-                                                 "control.system-architecture"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "bcd9fa55aaeefaec1234b6cc1ac3499b37813456b4219b46627378cdce54ce8a"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "rbac-policy.md",
-                      "docId":  "control.rbac-policy",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Role Model",
-                                               "Permission Boundaries",
-                                               "Administrative Provisioning",
-                                               "Digital Identifier Rules",
-                                               "Audit Expectations"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.system-architecture",
-                                                 "control.auth-security-policy",
-                                                 "main-service.auth",
-                                                 "main-service.users"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "f0bf296b36643588a584446d196f9ee07bbb1b645a79e84bcc1b7554bbf0cc9b"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "README.md",
-                      "docId":  "control.readme",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Shared Goal",
-                                               "Load Order",
-                                               "Quick Routing",
-                                               "Control-Plane Docs",
-                                               "Operating Rules",
-                                               "Legacy Material"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.api-strategy",
-                                                 "control.dto-policy",
-                                                 "control.frontend-backend-sync",
-                                                 "control.rbac-policy",
-                                                 "control.auth-security-policy",
-                                                 "control.ai-governance",
-                                                 "control.system-architecture",
-                                                 "control.domain-map",
-                                                 "control.golden-domain-template"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "8ec833833c76666b18cf202f11f34cc22b59c554941e318dd69b72add2eb6b40"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "system-architecture.md",
-                      "docId":  "control.system-architecture",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Shared Goal",
-                                               "Global Objectives",
-                                               "Agent Topology",
-                                               "Token Efficiency Rules",
-                                               "Write Governance",
-                                               "Cross-Domain Coordination",
-                                               "Improvement Loop",
-                                               "Markdown Integrity Rules"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.api-strategy",
-                                                 "control.dto-policy",
-                                                 "control.frontend-backend-sync",
-                                                 "control.rbac-policy",
-                                                 "control.auth-security-policy",
-                                                 "control.ai-governance",
-                                                 "control.markdown-contract",
-                                                 "control.golden-domain-template"
-                                             ],
-                      "summaryMaxWords":  null,
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "713c2952e8ba6a83ab25c10c8b4495bebbb5867c9653657832a5009d5bb29687"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00"
-                  },
-                  {
-                      "path":  "auth-security-policy.md",
-                      "version":  1,
-                      "hash":  {
-                                   "algorithm":  "sha256",
-                                   "value":  "e1aceb0d975f42342ecacc6ed1f0d0e52b3c890030702282896162da794bc832"
-                               },
-                      "validationStatus":  "validated",
-                      "lastVerifiedAt":  "2026-04-14T02:19:09.9578042+08:00",
-                      "docId":  "control.auth-security-policy",
-                      "docType":  "control-plane",
-                      "owningService":  "control-plane",
-                      "owningRole":  "orchestrator",
-                      "requiredHeadings":  [
-                                               "Signup and Activation Model",
-                                               "Google Identity Verification",
-                                               "Email OTP Verification",
-                                               "Pending Account States",
-                                               "Legacy Login Position",
-                                               "Audit and Delivery Expectations"
-                                           ],
-                      "directDependencies":  [
-                                                 "control.system-architecture",
-                                                 "control.api-strategy",
-                                                 "control.rbac-policy",
-                                                 "main-service.auth",
-                                                 "main-service.users",
-                                                 "main-service.notifications"
-                                             ],
-                      "summaryMaxWords":  null
-                  }
-              ]
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-04-13T21:21:42.489Z",
+  "policy": {
+    "orchestratorWriteMode": "proposal-only",
+    "validatorMode": "content-strict",
+    "domainWorkerManifestWrites": false,
+    "transactionalReplacement": true
+  },
+  "files": [
+    {
+      "path": "agents/docs-worker.md",
+      "docId": "agent.docs-worker",
+      "docType": "agent-role",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Mission",
+        "Allowed Actions",
+        "Forbidden Actions",
+        "Inputs",
+        "Outputs",
+        "Handoff Rules",
+        "Stop Conditions"
+      ],
+      "directDependencies": [
+        "control.system-architecture",
+        "control.markdown-contract"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "d9b4045b49c0686b834ef4caec320e3099955c8deabe26018e48ff84698e46cb"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "agents/domain-worker.md",
+      "docId": "agent.domain-worker",
+      "docType": "agent-role",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Mission",
+        "Allowed Actions",
+        "Forbidden Actions",
+        "Inputs",
+        "Outputs",
+        "Handoff Rules",
+        "Stop Conditions"
+      ],
+      "directDependencies": [
+        "control.system-architecture",
+        "control.markdown-contract"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "7c89c96563d2f61ff0d678b4afcd9382b78678bb0078fa5b0ea4e526213f7179"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "agents/integration-worker.md",
+      "docId": "agent.integration-worker",
+      "docType": "agent-role",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Mission",
+        "Allowed Actions",
+        "Forbidden Actions",
+        "Inputs",
+        "Outputs",
+        "Handoff Rules",
+        "Stop Conditions"
+      ],
+      "directDependencies": [
+        "control.system-architecture",
+        "control.domain-map"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "48d6bc7a5d77c0f4e38ab6d3a16504b25883f8a8255696dd71f8ca27ddc26789"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "agents/operating-rules.md",
+      "docId": "agent.operating-rules",
+      "docType": "agent-role",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Mission",
+        "Allowed Actions",
+        "Forbidden Actions",
+        "Inputs",
+        "Outputs",
+        "Handoff Rules",
+        "Stop Conditions"
+      ],
+      "directDependencies": [
+        "control.system-architecture",
+        "control.domain-map"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "a65a0fabf6cc862bf0830815df643d38ba790e55f4eb72d06021eb4f6e2da568"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "agents/orchestrator.md",
+      "docId": "agent.orchestrator",
+      "docType": "agent-role",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Mission",
+        "Allowed Actions",
+        "Forbidden Actions",
+        "Inputs",
+        "Outputs",
+        "Handoff Rules",
+        "Stop Conditions"
+      ],
+      "directDependencies": [
+        "control.system-architecture",
+        "control.domain-map"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "8171199182daa23b40e107fe64d182ff8c2ecbf087c45327805b3e3137fba0c4"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "agents/refactor-worker.md",
+      "docId": "agent.refactor-worker",
+      "docType": "agent-role",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Mission",
+        "Allowed Actions",
+        "Forbidden Actions",
+        "Inputs",
+        "Outputs",
+        "Handoff Rules",
+        "Stop Conditions"
+      ],
+      "directDependencies": [
+        "control.markdown-contract"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "1c28939cea3baf7c00b63de733d9c1e3b26ea3e97fd86fa8fa47c3d165d53724"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "agents/test-worker.md",
+      "docId": "agent.test-worker",
+      "docType": "agent-role",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Mission",
+        "Allowed Actions",
+        "Forbidden Actions",
+        "Inputs",
+        "Outputs",
+        "Handoff Rules",
+        "Stop Conditions"
+      ],
+      "directDependencies": [
+        "control.markdown-contract"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "eb50504ac08b903c9db712df958bc571bc00f326b9cf95386632f7ae13e54aa1"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "agents/validator.md",
+      "docId": "agent.validator",
+      "docType": "agent-role",
+      "owningService": "control-plane",
+      "owningRole": "validator",
+      "requiredHeadings": [
+        "Mission",
+        "Allowed Actions",
+        "Forbidden Actions",
+        "Inputs",
+        "Outputs",
+        "Handoff Rules",
+        "Stop Conditions"
+      ],
+      "directDependencies": [
+        "control.markdown-contract"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "92b44cdb1b3b57db5c3326f0e4a5960bcac939a792343ff44f7d0ec647b7fbab"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "ai-governance.md",
+      "docId": "control.ai-governance",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Approved AI Scope",
+        "Provider Strategy",
+        "Human Review Requirements",
+        "Prompt and Output Rules",
+        "Operational Safety"
+      ],
+      "directDependencies": [
+        "control.api-strategy",
+        "control.system-architecture",
+        "main-service.vehicle-lifecycle",
+        "main-service.quality-gates"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "ab651d7438a0964d3fcb74b7ed032e2c2794ff925426e5fcee2b4f6b943adafe"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "api-strategy.md",
+      "docId": "control.api-strategy",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Interaction Model",
+        "REST and Swagger Contract",
+        "Main-Service REST Surface",
+        "E-Commerce REST Surface",
+        "RabbitMQ Event Contract",
+        "BullMQ Job Contract",
+        "Recommendations and Exclusions"
+      ],
+      "directDependencies": [
+        "control.dto-policy",
+        "control.rbac-policy",
+        "control.auth-security-policy",
+        "control.ai-governance",
+        "control.system-architecture",
+        "control.domain-map",
+        "main-service.auth",
+        "main-service.users"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "1472a1a83483347f2d03691444f4c03007fc931e3b16e8b5bb75eb4ed57520a6"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T21:21:42.489Z"
+    },
+    {
+      "path": "domain-map.md",
+      "docId": "control.domain-map",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Main Service Domains",
+        "E-Commerce Domains",
+        "Shared Concerns",
+        "Cross-Domain Hotspots",
+        "Build Order"
+      ],
+      "directDependencies": [
+        "control.api-strategy",
+        "control.dto-policy",
+        "control.rbac-policy",
+        "control.auth-security-policy",
+        "control.ai-governance",
+        "control.system-architecture",
+        "control.golden-domain-template"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "18a25c4d65c0e97ba76e0c853a4bd0656f48719e59ece57330e7311bb960915c"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T21:21:42.489Z"
+    },
+    {
+      "path": "domains/ecommerce/cart.md",
+      "docId": "ecommerce.cart",
+      "docType": "domain",
+      "owningService": "ecommerce",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "ecommerce.catalog",
+        "ecommerce.inventory"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "f15552f095374ec825d513b147f069d5f0ebfc828a3e3793907e4c35f6cc0801"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/ecommerce/catalog.md",
+      "docId": "ecommerce.catalog",
+      "docType": "domain",
+      "owningService": "ecommerce",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "2da5ab1ebfbdd3fa2ab7612b63931283f53483e9aa40e49b3da4de9d200d1b59"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/ecommerce/commerce-events.md",
+      "docId": "ecommerce.commerce-events",
+      "docType": "domain",
+      "owningService": "ecommerce",
+      "owningRole": "integration-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "ecommerce.orders",
+        "ecommerce.inventory",
+        "ecommerce.invoice-payments"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "e84b699cc6afdc08d6eeea3a5a4599ce093c635d6ce5ce6ef8ee8603907024bf"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/ecommerce/inventory.md",
+      "docId": "ecommerce.inventory",
+      "docType": "domain",
+      "owningService": "ecommerce",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "ecommerce.catalog",
+        "ecommerce.orders"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "ce8989722cb0445940ec3268c8ecb72c9bfacafcb9b1aa3fe61e7d37c750531f"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/ecommerce/invoice-payments.md",
+      "docId": "ecommerce.invoice-payments",
+      "docType": "domain",
+      "owningService": "ecommerce",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "ecommerce.orders"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "3f19ea7b04744c095895b3198851be7091a69a0acd93d59b4ef69da57aab347f"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/ecommerce/orders.md",
+      "docId": "ecommerce.orders",
+      "docType": "domain",
+      "owningService": "ecommerce",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "ecommerce.cart",
+        "ecommerce.inventory",
+        "ecommerce.invoice-payments"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "0c84a7f2a218b5276c4d61e293d0c1af86c4e51c7a0094df4f9562e0ed2aba6b"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/analytics.md",
+      "docId": "main-service.analytics",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "integration-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "cross-domain"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "16c76f44c94f37842bff41ea7a602771ca89a577bc6f47d8104c3e87abdf3181"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/auth.md",
+      "docId": "main-service.auth",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.users",
+        "main-service.notifications"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "99a113a2d6528b2dd6bd8b08f932ebedcdcf80d98d04918fe45042d45ed4b8f8"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/back-jobs.md",
+      "docId": "main-service.back-jobs",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.vehicles",
+        "main-service.inspections",
+        "main-service.job-orders"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "aa3aaf966ce49c227caf6dddbc967db0a8c1046539771ef52ace160f628ae28e"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/bookings.md",
+      "docId": "main-service.bookings",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.users",
+        "main-service.vehicles"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "28af5def8f1bc264fdead600dc2fcbe450edb0d863a87fa945deb0787d3fd068"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/chatbot.md",
+      "docId": "main-service.chatbot",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.bookings",
+        "main-service.insurance",
+        "ecommerce.orders"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "9a00bed7dea90ecd29631e522a6d082146def1d11055f60c527038ff3b80c107"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/inspections.md",
+      "docId": "main-service.inspections",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.vehicles",
+        "main-service.bookings",
+        "main-service.job-orders",
+        "main-service.back-jobs"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "a92ca6896137e0abfb7c0c4aea75e5963d899d08288a0f4ac51785417761ac77"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/insurance.md",
+      "docId": "main-service.insurance",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.users",
+        "main-service.vehicles"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "65945fef8fb59daeb9e30e92ab10aff90044e2266274fb06fdbc36a8c0815be9"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/job-orders.md",
+      "docId": "main-service.job-orders",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.bookings",
+        "main-service.back-jobs",
+        "main-service.users"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "5ca39ff6de7673c7fc81845656a68f2a925e3da128c35497b203292c431ffa7a"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/loyalty.md",
+      "docId": "main-service.loyalty",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.users",
+        "main-service.job-orders",
+        "ecommerce.commerce-events"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "b7d60889fb138ed68dff41dac0e3dad46ea3b8ea075ce04a6a07d4cceb12785b"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/notifications.md",
+      "docId": "main-service.notifications",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.auth",
+        "main-service.bookings",
+        "main-service.insurance",
+        "main-service.back-jobs",
+        "ecommerce.invoice-payments"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "483062939408af6eb24ede9723304827f398d8a7ed1db70b8b861c29a87547b8"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T21:21:42.489Z"
+    },
+    {
+      "path": "domains/main-service/quality-gates.md",
+      "docId": "main-service.quality-gates",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "integration-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.bookings",
+        "main-service.inspections",
+        "main-service.job-orders",
+        "main-service.back-jobs"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "4b12abd04bdb4050caa1070e3c00d3f61b46528f0ea1b3a726ab374564aec570"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/users.md",
+      "docId": "main-service.users",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "60c4e8bab86bbb496fa413408b069a3503ccb89a374c6fc1a6d5ac1a3c1b26e7"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/vehicle-lifecycle.md",
+      "docId": "main-service.vehicle-lifecycle",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.vehicles",
+        "main-service.bookings",
+        "main-service.inspections",
+        "main-service.job-orders",
+        "main-service.quality-gates"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "27b86e9071cc22c16d7f307dda50c3d0fc07cf4837f909ca8126694ccf483d05"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "domains/main-service/vehicles.md",
+      "docId": "main-service.vehicles",
+      "docType": "domain",
+      "owningService": "main-service",
+      "owningRole": "domain-worker",
+      "requiredHeadings": [
+        "Domain ID",
+        "Agent Summary",
+        "Primary Objective",
+        "Inputs",
+        "Outputs",
+        "Dependencies",
+        "Owned Data / ERD",
+        "Primary Business Logic",
+        "Process Flow",
+        "Use Cases",
+        "API Surface",
+        "Edge Cases",
+        "Writable Sections",
+        "Out of Scope"
+      ],
+      "directDependencies": [
+        "main-service.users"
+      ],
+      "summaryMaxWords": 40,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "9816c9b5d4f0f8db839c5f2a6045c5a55bdff453cfd1c2ab836aeb1ed1f9b4f7"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "dto-policy.md",
+      "docId": "control.dto-policy",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Policy Goal",
+        "Default Rule",
+        "Request DTO Policy",
+        "Response DTO Policy",
+        "Layer Boundaries",
+        "Naming Standard",
+        "Validation and Swagger",
+        "Allowed Exceptions"
+      ],
+      "directDependencies": [
+        "control.system-architecture",
+        "control.api-strategy",
+        "main-service.auth",
+        "main-service.users"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "847f0eb444d60307857bc87f5b115116889825abf938cb7e7c316bd399ab0ffc"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "frontend-backend-sync.md",
+      "docId": "control.frontend-backend-sync",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Shared Slice Workflow",
+        "Codex Coordination Model",
+        "Contract Artifacts",
+        "Contract Pack Rules",
+        "Frontend Consumption Rules",
+        "Slice Acceptance Workflow"
+      ],
+      "directDependencies": [
+        "control.readme",
+        "control.system-architecture",
+        "control.api-strategy",
+        "control.dto-policy",
+        "control.golden-domain-template"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "c52ebe6860135fb5e9a947ba239bb0317de84fac5034cbe7d8a424e4bc0ea67b"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "golden-domain-template.md",
+      "docId": "control.golden-domain-template",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Reference Purpose",
+        "Domain Doc Contract",
+        "Code Module Contract",
+        "API Documentation Contract",
+        "Minimum Test Baseline",
+        "Naming and Ownership Rules",
+        "Reference Starter Domains"
+      ],
+      "directDependencies": [
+        "control.api-strategy",
+        "control.dto-policy",
+        "control.frontend-backend-sync",
+        "control.system-architecture",
+        "main-service.users",
+        "main-service.auth"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "b5a4370c1e84fe033f3cb511ce72a58213716d4f27a5f7e1a74e00991baec35b"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "markdown-contract.md",
+      "docId": "control.markdown-contract",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "validator",
+      "requiredHeadings": [
+        "Allowed Heading Names",
+        "Required Order",
+        "File Rules",
+        "Forbidden Patterns",
+        "Validation Expectations"
+      ],
+      "directDependencies": [
+        "control.api-strategy",
+        "control.dto-policy",
+        "control.rbac-policy",
+        "control.auth-security-policy",
+        "control.ai-governance",
+        "control.system-architecture"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "bcd9fa55aaeefaec1234b6cc1ac3499b37813456b4219b46627378cdce54ce8a"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "rbac-policy.md",
+      "docId": "control.rbac-policy",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Role Model",
+        "Permission Boundaries",
+        "Administrative Provisioning",
+        "Digital Identifier Rules",
+        "Audit Expectations"
+      ],
+      "directDependencies": [
+        "control.system-architecture",
+        "control.auth-security-policy",
+        "main-service.auth",
+        "main-service.users"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "f0bf296b36643588a584446d196f9ee07bbb1b645a79e84bcc1b7554bbf0cc9b"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "README.md",
+      "docId": "control.readme",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Shared Goal",
+        "Load Order",
+        "Quick Routing",
+        "Control-Plane Docs",
+        "Operating Rules",
+        "Legacy Material"
+      ],
+      "directDependencies": [
+        "control.api-strategy",
+        "control.dto-policy",
+        "control.frontend-backend-sync",
+        "control.rbac-policy",
+        "control.auth-security-policy",
+        "control.ai-governance",
+        "control.system-architecture",
+        "control.domain-map",
+        "control.golden-domain-template"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "74490c770d0413017b806de7fa436ab85d35d4d176b63dfd89f8000d8d76c4b0"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T21:21:42.489Z"
+    },
+    {
+      "path": "system-architecture.md",
+      "docId": "control.system-architecture",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Shared Goal",
+        "Global Objectives",
+        "Agent Topology",
+        "Token Efficiency Rules",
+        "Write Governance",
+        "Cross-Domain Coordination",
+        "Improvement Loop",
+        "Markdown Integrity Rules"
+      ],
+      "directDependencies": [
+        "control.api-strategy",
+        "control.dto-policy",
+        "control.frontend-backend-sync",
+        "control.rbac-policy",
+        "control.auth-security-policy",
+        "control.ai-governance",
+        "control.markdown-contract",
+        "control.golden-domain-template"
+      ],
+      "summaryMaxWords": null,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "151c47354cc927bdeb01adb65b5c503b8d8c1df2a451b67c7eb93f2162921e45"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T21:21:42.489Z"
+    },
+    {
+      "path": "auth-security-policy.md",
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "f646365087cdc54f22eeca6466db85f342624e3ffdb804b665f4380a90e17597"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-04-13T20:49:58.754Z",
+      "docId": "control.auth-security-policy",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Signup and Activation Model",
+        "Google Identity Verification",
+        "Email OTP Verification",
+        "Pending Account States",
+        "Legacy Login Position",
+        "Audit and Delivery Expectations"
+      ],
+      "directDependencies": [
+        "control.system-architecture",
+        "control.api-strategy",
+        "control.rbac-policy",
+        "main-service.auth",
+        "main-service.users",
+        "main-service.notifications"
+      ],
+      "summaryMaxWords": null
+    }
+  ]
 }

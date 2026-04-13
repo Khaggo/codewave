@@ -208,35 +208,22 @@ export class NotificationsService {
     const attemptNumber = notification.attempts.length + 1;
 
     try {
-      if (notification.channel === 'email') {
-        const result = await this.smtpMailService.sendMail({
-          to: user.email,
-          subject: notification.title,
-          text: notification.message,
-        });
-
-        await this.notificationsRepository.createDeliveryAttempt({
-          notificationId,
-          attemptNumber,
-          status: 'sent',
-          providerMessageId: result.messageId ?? null,
-        });
-
-        return this.notificationsRepository.updateNotificationStatus(notificationId, {
-          status: 'sent',
-          deliveredAt: new Date(),
-        });
-      }
+      const result = await this.smtpMailService.sendMail({
+        to: user.email,
+        subject: notification.title,
+        text: notification.message,
+      });
 
       await this.notificationsRepository.createDeliveryAttempt({
         notificationId,
         attemptNumber,
-        status: 'skipped',
-        errorMessage: 'SMS delivery transport is not configured',
+        status: 'sent',
+        providerMessageId: result.messageId ?? null,
       });
 
       return this.notificationsRepository.updateNotificationStatus(notificationId, {
-        status: 'skipped',
+        status: 'sent',
+        deliveredAt: new Date(),
       });
     } catch (error) {
       await this.notificationsRepository.createDeliveryAttempt({
@@ -289,14 +276,6 @@ export class NotificationsService {
 
     if (payload.channel === 'email' && !payload.preferences.emailEnabled) {
       return 'Email notifications are disabled for this user';
-    }
-
-    if (payload.channel === 'sms' && !payload.preferences.smsEnabled) {
-      return 'SMS notifications are disabled for this user';
-    }
-
-    if (payload.channel === 'sms' && !payload.user?.profile?.phone) {
-      return 'No phone number is available for SMS delivery';
     }
 
     const categoryEnabledMap: Record<NotificationCategory, boolean> = {

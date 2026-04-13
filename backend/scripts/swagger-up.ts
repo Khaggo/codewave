@@ -1,4 +1,5 @@
 import {
+  getDatabasePort,
   getDocsJsonUrl,
   getHealthUrl,
   loadLocalEnv,
@@ -16,7 +17,7 @@ async function main() {
   await stopMainService();
   await startInfra(env);
 
-  await waitForPort('127.0.0.1', 5432);
+  await waitForPort('127.0.0.1', getDatabasePort(env));
   await waitForPort('127.0.0.1', 6379);
   await waitForPort('127.0.0.1', 5672);
 

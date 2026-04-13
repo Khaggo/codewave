@@ -38,7 +38,7 @@ Define the canonical auth security and signup 2FA policy.
 
 ## Goal
 
-Turn the PM-required Google-plus-SMS account activation model into a decision-complete policy that future auth and notification work can implement consistently.
+Turn the PM-required Google-plus-email account activation model into a decision-complete policy that future auth and notification work can implement consistently.
 
 ## Deliverables
 

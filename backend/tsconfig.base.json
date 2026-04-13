@@ -21,6 +21,9 @@
       ],
       "@main-modules/*": [
         "apps/main-service/src/modules/*"
+      ],
+      "@ecommerce-modules/*": [
+        "apps/ecommerce-service/src/modules/*"
       ]
     }
   }

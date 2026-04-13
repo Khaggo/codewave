@@ -19,11 +19,6 @@ export class NotificationPreferencesResponseDto {
   @ApiProperty({
     example: true,
   })
-  smsEnabled!: boolean;
-
-  @ApiProperty({
-    example: true,
-  })
   bookingRemindersEnabled!: boolean;
 
   @ApiProperty({

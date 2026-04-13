@@ -25,6 +25,10 @@ This folder contains human-readable handoff packs for slices that need frontend 
 - `T109-back-jobs-review-and-validation.md`
 - `T110-insurance-inquiry-core.md`
 - `T111-notifications-reminders-core.md`
+- `T115-vehicle-lifecycle-ai-summary-review.md`
 - `T116-quality-gates-foundation.md`
-- `T120-google-signup-and-sms-otp-customer-enrollment.md`
-- `T121-staff-pending-activation-google-sms.md`
+- `T117-quality-gate1-semantic-resolution-auditor.md`
+- `T118-quality-gate2-discrepancy-risk-engine.md`
+- `T119-quality-gate-manual-override.md`
+- `T120-google-signup-and-email-otp-customer-enrollment.md`
+- `T121-staff-pending-activation-google-email-otp.md`

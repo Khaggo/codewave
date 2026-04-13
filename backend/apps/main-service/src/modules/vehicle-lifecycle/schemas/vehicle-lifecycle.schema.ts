@@ -1,7 +1,8 @@
-import { relations } from 'drizzle-orm';
-import { boolean, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { relations, sql } from 'drizzle-orm';
+import { boolean, jsonb, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
 import { vehicleInspections } from '@main-modules/inspections/schemas/inspections.schema';
+import { users } from '@main-modules/users/schemas/users.schema';
 import { vehicles } from '@main-modules/vehicles/schemas/vehicles.schema';
 
 export const vehicleTimelineSourceTypeEnum = pgEnum('vehicle_timeline_source_type', [
@@ -14,6 +15,20 @@ export const vehicleTimelineEventCategoryEnum = pgEnum('vehicle_timeline_event_c
   'administrative',
   'verified',
 ]);
+
+export const vehicleLifecycleSummaryStatusEnum = pgEnum('vehicle_lifecycle_summary_status', [
+  'pending_review',
+  'approved',
+  'rejected',
+]);
+
+export type VehicleLifecycleSummaryProvenance = {
+  provider: string;
+  model: string;
+  promptVersion: string;
+  evidenceRefs: string[];
+  evidenceSummary: string;
+};
 
 export const vehicleTimelineEvents = pgTable('vehicle_timeline_events', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -34,6 +49,29 @@ export const vehicleTimelineEvents = pgTable('vehicle_timeline_events', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const vehicleLifecycleSummaries = pgTable('vehicle_lifecycle_summaries', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  vehicleId: uuid('vehicle_id')
+    .notNull()
+    .references(() => vehicles.id, { onDelete: 'cascade' }),
+  requestedByUserId: uuid('requested_by_user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'restrict' }),
+  summaryText: text('summary_text').notNull(),
+  status: vehicleLifecycleSummaryStatusEnum('status').notNull().default('pending_review'),
+  customerVisible: boolean('customer_visible').notNull().default(false),
+  customerVisibleAt: timestamp('customer_visible_at', { withTimezone: true }),
+  reviewNotes: text('review_notes'),
+  reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  provenance: jsonb('provenance')
+    .$type<VehicleLifecycleSummaryProvenance>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const vehicleTimelineEventsRelations = relations(vehicleTimelineEvents, ({ one }) => ({
   vehicle: one(vehicles, {
     fields: [vehicleTimelineEvents.vehicleId],
@@ -42,5 +80,22 @@ export const vehicleTimelineEventsRelations = relations(vehicleTimelineEvents, (
   inspection: one(vehicleInspections, {
     fields: [vehicleTimelineEvents.inspectionId],
     references: [vehicleInspections.id],
+  }),
+}));
+
+export const vehicleLifecycleSummariesRelations = relations(vehicleLifecycleSummaries, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [vehicleLifecycleSummaries.vehicleId],
+    references: [vehicles.id],
+  }),
+  requestedByUser: one(users, {
+    fields: [vehicleLifecycleSummaries.requestedByUserId],
+    references: [users.id],
+    relationName: 'vehicle_lifecycle_summary_requested_by',
+  }),
+  reviewedByUser: one(users, {
+    fields: [vehicleLifecycleSummaries.reviewedByUserId],
+    references: [users.id],
+    relationName: 'vehicle_lifecycle_summary_reviewed_by',
   }),
 }));

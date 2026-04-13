@@ -16,9 +16,6 @@ describe('NotificationsService', () => {
         email: 'customer@example.com',
         role: 'customer',
         isActive: true,
-        profile: {
-          phone: '+639171234567',
-        },
       }),
     };
 
@@ -28,7 +25,6 @@ describe('NotificationsService', () => {
         id: 'pref-1',
         userId: 'user-1',
         emailEnabled: true,
-        smsEnabled: true,
         bookingRemindersEnabled: true,
         insuranceUpdatesEnabled: true,
         invoiceRemindersEnabled: true,
@@ -38,13 +34,13 @@ describe('NotificationsService', () => {
         id: 'notification-1',
         userId: 'user-1',
         category: 'insurance_update',
-        channel: 'sms',
+        channel: 'email',
         sourceType: 'insurance_inquiry',
         sourceId: 'insurance-1',
         title: 'Insurance review update',
         message: 'Your insurance inquiry is now under review.',
         status: 'queued',
-        dedupeKey: 'insurance-1-review-sms',
+        dedupeKey: 'insurance-1-review-email',
         scheduledFor: null,
         deliveredAt: null,
         attempts: [],
@@ -70,12 +66,12 @@ describe('NotificationsService', () => {
     const result = await service.enqueueNotification({
       userId: 'user-1',
       category: 'insurance_update',
-      channel: 'sms',
+      channel: 'email',
       sourceType: 'insurance_inquiry',
       sourceId: 'insurance-1',
       title: 'Insurance review update',
       message: 'Your insurance inquiry is now under review.',
-      dedupeKey: 'insurance-1-review-sms',
+      dedupeKey: 'insurance-1-review-email',
     });
 
     expect(notificationsRepository.createNotification).toHaveBeenCalled();
@@ -86,7 +82,7 @@ describe('NotificationsService', () => {
         userId: 'user-1',
       }),
       expect.objectContaining({
-        jobId: 'insurance-1-review-sms',
+        jobId: 'insurance-1-review-email',
       }),
     );
     expect(result.status).toBe('queued');
@@ -124,7 +120,7 @@ describe('NotificationsService', () => {
     const result = await service.scheduleReminder({
       userId: 'user-1',
       reminderType: 'booking_reminder',
-      channel: 'sms',
+      channel: 'email',
       sourceType: 'booking',
       sourceId: 'booking-1',
       title: 'Upcoming appointment',
@@ -194,7 +190,6 @@ describe('NotificationsService', () => {
         id: 'pref-1',
         userId: 'user-1',
         emailEnabled: false,
-        smsEnabled: false,
         bookingRemindersEnabled: false,
         insuranceUpdatesEnabled: false,
         invoiceRemindersEnabled: false,

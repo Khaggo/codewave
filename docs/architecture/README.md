@@ -44,7 +44,7 @@ Use the docs in this directory to build and improve the backend quickly while pr
 - Use [`domains/main-service/back-jobs.md`](./domains/main-service/back-jobs.md) for return/rework cases linked to prior work.
 - Use [`domains/main-service/job-orders.md`](./domains/main-service/job-orders.md) for digital job orders, technician assignments, work progress, and invoice readiness.
 - Use [`domains/main-service/quality-gates.md`](./domains/main-service/quality-gates.md) for AI-assisted release audits, QA statuses, and manual override flow.
-- Use [`domains/main-service/notifications.md`](./domains/main-service/notifications.md) for reminders, preferences, and delivery state.
+- Use [`domains/main-service/notifications.md`](./domains/main-service/notifications.md) for email-only reminders, preferences, and delivery state.
 - Use [`domains/main-service/chatbot.md`](./domains/main-service/chatbot.md) for deterministic inquiry routing and escalations.
 - Use [`domains/main-service/analytics.md`](./domains/main-service/analytics.md) for derived dashboards and audit-friendly read models.
 - Use [`domains/ecommerce/catalog.md`](./domains/ecommerce/catalog.md) for products, categories, and sellable catalog state.
@@ -87,6 +87,7 @@ Use the docs in this directory to build and improve the backend quickly while pr
 - Canonical staff roles are `customer`, `technician`, `service_adviser`, and `super_admin`.
 - The chatbot stays deterministic and FAQ-oriented even though AI becomes canonical Phase 2 elsewhere.
 - Firmware and device protocols remain out of scope, and third-party APIs stay excluded except for approved AI provider adapters plus approved identity providers and Nodemailer-backed SMTP delivery needed for canonical account activation.
+- SMS delivery is not part of the current canonical scope because of cost. Keep operational reminders and auth OTP on the approved email-only path.
 
 ## Legacy Material
 

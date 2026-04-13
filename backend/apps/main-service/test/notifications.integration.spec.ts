@@ -31,7 +31,6 @@ describe('NotificationsController integration', () => {
         expect.objectContaining({
           userId: customer.id,
           emailEnabled: true,
-          smsEnabled: true,
         }),
       );
 
@@ -39,24 +38,23 @@ describe('NotificationsController integration', () => {
         .patch(`/api/users/${customer.id}/notification-preferences`)
         .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
         .send({
-          smsEnabled: false,
           bookingRemindersEnabled: false,
         });
       expect(updatedPreferencesResponse.status).toBe(200);
-      expect(updatedPreferencesResponse.body.smsEnabled).toBe(false);
+      expect(updatedPreferencesResponse.body.emailEnabled).toBe(true);
       expect(updatedPreferencesResponse.body.bookingRemindersEnabled).toBe(false);
 
       const notificationsService = app.get(NotificationsService);
       const bookingNotification = await notificationsService.scheduleReminder({
         userId: customer.id,
         reminderType: 'booking_reminder',
-        channel: 'sms',
+        channel: 'email',
         sourceType: 'booking',
         sourceId: 'booking-1',
         title: 'Upcoming booking reminder',
         message: 'Your appointment is tomorrow at 9:00 AM.',
         scheduledFor: new Date('2026-04-20T09:00:00.000Z'),
-        dedupeKey: 'booking-1-reminder-sms',
+        dedupeKey: 'booking-1-reminder-email',
       });
       expect(bookingNotification.notification?.status).toBe('skipped');
 
@@ -79,7 +77,7 @@ describe('NotificationsController integration', () => {
       expect(notificationsResponse.body).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            dedupeKey: 'booking-1-reminder-sms',
+            dedupeKey: 'booking-1-reminder-email',
             status: 'skipped',
           }),
           expect.objectContaining({

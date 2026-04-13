@@ -3,7 +3,16 @@ import type {
   AuthSessionResponse,
   AuthenticatedUserResponse,
   GoogleSignupStartResponse,
+  RegisterStartResponse,
 } from '../../lib/api/generated/auth/responses';
+
+export const registerStartMock: RegisterStartResponse = {
+  enrollmentId: 'aa94ac26-0c26-4d61-aad8-c50af70b5384',
+  userId: 'a3cce1f2-a6eb-4fdd-bf11-8b17d3ddfc17',
+  maskedEmail: 'cu***@example.com',
+  otpExpiresAt: '2026-04-13T18:45:00.000Z',
+  status: 'pending_activation',
+};
 
 export const googleSignupStartMock: GoogleSignupStartResponse = {
   enrollmentId: 'f9e31f73-32d9-4c2f-8f8c-6cc5acbff1da',

@@ -11,7 +11,25 @@ export interface QualityGateFindingResponse {
   severity: QualityGateFindingSeverity;
   code: string;
   message: string;
+  provenance?: QualityGateFindingProvenance | null;
   createdAt: string;
+}
+
+export interface QualityGateFindingProvenance {
+  provider: string;
+  model: string;
+  promptVersion: string;
+  sourceType: 'booking' | 'back_job';
+  ruleId?: string;
+  recommendation: 'supported' | 'review_needed' | 'insufficient_context';
+  confidence: 'high' | 'medium' | 'low';
+  concernSummary: string;
+  completedWorkSummary: string;
+  matchedKeywords: string[];
+  coverageRatio: number;
+  evidenceRefs?: string[];
+  evidenceSummary?: string;
+  riskContribution?: number;
 }
 
 export interface QualityGateOverrideResponse {

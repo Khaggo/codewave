@@ -5,7 +5,7 @@ import { NotificationsRepository } from '../src/modules/notifications/repositori
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
 describe('AuthController integration', () => {
-  it('registers, logs in, refreshes, and resolves the authenticated user', async () => {
+  it('registers with email OTP, then logs in, refreshes, and resolves the authenticated user', async () => {
     const { app } = await createMainServiceTestApp();
 
     try {
@@ -18,6 +18,37 @@ describe('AuthController integration', () => {
 
       expect(registerResponse.status).toBe(201);
       expect(registerResponse.body).toEqual(
+        expect.objectContaining({
+          enrollmentId: expect.any(String),
+          userId: expect.any(String),
+          maskedEmail: expect.any(String),
+          otpExpiresAt: expect.any(String),
+          status: 'pending_activation',
+        }),
+      );
+
+      const notificationsRepository = app.get(NotificationsRepository);
+      const otpNotification = await notificationsRepository.findNotificationByDedupeKey(
+        `auth-otp-${registerResponse.body.enrollmentId}`,
+      );
+      expect(otpNotification).toBeTruthy();
+
+      if (!otpNotification) {
+        throw new Error('OTP notification not found');
+      }
+
+      const otpMatch = otpNotification.message.match(/(\d{4,8})/);
+      expect(otpMatch).toBeTruthy();
+
+      const verifyResponse = await request(app.getHttpServer())
+        .post('/api/auth/register/verify-email')
+        .send({
+          enrollmentId: registerResponse.body.enrollmentId,
+          otp: otpMatch?.[1],
+        });
+
+      expect(verifyResponse.status).toBe(200);
+      expect(verifyResponse.body).toEqual(
         expect.objectContaining({
           accessToken: expect.any(String),
           refreshToken: expect.any(String),
@@ -51,7 +82,7 @@ describe('AuthController integration', () => {
 
       expect(meResponse.status).toBe(200);
       expect(meResponse.body).toEqual({
-        userId: registerResponse.body.user.id,
+        userId: verifyResponse.body.user.id,
         email: 'customer@example.com',
         role: 'customer',
       });
@@ -60,7 +91,7 @@ describe('AuthController integration', () => {
     }
   });
 
-  it('rejects duplicate registration, invalid credentials, invalid refresh tokens, and missing bearer auth', async () => {
+  it('rejects duplicate registration, inactive pre-verification login, invalid refresh tokens, and missing bearer auth', async () => {
     const { app } = await createMainServiceTestApp();
 
     try {
@@ -79,11 +110,11 @@ describe('AuthController integration', () => {
       });
       expect(duplicateRegister.status).toBe(409);
 
-      const invalidLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+      const inactiveLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
         email: 'customer@example.com',
-        password: 'wrongpass123',
+        password: 'password123',
       });
-      expect(invalidLogin.status).toBe(401);
+      expect(inactiveLogin.status).toBe(401);
 
       const invalidRefresh = await request(app.getHttpServer()).post('/api/auth/refresh').send({
         refreshToken: 'this-is-not-a-valid-refresh-token-at-all',
@@ -195,10 +226,10 @@ describe('AuthController integration', () => {
   });
 
   it('blocks non-super-admin users from provisioning staff accounts', async () => {
-    const { app } = await createMainServiceTestApp();
+    const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
-      await request(app.getHttpServer()).post('/api/auth/register').send({
+      await seedAuthUser({
         email: 'customer@example.com',
         password: 'password123',
         firstName: 'Jane',

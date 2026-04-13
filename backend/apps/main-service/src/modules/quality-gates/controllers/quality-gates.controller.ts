@@ -1,7 +1,8 @@
-import { Controller, Get, Param, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
@@ -17,6 +18,7 @@ import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 
 import { JobOrderQualityGateResponseDto } from '../dto/job-order-quality-gate-response.dto';
+import { OverrideQualityGateDto } from '../dto/override-quality-gate.dto';
 import { QualityGatesService } from '../services/quality-gates.service';
 
 @ApiTags('quality-gates')
@@ -45,6 +47,43 @@ export class QualityGatesController {
   findByJobOrderId(@Param('jobOrderId') jobOrderId: string, @Req() request: Request) {
     return this.qualityGatesService.getByJobOrderId(
       jobOrderId,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Patch('override')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @ApiOperation({ summary: 'Approve a manual override for a blocked quality gate.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'jobOrderId',
+    description: 'Job-order identifier.',
+    example: '7bc8926d-8eb7-4c97-85ab-4597a58e1f43',
+  })
+  @ApiBody({
+    type: OverrideQualityGateDto,
+  })
+  @ApiOkResponse({
+    description: 'The quality gate was manually overridden and remains fully auditable.',
+    type: JobOrderQualityGateResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'The quality gate is unavailable or is not currently blocked.',
+  })
+  @ApiForbiddenResponse({
+    description: 'Only super admins can approve manual quality-gate overrides.',
+  })
+  @ApiNotFoundResponse({ description: 'Job order or quality-gate actor not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  overrideBlockedGate(
+    @Param('jobOrderId') jobOrderId: string,
+    @Body() payload: OverrideQualityGateDto,
+    @Req() request: Request,
+  ) {
+    return this.qualityGatesService.overrideBlockedGate(
+      jobOrderId,
+      payload,
       request.user as { userId: string; role: string },
     );
   }
