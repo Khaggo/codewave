@@ -1,8 +1,34 @@
-﻿# inventory
+# inventory
 
-## Purpose
+## Domain ID
 
-Own stock quantities, reservations, stock movements, and inventory corrections for e-commerce products.
+`ecommerce.inventory`
+
+## Agent Summary
+
+Load this doc for stock counts, reservations, adjustments, and stock movement policy. Skip it for catalog content or invoice tracking.
+
+## Primary Objective
+
+Keep product availability accurate and reservation-safe so checkout and fulfillment do not oversell or silently lose stock state.
+
+## Inputs
+
+- stock initialization and adjustment requests
+- reservation requests from checkout
+- release and commit signals from order lifecycle
+
+## Outputs
+
+- inventory items
+- reservations
+- movement logs
+- downstream stock events
+
+## Dependencies
+
+- `ecommerce.catalog`
+- `ecommerce.orders`
 
 ## Owned Data / ERD
 
@@ -16,13 +42,6 @@ Key relations:
 - carts or checkout may create short-lived reservations
 - orders confirm or release reservations depending on outcome
 
-Core fields:
-- product ID
-- on-hand quantity
-- reserved quantity
-- available quantity derived or stored
-- reorder threshold if needed
-
 ## Primary Business Logic
 
 - keep stock counts accurate
@@ -33,11 +52,11 @@ Core fields:
 
 ## Process Flow
 
-1. Product stock is initialized or adjusted
-2. Checkout may request reservation
-3. Order confirmation consumes stock
-4. Cancellation or timeout releases reservations
-5. Analytics and catalog read updated availability
+1. Product stock is initialized or adjusted.
+2. Checkout may request reservation.
+3. Order confirmation consumes stock.
+4. Cancellation or timeout releases reservations.
+5. Analytics and catalog read updated availability.
 
 ## Use Cases
 
@@ -61,12 +80,10 @@ Core fields:
 - manual adjustment bypasses audit logging
 - available quantity shown incorrectly because reserved quantity is stale
 
-## Dependencies
+## Writable Sections
 
-- `catalog`
-- `orders`
-- `commerce-events`
-- `analytics`
+- stock semantics, reservation behavior, inventory APIs, and inventory edge cases
+- do not redefine product content or invoice payment policy here
 
 ## Out of Scope
 

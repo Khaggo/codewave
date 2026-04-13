@@ -15,5 +15,14 @@ export const validateEnv = (config: EnvRecord): EnvRecord => {
     }
   }
 
+  const smtpKeys = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'] as const;
+  const hasAnySmtpValue = smtpKeys.some((key) => Boolean(config[key]));
+  const missingSmtpKeys = smtpKeys.filter((key) => !config[key]);
+  if (hasAnySmtpValue && missingSmtpKeys.length > 0) {
+    throw new Error(
+      `Missing required SMTP environment variables: ${missingSmtpKeys.join(', ')}`,
+    );
+  }
+
   return config;
 };

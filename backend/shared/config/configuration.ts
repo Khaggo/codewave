@@ -21,6 +21,17 @@ export type AppConfig = {
     url: string;
     queue: string;
   };
+  google: {
+    clientId?: string;
+  };
+  mail: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user?: string;
+    pass?: string;
+    from: string;
+  };
 };
 
 const toNumber = (value: string | undefined, fallback: number): number => {
@@ -50,5 +61,16 @@ export default (): AppConfig => ({
   rabbitmq: {
     url: process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672',
     queue: process.env.RABBITMQ_QUEUE ?? 'autocare_events',
+  },
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+  },
+  mail: {
+    host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
+    port: toNumber(process.env.SMTP_PORT, 465),
+    secure: (process.env.SMTP_SECURE ?? 'true').toLowerCase() !== 'false',
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+    from: process.env.SMTP_FROM ?? 'AUTOCARE <no-reply@example.com>',
   },
 });

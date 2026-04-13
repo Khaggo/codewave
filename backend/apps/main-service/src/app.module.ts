@@ -7,7 +7,14 @@ import { DatabaseModule } from '@shared/db/database.module';
 import { EventsModule } from '@shared/events/events.module';
 import { QueueModule } from '@shared/queue/queue.module';
 import { AuthModule } from '@main-modules/auth/auth.module';
+import { BackJobsModule } from '@main-modules/back-jobs/back-jobs.module';
+import { BookingsModule } from '@main-modules/bookings/bookings.module';
+import { InsuranceModule } from '@main-modules/insurance/insurance.module';
+import { InspectionsModule } from '@main-modules/inspections/inspections.module';
+import { JobOrdersModule } from '@main-modules/job-orders/job-orders.module';
+import { NotificationsModule } from '@main-modules/notifications/notifications.module';
 import { UsersModule } from '@main-modules/users/users.module';
+import { VehicleLifecycleModule } from '@main-modules/vehicle-lifecycle/vehicle-lifecycle.module';
 import { VehiclesModule } from '@main-modules/vehicles/vehicles.module';
 
 import { HealthController } from './health.controller';
@@ -26,6 +33,13 @@ import { HealthController } from './health.controller';
     UsersModule,
     AuthModule,
     VehiclesModule,
+    BookingsModule,
+    BackJobsModule,
+    InsuranceModule,
+    NotificationsModule,
+    JobOrdersModule,
+    InspectionsModule,
+    VehicleLifecycleModule,
   ],
   controllers: [HealthController],
 })

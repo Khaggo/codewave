@@ -1,8 +1,34 @@
-﻿# commerce-events
+# commerce-events
 
-## Purpose
+## Domain ID
 
-Own the e-commerce service event boundary: outbox publishing, inbox consumption, and external-facing business events for other services such as loyalty, analytics, and notifications.
+`ecommerce.commerce-events`
+
+## Agent Summary
+
+Load this doc for outbox, inbox, and cross-service event publication from e-commerce domains. Skip it for local order or inventory business rules.
+
+## Primary Objective
+
+Own durable asynchronous communication from e-commerce domains without replacing source-domain ownership or immediate consistency reads.
+
+## Inputs
+
+- outbox records from orders, inventory, and invoice-payments
+- downstream consumer acknowledgements
+- retry and replay signals
+
+## Outputs
+
+- published RabbitMQ business events
+- inbox or delivery state
+- retry and failure tracking
+
+## Dependencies
+
+- `ecommerce.orders`
+- `ecommerce.inventory`
+- `ecommerce.invoice-payments`
 
 ## Owned Data / ERD
 
@@ -24,37 +50,34 @@ Key relations:
 
 ## Process Flow
 
-1. Source module writes business change and outbox record in one transaction where possible
-2. Publisher sends event to RabbitMQ
-3. Downstream services consume and process idempotently
-4. Delivery state and failures are tracked for retries
+1. Source module writes business change and outbox record in one transaction where possible.
+2. Publisher sends the event to RabbitMQ.
+3. Downstream services consume and process idempotently.
+4. Delivery state and failures are tracked for retries.
 
 ## Use Cases
 
-- order completion triggers loyalty accrual request
+- order completion triggers loyalty accrual requests
 - invoice status updates trigger notifications and analytics refresh
-- inventory change emits a stock-related event for downstream summaries
+- inventory change emits stock-related events for downstream summaries
 
 ## API Surface
 
 - internal `publishCommerceEvent`
 - internal `consumeCommerceEvent`
-- admin `GET /commerce-events/outbox` if monitoring UI is needed
+- admin `GET /commerce-events/outbox`
 
 ## Edge Cases
 
 - event published twice after retry
-- consumer processes message after source state was corrected
-- outbox rows accumulate because publisher is stalled
-- downstream service assumes event delivery order that is not guaranteed globally
+- consumer processes a message after source state was corrected
+- outbox rows accumulate because the publisher is stalled
+- downstream service assumes global delivery order that is not guaranteed
 
-## Dependencies
+## Writable Sections
 
-- `orders`
-- `inventory`
-- `invoice-payments`
-- RabbitMQ
-- shared outbox and inbox infrastructure
+- outbox and inbox semantics, event names, event delivery rules, and commerce-event edge cases
+- do not redefine local order, inventory, or invoice business behavior here
 
 ## Out of Scope
 

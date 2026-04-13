@@ -1,8 +1,33 @@
-﻿# invoice-payments
+# invoice-payments
 
-## Purpose
+## Domain ID
 
-Own invoice records and payment tracking for e-commerce orders. This module tracks invoice-based payment state; it does not imply automated bank, card, or gateway settlement.
+`ecommerce.invoice-payments`
+
+## Agent Summary
+
+Load this doc for invoice creation, payment-entry tracking, balances, and aging behavior. Skip it for fulfillment or gateway automation.
+
+## Primary Objective
+
+Track invoice state accurately from payment entries and aging rules without implying automated bank, card, or gateway settlement.
+
+## Inputs
+
+- order references
+- payment entry records
+- invoice status or aging triggers
+
+## Outputs
+
+- invoices
+- payment entries
+- outstanding balance and aging state
+- notification and analytics triggers
+
+## Dependencies
+
+- `ecommerce.orders`
 
 ## Owned Data / ERD
 
@@ -15,13 +40,6 @@ Key relations:
 - one order may have one invoice and many payment entries
 - one invoice may move through multiple payment statuses over time
 
-Core statuses:
-- `pending`
-- `partial`
-- `paid`
-- `overdue`
-- `void`
-
 ## Primary Business Logic
 
 - create invoice records for eligible orders
@@ -32,10 +50,10 @@ Core statuses:
 
 ## Process Flow
 
-1. Orders creates or requests an invoice record
-2. Staff or system records payment entries
-3. Invoice balance and status are recalculated
-4. Notifications and downstream summaries are updated
+1. Orders creates or requests an invoice record.
+2. Staff or system records payment entries.
+3. Invoice balance and status are recalculated.
+4. Notifications and downstream summaries are updated.
 
 ## Use Cases
 
@@ -57,12 +75,10 @@ Core statuses:
 - invoice is marked paid manually without complete payment records
 - overdue reminders continue after invoice becomes paid
 
-## Dependencies
+## Writable Sections
 
-- `orders`
-- `notifications`
-- `commerce-events`
-- `analytics`
+- invoice state rules, balance semantics, payment-entry behavior, invoice APIs, and invoice edge cases
+- do not imply gateway reconciliation or fulfillment ownership here
 
 ## Out of Scope
 

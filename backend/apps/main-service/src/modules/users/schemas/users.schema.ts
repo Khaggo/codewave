@@ -1,12 +1,18 @@
 import { relations } from 'drizzle-orm';
 import { boolean, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
-export const userRoleEnum = pgEnum('user_role', ['customer', 'staff', 'admin']);
+export const userRoleEnum = pgEnum('user_role', [
+  'customer',
+  'technician',
+  'service_adviser',
+  'super_admin',
+]);
 
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   role: userRoleEnum('role').notNull().default('customer'),
+  staffCode: varchar('staff_code', { length: 40 }).unique(),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

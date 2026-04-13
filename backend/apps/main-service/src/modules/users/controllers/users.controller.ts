@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -24,7 +24,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a user account record.' })
+  @ApiOperation({ summary: 'Create a customer identity record.' })
   @ApiCreatedResponse({
     description: 'The user was created successfully.',
     type: UserResponseDto,
@@ -47,12 +47,17 @@ export class UsersController {
     type: UserResponseDto,
   })
   @ApiNotFoundResponse({ description: 'User not found.' })
-  findById(@Param('id') id: string) {
-    return this.usersService.findById(id);
+  async findById(@Param('id') id: string) {
+    const user = await this.usersService.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a user profile or active status.' })
+  @ApiOperation({ summary: 'Update user profile fields.' })
   @ApiParam({
     name: 'id',
     description: 'User identifier.',
@@ -83,7 +88,11 @@ export class UsersController {
   @ApiNotFoundResponse({ description: 'User not found.' })
   async listAddresses(@Param('id') id: string) {
     const user = await this.usersService.findById(id);
-    return user?.addresses ?? [];
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user.addresses ?? [];
   }
 
   @Post(':id/addresses')

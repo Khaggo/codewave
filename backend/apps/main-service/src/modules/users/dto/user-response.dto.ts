@@ -22,6 +22,12 @@ export class UserResponseDto {
   })
   role!: string;
 
+  @ApiPropertyOptional({
+    example: 'SA-0012',
+    description: 'Stable digital identifier for staff-capable accounts.',
+  })
+  staffCode?: string | null;
+
   @ApiProperty({
     example: true,
   })

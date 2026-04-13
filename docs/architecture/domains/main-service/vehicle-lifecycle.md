@@ -1,94 +1,100 @@
-﻿# vehicle-lifecycle
+# vehicle-lifecycle
 
-## Purpose
+## Domain ID
 
-Own the unified vehicle timeline. This module is the operational history view that combines bookings, inspections, insurance, job execution, back jobs, and selected commerce summaries.
+`main-service.vehicle-lifecycle`
+
+## Agent Summary
+
+Load this doc for the unified vehicle timeline, event normalization, and reviewed AI summaries over lifecycle history. Skip it for source-domain business rules.
+
+## Primary Objective
+
+Provide one trustworthy vehicle timeline that combines operational history while keeping condition-sensitive milestones verification-backed.
+
+## Inputs
+
+- booking events
+- inspection-linked verification signals
+- job-order completion and QA release signals
+- AI summary generation requests and human review actions
+
+## Outputs
+
+- `vehicle_timeline_events`
+- customer-facing and admin-facing vehicle history
+- normalized timeline signals for current UI read models
+- review-gated lifecycle summaries
+
+## Dependencies
+
+- `main-service.vehicles`
+- `main-service.bookings`
+- `main-service.inspections`
+- `main-service.job-orders`
+- `main-service.quality-gates`
 
 ## Owned Data / ERD
 
 Primary tables or equivalents:
 - `vehicle_timeline_events`
+- `vehicle_lifecycle_summaries`
 
 Key relations:
 - each event belongs to one vehicle
-- an event may reference a source module record by `source_type` and `source_id`
-- verified events may reference `vehicle_inspections.inspection_id`
-
-Core fields:
-- vehicle ID
-- event type
-- source type
-- source ID
-- occurred at
-- `verified` flag
-- nullable inspection reference
-- actor ID
-- customer-visible notes
-- internal notes if split
+- an event may reference a source record by `source_type` and `source_id`
+- verified events may reference a `vehicle_inspections` record
+- one vehicle may have many lifecycle summaries with review state
 
 ## Primary Business Logic
 
-- accept timeline-worthy events from operational modules
+- derive timeline-worthy events from implemented operational modules
 - differentiate administrative events from condition-sensitive events
 - mark condition-sensitive milestones as verified only when inspection-backed
-- expose a filtered timeline for customer and admin views
-- prevent duplicate events when retries or event replays happen
-
-### Administrative Events
-
-May be system-generated without physical verification:
-- booking created
-- booking confirmed
-- insurance inquiry submitted
-- order placed
-- invoice updated
-
-### Verified Condition Events
-
-Must be inspection-backed or staff-verified through the inspection workflow:
-- intake condition recorded
-- repair findings confirmed
-- work completion verified
-- return issue diagnosed
-- back job confirmed as rework
+- generate layman-friendly AI summaries from approved lifecycle evidence
+- hide AI summaries from customers until a reviewer approves them
+- expose an ordered timeline view for vehicle history consumers
+- prevent duplicate timeline entries during retries or replays
 
 ## Process Flow
 
-1. Source modules publish operational events
-2. Lifecycle normalizes them into timeline events
-3. Verified milestones wait for inspection linkage before being flagged verified
-4. Read models are refreshed for UI consumption
+1. Lifecycle loads booking and inspection records for the target vehicle.
+2. The service normalizes those records into timeline entries.
+3. Verified milestones are accepted only when inspection-backed.
+4. Optional AI summary generation uses filtered lifecycle evidence.
+5. Customer visibility changes only after human review approval.
+6. The projection is refreshed and returned for UI consumption.
 
 ## Use Cases
 
 - customer views a full vehicle history
 - staff reviews all past interactions before new work starts
 - analytics reads lifecycle summaries for repeat issues and turnaround trends
+- reviewer approves or rejects an AI-generated customer summary
 
 ## API Surface
 
 - `GET /vehicles/:id/timeline`
+- `POST /vehicles/:id/lifecycle-summary/generate`
+- `PATCH /vehicles/:id/lifecycle-summary/:summaryId/review`
 - internal `appendVehicleTimelineEvent`
-- internal `refreshVehicleTimeline` job
+- internal `refreshVehicleTimeline`
 
 ## Edge Cases
 
 - duplicate events from retries or outbox replay
 - verified flag set without a valid inspection reference
 - customer-facing timeline accidentally includes internal notes
-- cross-service order summary arrives late and appears out of order
+- AI summary is published before human review
+- tied booking and inspection timestamps must still sort deterministically
 
-## Dependencies
+## Writable Sections
 
-- `vehicles`
-- `bookings`
-- `inspections`
-- `insurance`
-- `back-jobs`
-- optional commerce summary events
+- lifecycle event normalization, verified-event rules, lifecycle-summary review rules, timeline API behavior, and lifecycle-owned edge cases
+- do not redefine source-domain rules for bookings, inspections, or insurance here
 
 ## Out of Scope
 
-- creating or editing inspections
-- booking scheduling rules
-- owning raw order or invoice records
+- vehicle master data ownership
+- booking approval semantics
+- inspection content ownership

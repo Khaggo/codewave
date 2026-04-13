@@ -1,8 +1,36 @@
-﻿# orders
+# orders
 
-## Purpose
+## Domain ID
 
-Own e-commerce order creation, order item snapshots, order state progression, and checkout orchestration using invoice-based payment.
+`ecommerce.orders`
+
+## Agent Summary
+
+Load this doc for invoice-based checkout, order records, order state progression, and order item snapshots. Skip it for direct payment gateway assumptions.
+
+## Primary Objective
+
+Own order creation and invoice-based checkout progression while preserving historical order snapshots and inventory coordination.
+
+## Inputs
+
+- validated cart payloads
+- address snapshots
+- inventory reservation responses
+- invoice-creation or invoice-update outcomes
+
+## Outputs
+
+- orders
+- order items
+- order address snapshots
+- downstream commerce events
+
+## Dependencies
+
+- `ecommerce.cart`
+- `ecommerce.inventory`
+- `ecommerce.invoice-payments`
 
 ## Owned Data / ERD
 
@@ -14,17 +42,8 @@ Primary tables or equivalents:
 Key relations:
 - one order belongs to one customer identity
 - one order has many order items
-- one order may reference one invoice aggregate in `invoice-payments`
+- one order may reference one invoice aggregate
 - order items snapshot product name, SKU, and price at checkout time
-
-Core states:
-- `draft`
-- `pending_invoice`
-- `awaiting_payment`
-- `confirmed`
-- `processing`
-- `fulfilled`
-- `cancelled`
 
 ## Primary Business Logic
 
@@ -36,12 +55,12 @@ Core states:
 
 ## Process Flow
 
-1. Customer reviews cart and confirms checkout
-2. Orders validates cart, address, and inventory policy
-3. Order and order items are created
-4. Invoice-payment record is created or linked
-5. Order advances as invoice and fulfillment states change
-6. Events are published for downstream consumers
+1. Customer reviews the cart and confirms checkout.
+2. Orders validates cart, address, and inventory policy.
+3. Order and order items are created.
+4. Invoice-payment record is created or linked.
+5. Order advances as invoice and fulfillment states change.
+6. Events are published for downstream consumers.
 
 ## Use Cases
 
@@ -64,14 +83,10 @@ Core states:
 - order is fulfilled while invoice is still incomplete by policy mistake
 - cancellation occurs after inventory has already been committed
 
-## Dependencies
+## Writable Sections
 
-- `cart`
-- `inventory`
-- `invoice-payments`
-- `commerce-events`
-- `notifications`
-- `analytics`
+- order lifecycle, checkout ownership, order APIs, and order edge cases
+- do not redefine cart persistence or invoice-ledger semantics here
 
 ## Out of Scope
 

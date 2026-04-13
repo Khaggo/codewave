@@ -1,15 +1,27 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 
 import { CreateUserDto } from '@main-modules/users/dto/create-user.dto';
 import { UsersService } from '@main-modules/users/services/users.service';
+import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 
+import { GoogleSignupStartDto } from '../dto/google-signup-start.dto';
 import { LoginDto } from '../dto/login.dto';
+import { CreateStaffAccountDto } from '../dto/create-staff-account.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
+import { UpdateStaffAccountStatusDto } from '../dto/update-staff-account-status.dto';
+import { VerifyEmailOtpDto } from '../dto/verify-email-otp.dto';
 import { AuthRepository } from '../repositories/auth.repository';
+import { GoogleIdentityService } from './google-identity.service';
 
 type TokenPayload = {
   sub: string;
@@ -28,6 +40,8 @@ export class AuthService {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly usersService: UsersService,
+    private readonly notificationsService: NotificationsService,
+    private readonly googleIdentityService: GoogleIdentityService,
     private readonly jwtService: JwtService,
     configService: ConfigService,
   ) {
@@ -35,6 +49,233 @@ export class AuthService {
     this.refreshSecret = configService.getOrThrow<string>('jwt.refreshSecret');
     this.accessExpiresIn = configService.get<string>('jwt.accessExpiresIn', '15m');
     this.refreshExpiresIn = configService.get<string>('jwt.refreshExpiresIn', '7d');
+  }
+
+  async startGoogleSignup(payload: GoogleSignupStartDto) {
+    const googleIdentity = await this.googleIdentityService.verifyIdToken(payload.googleIdToken);
+    const normalizedEmail = googleIdentity.email;
+
+    const existingUser = await this.usersService.findByEmail(normalizedEmail);
+    if (existingUser) {
+      throw new ConflictException('Email is already registered');
+    }
+
+    const existingIdentity = await this.authRepository.findGoogleIdentityByProviderUserId(
+      googleIdentity.subject,
+    );
+    if (existingIdentity) {
+      throw new ConflictException('Google identity is already linked to an account');
+    }
+
+    const user = await this.usersService.create({
+      email: normalizedEmail,
+      firstName: googleIdentity.firstName,
+      lastName: googleIdentity.lastName,
+    } satisfies CreateUserDto);
+
+    await this.usersService.setActivationStatus(user.id, false);
+
+    const tempPasswordHash = await bcrypt.hash(`google:${user.id}:${Date.now()}`, 10);
+    await this.authRepository.createAccount(user.id, tempPasswordHash);
+    await this.authRepository.updateAccountStatus(user.id, false);
+
+    await this.authRepository.createGoogleIdentity({
+      userId: user.id,
+      providerUserId: googleIdentity.subject,
+      email: normalizedEmail,
+    });
+
+    const otp = this.generateOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    const challenge = await this.authRepository.createOtpChallenge({
+      userId: user.id,
+      purpose: 'customer_signup',
+      email: normalizedEmail,
+      otpHash,
+      expiresAt,
+    });
+
+    await this.notificationsService.enqueueAuthOtpDelivery({
+      userId: user.id,
+      otp,
+      email: normalizedEmail,
+      activationContext: 'customer_signup',
+      dedupeKey: `auth-otp-${challenge.id}`,
+      sourceId: challenge.id,
+    });
+
+    return {
+      enrollmentId: challenge.id,
+      userId: user.id,
+      maskedEmail: this.maskEmail(normalizedEmail),
+      otpExpiresAt: expiresAt.toISOString(),
+      status: 'pending_activation',
+    };
+  }
+
+  async startStaffActivation(payload: GoogleSignupStartDto) {
+    const googleIdentity = await this.googleIdentityService.verifyIdToken(payload.googleIdToken);
+    const normalizedEmail = googleIdentity.email;
+
+    const user = await this.usersService.findByEmail(normalizedEmail);
+    if (!user) {
+      throw new NotFoundException('Staff account not found');
+    }
+
+    if (user.role === 'customer') {
+      throw new BadRequestException('Only staff accounts can use staff activation');
+    }
+
+    if (user.isActive) {
+      throw new ConflictException('Staff account is already active');
+    }
+
+    const existingIdentity = await this.authRepository.findGoogleIdentityByProviderUserId(
+      googleIdentity.subject,
+    );
+    if (existingIdentity && existingIdentity.userId !== user.id) {
+      throw new ConflictException('Google identity is already linked to another account');
+    }
+
+    const existingEmailIdentity = await this.authRepository.findGoogleIdentityByEmail(
+      normalizedEmail,
+    );
+    if (existingEmailIdentity && existingEmailIdentity.userId !== user.id) {
+      throw new ConflictException('Google identity email is already linked to another account');
+    }
+
+    if (!existingIdentity) {
+      await this.authRepository.createGoogleIdentity({
+        userId: user.id,
+        providerUserId: googleIdentity.subject,
+        email: normalizedEmail,
+      });
+    }
+
+    const otp = this.generateOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    const challenge = await this.authRepository.createOtpChallenge({
+      userId: user.id,
+      purpose: 'staff_activation',
+      email: normalizedEmail,
+      otpHash,
+      expiresAt,
+    });
+
+    await this.notificationsService.enqueueAuthOtpDelivery({
+      userId: user.id,
+      otp,
+      email: normalizedEmail,
+      activationContext: 'staff_activation',
+      dedupeKey: `auth-otp-${challenge.id}`,
+      sourceId: challenge.id,
+    });
+
+    return {
+      enrollmentId: challenge.id,
+      userId: user.id,
+      maskedEmail: this.maskEmail(normalizedEmail),
+      otpExpiresAt: expiresAt.toISOString(),
+      status: 'pending_activation',
+    };
+  }
+
+  async verifyEmailOtp(payload: VerifyEmailOtpDto) {
+    const challenge = await this.authRepository.findOtpChallengeById(payload.enrollmentId);
+    if (!challenge) {
+      throw new NotFoundException('OTP enrollment not found');
+    }
+
+    if (challenge.purpose !== 'customer_signup') {
+      throw new BadRequestException('OTP purpose does not match customer signup');
+    }
+
+    if (challenge.consumedAt) {
+      throw new ConflictException('OTP has already been used');
+    }
+
+    if (challenge.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('OTP has expired');
+    }
+
+    const isOtpValid = await bcrypt.compare(payload.otp, challenge.otpHash);
+    if (!isOtpValid) {
+      await this.authRepository.incrementOtpAttempts(
+        challenge.id,
+        (challenge.attempts ?? 0) + 1,
+      );
+      throw new BadRequestException('Invalid OTP');
+    }
+
+    await this.authRepository.consumeOtpChallenge(challenge.id);
+
+    const user = await this.usersService.findById(challenge.userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const account = await this.authRepository.findAccountByUserId(user.id);
+    if (!account) {
+      throw new NotFoundException('Auth account not found');
+    }
+
+    await this.usersService.setActivationStatus(user.id, true);
+    await this.authRepository.updateAccountStatus(user.id, true);
+
+    return this.issueTokens(user);
+  }
+
+  async verifyStaffEmailOtp(payload: VerifyEmailOtpDto) {
+    const challenge = await this.authRepository.findOtpChallengeById(payload.enrollmentId);
+    if (!challenge) {
+      throw new NotFoundException('OTP enrollment not found');
+    }
+
+    if (challenge.purpose !== 'staff_activation') {
+      throw new BadRequestException('OTP purpose does not match staff activation');
+    }
+
+    if (challenge.consumedAt) {
+      throw new ConflictException('OTP has already been used');
+    }
+
+    if (challenge.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('OTP has expired');
+    }
+
+    const isOtpValid = await bcrypt.compare(payload.otp, challenge.otpHash);
+    if (!isOtpValid) {
+      await this.authRepository.incrementOtpAttempts(
+        challenge.id,
+        (challenge.attempts ?? 0) + 1,
+      );
+      throw new BadRequestException('Invalid OTP');
+    }
+
+    await this.authRepository.consumeOtpChallenge(challenge.id);
+
+    const user = await this.usersService.findById(challenge.userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role === 'customer') {
+      throw new BadRequestException('Only staff accounts can complete staff activation');
+    }
+
+    const account = await this.authRepository.findAccountByUserId(user.id);
+    if (!account) {
+      throw new NotFoundException('Auth account not found');
+    }
+
+    await this.usersService.setActivationStatus(user.id, true);
+    await this.authRepository.updateAccountStatus(user.id, true);
+
+    return this.issueTokens(user);
   }
 
   async register(registerDto: RegisterDto) {
@@ -48,7 +289,6 @@ export class AuthService {
       firstName: registerDto.firstName,
       lastName: registerDto.lastName,
       phone: registerDto.phone,
-      role: 'customer',
     } satisfies CreateUserDto);
 
     const passwordHash = await bcrypt.hash(registerDto.password, 10);
@@ -75,7 +315,7 @@ export class AuthService {
     }
 
     const account = await this.authRepository.findAccountByUserId(user.id);
-    if (!account || !account.isActive) {
+    if (!account || !account.isActive || !user.isActive) {
       await this.authRepository.logLoginAttempt({
         userId: user.id,
         email: loginDto.email,
@@ -107,9 +347,14 @@ export class AuthService {
   }
 
   async refresh(refreshTokenDto: RefreshTokenDto) {
-    const payload = await this.jwtService.verifyAsync<TokenPayload>(refreshTokenDto.refreshToken, {
-      secret: this.refreshSecret,
-    });
+    let payload: TokenPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<TokenPayload>(refreshTokenDto.refreshToken, {
+        secret: this.refreshSecret,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
 
     if (payload.type !== 'refresh') {
       throw new UnauthorizedException('Invalid refresh token');
@@ -126,11 +371,61 @@ export class AuthService {
     }
 
     const user = await this.usersService.findById(payload.sub);
-    if (!user) {
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const account = await this.authRepository.findAccountByUserId(user.id);
+    if (!account?.isActive) {
       throw new UnauthorizedException('User not found');
     }
 
     return this.issueTokens(user);
+  }
+
+  async provisionStaffAccount(payload: CreateStaffAccountDto) {
+    const user = await this.usersService.createManagedUser({
+      email: payload.email,
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      phone: payload.phone,
+      role: payload.role,
+      staffCode: payload.staffCode,
+    });
+
+    const passwordHash = await bcrypt.hash(payload.password, 10);
+    await this.authRepository.createAccount(user.id, passwordHash);
+    await this.usersService.setActivationStatus(user.id, false);
+    await this.authRepository.updateAccountStatus(user.id, false);
+
+    return this.usersService.findById(user.id);
+  }
+
+  async updateStaffAccountStatus(userId: string, payload: UpdateStaffAccountStatusDto) {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role === 'customer') {
+      throw new BadRequestException('Only staff accounts can be managed through this endpoint');
+    }
+
+    if (payload.isActive) {
+      const identity = await this.authRepository.findGoogleIdentityByEmail(user.email);
+      if (!identity) {
+        throw new BadRequestException('Staff account has not completed activation');
+      }
+    }
+
+    await this.usersService.setActivationStatus(userId, payload.isActive);
+    await this.authRepository.updateAccountStatus(userId, payload.isActive);
+
+    if (!payload.isActive) {
+      await this.authRepository.revokeActiveRefreshTokens(userId);
+    }
+
+    return this.usersService.findById(userId);
   }
 
   private async issueTokens(user: { id: string; email: string; role: string; profile?: unknown }) {
@@ -168,5 +463,22 @@ export class AuthService {
       refreshToken,
       user,
     };
+  }
+
+  private generateOtp() {
+    return `${Math.floor(100000 + Math.random() * 900000)}`;
+  }
+
+  private maskEmail(email: string) {
+    const [localPart, domainPart] = email.trim().toLowerCase().split('@');
+    if (!localPart || !domainPart) {
+      return '***';
+    }
+
+    if (localPart.length <= 2) {
+      return `${localPart[0] ?? '*'}***@${domainPart}`;
+    }
+
+    return `${localPart.slice(0, 2)}***@${domainPart}`;
   }
 }
