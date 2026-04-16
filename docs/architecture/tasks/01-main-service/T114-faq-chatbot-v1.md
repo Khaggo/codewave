@@ -14,7 +14,7 @@ Build the deterministic FAQ chatbot.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

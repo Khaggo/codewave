@@ -14,7 +14,7 @@ Run AI-assisted work through BullMQ workers.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

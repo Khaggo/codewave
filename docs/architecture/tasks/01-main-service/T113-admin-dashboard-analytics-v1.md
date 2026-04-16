@@ -14,7 +14,7 @@ Build the first admin analytics dashboard.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

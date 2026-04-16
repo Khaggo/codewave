@@ -15,6 +15,12 @@ Send the right operational notices at the right time while keeping delivery poli
 ## Inputs
 
 - notify-worthy domain events
+- `booking.reminder_requested` internal trigger contracts from `main-service.bookings`
+- `insurance.inquiry_status_changed` internal trigger contracts from `main-service.insurance`
+- `back_job.status_changed` internal trigger contracts from `main-service.back-jobs`
+- `job_order.service_follow_up_requested` internal trigger contracts from `main-service.job-orders`
+- `order.invoice_issued` facts from `ecommerce-service`
+- `invoice.payment_recorded` facts from `ecommerce-service`
 - auth OTP delivery requests
 - user notification preferences
 - reminder rules and queue jobs
@@ -52,28 +58,34 @@ Key relations:
 ## Primary Business Logic
 
 - decide whether a user should receive a notice
+- translate source-domain facts into notification-owned queue actions without taking over source-domain state
 - schedule reminders and retries through BullMQ
 - store delivery status and failures
 - support operational email delivery without changing trigger ownership
 - expose user-facing preference and history endpoints for operational notifications
 - deliver email OTP challenges for signup and staff activation without taking ownership of activation decisions
+- react to commerce invoice-issued and payment-recorded facts without reaching into ecommerce tables directly
+- keep trigger contracts explicit per source domain instead of relying on one generic `notification.requested` event
 - hide internal-only operational events from customer notification streams
 - keep SMS and other paid delivery channels out of the canonical scope unless explicitly reapproved
 
 ## Process Flow
 
-1. Source module emits a notify-worthy event or schedules a reminder.
-2. Notification policy checks preferences, templates, and delivery constraints for the relevant channel.
-3. Queue schedules immediate or delayed delivery.
-4. Delivery result is stored and retried if needed.
-5. Auth OTP delivery uses Nodemailer over SMTP, but challenge validation and activation ownership stay in `auth`.
+1. Source module emits a notify-worthy event or an explicit notification trigger contract.
+2. Notification planning maps the source fact to `enqueueNotification`, `scheduleReminder`, or cancellation actions with stable dedupe keys.
+3. Notification policy checks preferences, templates, and delivery constraints for the relevant channel.
+4. Queue schedules immediate or delayed delivery, or existing reminder policy is cancelled when a downstream fact closes the workflow.
+5. Delivery result is stored and retried if needed.
+6. Auth OTP delivery uses Nodemailer over SMTP, but challenge validation and activation ownership stay in `auth`.
 
 ## Use Cases
 
 - booking reminder before appointment
 - insurance inquiry update notice
 - back-job status change notice
-- invoice aging reminder for unpaid commerce orders
+- service follow-up reminder after a completed job-order workflow
+- invoice issuance starts aging reminder policy for unpaid commerce orders
+- invoice payment recorded updates or stops aging reminder policy
 - insurance renewal and service reminder notices
 - customer signup email OTP delivery
 - pending staff activation email OTP delivery
@@ -85,11 +97,13 @@ Key relations:
 - `GET /users/:id/notifications`
 - internal `enqueueNotification`
 - internal `scheduleReminder`
+- internal `applyTrigger`
 - internal `enqueueAuthOtpDelivery`
 
 ## Edge Cases
 
 - duplicate notifications from repeated upstream events
+- duplicate trigger delivery reuses the same dedupe key and must not create a second customer-visible notification
 - user opts out of a channel after a job is already queued
 - reminder jobs remain queued after booking cancellation
 - invoice reminders keep sending after payment is fully recorded

@@ -18,6 +18,7 @@ export const notificationChannelEnum = pgEnum('notification_channel', ['email'])
 export const notificationCategoryEnum = pgEnum('notification_category', [
   'booking_reminder',
   'insurance_update',
+  'back_job_update',
   'invoice_aging',
   'service_follow_up',
   'auth_otp',

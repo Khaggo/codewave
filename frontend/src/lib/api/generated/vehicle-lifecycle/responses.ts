@@ -3,6 +3,7 @@ import type {
   VehicleTimelineEventCategory,
   VehicleTimelineSourceType,
 } from './requests';
+import type { AiWorkerJobResponse } from '../shared';
 
 export interface VehicleTimelineEventResponse {
   id: string;
@@ -35,6 +36,7 @@ export interface VehicleLifecycleSummaryResponse {
   requestedByUserId: string;
   summaryText: string;
   status: VehicleLifecycleSummaryStatus;
+  generationJob: AiWorkerJobResponse;
   customerVisible: boolean;
   reviewNotes?: string | null;
   reviewedByUserId?: string | null;

@@ -16,3 +16,17 @@ export interface ApiErrorResponse {
   source: ContractRouteSource;
   details?: Record<string, unknown>;
 }
+
+export interface AiWorkerJobResponse {
+  queueName: string;
+  jobName: string;
+  jobId: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  requestedAt: string;
+  attemptsAllowed: number;
+  attemptNumber: number;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  failedAt?: string | null;
+  lastError?: string | null;
+}

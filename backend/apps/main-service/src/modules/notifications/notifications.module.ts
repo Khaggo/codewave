@@ -8,6 +8,7 @@ import { NotificationsController } from './controllers/notifications.controller'
 import { NOTIFICATIONS_QUEUE_NAME } from './notifications.constants';
 import { NotificationsProcessor } from './notifications.processor';
 import { NotificationsRepository } from './repositories/notifications.repository';
+import { NotificationTriggerPlannerService } from './services/notification-trigger-planner.service';
 import { NotificationsService } from './services/notifications.service';
 import { SmtpMailService } from './services/smtp-mail.service';
 
@@ -18,7 +19,13 @@ import { SmtpMailService } from './services/smtp-mail.service';
     BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE_NAME }),
   ],
   controllers: [NotificationsController],
-  providers: [NotificationsRepository, NotificationsService, NotificationsProcessor, SmtpMailService],
+  providers: [
+    NotificationsRepository,
+    NotificationTriggerPlannerService,
+    NotificationsService,
+    NotificationsProcessor,
+    SmtpMailService,
+  ],
   exports: [NotificationsRepository, NotificationsService],
 })
 export class NotificationsModule {}

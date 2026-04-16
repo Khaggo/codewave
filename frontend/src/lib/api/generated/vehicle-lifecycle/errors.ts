@@ -10,6 +10,6 @@ export const lifecycleSummaryForbiddenError: ApiErrorResponse = {
 export const lifecycleSummaryConflictError: ApiErrorResponse = {
   statusCode: 409,
   code: 'CONFLICT',
-  message: 'Vehicle lifecycle summary has already been reviewed.',
+  message: 'Vehicle lifecycle summary is not ready for review or has already been reviewed.',
   source: 'swagger',
 };

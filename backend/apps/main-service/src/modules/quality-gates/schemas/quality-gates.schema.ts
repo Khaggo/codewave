@@ -13,6 +13,7 @@ import {
 
 import { jobOrders } from '@main-modules/job-orders/schemas/job-orders.schema';
 import { userRoleEnum, users } from '@main-modules/users/schemas/users.schema';
+import { AiWorkerJobMetadata } from '@shared/queue/ai-worker.types';
 
 export const qualityGateStatusEnum = pgEnum('quality_gate_status', [
   'pending',
@@ -60,6 +61,7 @@ export const jobOrderQualityGates = pgTable(
     status: qualityGateStatusEnum('status').notNull().default('pending'),
     riskScore: integer('risk_score').notNull().default(0),
     blockingReason: text('blocking_reason'),
+    auditJob: jsonb('audit_job').$type<AiWorkerJobMetadata | null>(),
     lastAuditRequestedAt: timestamp('last_audit_requested_at', { withTimezone: true }).notNull().defaultNow(),
     lastAuditCompletedAt: timestamp('last_audit_completed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -6,12 +6,13 @@ import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jo
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
 import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
-import { QUALITY_GATES_QUEUE_NAME } from '@main-modules/quality-gates/quality-gates.constants';
 import { QualityGatesRepository } from '@main-modules/quality-gates/repositories/quality-gates.repository';
 import { QualityGateDiscrepancyEngineService } from '@main-modules/quality-gates/services/quality-gate-discrepancy-engine.service';
 import { QualityGateSemanticAuditorService } from '@main-modules/quality-gates/services/quality-gate-semantic-auditor.service';
 import { QualityGatesService } from '@main-modules/quality-gates/services/quality-gates.service';
 import { UsersService } from '@main-modules/users/services/users.service';
+import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
+import { AI_WORKER_QUEUE_NAME } from '@shared/queue/ai-worker.constants';
 
 describe('QualityGatesService', () => {
   it('starts a pending quality gate and queues an audit for ready-for-QA job orders', async () => {
@@ -46,7 +47,8 @@ describe('QualityGatesService', () => {
         { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn() } },
         { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn().mockResolvedValue([]) } },
         { provide: UsersService, useValue: { findById: jest.fn() } },
-        { provide: getQueueToken(QUALITY_GATES_QUEUE_NAME), useValue: qualityGatesQueue },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: qualityGatesQueue },
       ],
     }).compile();
 
@@ -54,10 +56,17 @@ describe('QualityGatesService', () => {
 
     const result = await service.beginQualityGate('job-order-1');
 
-    expect(qualityGatesRepository.upsertPending).toHaveBeenCalledWith('job-order-1');
+    expect(qualityGatesRepository.upsertPending).toHaveBeenCalledWith(
+      'job-order-1',
+      expect.objectContaining({
+        queueName: 'ai-worker-jobs',
+        jobName: 'run-quality-gate-audit',
+        status: 'queued',
+      }),
+    );
     expect(qualityGatesQueue.add).toHaveBeenCalledWith(
       'run-quality-gate-audit',
-      { jobOrderId: 'job-order-1' },
+      expect.objectContaining({ jobOrderId: 'job-order-1', requestedAt: expect.any(String) }),
       expect.objectContaining({
         jobId: 'quality-gate:job-order-1',
       }),
@@ -87,6 +96,7 @@ describe('QualityGatesService', () => {
         jobOrderId: 'job-order-1',
         status: 'pending',
       }),
+      updateAuditJob: jest.fn().mockResolvedValue(undefined),
       completeAudit: jest.fn().mockResolvedValue({
         id: 'quality-gate-1',
         jobOrderId: 'job-order-1',
@@ -126,8 +136,9 @@ describe('QualityGatesService', () => {
         { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn() } },
         { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn().mockResolvedValue([]) } },
         { provide: UsersService, useValue: { findById: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         QualityGateSemanticAuditorService,
-        { provide: getQueueToken(QUALITY_GATES_QUEUE_NAME), useValue: { add: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
       ],
     }).compile();
 
@@ -157,6 +168,7 @@ describe('QualityGatesService', () => {
         jobOrderId: 'job-order-1',
         status: 'pending',
       }),
+      updateAuditJob: jest.fn().mockResolvedValue(undefined),
       completeAudit: jest.fn().mockResolvedValue({
         id: 'quality-gate-1',
         jobOrderId: 'job-order-1',
@@ -224,7 +236,8 @@ describe('QualityGatesService', () => {
         { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn() } },
         { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn().mockResolvedValue([]) } },
         { provide: UsersService, useValue: { findById: jest.fn() } },
-        { provide: getQueueToken(QUALITY_GATES_QUEUE_NAME), useValue: { add: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
       ],
     }).compile();
 
@@ -259,6 +272,7 @@ describe('QualityGatesService', () => {
         jobOrderId: 'job-order-1',
         status: 'pending',
       }),
+      updateAuditJob: jest.fn().mockResolvedValue(undefined),
       completeAudit: jest.fn().mockResolvedValue({
         id: 'quality-gate-1',
         jobOrderId: 'job-order-1',
@@ -344,7 +358,8 @@ describe('QualityGatesService', () => {
           },
         },
         { provide: UsersService, useValue: { findById: jest.fn() } },
-        { provide: getQueueToken(QUALITY_GATES_QUEUE_NAME), useValue: { add: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
       ],
     }).compile();
 
@@ -402,7 +417,47 @@ describe('QualityGatesService', () => {
         { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn() } },
         { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn().mockResolvedValue([]) } },
         { provide: UsersService, useValue: { findById: jest.fn() } },
-        { provide: getQueueToken(QUALITY_GATES_QUEUE_NAME), useValue: { add: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(QualityGatesService);
+
+    await expect(service.assertReleaseAllowed('job-order-1')).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('prevents release when the quality gate is still pending', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        QualityGatesService,
+        QualityGateDiscrepancyEngineService,
+        QualityGateSemanticAuditorService,
+        {
+          provide: QualityGatesRepository,
+          useValue: {
+            findOptionalByJobOrderId: jest.fn().mockResolvedValue({
+              id: 'quality-gate-1',
+              jobOrderId: 'job-order-1',
+              status: 'pending',
+            }),
+          },
+        },
+        {
+          provide: JobOrdersRepository,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'job-order-1',
+              status: 'ready_for_qa',
+            }),
+          },
+        },
+        { provide: BookingsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn().mockResolvedValue([]) } },
+        { provide: UsersService, useValue: { findById: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
       ],
     }).compile();
 
@@ -460,7 +515,8 @@ describe('QualityGatesService', () => {
             }),
           },
         },
-        { provide: getQueueToken(QUALITY_GATES_QUEUE_NAME), useValue: { add: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
       ],
     }).compile();
 
@@ -511,7 +567,8 @@ describe('QualityGatesService', () => {
             }),
           },
         },
-        { provide: getQueueToken(QUALITY_GATES_QUEUE_NAME), useValue: { add: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
       ],
     }).compile();
 

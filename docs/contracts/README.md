@@ -32,3 +32,11 @@ This folder contains human-readable handoff packs for slices that need frontend 
 - `T119-quality-gate-manual-override.md`
 - `T120-google-signup-and-email-otp-customer-enrollment.md`
 - `T121-staff-pending-activation-google-email-otp.md`
+- `T202-catalog-v1.md`
+- `T203-cart-and-invoice-checkout.md`
+- `T204-order-tracking-and-purchase-history.md`
+- `T205-invoice-only-payment-tracking.md`
+- `T301-main-ecommerce-event-contracts.md`
+- `T302-lifecycle-event-expansion.md`
+- `T303-loyalty-from-service-and-purchase-events.md`
+- `T304-notification-trigger-integration.md`

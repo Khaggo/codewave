@@ -15,8 +15,8 @@ Own a correct, idempotent loyalty ledger that reacts to completed service invoic
 ## Inputs
 
 - user references
-- finalized service-side invoice records from `main-service.job-orders`
-- commerce purchase-completion or invoice-payment-recorded accrual facts
+- `service.invoice_finalized` facts from `main-service.job-orders`
+- `invoice.payment_recorded` commerce facts from `ecommerce-service`
 - admin reward-catalog management requests
 - redemption requests
 
@@ -39,6 +39,7 @@ Primary tables or equivalents:
 - `loyalty_accounts`
 - `loyalty_transactions`
 - `rewards`
+- `reward_catalog_audits`
 - `reward_redemptions`
 
 Key relations:
@@ -50,20 +51,24 @@ Key relations:
 ## Primary Business Logic
 
 - create and maintain a points ledger
-- award points for finalized service invoice records and commerce purchase or payment facts
+- award points only for completed service invoice facts and commerce payment-recorded facts
+- use one stable v1 points policy: `service.invoice_finalized` awards a flat `100` points and `invoice.payment_recorded` awards `1` point per `PHP 50` paid, rounded down with a minimum of `1`
 - deduct points on reward redemption
 - let admins add, edit, activate, deactivate, and audit rewards without bypassing ledger integrity
-- guarantee idempotent accrual on repeated events
+- guarantee idempotent accrual on repeated events by stable source references such as `invoice_record_id` and `payment_entry_id`
+- keep reversal policy explicit: service accruals require manual adjustment until a service reversal fact exists, while purchase accruals can later consume refund or reversal facts
+- reject booking-created or booking-confirmed facts as loyalty triggers
 - expose balances, reward catalog state, and redemption history to customers and admins
 
 ## Process Flow
 
-1. A finalized service invoice fact or commerce purchase or payment fact occurs.
-2. Loyalty receives or derives an accrual request.
-3. Ledger transaction is written idempotently.
+1. `service.invoice_finalized` or `invoice.payment_recorded` occurs.
+2. Loyalty derives an accrual plan with a deterministic idempotency key from the source fact.
+3. Ledger transaction is written once or ignored if the idempotency key already exists.
 4. Customer balance is refreshed.
 5. Admins manage reward catalog lifecycle without mutating historical ledger entries.
 6. Reward redemption creates a debit transaction and redemption record.
+7. Later reversals or corrections use explicit compensating adjustments instead of rewriting the original accrual row.
 
 ## Use Cases
 
@@ -71,8 +76,9 @@ Key relations:
 - customer redeems a reward
 - admin creates, edits, activates, or deactivates a reward
 - admin audits why points were added or removed
-- service invoice finalization requests loyalty accrual through stable service facts
-- e-commerce purchase completion requests loyalty accrual through events
+- service invoice finalization requests loyalty accrual through `service.invoice_finalized`
+- e-commerce `invoice.payment_recorded` requests purchase accrual evaluation through events
+- duplicate event delivery is ignored without double-awarding points
 
 ## API Surface
 
@@ -89,9 +95,10 @@ Key relations:
 
 - booking creation or booking confirmation incorrectly tries to award points
 - same service invoice fact or purchase fact sends duplicate accrual events
+- a service invoice later needs reversal before a dedicated service reversal event exists
 - reward redemption occurs with stale balance
 - reward activation state changes while a redemption request is in flight
-- partial order cancellation requires points reversal
+- purchase refund or payment reversal arrives after points were already awarded
 
 ## Writable Sections
 

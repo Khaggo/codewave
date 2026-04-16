@@ -3,6 +3,7 @@ import type {
   QualityGateFindingSeverity,
   QualityGateStatus,
 } from './requests';
+import type { AiWorkerJobResponse } from '../shared';
 
 export interface QualityGateFindingResponse {
   id: string;
@@ -49,6 +50,7 @@ export interface JobOrderQualityGateResponse {
   blockingReason?: string | null;
   lastAuditRequestedAt: string;
   lastAuditCompletedAt?: string | null;
+  auditJob?: AiWorkerJobResponse | null;
   createdAt: string;
   updatedAt: string;
   findings: QualityGateFindingResponse[];

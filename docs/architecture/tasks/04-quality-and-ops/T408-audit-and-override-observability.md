@@ -14,7 +14,7 @@ Add observability for audits and manual overrides.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

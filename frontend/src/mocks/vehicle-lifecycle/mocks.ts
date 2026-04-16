@@ -24,6 +24,22 @@ export const vehicleTimelineMock: VehicleTimelineEventResponse[] = [
   {
     id: 'timeline-event-2',
     vehicleId: 'vehicle-1',
+    eventType: 'job_order_created',
+    eventCategory: 'administrative',
+    sourceType: 'job_order',
+    sourceId: 'job-order-1',
+    occurredAt: '2026-05-12T02:15:00.000Z',
+    verified: false,
+    inspectionId: null,
+    actorUserId: 'service-adviser-1',
+    notes: 'Track steering vibration complaint through release readiness.',
+    dedupeKey: 'job-order:job-order-1:created',
+    createdAt: '2026-05-12T02:15:00.000Z',
+    updatedAt: '2026-05-12T02:15:00.000Z',
+  },
+  {
+    id: 'timeline-event-3',
+    vehicleId: 'vehicle-1',
     eventType: 'inspection_completion_completed',
     eventCategory: 'verified',
     sourceType: 'inspection',
@@ -37,6 +53,54 @@ export const vehicleTimelineMock: VehicleTimelineEventResponse[] = [
     createdAt: '2026-05-12T03:00:00.000Z',
     updatedAt: '2026-05-12T03:00:00.000Z',
   },
+  {
+    id: 'timeline-event-4',
+    vehicleId: 'vehicle-1',
+    eventType: 'quality_gate_passed',
+    eventCategory: 'administrative',
+    sourceType: 'quality_gate',
+    sourceId: 'quality-gate-1',
+    occurredAt: '2026-05-12T03:20:00.000Z',
+    verified: false,
+    inspectionId: null,
+    actorUserId: null,
+    notes: null,
+    dedupeKey: 'quality-gate:quality-gate-1:status:passed',
+    createdAt: '2026-05-12T03:20:00.000Z',
+    updatedAt: '2026-05-12T03:20:00.000Z',
+  },
+  {
+    id: 'timeline-event-5',
+    vehicleId: 'vehicle-1',
+    eventType: 'job_order_finalized',
+    eventCategory: 'administrative',
+    sourceType: 'job_order',
+    sourceId: 'job-order-1',
+    occurredAt: '2026-05-12T03:30:00.000Z',
+    verified: false,
+    inspectionId: null,
+    actorUserId: 'service-adviser-1',
+    notes: 'Invoice-ready after QA cleared the steering vibration work.',
+    dedupeKey: 'job-order:job-order-1:status:finalized',
+    createdAt: '2026-05-12T03:30:00.000Z',
+    updatedAt: '2026-05-12T03:30:00.000Z',
+  },
+  {
+    id: 'timeline-event-6',
+    vehicleId: 'vehicle-1',
+    eventType: 'lifecycle_summary_approved',
+    eventCategory: 'administrative',
+    sourceType: 'lifecycle_summary',
+    sourceId: 'summary-1',
+    occurredAt: '2026-05-12T03:45:00.000Z',
+    verified: false,
+    inspectionId: null,
+    actorUserId: 'service-adviser-1',
+    notes: 'Approved after checking the latest verified lifecycle evidence.',
+    dedupeKey: 'lifecycle-summary:summary-1:review:approved',
+    createdAt: '2026-05-12T03:45:00.000Z',
+    updatedAt: '2026-05-12T03:45:00.000Z',
+  },
 ];
 
 export const pendingLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
@@ -44,8 +108,64 @@ export const pendingLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
   vehicleId: 'vehicle-1',
   requestedByUserId: 'service-adviser-1',
   summaryText:
-    '2024 Honda City has 2 recorded lifecycle events in this history snapshot. Administrative milestones include booking created (2026-05-12). Verified evidence includes Completion Completed (2026-05-12). The latest verified service record was logged on 2026-05-12.',
+    'Lifecycle summary generation is queued and awaiting worker execution.',
+  status: 'queued',
+  generationJob: {
+    queueName: 'ai-worker-jobs',
+    jobName: 'generate-vehicle-lifecycle-summary',
+    jobId: 'lifecycle-summary-job-1',
+    status: 'queued',
+    requestedAt: '2026-05-12T03:30:00.000Z',
+    attemptsAllowed: 3,
+    attemptNumber: 0,
+    startedAt: null,
+    completedAt: null,
+    failedAt: null,
+    lastError: null,
+  },
+  customerVisible: false,
+  reviewNotes: null,
+  reviewedByUserId: null,
+  reviewedAt: null,
+  customerVisibleAt: null,
+  provenance: {
+    provider: 'ai-worker-placeholder',
+    model: 'queued-summary-generation',
+    promptVersion: 'vehicle-lifecycle.summary.v1',
+    evidenceRefs: [
+      'booking:booking-1:history:history-1',
+      'job-order:job-order-1:created',
+      'inspection:inspection-1:completed',
+      'quality-gate:quality-gate-1:status:passed',
+      'job-order:job-order-1:status:finalized',
+    ],
+    evidenceSummary:
+      'Lifecycle evidence snapshot recorded while the shared AI worker queue prepares summary generation.',
+  },
+  createdAt: '2026-05-12T03:30:00.000Z',
+  updatedAt: '2026-05-12T03:30:00.000Z',
+};
+
+export const readyForReviewLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
+  id: 'summary-1',
+  vehicleId: 'vehicle-1',
+  requestedByUserId: 'service-adviser-1',
+  summaryText:
+    '2024 Honda City has 6 recorded lifecycle events in this history snapshot. Administrative milestones include booking created (2026-05-12), job order created (2026-05-12), quality gate passed (2026-05-12). Verified evidence includes Completion Completed (2026-05-12). The latest verified service record was logged on 2026-05-12.',
   status: 'pending_review',
+  generationJob: {
+    queueName: 'ai-worker-jobs',
+    jobName: 'generate-vehicle-lifecycle-summary',
+    jobId: 'lifecycle-summary-job-1',
+    status: 'completed',
+    requestedAt: '2026-05-12T03:30:00.000Z',
+    attemptsAllowed: 3,
+    attemptNumber: 1,
+    startedAt: '2026-05-12T03:30:01.000Z',
+    completedAt: '2026-05-12T03:30:05.000Z',
+    failedAt: null,
+    lastError: null,
+  },
   customerVisible: false,
   reviewNotes: null,
   reviewedByUserId: null,
@@ -55,7 +175,13 @@ export const pendingLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
     provider: 'local-summary-adapter',
     model: 'timeline-summary-v1',
     promptVersion: 'vehicle-lifecycle.summary.v1',
-    evidenceRefs: ['booking:booking-1:history:history-1', 'inspection:inspection-1:completed'],
+    evidenceRefs: [
+      'booking:booking-1:history:history-1',
+      'job-order:job-order-1:created',
+      'inspection:inspection-1:completed',
+      'quality-gate:quality-gate-1:status:passed',
+      'job-order:job-order-1:status:finalized',
+    ],
     evidenceSummary:
       'Evidence is limited to normalized lifecycle timeline events, with special emphasis on verified inspection-backed milestones and customer-safe administrative statuses.',
   },
@@ -64,7 +190,7 @@ export const pendingLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
 };
 
 export const approvedLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
-  ...pendingLifecycleSummaryMock,
+  ...readyForReviewLifecycleSummaryMock,
   status: 'approved',
   customerVisible: true,
   reviewNotes: 'Approved after checking the latest verified lifecycle evidence.',
@@ -75,7 +201,7 @@ export const approvedLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
 };
 
 export const rejectedLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
-  ...pendingLifecycleSummaryMock,
+  ...readyForReviewLifecycleSummaryMock,
   status: 'rejected',
   customerVisible: false,
   reviewNotes: 'Rejected because the draft should be regenerated after more verified evidence is recorded.',
@@ -83,6 +209,22 @@ export const rejectedLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
   reviewedAt: '2026-05-12T03:50:00.000Z',
   customerVisibleAt: null,
   updatedAt: '2026-05-12T03:50:00.000Z',
+};
+
+export const failedLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
+  ...pendingLifecycleSummaryMock,
+  status: 'generation_failed',
+  summaryText:
+    'Lifecycle summary generation failed and requires a retry before review.',
+  generationJob: {
+    ...pendingLifecycleSummaryMock.generationJob,
+    status: 'failed',
+    attemptNumber: 3,
+    startedAt: '2026-05-12T03:30:01.000Z',
+    failedAt: '2026-05-12T03:32:00.000Z',
+    lastError: 'Provider timeout while preparing lifecycle summary.',
+  },
+  updatedAt: '2026-05-12T03:32:00.000Z',
 };
 
 export const lifecycleSummaryForbiddenErrorMock: ApiErrorResponse = {

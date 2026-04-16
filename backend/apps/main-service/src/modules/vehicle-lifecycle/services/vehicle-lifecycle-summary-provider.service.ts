@@ -11,7 +11,7 @@ type LifecycleSummaryInput = {
   timelineEvents: Array<{
     eventType: string;
     eventCategory: 'administrative' | 'verified';
-    sourceType: 'booking' | 'inspection' | 'manual';
+    sourceType: 'booking' | 'inspection' | 'job_order' | 'quality_gate' | 'lifecycle_summary' | 'manual';
     occurredAt: Date;
     dedupeKey: string;
   }>;

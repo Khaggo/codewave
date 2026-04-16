@@ -14,7 +14,7 @@ Build the RBAC regression matrix.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

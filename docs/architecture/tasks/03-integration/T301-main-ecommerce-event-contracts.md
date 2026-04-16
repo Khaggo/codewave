@@ -14,7 +14,7 @@ Define and implement the first RabbitMQ event contracts between `main-service` a
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

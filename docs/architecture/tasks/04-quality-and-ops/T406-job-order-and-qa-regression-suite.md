@@ -14,7 +14,7 @@ Build regression coverage for job orders and QA.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

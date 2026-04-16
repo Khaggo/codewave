@@ -8,7 +8,12 @@ import { Test } from '@nestjs/testing';
 import { PassportModule } from '@nestjs/passport';
 import * as bcrypt from 'bcrypt';
 
+import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
+import { LoyaltyAccrualPlannerService } from '@shared/events/loyalty-accrual-planner.service';
 import { HealthController } from '../../src/health.controller';
+import { AnalyticsController } from '../../src/modules/analytics/controllers/analytics.controller';
+import { AnalyticsRepository } from '../../src/modules/analytics/repositories/analytics.repository';
+import { AnalyticsService } from '../../src/modules/analytics/services/analytics.service';
 import { AuthController } from '../../src/modules/auth/controllers/auth.controller';
 import { JwtAuthGuard } from '../../src/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../src/modules/auth/guards/roles.guard';
@@ -32,6 +37,9 @@ import { UpdateBookingStatusDto } from '../../src/modules/bookings/dto/update-bo
 import { BookingsRepository } from '../../src/modules/bookings/repositories/bookings.repository';
 import { bookingStatusEnum } from '../../src/modules/bookings/schemas/bookings.schema';
 import { BookingsService } from '../../src/modules/bookings/services/bookings.service';
+import { ChatbotController } from '../../src/modules/chatbot/controllers/chatbot.controller';
+import { ChatbotRepository } from '../../src/modules/chatbot/repositories/chatbot.repository';
+import { ChatbotService } from '../../src/modules/chatbot/services/chatbot.service';
 import { InsuranceController } from '../../src/modules/insurance/controllers/insurance.controller';
 import { AddInsuranceDocumentDto } from '../../src/modules/insurance/dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../../src/modules/insurance/dto/create-insurance-inquiry.dto';
@@ -66,6 +74,21 @@ import {
   jobOrderTypeEnum,
 } from '../../src/modules/job-orders/schemas/job-orders.schema';
 import { JobOrdersService } from '../../src/modules/job-orders/services/job-orders.service';
+import { LoyaltyController } from '../../src/modules/loyalty/controllers/loyalty.controller';
+import { CreateRewardDto } from '../../src/modules/loyalty/dto/create-reward.dto';
+import { RedeemRewardDto } from '../../src/modules/loyalty/dto/redeem-reward.dto';
+import { UpdateRewardDto } from '../../src/modules/loyalty/dto/update-reward.dto';
+import { UpdateRewardStatusDto } from '../../src/modules/loyalty/dto/update-reward-status.dto';
+import { LoyaltyRepository } from '../../src/modules/loyalty/repositories/loyalty.repository';
+import {
+  loyaltySourceTypeEnum,
+  loyaltyTransactionTypeEnum,
+  rewardCatalogAuditActionEnum,
+  RewardCatalogSnapshot,
+  rewardStatusEnum,
+  rewardTypeEnum,
+} from '../../src/modules/loyalty/schemas/loyalty.schema';
+import { LoyaltyService } from '../../src/modules/loyalty/services/loyalty.service';
 import { NotificationsController } from '../../src/modules/notifications/controllers/notifications.controller';
 import { UpdateNotificationPreferencesDto } from '../../src/modules/notifications/dto/update-notification-preferences.dto';
 import { NOTIFICATIONS_QUEUE_NAME } from '../../src/modules/notifications/notifications.constants';
@@ -78,11 +101,12 @@ import {
   notificationStatusEnum,
   reminderRuleStatusEnum,
 } from '../../src/modules/notifications/schemas/notifications.schema';
+import { NotificationTriggerPlannerService } from '../../src/modules/notifications/services/notification-trigger-planner.service';
 import { NotificationsService } from '../../src/modules/notifications/services/notifications.service';
 import { SmtpMailService } from '../../src/modules/notifications/services/smtp-mail.service';
+import { AiWorkerProcessor } from '../../src/modules/ai-worker/ai-worker.processor';
 import { QualityGatesController } from '../../src/modules/quality-gates/controllers/quality-gates.controller';
 import { QualityGatesRepository } from '../../src/modules/quality-gates/repositories/quality-gates.repository';
-import { QUALITY_GATES_QUEUE_NAME } from '../../src/modules/quality-gates/quality-gates.constants';
 import {
   QualityGateFindingProvenance,
   qualityGateFindingGateEnum,
@@ -115,6 +139,13 @@ import { CreateVehicleDto } from '../../src/modules/vehicles/dto/create-vehicle.
 import { UpdateVehicleDto } from '../../src/modules/vehicles/dto/update-vehicle.dto';
 import { VehiclesRepository } from '../../src/modules/vehicles/repositories/vehicles.repository';
 import { VehiclesService } from '../../src/modules/vehicles/services/vehicles.service';
+import {
+  AI_WORKER_QUEUE_NAME,
+  GENERATE_VEHICLE_LIFECYCLE_SUMMARY_JOB_NAME,
+  RUN_QUALITY_GATE_AUDIT_JOB_NAME,
+} from '../../../../shared/queue/ai-worker.constants';
+import { AiWorkerJobMetadata } from '../../../../shared/queue/ai-worker.types';
+import { setupSwagger } from '../../src/swagger';
 
 type UserRole = 'customer' | 'technician' | 'service_adviser' | 'super_admin';
 
@@ -391,6 +422,23 @@ type JobOrderInvoiceRecord = {
   updatedAt: Date;
 };
 
+type StaffAdminAuditAction = 'staff_account_provisioned' | 'staff_account_status_changed';
+
+type StaffAdminAuditLogRecord = {
+  id: string;
+  action: StaffAdminAuditAction;
+  actorUserId: string | null;
+  actorRole: 'super_admin';
+  targetUserId: string | null;
+  targetRole: Exclude<UserRole, 'customer'>;
+  targetEmail: string;
+  targetStaffCode: string | null;
+  previousIsActive: boolean | null;
+  nextIsActive: boolean | null;
+  reason: string | null;
+  createdAt: Date;
+};
+
 type VehicleLifecycleSummaryStatus = (typeof vehicleLifecycleSummaryStatusEnum.enumValues)[number];
 
 type VehicleLifecycleSummaryRecord = {
@@ -399,6 +447,7 @@ type VehicleLifecycleSummaryRecord = {
   requestedByUserId: string;
   summaryText: string;
   status: VehicleLifecycleSummaryStatus;
+  generationJob: AiWorkerJobMetadata | null;
   customerVisible: boolean;
   customerVisibleAt: Date | null;
   reviewNotes: string | null;
@@ -419,6 +468,7 @@ type QualityGateRecord = {
   status: QualityGateStatus;
   riskScore: number;
   blockingReason: string | null;
+  auditJob: AiWorkerJobMetadata | null;
   lastAuditRequestedAt: Date;
   lastAuditCompletedAt: Date | null;
   createdAt: Date;
@@ -442,6 +492,109 @@ type QualityGateOverrideRecord = {
   actorUserId: string;
   actorRole: UserRole;
   reason: string;
+  createdAt: Date;
+};
+
+type AnalyticsSnapshotType =
+  | 'dashboard'
+  | 'operations'
+  | 'back_jobs'
+  | 'loyalty'
+  | 'invoice_aging'
+  | 'audit_trail';
+type AnalyticsRefreshJobStatus = 'processing' | 'completed' | 'failed';
+type AnalyticsRefreshTriggerSource = 'bootstrap_read' | 'manual_refresh' | 'integration_refresh';
+
+type AnalyticsRefreshJobRecord = {
+  id: string;
+  snapshotTypes: AnalyticsSnapshotType[];
+  triggerSource: AnalyticsRefreshTriggerSource;
+  requestedByUserId: string | null;
+  status: AnalyticsRefreshJobStatus;
+  sourceCounts: Record<string, number>;
+  errorMessage: string | null;
+  startedAt: Date;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type AnalyticsSnapshotRecord = {
+  id: string;
+  snapshotType: AnalyticsSnapshotType;
+  version: string;
+  payload: Record<string, unknown>;
+  sourceCounts: Record<string, number>;
+  refreshJobId: string | null;
+  generatedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type LoyaltyTransactionType = (typeof loyaltyTransactionTypeEnum.enumValues)[number];
+type LoyaltySourceType = (typeof loyaltySourceTypeEnum.enumValues)[number];
+type RewardStatus = (typeof rewardStatusEnum.enumValues)[number];
+type RewardType = (typeof rewardTypeEnum.enumValues)[number];
+type RewardCatalogAuditAction = (typeof rewardCatalogAuditActionEnum.enumValues)[number];
+
+type LoyaltyAccountRecord = {
+  id: string;
+  userId: string;
+  pointsBalance: number;
+  lifetimePointsEarned: number;
+  lifetimePointsRedeemed: number;
+  lastAccruedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type LoyaltyTransactionRecord = {
+  id: string;
+  loyaltyAccountId: string;
+  transactionType: LoyaltyTransactionType;
+  sourceType: LoyaltySourceType;
+  sourceReference: string;
+  idempotencyKey: string | null;
+  policyKey: string | null;
+  pointsDelta: number;
+  resultingBalance: number;
+  metadata: Record<string, unknown>;
+  createdAt: Date;
+};
+
+type RewardRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  rewardType: RewardType;
+  pointsCost: number;
+  discountPercent: number | null;
+  status: RewardStatus;
+  createdByUserId: string;
+  updatedByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type RewardCatalogAuditRecord = {
+  id: string;
+  rewardId: string;
+  actorUserId: string;
+  action: RewardCatalogAuditAction;
+  reason: string | null;
+  snapshot: RewardCatalogSnapshot;
+  createdAt: Date;
+};
+
+type RewardRedemptionRecord = {
+  id: string;
+  loyaltyAccountId: string;
+  rewardId: string;
+  transactionId: string;
+  redeemedByUserId: string;
+  rewardNameSnapshot: string;
+  pointsCostSnapshot: number;
+  note: string | null;
   createdAt: Date;
 };
 
@@ -521,6 +674,68 @@ type InsuranceRecordRecord = {
   providerName: string | null;
   policyNumber: string | null;
   status: InsuranceInquiryStatus;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type ChatbotIntentType = 'faq' | 'lookup';
+type ChatbotIntentVisibility = 'all' | 'staff_only';
+type ChatbotLookupType = 'booking_status' | 'insurance_status';
+type ChatbotConversationResponseType = 'answer' | 'lookup' | 'escalation';
+type ChatbotEscalationStatus = 'open' | 'reviewed';
+
+type ChatbotLookupPayloadRecord = {
+  lookupType: ChatbotLookupType;
+  referenceId: string | null;
+  status: string | null;
+  message: string;
+};
+
+type ChatbotIntentRecord = {
+  id: string;
+  intentKey: string;
+  label: string;
+  description: string;
+  intentType: ChatbotIntentType;
+  responseTemplate: string;
+  lookupType: ChatbotLookupType | null;
+  visibility: ChatbotIntentVisibility;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type ChatbotRuleRecord = {
+  id: string;
+  ruleKey: string;
+  intentId: string;
+  keywords: string[];
+  priority: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type ChatbotEscalationRecord = {
+  id: string;
+  userId: string;
+  intentId: string | null;
+  prompt: string;
+  reason: string;
+  status: ChatbotEscalationStatus;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type ChatbotConversationRecord = {
+  id: string;
+  userId: string;
+  intentId: string | null;
+  prompt: string;
+  responseType: ChatbotConversationResponseType;
+  responseText: string;
+  lookupPayload: ChatbotLookupPayloadRecord | null;
+  escalationId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -672,6 +887,7 @@ const cloneQualityGate = (
 
   return {
     ...qualityGate,
+    auditJob: qualityGate.auditJob ? { ...qualityGate.auditJob } : null,
     findings: findings
       .filter((finding) => finding.qualityGateId === qualityGate.id)
       .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
@@ -889,6 +1105,7 @@ class InMemoryAuthRepository {
   private readonly googleIdentities = new Map<string, AuthGoogleIdentityRecord>();
   private readonly otpChallenges = new Map<string, AuthOtpChallengeRecord>();
   private readonly refreshTokens: RefreshTokenRecord[] = [];
+  private readonly staffAdminAuditLogs: StaffAdminAuditLogRecord[] = [];
   private readonly loginAuditLogs: Array<{
     userId?: string;
     email: string;
@@ -1061,6 +1278,43 @@ class InMemoryAuthRepository {
 
     this.otpChallenges.set(id, updatedRecord);
     return { ...updatedRecord };
+  }
+
+  async createStaffAdminAuditLog(payload: {
+    action: StaffAdminAuditAction;
+    actorUserId: string;
+    actorRole: 'super_admin';
+    targetUserId: string;
+    targetRole: Exclude<UserRole, 'customer'>;
+    targetEmail: string;
+    targetStaffCode?: string | null;
+    previousIsActive?: boolean | null;
+    nextIsActive?: boolean | null;
+    reason?: string | null;
+  }) {
+    const record: StaffAdminAuditLogRecord = {
+      id: randomUUID(),
+      action: payload.action,
+      actorUserId: payload.actorUserId,
+      actorRole: payload.actorRole,
+      targetUserId: payload.targetUserId,
+      targetRole: payload.targetRole,
+      targetEmail: payload.targetEmail,
+      targetStaffCode: payload.targetStaffCode ?? null,
+      previousIsActive: payload.previousIsActive ?? null,
+      nextIsActive: payload.nextIsActive ?? null,
+      reason: payload.reason ?? null,
+      createdAt: new Date(),
+    };
+
+    this.staffAdminAuditLogs.push(record);
+    return { ...record };
+  }
+
+  async listStaffAdminAuditLogsForAnalytics() {
+    return [...this.staffAdminAuditLogs]
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((auditLog) => ({ ...auditLog }));
   }
 }
 
@@ -1295,6 +1549,14 @@ class InMemoryBookingsRepository {
       );
   }
 
+  async listForAnalytics() {
+    return Array.from(this.bookings.values())
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((booking) =>
+        cloneBooking(booking, this.services, this.timeSlots, this.bookingServices, this.bookingStatusHistory),
+      );
+  }
+
   async findByScheduledDate(
     scheduledDate: string,
     options?: {
@@ -1458,6 +1720,23 @@ class InMemoryJobOrdersRepository {
     );
   }
 
+  async findByVehicleId(vehicleId: string) {
+    return Array.from(this.jobOrders.values())
+      .filter((jobOrder) => jobOrder.vehicleId === vehicleId)
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+      .map((jobOrder) =>
+        cloneJobOrder(jobOrder, this.items, this.assignments, this.progressEntries, this.photos, this.invoiceRecords),
+      );
+  }
+
+  async listForAnalytics() {
+    return Array.from(this.jobOrders.values())
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((jobOrder) =>
+        cloneJobOrder(jobOrder, this.items, this.assignments, this.progressEntries, this.photos, this.invoiceRecords),
+      );
+  }
+
   async hasBookingSource(sourceId: string) {
     return Array.from(this.jobOrders.values()).some(
       (jobOrder) => jobOrder.sourceType === 'booking' && jobOrder.sourceId === sourceId,
@@ -1595,7 +1874,16 @@ class InMemoryQualityGatesRepository {
     return cloneQualityGate(gate, this.findings, this.overrides);
   }
 
-  async upsertPending(jobOrderId: string) {
+  async findByJobOrderIds(jobOrderIds: string[]) {
+    const jobOrderIdSet = new Set(jobOrderIds);
+
+    return Array.from(this.qualityGates.values())
+      .filter((gate) => jobOrderIdSet.has(gate.jobOrderId))
+      .sort((left, right) => left.lastAuditRequestedAt.getTime() - right.lastAuditRequestedAt.getTime())
+      .map((gate) => cloneQualityGate(gate, this.findings, this.overrides));
+  }
+
+  async upsertPending(jobOrderId: string, auditJob: AiWorkerJobMetadata) {
     const existing = Array.from(this.qualityGates.values()).find((entry) => entry.jobOrderId === jobOrderId);
     const now = new Date();
 
@@ -1605,6 +1893,7 @@ class InMemoryQualityGatesRepository {
         status: 'pending',
         riskScore: 0,
         blockingReason: null,
+        auditJob: { ...auditJob },
         lastAuditRequestedAt: now,
         lastAuditCompletedAt: null,
         updatedAt: now,
@@ -1626,6 +1915,7 @@ class InMemoryQualityGatesRepository {
       status: 'pending',
       riskScore: 0,
       blockingReason: null,
+      auditJob: { ...auditJob },
       lastAuditRequestedAt: now,
       lastAuditCompletedAt: null,
       createdAt: now,
@@ -1636,12 +1926,37 @@ class InMemoryQualityGatesRepository {
     return this.findByJobOrderId(jobOrderId);
   }
 
+  async updateAuditJob(
+    jobOrderId: string,
+    auditJob: AiWorkerJobMetadata,
+    options?: {
+      blockingReason?: string | null;
+      lastAuditCompletedAt?: Date | null;
+    },
+  ) {
+    const gate = Array.from(this.qualityGates.values()).find((entry) => entry.jobOrderId === jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    this.qualityGates.set(gate.id, {
+      ...gate,
+      auditJob: { ...auditJob },
+      blockingReason: options?.blockingReason ?? gate.blockingReason,
+      lastAuditCompletedAt: options?.lastAuditCompletedAt ?? gate.lastAuditCompletedAt,
+      updatedAt: new Date(),
+    });
+
+    return this.findByJobOrderId(jobOrderId);
+  }
+
   async completeAudit(
     jobOrderId: string,
     payload: {
       status: QualityGateStatus;
       riskScore: number;
       blockingReason?: string | null;
+      auditJob: AiWorkerJobMetadata;
       findings: Array<{
         gate: QualityGateFindingGate;
         severity: QualityGateFindingSeverity;
@@ -1662,6 +1977,7 @@ class InMemoryQualityGatesRepository {
       status: payload.status,
       riskScore: payload.riskScore,
       blockingReason: payload.blockingReason ?? null,
+      auditJob: { ...payload.auditJob },
       lastAuditCompletedAt: now,
       updatedAt: now,
     });
@@ -1718,6 +2034,22 @@ class InMemoryQualityGatesRepository {
     });
 
     return this.findByJobOrderId(jobOrderId);
+  }
+
+  async listOverridesForAnalytics() {
+    return [...this.overrides]
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((override) => {
+        const gate = this.qualityGates.get(override.qualityGateId);
+        if (!gate) {
+          throw new NotFoundException('Quality gate not found');
+        }
+
+        return {
+          ...override,
+          qualityGate: { ...gate },
+        };
+      });
   }
 }
 
@@ -1779,6 +2111,12 @@ class InMemoryBackJobsRepository {
   async findByVehicleId(vehicleId: string) {
     return Array.from(this.backJobs.values())
       .filter((backJob) => backJob.vehicleId === vehicleId)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((backJob) => cloneBackJob(backJob, this.findings));
+  }
+
+  async listForAnalytics() {
+    return Array.from(this.backJobs.values())
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((backJob) => cloneBackJob(backJob, this.findings));
   }
@@ -1962,6 +2300,8 @@ class InMemoryVehicleLifecycleRepository {
     vehicleId: string;
     requestedByUserId: string;
     summaryText: string;
+    status?: VehicleLifecycleSummaryStatus;
+    generationJob: AiWorkerJobMetadata;
     provenance: VehicleLifecycleSummaryProvenance;
   }) {
     const now = new Date();
@@ -1970,7 +2310,8 @@ class InMemoryVehicleLifecycleRepository {
       vehicleId: payload.vehicleId,
       requestedByUserId: payload.requestedByUserId,
       summaryText: payload.summaryText,
-      status: 'pending_review',
+      status: payload.status ?? 'queued',
+      generationJob: { ...payload.generationJob },
       customerVisible: false,
       customerVisibleAt: null,
       reviewNotes: null,
@@ -1993,6 +2334,7 @@ class InMemoryVehicleLifecycleRepository {
 
     return {
       ...summary,
+      generationJob: summary.generationJob ? { ...summary.generationJob } : null,
       provenance: {
         ...summary.provenance,
         evidenceRefs: [...summary.provenance.evidenceRefs],
@@ -2006,11 +2348,80 @@ class InMemoryVehicleLifecycleRepository {
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((summary) => ({
         ...summary,
+        generationJob: summary.generationJob ? { ...summary.generationJob } : null,
         provenance: {
           ...summary.provenance,
           evidenceRefs: [...summary.provenance.evidenceRefs],
         },
       }));
+  }
+
+  async updateSummaryGenerationJob(
+    summaryId: string,
+    generationJob: AiWorkerJobMetadata,
+    status?: VehicleLifecycleSummaryStatus,
+  ) {
+    const summary = this.summaries.get(summaryId);
+    if (!summary) {
+      throw new NotFoundException('Vehicle lifecycle summary not found');
+    }
+
+    this.summaries.set(summaryId, {
+      ...summary,
+      generationJob: { ...generationJob },
+      status: status ?? summary.status,
+      updatedAt: new Date(),
+    });
+
+    return this.findSummaryById(summaryId);
+  }
+
+  async completeSummaryGeneration(
+    summaryId: string,
+    payload: {
+      summaryText: string;
+      provenance: VehicleLifecycleSummaryProvenance;
+      generationJob: AiWorkerJobMetadata;
+    },
+  ) {
+    const summary = this.summaries.get(summaryId);
+    if (!summary) {
+      throw new NotFoundException('Vehicle lifecycle summary not found');
+    }
+
+    this.summaries.set(summaryId, {
+      ...summary,
+      summaryText: payload.summaryText,
+      status: 'pending_review',
+      generationJob: { ...payload.generationJob },
+      provenance: { ...payload.provenance, evidenceRefs: [...payload.provenance.evidenceRefs] },
+      updatedAt: new Date(),
+    });
+
+    return this.findSummaryById(summaryId);
+  }
+
+  async failSummaryGeneration(
+    summaryId: string,
+    payload: {
+      summaryText: string;
+      generationJob: AiWorkerJobMetadata;
+    },
+  ) {
+    const summary = this.summaries.get(summaryId);
+    if (!summary) {
+      throw new NotFoundException('Vehicle lifecycle summary not found');
+    }
+
+    this.summaries.set(summaryId, {
+      ...summary,
+      summaryText: payload.summaryText,
+      status: 'generation_failed',
+      generationJob: { ...payload.generationJob },
+      updatedAt: new Date(),
+    });
+
+    return this.findSummaryById(summaryId);
   }
 
   async reviewSummary(
@@ -2127,6 +2538,13 @@ class InMemoryInsuranceRepository {
     return this.findById(id);
   }
 
+  async findByUserId(userId: string) {
+    return Array.from(this.inquiries.values())
+      .filter((inquiry) => inquiry.userId === userId)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents));
+  }
+
   async upsertRecordFromInquiry(payload: {
     inquiryId: string;
     userId: string;
@@ -2175,6 +2593,709 @@ class InMemoryInsuranceRepository {
       .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
       .map((record) => ({ ...record }));
   }
+
+  async listForAnalytics() {
+    return Array.from(this.inquiries.values())
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents));
+  }
+}
+
+const defaultChatbotIntentCatalog = [
+  {
+    intentKey: 'booking.how_to_book',
+    label: 'How to book a service',
+    description: 'Explains the minimum information required to create a booking.',
+    intentType: 'faq' as const,
+    responseTemplate:
+      'To book a service, choose your vehicle, appointment date, time slot, and at least one service. New bookings start in pending status until staff review.',
+    lookupType: null,
+    visibility: 'all' as const,
+    keywords: ['book service', 'booking', 'appointment', 'schedule service'],
+    priority: 300,
+  },
+  {
+    intentKey: 'booking.latest_status',
+    label: 'Latest booking status',
+    description: 'Looks up the most recent booking attached to the signed-in user.',
+    intentType: 'lookup' as const,
+    responseTemplate: 'Here is the latest booking status I found for your account.',
+    lookupType: 'booking_status' as const,
+    visibility: 'all' as const,
+    keywords: ['booking status', 'appointment status', 'my booking', 'latest booking'],
+    priority: 280,
+  },
+  {
+    intentKey: 'insurance.required_documents',
+    label: 'Insurance inquiry requirements',
+    description: 'Explains the deterministic insurance inquiry input and supporting files.',
+    intentType: 'faq' as const,
+    responseTemplate:
+      'Start with the customer and vehicle reference, inquiry type, subject, description, and any supporting files you already have. A service adviser can request additional documents during review.',
+    lookupType: null,
+    visibility: 'all' as const,
+    keywords: [
+      'insurance documents',
+      'insurance document',
+      'required documents',
+      'claim documents',
+      'documents do i need',
+      'insurance requirements',
+    ],
+    priority: 260,
+  },
+  {
+    intentKey: 'insurance.latest_status',
+    label: 'Latest insurance inquiry status',
+    description: 'Looks up the most recent insurance inquiry attached to the signed-in user.',
+    intentType: 'lookup' as const,
+    responseTemplate: 'Here is the latest insurance inquiry status I found for your account.',
+    lookupType: 'insurance_status' as const,
+    visibility: 'all' as const,
+    keywords: ['insurance status', 'claim status', 'my insurance', 'inquiry status'],
+    priority: 240,
+  },
+  {
+    intentKey: 'workshop.support_window',
+    label: 'Workshop support window',
+    description:
+      'Explains that the chatbot is always available for FAQ routing while staff follow-up is asynchronous.',
+    intentType: 'faq' as const,
+    responseTemplate:
+      'I can answer booking and insurance FAQs any time. If your concern needs manual review or is outside the approved rules, I will open an escalation for a service adviser follow-up.',
+    lookupType: null,
+    visibility: 'all' as const,
+    keywords: ['business hours', 'support hours', 'open today', 'workshop hours'],
+    priority: 200,
+  },
+] as const;
+
+class InMemoryChatbotRepository {
+  private readonly intents = new Map<string, ChatbotIntentRecord>();
+  private readonly rules = new Map<string, ChatbotRuleRecord>();
+  private readonly escalations = new Map<string, ChatbotEscalationRecord>();
+  private readonly conversations = new Map<string, ChatbotConversationRecord>();
+
+  constructor() {
+    this.seedDefaults();
+  }
+
+  async listActiveRules() {
+    return Array.from(this.rules.values())
+      .filter((rule) => rule.isActive)
+      .sort((left, right) => right.priority - left.priority)
+      .map((rule) => ({
+        ...rule,
+        keywords: [...rule.keywords],
+        intent: this.cloneIntent(this.intents.get(rule.intentId) as ChatbotIntentRecord),
+      }));
+  }
+
+  async listActiveIntents() {
+    return Array.from(this.intents.values())
+      .filter((intent) => intent.isActive)
+      .sort((left, right) => left.label.localeCompare(right.label))
+      .map((intent) => ({
+        ...this.cloneIntent(intent),
+        rules: Array.from(this.rules.values())
+          .filter((rule) => rule.intentId === intent.id && rule.isActive)
+          .sort((left, right) => right.priority - left.priority)
+          .map((rule) => ({ ...rule, keywords: [...rule.keywords] })),
+      }));
+  }
+
+  async findConversationById(id: string) {
+    const conversation = this.conversations.get(id);
+    if (!conversation) {
+      throw new NotFoundException('Chatbot conversation not found');
+    }
+
+    return this.cloneConversation(conversation);
+  }
+
+  async createEscalation(payload: {
+    userId: string;
+    intentId?: string | null;
+    prompt: string;
+    reason: string;
+  }) {
+    const now = new Date();
+    const escalation: ChatbotEscalationRecord = {
+      id: randomUUID(),
+      userId: payload.userId,
+      intentId: payload.intentId ?? null,
+      prompt: payload.prompt,
+      reason: payload.reason,
+      status: 'open',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.escalations.set(escalation.id, escalation);
+    return this.cloneEscalation(escalation);
+  }
+
+  async createConversation(payload: {
+    userId: string;
+    intentId?: string | null;
+    prompt: string;
+    responseType: ChatbotConversationResponseType;
+    responseText: string;
+    lookupPayload?: ChatbotLookupPayloadRecord | null;
+    escalationId?: string | null;
+  }) {
+    const now = new Date();
+    const conversation: ChatbotConversationRecord = {
+      id: randomUUID(),
+      userId: payload.userId,
+      intentId: payload.intentId ?? null,
+      prompt: payload.prompt,
+      responseType: payload.responseType,
+      responseText: payload.responseText,
+      lookupPayload: payload.lookupPayload ?? null,
+      escalationId: payload.escalationId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.conversations.set(conversation.id, conversation);
+    return this.cloneConversation(conversation);
+  }
+
+  private seedDefaults() {
+    const now = new Date();
+
+    for (const intent of defaultChatbotIntentCatalog) {
+      const intentRecord: ChatbotIntentRecord = {
+        id: randomUUID(),
+        intentKey: intent.intentKey,
+        label: intent.label,
+        description: intent.description,
+        intentType: intent.intentType,
+        responseTemplate: intent.responseTemplate,
+        lookupType: intent.lookupType,
+        visibility: intent.visibility,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.intents.set(intentRecord.id, intentRecord);
+
+      const ruleRecord: ChatbotRuleRecord = {
+        id: randomUUID(),
+        ruleKey: `${intent.intentKey}.keywords`,
+        intentId: intentRecord.id,
+        keywords: [...intent.keywords],
+        priority: intent.priority,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.rules.set(ruleRecord.id, ruleRecord);
+    }
+  }
+
+  private cloneIntent(intent: ChatbotIntentRecord) {
+    return {
+      ...intent,
+      lookupType: intent.lookupType ?? null,
+    };
+  }
+
+  private cloneEscalation(escalation: ChatbotEscalationRecord) {
+    return {
+      ...escalation,
+      intent: escalation.intentId ? this.cloneIntent(this.intents.get(escalation.intentId) as ChatbotIntentRecord) : null,
+    };
+  }
+
+  private cloneConversation(conversation: ChatbotConversationRecord) {
+    return {
+      ...conversation,
+      lookupPayload: conversation.lookupPayload ? { ...conversation.lookupPayload } : null,
+      intent: conversation.intentId
+        ? this.cloneIntent(this.intents.get(conversation.intentId) as ChatbotIntentRecord)
+        : null,
+      escalation: conversation.escalationId
+        ? this.cloneEscalation(this.escalations.get(conversation.escalationId) as ChatbotEscalationRecord)
+        : null,
+    };
+  }
+}
+
+class InMemoryLoyaltyRepository {
+  private readonly accounts = new Map<string, LoyaltyAccountRecord>();
+  private readonly transactions = new Map<string, LoyaltyTransactionRecord>();
+  private readonly rewards = new Map<string, RewardRecord>();
+  private readonly rewardAudits = new Map<string, RewardCatalogAuditRecord>();
+  private readonly redemptions = new Map<string, RewardRedemptionRecord>();
+
+  async findAccountById(accountId: string) {
+    const account = this.accounts.get(accountId);
+    if (!account) {
+      throw new NotFoundException('Loyalty account not found');
+    }
+
+    return { ...account };
+  }
+
+  async findAccountByUserId(userId: string) {
+    const account = Array.from(this.accounts.values()).find((entry) => entry.userId === userId);
+    return account ? { ...account } : null;
+  }
+
+  async getOrCreateAccount(userId: string) {
+    const existingAccount = await this.findAccountByUserId(userId);
+    if (existingAccount) {
+      return existingAccount;
+    }
+
+    const now = new Date();
+    const account: LoyaltyAccountRecord = {
+      id: randomUUID(),
+      userId,
+      pointsBalance: 0,
+      lifetimePointsEarned: 0,
+      lifetimePointsRedeemed: 0,
+      lastAccruedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.accounts.set(account.id, account);
+    return { ...account };
+  }
+
+  async listTransactionsByUserId(userId: string) {
+    const account = await this.getOrCreateAccount(userId);
+    return Array.from(this.transactions.values())
+      .filter((entry) => entry.loyaltyAccountId === account.id)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((entry) => ({ ...entry, metadata: { ...entry.metadata } }));
+  }
+
+  async listAccountsForAnalytics() {
+    return Array.from(this.accounts.values())
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+      .map((account) => ({ ...account }));
+  }
+
+  async listTransactionsForAnalytics() {
+    return Array.from(this.transactions.values())
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((entry) => ({ ...entry, metadata: { ...entry.metadata } }));
+  }
+
+  async listRewardRedemptionsForAnalytics() {
+    return Array.from(this.redemptions.values())
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((redemption) => ({ ...redemption }));
+  }
+
+  async listRewards(options?: { includeInactive?: boolean }) {
+    return Array.from(this.rewards.values())
+      .filter((reward) => (options?.includeInactive ? true : reward.status === 'active'))
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+      .map((reward) => this.cloneReward(reward));
+  }
+
+  async findRewardById(id: string) {
+    const reward = this.rewards.get(id);
+    if (!reward) {
+      throw new NotFoundException('Reward not found');
+    }
+
+    return this.cloneReward(reward);
+  }
+
+  async createReward(payload: CreateRewardDto & { actorUserId: string }) {
+    const now = new Date();
+    const reward: RewardRecord = {
+      id: randomUUID(),
+      name: payload.name,
+      description: payload.description ?? null,
+      rewardType: payload.rewardType,
+      pointsCost: payload.pointsCost,
+      discountPercent: payload.discountPercent ?? null,
+      status: payload.status ?? 'active',
+      createdByUserId: payload.actorUserId,
+      updatedByUserId: payload.actorUserId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.rewards.set(reward.id, reward);
+    await this.insertRewardAudit({
+      rewardId: reward.id,
+      actorUserId: payload.actorUserId,
+      action: 'created',
+      reason: payload.reason ?? null,
+      snapshot: this.toRewardSnapshot(reward),
+    });
+
+    return this.cloneReward(reward);
+  }
+
+  async updateReward(id: string, payload: UpdateRewardDto & { actorUserId: string }) {
+    const existingReward = this.rewards.get(id);
+    if (!existingReward) {
+      throw new NotFoundException('Reward not found');
+    }
+
+    const updatedReward: RewardRecord = {
+      ...existingReward,
+      name: payload.name ?? existingReward.name,
+      description: payload.description ?? existingReward.description,
+      rewardType: payload.rewardType ?? existingReward.rewardType,
+      pointsCost: payload.pointsCost ?? existingReward.pointsCost,
+      discountPercent:
+        payload.discountPercent !== undefined
+          ? payload.discountPercent
+          : existingReward.discountPercent,
+      updatedByUserId: payload.actorUserId,
+      updatedAt: new Date(),
+    };
+
+    this.rewards.set(updatedReward.id, updatedReward);
+    await this.insertRewardAudit({
+      rewardId: updatedReward.id,
+      actorUserId: payload.actorUserId,
+      action: 'updated',
+      reason: payload.reason ?? null,
+      snapshot: this.toRewardSnapshot(updatedReward),
+    });
+
+    return this.cloneReward(updatedReward);
+  }
+
+  async updateRewardStatus(id: string, payload: UpdateRewardStatusDto & { actorUserId: string }) {
+    const existingReward = this.rewards.get(id);
+    if (!existingReward) {
+      throw new NotFoundException('Reward not found');
+    }
+
+    const updatedReward: RewardRecord = {
+      ...existingReward,
+      status: payload.status,
+      updatedByUserId: payload.actorUserId,
+      updatedAt: new Date(),
+    };
+
+    this.rewards.set(updatedReward.id, updatedReward);
+    await this.insertRewardAudit({
+      rewardId: updatedReward.id,
+      actorUserId: payload.actorUserId,
+      action: payload.status === 'active' ? 'activated' : 'deactivated',
+      reason: payload.reason,
+      snapshot: this.toRewardSnapshot(updatedReward),
+    });
+
+    return this.cloneReward(updatedReward);
+  }
+
+  async applyAccrual(payload: {
+    plan: {
+      loyaltyUserId: string;
+      accrualKind: LoyaltySourceType;
+      sourceReference: string;
+      idempotencyKey: string;
+      policyKey: string;
+      triggerName: string;
+      sourceDomain: string;
+      duplicateStrategy: string;
+      reversalStrategy: string;
+      pointsInput: Record<string, unknown>;
+    };
+    pointsAwarded: number;
+    occurredAt?: Date;
+  }) {
+    const account = await this.getOrCreateAccount(payload.plan.loyaltyUserId);
+    const existingTransaction = Array.from(this.transactions.values()).find(
+      (entry) => entry.idempotencyKey === payload.plan.idempotencyKey,
+    );
+
+    if (existingTransaction) {
+      return {
+        account,
+        transaction: { ...existingTransaction, metadata: { ...existingTransaction.metadata } },
+        wasDuplicate: true,
+      };
+    }
+
+    const nextBalance = account.pointsBalance + payload.pointsAwarded;
+    const updatedAccount: LoyaltyAccountRecord = {
+      ...account,
+      pointsBalance: nextBalance,
+      lifetimePointsEarned: account.lifetimePointsEarned + payload.pointsAwarded,
+      lastAccruedAt: payload.occurredAt ?? new Date(),
+      updatedAt: new Date(),
+    };
+    this.accounts.set(updatedAccount.id, updatedAccount);
+
+    const transaction: LoyaltyTransactionRecord = {
+      id: randomUUID(),
+      loyaltyAccountId: updatedAccount.id,
+      transactionType: 'accrual',
+      sourceType: payload.plan.accrualKind,
+      sourceReference: payload.plan.sourceReference,
+      idempotencyKey: payload.plan.idempotencyKey,
+      policyKey: payload.plan.policyKey,
+      pointsDelta: payload.pointsAwarded,
+      resultingBalance: nextBalance,
+      metadata: {
+        triggerName: payload.plan.triggerName,
+        sourceDomain: payload.plan.sourceDomain,
+        duplicateStrategy: payload.plan.duplicateStrategy,
+        reversalStrategy: payload.plan.reversalStrategy,
+        pointsInput: payload.plan.pointsInput,
+      },
+      createdAt: payload.occurredAt ?? new Date(),
+    };
+    this.transactions.set(transaction.id, transaction);
+
+    return {
+      account: { ...updatedAccount },
+      transaction: { ...transaction, metadata: { ...transaction.metadata } },
+      wasDuplicate: false,
+    };
+  }
+
+  async createRedemption(payload: {
+    userId: string;
+    rewardId: string;
+    redeemedByUserId: string;
+    note?: string | null;
+  }) {
+    const account = await this.getOrCreateAccount(payload.userId);
+    const reward = await this.findRewardById(payload.rewardId);
+    const nextBalance = account.pointsBalance - reward.pointsCost;
+    const updatedAccount: LoyaltyAccountRecord = {
+      ...account,
+      pointsBalance: nextBalance,
+      lifetimePointsRedeemed: account.lifetimePointsRedeemed + reward.pointsCost,
+      updatedAt: new Date(),
+    };
+    this.accounts.set(updatedAccount.id, updatedAccount);
+
+    const transaction: LoyaltyTransactionRecord = {
+      id: randomUUID(),
+      loyaltyAccountId: updatedAccount.id,
+      transactionType: 'redemption',
+      sourceType: 'reward_redemption',
+      sourceReference: reward.id,
+      idempotencyKey: null,
+      policyKey: 'loyalty.reward_redemption.v1',
+      pointsDelta: reward.pointsCost * -1,
+      resultingBalance: nextBalance,
+      metadata: {
+        rewardNameSnapshot: reward.name,
+        redeemedByUserId: payload.redeemedByUserId,
+        note: payload.note ?? null,
+      },
+      createdAt: new Date(),
+    };
+    this.transactions.set(transaction.id, transaction);
+
+    const redemption: RewardRedemptionRecord = {
+      id: randomUUID(),
+      loyaltyAccountId: updatedAccount.id,
+      rewardId: reward.id,
+      transactionId: transaction.id,
+      redeemedByUserId: payload.redeemedByUserId,
+      rewardNameSnapshot: reward.name,
+      pointsCostSnapshot: reward.pointsCost,
+      note: payload.note ?? null,
+      createdAt: new Date(),
+    };
+    this.redemptions.set(redemption.id, redemption);
+
+    return {
+      ...redemption,
+      transaction: { ...transaction, metadata: { ...transaction.metadata } },
+    };
+  }
+
+  async findRedemptionById(id: string) {
+    const redemption = this.redemptions.get(id);
+    if (!redemption) {
+      throw new NotFoundException('Reward redemption not found');
+    }
+
+    const transaction = this.transactions.get(redemption.transactionId);
+    if (!transaction) {
+      throw new NotFoundException('Loyalty transaction not found');
+    }
+
+    return {
+      ...redemption,
+      transaction: { ...transaction, metadata: { ...transaction.metadata } },
+    };
+  }
+
+  private async insertRewardAudit(payload: {
+    rewardId: string;
+    actorUserId: string;
+    action: RewardCatalogAuditAction;
+    reason?: string | null;
+    snapshot: RewardCatalogSnapshot;
+  }) {
+    const audit: RewardCatalogAuditRecord = {
+      id: randomUUID(),
+      rewardId: payload.rewardId,
+      actorUserId: payload.actorUserId,
+      action: payload.action,
+      reason: payload.reason ?? null,
+      snapshot: payload.snapshot,
+      createdAt: new Date(),
+    };
+    this.rewardAudits.set(audit.id, audit);
+    return { ...audit, snapshot: { ...audit.snapshot } };
+  }
+
+  private cloneReward(reward: RewardRecord) {
+    const audits = Array.from(this.rewardAudits.values())
+      .filter((audit) => audit.rewardId === reward.id)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((audit) => ({ ...audit, snapshot: { ...audit.snapshot } }));
+
+    return {
+      ...reward,
+      audits,
+    };
+  }
+
+  private toRewardSnapshot(reward: RewardRecord): RewardCatalogSnapshot {
+    return {
+      name: reward.name,
+      description: reward.description ?? null,
+      rewardType: reward.rewardType,
+      pointsCost: reward.pointsCost,
+      discountPercent: reward.discountPercent ?? null,
+      status: reward.status,
+    };
+  }
+}
+
+class InMemoryAnalyticsRepository {
+  private readonly refreshJobs = new Map<string, AnalyticsRefreshJobRecord>();
+  private readonly snapshots = new Map<AnalyticsSnapshotType, AnalyticsSnapshotRecord>();
+
+  async findSnapshotByType(snapshotType: AnalyticsSnapshotType) {
+    const snapshot = this.snapshots.get(snapshotType);
+    if (!snapshot) {
+      return null;
+    }
+
+    return {
+      ...snapshot,
+      payload: { ...snapshot.payload },
+      sourceCounts: { ...snapshot.sourceCounts },
+      refreshJob: snapshot.refreshJobId ? this.refreshJobs.get(snapshot.refreshJobId) ?? null : null,
+    };
+  }
+
+  async createRefreshJob(payload: {
+    snapshotTypes: AnalyticsSnapshotType[];
+    triggerSource: AnalyticsRefreshTriggerSource;
+    requestedByUserId?: string | null;
+    status?: AnalyticsRefreshJobStatus;
+  }) {
+    const now = new Date();
+    const refreshJob: AnalyticsRefreshJobRecord = {
+      id: randomUUID(),
+      snapshotTypes: [...payload.snapshotTypes],
+      triggerSource: payload.triggerSource,
+      requestedByUserId: payload.requestedByUserId ?? null,
+      status: payload.status ?? 'processing',
+      sourceCounts: {},
+      errorMessage: null,
+      startedAt: now,
+      completedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.refreshJobs.set(refreshJob.id, refreshJob);
+    return { ...refreshJob, snapshotTypes: [...refreshJob.snapshotTypes], sourceCounts: {} };
+  }
+
+  async markRefreshJobCompleted(id: string, sourceCounts: Record<string, number>) {
+    const refreshJob = this.refreshJobs.get(id);
+    if (!refreshJob) {
+      throw new NotFoundException('Analytics refresh job not found');
+    }
+
+    const updatedRefreshJob: AnalyticsRefreshJobRecord = {
+      ...refreshJob,
+      status: 'completed',
+      sourceCounts: { ...sourceCounts },
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.refreshJobs.set(id, updatedRefreshJob);
+    return { ...updatedRefreshJob, snapshotTypes: [...updatedRefreshJob.snapshotTypes], sourceCounts: { ...updatedRefreshJob.sourceCounts } };
+  }
+
+  async markRefreshJobFailed(id: string, errorMessage: string) {
+    const refreshJob = this.refreshJobs.get(id);
+    if (!refreshJob) {
+      throw new NotFoundException('Analytics refresh job not found');
+    }
+
+    const updatedRefreshJob: AnalyticsRefreshJobRecord = {
+      ...refreshJob,
+      status: 'failed',
+      errorMessage,
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.refreshJobs.set(id, updatedRefreshJob);
+    return {
+      ...updatedRefreshJob,
+      snapshotTypes: [...updatedRefreshJob.snapshotTypes],
+      sourceCounts: { ...updatedRefreshJob.sourceCounts },
+    };
+  }
+
+  async upsertSnapshot(payload: {
+    snapshotType: AnalyticsSnapshotType;
+    payload: Record<string, unknown>;
+    sourceCounts: Record<string, number>;
+    refreshJobId: string;
+    version?: string;
+  }) {
+    const existingSnapshot = this.snapshots.get(payload.snapshotType);
+    const now = new Date();
+    const snapshot: AnalyticsSnapshotRecord = {
+      id: existingSnapshot?.id ?? randomUUID(),
+      snapshotType: payload.snapshotType,
+      version: payload.version ?? 'v1',
+      payload: { ...payload.payload },
+      sourceCounts: { ...payload.sourceCounts },
+      refreshJobId: payload.refreshJobId,
+      generatedAt: now,
+      createdAt: existingSnapshot?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.snapshots.set(payload.snapshotType, snapshot);
+
+    return {
+      ...snapshot,
+      payload: { ...snapshot.payload },
+      sourceCounts: { ...snapshot.sourceCounts },
+    };
+  }
+
+  async listRefreshJobs(limit = 10) {
+    return Array.from(this.refreshJobs.values())
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .slice(0, limit)
+      .map((refreshJob) => ({
+        ...refreshJob,
+        snapshotTypes: [...refreshJob.snapshotTypes],
+        sourceCounts: { ...refreshJob.sourceCounts },
+      }));
+  }
 }
 
 class InMemoryNotificationsQueue {
@@ -2194,15 +3315,49 @@ class InMemoryNotificationsQueue {
   }
 }
 
-class InMemoryQualityGatesQueue {
+class InMemoryAiWorkerQueue {
   readonly jobs: Array<{
     name: string;
     payload: Record<string, unknown>;
     options?: Record<string, unknown>;
   }> = [];
+  private processor?: (job: {
+    id: string;
+    name: string;
+    data: Record<string, unknown>;
+    opts: Record<string, unknown>;
+    attemptsMade: number;
+    queueName: string;
+  }) => Promise<unknown>;
+
+  registerProcessor(
+    processor: (job: {
+      id: string;
+      name: string;
+      data: Record<string, unknown>;
+      opts: Record<string, unknown>;
+      attemptsMade: number;
+      queueName: string;
+    }) => Promise<unknown>,
+  ) {
+    this.processor = processor;
+  }
 
   async add(name: string, payload: Record<string, unknown>, options?: Record<string, unknown>) {
     this.jobs.push({ name, payload, options });
+    const job = {
+      id: String(options?.jobId ?? randomUUID()),
+      name,
+      data: payload,
+      opts: options ?? {},
+      attemptsMade: 0,
+      queueName: AI_WORKER_QUEUE_NAME,
+    };
+
+    if (this.processor) {
+      await this.processor(job);
+    }
+
     return {
       name,
       data: payload,
@@ -2355,6 +3510,13 @@ class InMemoryNotificationsRepository {
     return reminderRule ? { ...reminderRule } : null;
   }
 
+  async listReminderRulesForAnalytics(reminderType?: NotificationCategory) {
+    return Array.from(this.reminderRules.values())
+      .filter((reminderRule) => (reminderType ? reminderRule.reminderType === reminderType : true))
+      .sort((left, right) => right.scheduledFor.getTime() - left.scheduledFor.getTime())
+      .map((reminderRule) => ({ ...reminderRule }));
+  }
+
   async createReminderRule(payload: {
     userId: string;
     reminderType: NotificationCategory;
@@ -2382,6 +3544,70 @@ class InMemoryNotificationsRepository {
 
     this.reminderRules.set(reminderRule.id, reminderRule);
     return { ...reminderRule };
+  }
+
+  async cancelNotificationsBySource(payload: {
+    sourceType: NotificationSourceType;
+    sourceId: string;
+    category?: NotificationCategory;
+  }) {
+    const notifications = Array.from(this.notifications.values()).filter((notification) => {
+      if (notification.sourceType !== payload.sourceType || notification.sourceId !== payload.sourceId) {
+        return false;
+      }
+
+      return payload.category ? notification.category === payload.category : true;
+    });
+
+    const cancelled: NotificationRecord[] = [];
+
+    for (const notification of notifications) {
+      if (['sent', 'cancelled'].includes(notification.status)) {
+        continue;
+      }
+
+      const updatedNotification: NotificationRecord = {
+        ...notification,
+        status: 'cancelled',
+        updatedAt: new Date(),
+      };
+      this.notifications.set(updatedNotification.id, updatedNotification);
+      cancelled.push(updatedNotification);
+    }
+
+    return cancelled.map((notification) => cloneNotification(notification, this.attempts));
+  }
+
+  async cancelReminderRulesBySource(payload: {
+    sourceType: NotificationSourceType;
+    sourceId: string;
+    reminderType?: NotificationCategory;
+  }) {
+    const cancelled: ReminderRuleRecord[] = [];
+
+    for (const reminderRule of this.reminderRules.values()) {
+      if (reminderRule.sourceType !== payload.sourceType || reminderRule.sourceId !== payload.sourceId) {
+        continue;
+      }
+
+      if (payload.reminderType && reminderRule.reminderType !== payload.reminderType) {
+        continue;
+      }
+
+      if (reminderRule.status === 'cancelled') {
+        continue;
+      }
+
+      const updatedReminderRule: ReminderRuleRecord = {
+        ...reminderRule,
+        status: 'cancelled',
+        updatedAt: new Date(),
+      };
+      this.reminderRules.set(updatedReminderRule.id, updatedReminderRule);
+      cancelled.push(updatedReminderRule);
+    }
+
+    return cancelled.map((reminderRule) => ({ ...reminderRule }));
   }
 }
 
@@ -2443,10 +3669,13 @@ export async function createMainServiceTestApp(): Promise<{
   const jobOrdersRepository = new InMemoryJobOrdersRepository();
   const backJobsRepository = new InMemoryBackJobsRepository();
   const insuranceRepository = new InMemoryInsuranceRepository();
+  const chatbotRepository = new InMemoryChatbotRepository();
+  const loyaltyRepository = new InMemoryLoyaltyRepository();
+  const analyticsRepository = new InMemoryAnalyticsRepository();
   const notificationsRepository = new InMemoryNotificationsRepository();
   const notificationsQueue = new InMemoryNotificationsQueue();
   const qualityGatesRepository = new InMemoryQualityGatesRepository();
-  const qualityGatesQueue = new InMemoryQualityGatesQueue();
+  const aiWorkerQueue = new InMemoryAiWorkerQueue();
   const googleIdentityService = new FakeGoogleIdentityService();
   const smtpMailService = new FakeSmtpMailService();
   const inspectionsRepository = new InMemoryInspectionsRepository();
@@ -2456,12 +3685,15 @@ export async function createMainServiceTestApp(): Promise<{
     imports: [PassportModule.register({ defaultStrategy: 'jwt' }), JwtModule.register({})],
     controllers: [
       HealthController,
+      AnalyticsController,
       AuthController,
       UsersController,
       VehiclesController,
       BookingsController,
+      ChatbotController,
       BackJobsController,
       InsuranceController,
+      LoyaltyController,
       NotificationsController,
       JobOrdersController,
       QualityGatesController,
@@ -2469,6 +3701,7 @@ export async function createMainServiceTestApp(): Promise<{
       VehicleLifecycleController,
     ],
     providers: [
+      AnalyticsService,
       AuthService,
       JwtStrategy,
       JwtAuthGuard,
@@ -2476,8 +3709,10 @@ export async function createMainServiceTestApp(): Promise<{
       UsersService,
       VehiclesService,
       BookingsService,
+      ChatbotService,
       BackJobsService,
       InsuranceService,
+      LoyaltyService,
       NotificationsService,
       JobOrdersService,
       QualityGateDiscrepancyEngineService,
@@ -2486,6 +3721,9 @@ export async function createMainServiceTestApp(): Promise<{
       InspectionsService,
       VehicleLifecycleSummaryProviderService,
       VehicleLifecycleService,
+      AiWorkerProcessor,
+      AutocareEventBusService,
+      LoyaltyAccrualPlannerService,
       { provide: GoogleIdentityService, useValue: googleIdentityService },
       { provide: SmtpMailService, useValue: smtpMailService },
       {
@@ -2509,14 +3747,23 @@ export async function createMainServiceTestApp(): Promise<{
       { provide: JobOrdersRepository, useValue: jobOrdersRepository },
       { provide: BackJobsRepository, useValue: backJobsRepository },
       { provide: InsuranceRepository, useValue: insuranceRepository },
+      { provide: ChatbotRepository, useValue: chatbotRepository },
+      { provide: LoyaltyRepository, useValue: loyaltyRepository },
+      { provide: AnalyticsRepository, useValue: analyticsRepository },
       { provide: NotificationsRepository, useValue: notificationsRepository },
+      NotificationTriggerPlannerService,
       { provide: QualityGatesRepository, useValue: qualityGatesRepository },
       { provide: InspectionsRepository, useValue: inspectionsRepository },
       { provide: VehicleLifecycleRepository, useValue: vehicleLifecycleRepository },
       { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
-      { provide: getQueueToken(QUALITY_GATES_QUEUE_NAME), useValue: qualityGatesQueue },
+      { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: aiWorkerQueue },
     ],
   }).compile();
+
+  aiWorkerQueue.registerProcessor(async (job) => {
+    const processor = moduleRef.get(AiWorkerProcessor);
+    await processor.process(job as never);
+  });
 
   const app = moduleRef.createNestApplication();
   app.setGlobalPrefix('api');
@@ -2527,6 +3774,7 @@ export async function createMainServiceTestApp(): Promise<{
       transform: true,
     }),
   );
+  setupSwagger(app);
   await app.init();
 
   return {

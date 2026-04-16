@@ -119,13 +119,13 @@ Recommended event families:
 - `order.invoice_issued`
 - `invoice.payment_recorded`
 - `loyalty.points_earned`
-- `notification.requested`
 
 Rules:
 - events should describe facts, not vague commands
 - payloads should carry stable IDs and metadata, not cross-service database assumptions
 - do not model direct cross-service foreign keys
 - version payloads when contracts evolve
+- notifications should consume stable source facts or explicit subscriber-owned trigger contracts, not a generic catch-all `notification.requested` command
 
 ## BullMQ Job Contract
 
@@ -147,6 +147,7 @@ Rules:
 - jobs are not the source of truth
 - job names should be stable and domain-prefixed
 - background work should stay owned by the domain that triggers or reconciles it
+- AI-assisted BullMQ jobs must expose queued, processing, completed, or failed metadata through the owning domain record instead of making queue internals the only observable state
 
 ## Recommendations and Exclusions
 

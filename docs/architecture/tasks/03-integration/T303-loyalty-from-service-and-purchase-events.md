@@ -14,7 +14,7 @@ Feed loyalty from service and purchase events.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

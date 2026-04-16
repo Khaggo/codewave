@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -62,6 +62,18 @@ type CreateReminderRuleInput = {
   scheduledFor: Date;
   status?: ReminderRuleStatus;
   dedupeKey: string;
+};
+
+type CancelNotificationsBySourceInput = {
+  sourceType: NotificationSourceType;
+  sourceId: string;
+  category?: NotificationCategory;
+};
+
+type CancelReminderRulesBySourceInput = {
+  sourceType: NotificationSourceType;
+  sourceId: string;
+  reminderType?: NotificationCategory;
 };
 
 @Injectable()
@@ -217,6 +229,13 @@ export class NotificationsRepository extends BaseRepository {
     );
   }
 
+  async listReminderRulesForAnalytics(reminderType?: NotificationCategory) {
+    return this.db.query.reminderRules.findMany({
+      where: reminderType ? eq(reminderRules.reminderType, reminderType) : undefined,
+      orderBy: [desc(reminderRules.scheduledFor), desc(reminderRules.id)],
+    });
+  }
+
   async createReminderRule(payload: CreateReminderRuleInput) {
     const [createdRule] = await this.db
       .insert(reminderRules)
@@ -233,5 +252,71 @@ export class NotificationsRepository extends BaseRepository {
       .returning();
 
     return this.assertFound(createdRule, 'Reminder rule not found');
+  }
+
+  async cancelNotificationsBySource(payload: CancelNotificationsBySourceInput) {
+    const matchingNotifications = await this.db.query.notifications.findMany({
+      where: payload.category
+        ? and(
+            eq(notifications.sourceType, payload.sourceType),
+            eq(notifications.sourceId, payload.sourceId),
+            eq(notifications.category, payload.category),
+          )
+        : and(
+            eq(notifications.sourceType, payload.sourceType),
+            eq(notifications.sourceId, payload.sourceId),
+          ),
+    });
+
+    const cancellableIds = matchingNotifications
+      .filter((notification) => !['sent', 'cancelled'].includes(notification.status))
+      .map((notification) => notification.id);
+
+    if (!cancellableIds.length) {
+      return [];
+    }
+
+    await this.db
+      .update(notifications)
+      .set({
+        status: 'cancelled',
+        updatedAt: new Date(),
+      })
+      .where(inArray(notifications.id, cancellableIds));
+
+    return Promise.all(cancellableIds.map((id) => this.findNotificationById(id)));
+  }
+
+  async cancelReminderRulesBySource(payload: CancelReminderRulesBySourceInput) {
+    const matchingReminderRules = await this.db.query.reminderRules.findMany({
+      where: payload.reminderType
+        ? and(
+            eq(reminderRules.sourceType, payload.sourceType),
+            eq(reminderRules.sourceId, payload.sourceId),
+            eq(reminderRules.reminderType, payload.reminderType),
+          )
+        : and(eq(reminderRules.sourceType, payload.sourceType), eq(reminderRules.sourceId, payload.sourceId)),
+    });
+
+    const cancellableIds = matchingReminderRules
+      .filter((reminderRule) => reminderRule.status !== 'cancelled')
+      .map((reminderRule) => reminderRule.id);
+
+    if (!cancellableIds.length) {
+      return [];
+    }
+
+    await this.db
+      .update(reminderRules)
+      .set({
+        status: 'cancelled',
+        updatedAt: new Date(),
+      })
+      .where(inArray(reminderRules.id, cancellableIds));
+
+    return this.db.query.reminderRules.findMany({
+      where: inArray(reminderRules.id, cancellableIds),
+      orderBy: desc(reminderRules.updatedAt),
+    });
   }
 }

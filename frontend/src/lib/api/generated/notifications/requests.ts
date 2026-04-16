@@ -4,6 +4,7 @@ export type NotificationChannel = 'email';
 export type NotificationCategory =
   | 'booking_reminder'
   | 'insurance_update'
+  | 'back_job_update'
   | 'invoice_aging'
   | 'service_follow_up';
 export type NotificationStatus = 'queued' | 'sent' | 'failed' | 'skipped' | 'cancelled';

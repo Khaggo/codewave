@@ -20,7 +20,7 @@ Own durable asynchronous communication from e-commerce domains without replacing
 
 ## Outputs
 
-- published RabbitMQ business events
+- published RabbitMQ business events such as `order.created`, `order.invoice_issued`, and `invoice.payment_recorded`
 - inbox or delivery state
 - retry and failure tracking
 
@@ -44,9 +44,11 @@ Key relations:
 ## Primary Business Logic
 
 - publish durable business events from e-commerce modules
+- keep the first stable commerce facts limited to `order.created`, `order.invoice_issued`, and `invoice.payment_recorded`
 - consume relevant upstream events if the commerce domain needs them
 - guarantee idempotent event processing and replay safety
 - keep cross-service communication decoupled from direct table access
+- keep `invoice.payment_recorded` as the purchase-accrual fact for loyalty, while service-side loyalty accrual stays outside ecommerce on `service.invoice_finalized`
 
 ## Process Flow
 
@@ -57,14 +59,16 @@ Key relations:
 
 ## Use Cases
 
-- order completion triggers loyalty accrual requests
-- invoice status updates trigger notifications and analytics refresh
+- order creation triggers analytics without direct main-service reads into ecommerce tables
+- invoice issuance triggers notifications and analytics refresh planning
+- invoice payment recorded triggers loyalty, notifications, and analytics reactions
+- downstream services use `invoice.payment_recorded` for purchase accrual only, not as proof that a service invoice was finalized
 - inventory change emits stock-related events for downstream summaries
 
 ## API Surface
 
 - internal `publishCommerceEvent`
-- internal `consumeCommerceEvent`
+- internal `planCommerceEventReactions`
 - admin `GET /commerce-events/outbox`
 
 ## Edge Cases
@@ -72,6 +76,8 @@ Key relations:
 - event published twice after retry
 - consumer processes a message after source state was corrected
 - outbox rows accumulate because the publisher is stalled
+- consumer treats `invoice.payment_recorded` as settlement proof for gateway logic that does not exist in scope
+- downstream loyalty logic awards points from `order.created` instead of `invoice.payment_recorded`
 - downstream service assumes global delivery order that is not guaranteed
 
 ## Writable Sections

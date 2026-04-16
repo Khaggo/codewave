@@ -14,7 +14,7 @@ export const qualityGateRoutes: Record<string, RouteContract> = {
     path: '/api/job-orders/:jobOrderId/qa',
     status: 'live',
     source: 'swagger',
-    notes: 'Live route. Returns the current QA gate state and findings for the job order.',
+    notes: 'Live route. Returns the current QA gate state, findings, and worker metadata while the shared AI audit job is queued, processing, completed, or failed.',
   },
   overrideJobOrderQualityGate: {
     method: 'PATCH',

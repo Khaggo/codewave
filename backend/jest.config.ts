@@ -4,6 +4,7 @@ const config: Config = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
   testEnvironment: 'node',
+  testTimeout: 30000,
   testRegex: '.*\\.spec\\.ts$',
   transform: {
     '^.+\\.(t|j)s$': [

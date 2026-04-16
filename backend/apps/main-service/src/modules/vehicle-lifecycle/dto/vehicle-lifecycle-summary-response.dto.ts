@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { AiWorkerJobResponseDto } from '@shared/queue/ai-worker-job-response.dto';
 
 import { vehicleLifecycleSummaryStatusEnum } from '../schemas/vehicle-lifecycle.schema';
 
@@ -49,13 +50,13 @@ export class VehicleLifecycleSummaryResponseDto {
 
   @ApiProperty({
     example:
-      'This vehicle has a recorded service history that includes appointment intake milestones and verified inspection evidence. The most recent verified service check completed successfully and there are no pending customer-visible release issues in this summary draft.',
+      'Lifecycle summary generation is queued and awaiting worker execution.',
   })
   summaryText!: string;
 
   @ApiProperty({
     enum: vehicleLifecycleSummaryStatusEnum.enumValues,
-    example: 'pending_review',
+    example: 'queued',
   })
   status!: (typeof vehicleLifecycleSummaryStatusEnum.enumValues)[number];
 
@@ -85,6 +86,11 @@ export class VehicleLifecycleSummaryResponseDto {
     format: 'date-time',
   })
   customerVisibleAt?: string | null;
+
+  @ApiProperty({
+    type: () => AiWorkerJobResponseDto,
+  })
+  generationJob!: AiWorkerJobResponseDto;
 
   @ApiProperty({
     type: () => VehicleLifecycleSummaryProvenanceResponseDto,

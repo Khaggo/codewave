@@ -12,6 +12,7 @@ import {
   authOtpChallenges,
   loginAuditLogs,
   refreshTokens,
+  staffAdminAuditLogs,
 } from '../schemas/auth.schema';
 
 @Injectable()
@@ -176,5 +177,42 @@ export class AuthRepository extends BaseRepository {
       .returning();
 
     return challenge ?? null;
+  }
+
+  async createStaffAdminAuditLog(payload: {
+    action: 'staff_account_provisioned' | 'staff_account_status_changed';
+    actorUserId: string;
+    actorRole: 'super_admin';
+    targetUserId: string;
+    targetRole: 'technician' | 'service_adviser' | 'super_admin';
+    targetEmail: string;
+    targetStaffCode?: string | null;
+    previousIsActive?: boolean | null;
+    nextIsActive?: boolean | null;
+    reason?: string | null;
+  }) {
+    const [auditLog] = await this.db
+      .insert(staffAdminAuditLogs)
+      .values({
+        action: payload.action,
+        actorUserId: payload.actorUserId,
+        actorRole: payload.actorRole,
+        targetUserId: payload.targetUserId,
+        targetRole: payload.targetRole,
+        targetEmail: payload.targetEmail,
+        targetStaffCode: payload.targetStaffCode ?? null,
+        previousIsActive: payload.previousIsActive ?? null,
+        nextIsActive: payload.nextIsActive ?? null,
+        reason: payload.reason ?? null,
+      })
+      .returning();
+
+    return this.assertFound(auditLog, 'Staff admin audit log not found');
+  }
+
+  async listStaffAdminAuditLogsForAnalytics() {
+    return this.db.query.staffAdminAuditLogs.findMany({
+      orderBy: desc(staffAdminAuditLogs.createdAt),
+    });
   }
 }

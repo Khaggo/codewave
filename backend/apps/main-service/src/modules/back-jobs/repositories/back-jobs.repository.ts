@@ -91,6 +91,17 @@ export class BackJobsRepository extends BaseRepository {
     });
   }
 
+  async listForAnalytics() {
+    return this.db.query.backJobs.findMany({
+      with: {
+        findings: {
+          orderBy: desc(backJobFindings.createdAt),
+        },
+      },
+      orderBy: [desc(backJobs.createdAt), desc(backJobs.id)],
+    });
+  }
+
   async updateStatus(id: string, payload: UpdateBackJobStatusPersistenceInput) {
     const nextValues: Partial<typeof backJobs.$inferInsert> = {
       status: payload.status,

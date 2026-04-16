@@ -14,7 +14,7 @@ Build the first ecommerce catalog module.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

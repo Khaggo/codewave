@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from '@main-modules/users/dto/create-user.dto';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
+import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 
 import { GoogleSignupStartDto } from '../dto/google-signup-start.dto';
 import { LoginDto } from '../dto/login.dto';
@@ -42,6 +43,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly notificationsService: NotificationsService,
     private readonly googleIdentityService: GoogleIdentityService,
+    private readonly eventBus: AutocareEventBusService,
     private readonly jwtService: JwtService,
     configService: ConfigService,
   ) {
@@ -341,7 +343,10 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
-  async provisionStaffAccount(payload: CreateStaffAccountDto) {
+  async provisionStaffAccount(
+    payload: CreateStaffAccountDto,
+    actor: { userId: string; role: string },
+  ) {
     const user = await this.usersService.createManagedUser({
       email: payload.email,
       firstName: payload.firstName,
@@ -356,10 +361,38 @@ export class AuthService {
     await this.usersService.setActivationStatus(user.id, false);
     await this.authRepository.updateAccountStatus(user.id, false);
 
+    const auditLog = await this.authRepository.createStaffAdminAuditLog({
+      action: 'staff_account_provisioned',
+      actorUserId: actor.userId,
+      actorRole: 'super_admin',
+      targetUserId: user.id,
+      targetRole: user.role as 'technician' | 'service_adviser' | 'super_admin',
+      targetEmail: user.email,
+      targetStaffCode: user.staffCode,
+      previousIsActive: null,
+      nextIsActive: false,
+      reason: null,
+    });
+
+    this.eventBus.publish('staff_account.provisioned', {
+      auditLogId: auditLog.id,
+      actorUserId: actor.userId,
+      actorRole: 'super_admin',
+      targetUserId: user.id,
+      targetRole: user.role as 'technician' | 'service_adviser' | 'super_admin',
+      targetEmail: user.email,
+      targetStaffCode: user.staffCode,
+      reason: null,
+    });
+
     return this.usersService.findById(user.id);
   }
 
-  async updateStaffAccountStatus(userId: string, payload: UpdateStaffAccountStatusDto) {
+  async updateStaffAccountStatus(
+    userId: string,
+    payload: UpdateStaffAccountStatusDto,
+    actor: { userId: string; role: string },
+  ) {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -368,6 +401,8 @@ export class AuthService {
     if (user.role === 'customer') {
       throw new BadRequestException('Only staff accounts can be managed through this endpoint');
     }
+
+    const previousIsActive = user.isActive;
 
     if (payload.isActive) {
       const identity = await this.authRepository.findGoogleIdentityByEmail(user.email);
@@ -382,6 +417,32 @@ export class AuthService {
     if (!payload.isActive) {
       await this.authRepository.revokeActiveRefreshTokens(userId);
     }
+
+    const auditLog = await this.authRepository.createStaffAdminAuditLog({
+      action: 'staff_account_status_changed',
+      actorUserId: actor.userId,
+      actorRole: 'super_admin',
+      targetUserId: user.id,
+      targetRole: user.role as 'technician' | 'service_adviser' | 'super_admin',
+      targetEmail: user.email,
+      targetStaffCode: user.staffCode,
+      previousIsActive,
+      nextIsActive: payload.isActive,
+      reason: payload.reason ?? null,
+    });
+
+    this.eventBus.publish('staff_account.status_changed', {
+      auditLogId: auditLog.id,
+      actorUserId: actor.userId,
+      actorRole: 'super_admin',
+      targetUserId: user.id,
+      targetRole: user.role as 'technician' | 'service_adviser' | 'super_admin',
+      targetEmail: user.email,
+      targetStaffCode: user.staffCode,
+      previousIsActive,
+      nextIsActive: payload.isActive,
+      reason: payload.reason ?? null,
+    });
 
     return this.usersService.findById(userId);
   }

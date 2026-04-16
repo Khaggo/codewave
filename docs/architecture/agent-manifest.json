@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-13T21:21:42.489Z",
+  "generatedAt": "2026-04-16T09:51:27.4510031+08:00",
   "policy": {
     "orchestratorWriteMode": "proposal-only",
     "validatorMode": "content-strict",
@@ -252,7 +252,7 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "ab651d7438a0964d3fcb74b7ed032e2c2794ff925426e5fcee2b4f6b943adafe"
+        "value": "8c895f23fe923652ee36946ee1c0b07bed92d6c102d8768b01ce2d6b5a351f98"
       },
       "validationStatus": "validated",
       "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
@@ -286,10 +286,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "1472a1a83483347f2d03691444f4c03007fc931e3b16e8b5bb75eb4ed57520a6"
+        "value": "2ee309157117f25614a5b4405d14600daf2379a115518144c835695a1c1d2572"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T21:21:42.489Z"
+      "lastVerifiedAt": "2026-04-16T18:04:53.8708379+08:00"
     },
     {
       "path": "domain-map.md",
@@ -384,7 +384,7 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "2da5ab1ebfbdd3fa2ab7612b63931283f53483e9aa40e49b3da4de9d200d1b59"
+        "value": "7f783f557b2bedefcc267dd8e9f87d17011cad8b600f84b40bb2d779274908f9"
       },
       "validationStatus": "validated",
       "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
@@ -420,10 +420,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "e84b699cc6afdc08d6eeea3a5a4599ce093c635d6ce5ce6ef8ee8603907024bf"
+        "value": "c19bdcece1e42456e68315f02e42e32af0bb079d0dd3c5e889ec0c978da9506f"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-16T17:48:31.3912174+08:00"
     },
     {
       "path": "domains/ecommerce/inventory.md",
@@ -559,10 +559,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "16c76f44c94f37842bff41ea7a602771ca89a577bc6f47d8104c3e87abdf3181"
+        "value": "a23ab043f675771a4fe33804add19a324e176b0c1df5396796eb9f33f6291a09"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-17T00:00:00+08:00"
     },
     {
       "path": "domains/main-service/auth.md",
@@ -594,10 +594,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "99a113a2d6528b2dd6bd8b08f932ebedcdcf80d98d04918fe45042d45ed4b8f8"
+        "value": "faeec2a25a0dedb16468c76eb3e36d1546d51f36be69ba108896d1ff42cc577b"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-17T00:00:00+08:00"
     },
     {
       "path": "domains/main-service/back-jobs.md",
@@ -694,17 +694,16 @@
       ],
       "directDependencies": [
         "main-service.bookings",
-        "main-service.insurance",
-        "ecommerce.orders"
+        "main-service.insurance"
       ],
       "summaryMaxWords": 40,
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "9a00bed7dea90ecd29631e522a6d082146def1d11055f60c527038ff3b80c107"
+        "value": "679a664468b3fbd58cd444fc47d42a9dc1166f44c3278b23546dc8c102b741ed"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-17T00:00:00+08:00"
     },
     {
       "path": "domains/main-service/inspections.md",
@@ -845,10 +844,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "b7d60889fb138ed68dff41dac0e3dad46ea3b8ea075ce04a6a07d4cceb12785b"
+        "value": "53c67dc7e46494d237d8a627b7faa24d74128d0b17be1a2b7bdb73cf5f925f83"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-16T23:41:00+08:00"
     },
     {
       "path": "domains/main-service/notifications.md",
@@ -883,10 +882,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "483062939408af6eb24ede9723304827f398d8a7ed1db70b8b861c29a87547b8"
+        "value": "4fa2c177c897d15e40bae46cecb591ecebddb1fff9d4592632b8f3cdcb571905"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T21:21:42.489Z"
+      "lastVerifiedAt": "2026-04-16T18:04:53.8708379+08:00"
     },
     {
       "path": "domains/main-service/quality-gates.md",
@@ -920,10 +919,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "4b12abd04bdb4050caa1070e3c00d3f61b46528f0ea1b3a726ab374564aec570"
+        "value": "93be58da3e7ee60dbfbdf9ceef6305daeba65a61944744ff21e4ce85c60f2262"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-17T00:00:00+08:00"
     },
     {
       "path": "domains/main-service/users.md",
@@ -990,10 +989,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "27b86e9071cc22c16d7f307dda50c3d0fc07cf4837f909ca8126694ccf483d05"
+        "value": "2d2ef8508d27d78e4841057bb7e63d7da452761e197bfa85fa224cdbb37a7368"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-16T09:51:27.4510031+08:00"
     },
     {
       "path": "domains/main-service/vehicles.md",

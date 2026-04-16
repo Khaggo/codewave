@@ -64,6 +64,8 @@ Key relations:
 - `GET /products`
 - `GET /products/:id`
 - `GET /product-categories`
+- `POST /product-categories`
+- `PATCH /product-categories/:id`
 - `POST /products`
 - `PATCH /products/:id`
 

@@ -14,7 +14,7 @@ Expand OpenAPI coverage across the new domains.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

@@ -1,9 +1,10 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { asc, desc, eq } from 'drizzle-orm';
+import { asc, desc, eq, inArray } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
 import { AppDatabase } from '@shared/db/database.types';
+import { AiWorkerJobMetadata } from '@shared/queue/ai-worker.types';
 
 import {
   jobOrderQualityGates,
@@ -23,6 +24,7 @@ type CompleteAuditInput = {
   status: QualityGateStatus;
   riskScore: number;
   blockingReason?: string | null;
+  auditJob: AiWorkerJobMetadata;
   findings: Array<{
     gate: QualityGateFindingGate;
     severity: QualityGateFindingSeverity;
@@ -74,7 +76,26 @@ export class QualityGatesRepository extends BaseRepository {
     });
   }
 
-  async upsertPending(jobOrderId: string) {
+  async findByJobOrderIds(jobOrderIds: string[]) {
+    if (jobOrderIds.length === 0) {
+      return [];
+    }
+
+    return this.db.query.jobOrderQualityGates.findMany({
+      where: inArray(jobOrderQualityGates.jobOrderId, jobOrderIds),
+      with: {
+        findings: {
+          orderBy: asc(qualityGateFindings.createdAt),
+        },
+        overrides: {
+          orderBy: desc(qualityGateOverrides.createdAt),
+        },
+      },
+      orderBy: [asc(jobOrderQualityGates.lastAuditRequestedAt), asc(jobOrderQualityGates.createdAt)],
+    });
+  }
+
+  async upsertPending(jobOrderId: string, auditJob: AiWorkerJobMetadata) {
     const now = new Date();
     const existing = await this.findOptionalByJobOrderId(jobOrderId);
 
@@ -87,6 +108,7 @@ export class QualityGatesRepository extends BaseRepository {
           status: 'pending',
           riskScore: 0,
           blockingReason: null,
+          auditJob,
           lastAuditRequestedAt: now,
           lastAuditCompletedAt: null,
           updatedAt: now,
@@ -103,11 +125,34 @@ export class QualityGatesRepository extends BaseRepository {
         status: 'pending',
         riskScore: 0,
         blockingReason: null,
+        auditJob,
         lastAuditRequestedAt: now,
       })
       .returning();
 
     this.assertFound(createdRows[0], 'Quality gate not found');
+    return this.findByJobOrderId(jobOrderId);
+  }
+
+  async updateAuditJob(jobOrderId: string, auditJob: AiWorkerJobMetadata, options?: {
+    blockingReason?: string | null;
+    lastAuditCompletedAt?: Date | null;
+  }) {
+    const gate = await this.findOptionalByJobOrderId(jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    await this.db
+      .update(jobOrderQualityGates)
+      .set({
+        auditJob,
+        blockingReason: options?.blockingReason ?? gate.blockingReason,
+        lastAuditCompletedAt: options?.lastAuditCompletedAt ?? gate.lastAuditCompletedAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(jobOrderQualityGates.id, gate.id));
+
     return this.findByJobOrderId(jobOrderId);
   }
 
@@ -140,6 +185,7 @@ export class QualityGatesRepository extends BaseRepository {
         status: payload.status,
         riskScore: payload.riskScore,
         blockingReason: payload.blockingReason ?? null,
+        auditJob: payload.auditJob,
         lastAuditCompletedAt: now,
         updatedAt: now,
       })
@@ -174,5 +220,14 @@ export class QualityGatesRepository extends BaseRepository {
     });
 
     return this.findByJobOrderId(jobOrderId);
+  }
+
+  async listOverridesForAnalytics() {
+    return this.db.query.qualityGateOverrides.findMany({
+      orderBy: desc(qualityGateOverrides.createdAt),
+      with: {
+        qualityGate: true,
+      },
+    });
   }
 }

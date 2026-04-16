@@ -14,7 +14,7 @@ Implement invoice-only payment tracking.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

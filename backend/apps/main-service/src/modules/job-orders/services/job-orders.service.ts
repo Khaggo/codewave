@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
+import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jobs.repository';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { QualityGatesService } from '@main-modules/quality-gates/services/quality-gates.service';
@@ -48,6 +49,7 @@ export class JobOrdersService {
     private readonly usersService: UsersService,
     private readonly vehiclesRepository: VehiclesRepository,
     private readonly qualityGatesService: QualityGatesService,
+    private readonly eventBus: AutocareEventBusService,
   ) {}
 
   async create(payload: CreateJobOrderDto, actor: JobOrderActor) {
@@ -172,7 +174,13 @@ export class JobOrdersService {
       }
     }
 
-    return this.jobOrdersRepository.addProgressEntry(id, payload, actorInfo.userId);
+    const updatedJobOrder = await this.jobOrdersRepository.addProgressEntry(id, payload, actorInfo.userId);
+
+    if (updatedJobOrder.status === 'ready_for_qa') {
+      await this.qualityGatesService.beginQualityGate(id);
+    }
+
+    return updatedJobOrder;
   }
 
   async addPhoto(id: string, payload: AddJobOrderPhotoDto, actor: JobOrderActor) {
@@ -186,7 +194,13 @@ export class JobOrdersService {
     this.assertViewerCanAccess(jobOrder, actorInfo);
     this.assertJobOrderCanAcceptEvidence(jobOrder.status);
 
-    return this.jobOrdersRepository.addPhoto(id, payload, actorInfo.userId);
+    const updatedJobOrder = await this.jobOrdersRepository.addPhoto(id, payload, actorInfo.userId);
+
+    if (updatedJobOrder.status === 'ready_for_qa') {
+      await this.qualityGatesService.beginQualityGate(id);
+    }
+
+    return updatedJobOrder;
   }
 
   async finalize(id: string, payload: FinalizeJobOrderDto, actor: JobOrderActor) {
@@ -220,11 +234,26 @@ export class JobOrdersService {
 
     await this.qualityGatesService.assertReleaseAllowed(id);
 
-    return this.jobOrdersRepository.finalize(id, {
+    const finalizedJobOrder = await this.jobOrdersRepository.finalize(id, {
       ...payload,
       finalizedByUserId: actorInfo.userId,
       invoiceReference: this.generateInvoiceReference(jobOrder.id),
     });
+
+    this.eventBus.publish('service.invoice_finalized', {
+      jobOrderId: finalizedJobOrder.id,
+      invoiceRecordId: finalizedJobOrder.invoiceRecord.id,
+      invoiceReference: finalizedJobOrder.invoiceRecord.invoiceReference,
+      customerUserId: finalizedJobOrder.customerUserId,
+      vehicleId: finalizedJobOrder.vehicleId,
+      serviceAdviserUserId: finalizedJobOrder.serviceAdviserUserId,
+      serviceAdviserCode: finalizedJobOrder.serviceAdviserCode,
+      finalizedByUserId: actorInfo.userId,
+      sourceType: finalizedJobOrder.sourceType,
+      sourceId: finalizedJobOrder.sourceId,
+    });
+
+    return finalizedJobOrder;
   }
 
   private async assertSource(payload: CreateJobOrderDto) {

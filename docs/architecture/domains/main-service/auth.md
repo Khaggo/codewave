@@ -27,6 +27,7 @@ Maintain secure authentication, activation gating, staff-account credential owne
 - `auth_accounts`
 - `refresh_tokens`
 - `login_audit_logs`
+- `staff_admin_audit_logs`
 - authenticated user identity from JWT claims
 - admin-managed staff account credential state
 - activation decisions, OTP challenge ownership, and Google identity linkage targets
@@ -41,6 +42,7 @@ Primary tables or equivalents:
 - `auth_accounts`
 - `refresh_tokens`
 - `login_audit_logs`
+- `staff_admin_audit_logs`
 - `auth_google_identities`
 - `auth_otp_challenges`
 
@@ -59,6 +61,7 @@ Key relations:
 - rotate to one latest active refresh token per user
 - deactivate or reactivate staff credentials without deleting the user record
 - write login audit logs for successful and failed login attempts
+- write staff-admin audit logs for staff provisioning and activation-status changes, preserving actor, timestamp, and reason metadata
 - expose the authenticated identity through JWT guard resolution
 
 ## Process Flow

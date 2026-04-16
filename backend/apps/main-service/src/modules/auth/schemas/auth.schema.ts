@@ -1,7 +1,7 @@
 import { relations } from 'drizzle-orm';
 import { boolean, integer, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
-import { users } from '@main-modules/users/schemas/users.schema';
+import { userRoleEnum, users } from '@main-modules/users/schemas/users.schema';
 
 export const authAccounts = pgTable('auth_accounts', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -68,6 +68,26 @@ export const loginAuditLogs = pgTable('login_audit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const staffAdminAuditActionEnum = pgEnum('staff_admin_audit_action', [
+  'staff_account_provisioned',
+  'staff_account_status_changed',
+]);
+
+export const staffAdminAuditLogs = pgTable('staff_admin_audit_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  action: staffAdminAuditActionEnum('action').notNull(),
+  actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+  actorRole: userRoleEnum('actor_role').notNull(),
+  targetUserId: uuid('target_user_id').references(() => users.id, { onDelete: 'set null' }),
+  targetRole: userRoleEnum('target_role').notNull(),
+  targetEmail: varchar('target_email', { length: 255 }).notNull(),
+  targetStaffCode: varchar('target_staff_code', { length: 40 }),
+  previousIsActive: boolean('previous_is_active'),
+  nextIsActive: boolean('next_is_active'),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const authAccountsRelations = relations(authAccounts, ({ one, many }) => ({
   user: one(users, {
     fields: [authAccounts.userId],
@@ -93,6 +113,17 @@ export const authGoogleIdentitiesRelations = relations(authGoogleIdentities, ({ 
 export const authOtpChallengesRelations = relations(authOtpChallenges, ({ one }) => ({
   user: one(users, {
     fields: [authOtpChallenges.userId],
+    references: [users.id],
+  }),
+}));
+
+export const staffAdminAuditLogsRelations = relations(staffAdminAuditLogs, ({ one }) => ({
+  actor: one(users, {
+    fields: [staffAdminAuditLogs.actorUserId],
+    references: [users.id],
+  }),
+  target: one(users, {
+    fields: [staffAdminAuditLogs.targetUserId],
     references: [users.id],
   }),
 }));

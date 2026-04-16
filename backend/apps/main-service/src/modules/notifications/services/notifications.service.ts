@@ -8,6 +8,8 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
 import { UsersService } from '@main-modules/users/services/users.service';
+import { AnyCommerceEventEnvelope } from '@shared/events/contracts/commerce-events';
+import { AnyNotificationTriggerEnvelope } from '@shared/events/contracts/notification-triggers';
 
 import { UpdateNotificationPreferencesDto } from '../dto/update-notification-preferences.dto';
 import { NOTIFICATIONS_QUEUE_NAME } from '../notifications.constants';
@@ -17,6 +19,10 @@ import {
   notificationChannelEnum,
   notificationSourceTypeEnum,
 } from '../schemas/notifications.schema';
+import {
+  NotificationTriggerPlanAction,
+  NotificationTriggerPlannerService,
+} from './notification-trigger-planner.service';
 import { SmtpMailService } from './smtp-mail.service';
 
 type NotificationActor = {
@@ -70,6 +76,7 @@ export class NotificationsService {
   constructor(
     private readonly notificationsRepository: NotificationsRepository,
     private readonly usersService: UsersService,
+    private readonly notificationTriggerPlanner: NotificationTriggerPlannerService,
     private readonly smtpMailService: SmtpMailService,
     @InjectQueue(NOTIFICATIONS_QUEUE_NAME)
     private readonly notificationsQueue: Queue,
@@ -198,6 +205,94 @@ export class NotificationsService {
     });
   }
 
+  async applyTrigger(trigger: AnyNotificationTriggerEnvelope | AnyCommerceEventEnvelope) {
+    const plan = this.notificationTriggerPlanner.plan(trigger);
+    const actionResults: Array<{
+      kind: NotificationTriggerPlanAction['kind'];
+      result: unknown;
+    }> = [];
+
+    for (const action of plan.actions) {
+      if (action.kind === 'enqueue_notification') {
+        const notification = await this.enqueueNotification({
+          userId: action.userId,
+          category: action.category,
+          channel: action.channel,
+          sourceType: action.sourceType,
+          sourceId: action.sourceId,
+          title: action.title,
+          message: action.message,
+          dedupeKey: action.dedupeKey,
+        });
+
+        actionResults.push({
+          kind: action.kind,
+          result: notification,
+        });
+        continue;
+      }
+
+      if (action.kind === 'schedule_reminder') {
+        const reminder = await this.scheduleReminder({
+          userId: action.userId,
+          reminderType: action.category,
+          channel: action.channel,
+          sourceType: action.sourceType,
+          sourceId: action.sourceId,
+          title: action.title,
+          message: action.message,
+          scheduledFor: action.scheduledFor,
+          dedupeKey: action.dedupeKey,
+        });
+
+        actionResults.push({
+          kind: action.kind,
+          result: reminder,
+        });
+        continue;
+      }
+
+      if (action.kind === 'cancel_notifications') {
+        const notifications = await this.notificationsRepository.cancelNotificationsBySource({
+          sourceType: action.sourceType,
+          sourceId: action.sourceId,
+          category: action.category,
+        });
+
+        actionResults.push({
+          kind: action.kind,
+          result: {
+            reason: action.reason,
+            notifications,
+          },
+        });
+        continue;
+      }
+
+      const reminderRules = await this.notificationsRepository.cancelReminderRulesBySource({
+        sourceType: action.sourceType,
+        sourceId: action.sourceId,
+        reminderType: action.reminderType,
+      });
+
+      actionResults.push({
+        kind: action.kind,
+        result: {
+          reason: action.reason,
+          reminderRules,
+        },
+      });
+    }
+
+    return {
+      triggerName: plan.triggerName,
+      sourceDomain: plan.sourceDomain,
+      dedupePolicy: plan.dedupePolicy,
+      retryPolicy: plan.retryPolicy,
+      actionResults,
+    };
+  }
+
   async deliverNotification(notificationId: string) {
     const notification = await this.notificationsRepository.findNotificationById(notificationId);
     if (notification.status === 'sent' || notification.status === 'cancelled') {
@@ -281,6 +376,7 @@ export class NotificationsService {
     const categoryEnabledMap: Record<NotificationCategory, boolean> = {
       booking_reminder: payload.preferences.bookingRemindersEnabled,
       insurance_update: payload.preferences.insuranceUpdatesEnabled,
+      back_job_update: payload.preferences.serviceFollowUpEnabled,
       invoice_aging: payload.preferences.invoiceRemindersEnabled,
       service_follow_up: payload.preferences.serviceFollowUpEnabled,
       auth_otp: true,

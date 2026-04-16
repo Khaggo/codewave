@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { AiWorkerJobResponseDto } from '@shared/queue/ai-worker-job-response.dto';
 
 import { qualityGateStatusEnum } from '../schemas/quality-gates.schema';
 import { QualityGateFindingResponseDto } from './quality-gate-finding-response.dto';
@@ -42,6 +43,11 @@ export class JobOrderQualityGateResponseDto {
     format: 'date-time',
   })
   lastAuditCompletedAt?: string | null;
+
+  @ApiPropertyOptional({
+    type: () => AiWorkerJobResponseDto,
+  })
+  auditJob?: AiWorkerJobResponseDto | null;
 
   @ApiProperty({
     example: '2026-05-06T08:00:00.000Z',

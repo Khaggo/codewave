@@ -9,6 +9,19 @@ export const blockedQualityGateMock: JobOrderQualityGateResponse = {
   blockingReason: 'Quality gate found blocking issues that must be resolved before release.',
   lastAuditRequestedAt: '2026-05-06T08:00:00.000Z',
   lastAuditCompletedAt: '2026-05-06T08:00:05.000Z',
+  auditJob: {
+    queueName: 'ai-worker-jobs',
+    jobName: 'run-quality-gate-audit',
+    jobId: 'qa-job-1',
+    status: 'completed',
+    requestedAt: '2026-05-06T08:00:00.000Z',
+    attemptsAllowed: 3,
+    attemptNumber: 1,
+    startedAt: '2026-05-06T08:00:01.000Z',
+    completedAt: '2026-05-06T08:00:05.000Z',
+    failedAt: null,
+    lastError: null,
+  },
   createdAt: '2026-05-06T08:00:00.000Z',
   updatedAt: '2026-05-06T08:00:05.000Z',
   findings: [
@@ -23,6 +36,29 @@ export const blockedQualityGateMock: JobOrderQualityGateResponse = {
       createdAt: '2026-05-06T08:00:05.000Z',
     },
   ],
+  overrides: [],
+};
+
+export const pendingQualityGateMock: JobOrderQualityGateResponse = {
+  ...blockedQualityGateMock,
+  status: 'pending',
+  riskScore: 0,
+  blockingReason: 'Quality gate audit is still running.',
+  lastAuditCompletedAt: null,
+  auditJob: {
+    queueName: 'ai-worker-jobs',
+    jobName: 'run-quality-gate-audit',
+    jobId: 'qa-job-pending-1',
+    status: 'processing',
+    requestedAt: '2026-05-06T08:30:00.000Z',
+    attemptsAllowed: 3,
+    attemptNumber: 1,
+    startedAt: '2026-05-06T08:30:01.000Z',
+    completedAt: null,
+    failedAt: null,
+    lastError: null,
+  },
+  findings: [],
   overrides: [],
 };
 

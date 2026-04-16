@@ -14,7 +14,7 @@ Implement loyalty points and rewards core.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

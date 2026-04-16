@@ -53,6 +53,9 @@ This folder is the execution layer derived from the canonical SSoT in `docs/arch
   - `T109-back-jobs-review-and-validation`
   - `T110-insurance-inquiry-core`
   - `T111-notifications-reminders-core`
+  - `T112-loyalty-core`
+  - `T113-admin-dashboard-analytics-v1`
+  - `T114-faq-chatbot-v1`
   - `T122-auth-otp-delivery-foundation`
   - `T120-google-signup-and-email-otp-customer-enrollment`
   - `T121-staff-pending-activation-google-email-otp`
@@ -62,7 +65,6 @@ This folder is the execution layer derived from the canonical SSoT in `docs/arch
   - `T118-quality-gate2-discrepancy-risk-engine`
   - `T119-quality-gate-manual-override`
   - `T201-ecommerce-bootstrap`
-- current priority queue:
   - `T202-catalog-v1`
   - `T203-cart-and-invoice-checkout`
   - `T204-order-tracking-and-purchase-history`
@@ -72,13 +74,12 @@ This folder is the execution layer derived from the canonical SSoT in `docs/arch
   - `T303-loyalty-from-service-and-purchase-events`
   - `T304-notification-trigger-integration`
   - `T305-ai-worker-jobs-with-bullmq`
-  - `T112-loyalty-core`
-  - `T113-admin-dashboard-analytics-v1`
-  - `T114-faq-chatbot-v1`
   - `T405-rbac-regression-matrix`
   - `T406-job-order-and-qa-regression-suite`
   - `T407-openapi-contract-expansion`
   - `T408-audit-and-override-observability`
+- current priority queue:
+  - no seeded tasks are currently queued
 
 ## Operating Rules
 

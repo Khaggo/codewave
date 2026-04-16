@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 
+import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { AuthRepository } from '@main-modules/auth/repositories/auth.repository';
 import { AuthService } from '@main-modules/auth/services/auth.service';
 import { GoogleIdentityService } from '@main-modules/auth/services/google-identity.service';
@@ -57,6 +58,7 @@ describe('AuthService', () => {
         { provide: AuthRepository, useValue: authRepository },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: {} },
         { provide: ConfigService, useValue: configService },
       ],
@@ -108,6 +110,7 @@ describe('AuthService', () => {
         { provide: AuthRepository, useValue: {} },
         { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: {} },
         {
           provide: ConfigService,
@@ -148,6 +151,7 @@ describe('AuthService', () => {
         { provide: AuthRepository, useValue: authRepository },
         { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: {} },
         {
           provide: ConfigService,
@@ -198,6 +202,7 @@ describe('AuthService', () => {
         },
         { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: jwtService },
         {
           provide: ConfigService,
@@ -244,6 +249,7 @@ describe('AuthService', () => {
     const authRepository = {
       createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
       updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: false }),
+      createStaffAdminAuditLog: jest.fn().mockResolvedValue({ id: 'audit-log-1' }),
       revokeActiveRefreshTokens: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -254,6 +260,7 @@ describe('AuthService', () => {
         { provide: AuthRepository, useValue: authRepository },
         { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: {} },
         {
           provide: ConfigService,
@@ -267,14 +274,20 @@ describe('AuthService', () => {
 
     const service = moduleRef.get(AuthService);
 
-    const created = await service.provisionStaffAccount({
-      email: 'staff@example.com',
-      password: 'password123',
-      firstName: 'Maria',
-      lastName: 'Santos',
-      role: 'service_adviser',
-      staffCode: 'SA-0001',
-    });
+    const created = await service.provisionStaffAccount(
+      {
+        email: 'staff@example.com',
+        password: 'password123',
+        firstName: 'Maria',
+        lastName: 'Santos',
+        role: 'service_adviser',
+        staffCode: 'SA-0001',
+      },
+      {
+        userId: 'admin-1',
+        role: 'super_admin',
+      },
+    );
 
     expect(usersService.createManagedUser).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -288,9 +301,16 @@ describe('AuthService', () => {
     expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('staff-1', false);
     expect(created?.staffCode).toBe('SA-0001');
 
-    await service.updateStaffAccountStatus('staff-1', {
-      isActive: false,
-    });
+    await service.updateStaffAccountStatus(
+      'staff-1',
+      {
+        isActive: false,
+      },
+      {
+        userId: 'admin-1',
+        role: 'super_admin',
+      },
+    );
 
     expect(usersService.setActivationStatus).toHaveBeenCalledWith('staff-1', false);
     expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('staff-1', false);
@@ -381,6 +401,7 @@ describe('AuthService', () => {
         { provide: AuthRepository, useValue: authRepository },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: GoogleIdentityService, useValue: googleIdentityService },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
       ],
@@ -489,6 +510,7 @@ describe('AuthService', () => {
         { provide: AuthRepository, useValue: authRepository },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: GoogleIdentityService, useValue: googleIdentityService },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
       ],

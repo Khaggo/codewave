@@ -50,15 +50,18 @@ Key relations:
 - run Gate 2 rule-based discrepancy and risk scoring over job-order and inspection evidence
 - block release when QA status requires staff action
 - allow manual override only for authorized staff with audit trail
-- keep BullMQ as the owner of asynchronous QA execution
+- publish audit signals after manual overrides so analytics consumers can trace the exception without owning the write path
+- queue QA audits on the shared `ai-worker-jobs` BullMQ lane and expose `auditJob` metadata on the QA record
+- rerun QA safely when release-ready job-order evidence changes after the first audit request
 
 ## Process Flow
 
 1. Job order reaches release-ready status.
-2. Background audit gathers booking, inspection, and work evidence.
-3. Gate 1 checks whether the completed work addresses the recorded concern.
-4. Gate 2 scores discrepancies and risk conditions.
-5. Staff reviews results, applies override if allowed, or keeps the job blocked.
+2. Quality-gates creates or refreshes a pending QA record and queues `run-quality-gate-audit` on the shared AI worker queue.
+3. Background audit gathers booking, inspection, and work evidence.
+4. Gate 1 checks whether the completed work addresses the recorded concern.
+5. Gate 2 scores discrepancies and risk conditions.
+6. Staff reviews results, applies override if allowed, or keeps the job blocked.
 
 ## Use Cases
 
@@ -77,6 +80,7 @@ Key relations:
 
 - job order is finalized while QA audit is still pending
 - AI-assisted semantic audit and evidence-backed rules disagree
+- semantic audit provider or worker failure must surface through warning findings and failed `auditJob` metadata instead of silently dropping QA state
 - override happens without a valid actor role or reason
 - repeated retries create duplicate QA findings for one job order
 

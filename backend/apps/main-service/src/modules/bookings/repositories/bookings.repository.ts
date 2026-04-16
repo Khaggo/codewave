@@ -207,6 +207,20 @@ export class BookingsRepository extends BaseRepository {
     });
   }
 
+  async listForAnalytics() {
+    return this.db.query.bookings.findMany({
+      with: {
+        timeSlot: true,
+        requestedServices: {
+          with: {
+            service: true,
+          },
+        },
+      },
+      orderBy: [desc(bookings.createdAt), desc(bookings.id)],
+    });
+  }
+
   async updateStatus(id: string, payload: UpdateBookingStatusPersistenceInput) {
     const currentBooking = await this.findById(id);
 

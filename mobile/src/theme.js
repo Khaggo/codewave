@@ -1,0 +1,30 @@
+export const colors = {
+  background: '#0F121C',
+  surface: '#141826',
+  surfaceStrong: '#1B2131',
+  surfaceMuted: '#20263A',
+  primary: '#FF7A00',
+  primarySoft: 'rgba(255, 122, 0, 0.14)',
+  primaryGlow: 'rgba(255, 122, 0, 0.28)',
+  accent: '#FFB067',
+  text: '#FFFFFF',
+  mutedText: '#7F89AE',
+  labelText: '#9AA4C9',
+  border: '#303855',
+  borderSoft: '#252C41',
+  input: '#1F2536',
+  shadow: '#000000',
+  readonly: '#181D2B',
+  success: '#3FD78F',
+  successSoft: 'rgba(63, 215, 143, 0.14)',
+  danger: '#FF6B6B',
+  dangerSoft: 'rgba(255, 107, 107, 0.12)',
+  onPrimary: '#FFF8F0',
+  overlay: 'rgba(5, 7, 13, 0.76)',
+};
+
+export const radius = {
+  medium: 16,
+  large: 26,
+  pill: 999,
+};

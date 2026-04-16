@@ -4,6 +4,7 @@ import { asc, desc, eq } from 'drizzle-orm';
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
 import { AppDatabase } from '@shared/db/database.types';
+import { AiWorkerJobMetadata } from '@shared/queue/ai-worker.types';
 
 import { AppendVehicleTimelineEventDto } from '../dto/append-vehicle-timeline-event.dto';
 import {
@@ -19,6 +20,8 @@ type CreateVehicleLifecycleSummaryInput = {
   vehicleId: string;
   requestedByUserId: string;
   summaryText: string;
+  status?: VehicleLifecycleSummaryStatus;
+  generationJob: AiWorkerJobMetadata;
   provenance: VehicleLifecycleSummaryProvenance;
 };
 
@@ -29,6 +32,17 @@ type ReviewVehicleLifecycleSummaryInput = {
   reviewedAt: Date;
   customerVisible: boolean;
   customerVisibleAt?: Date | null;
+};
+
+type CompleteVehicleLifecycleSummaryGenerationInput = {
+  summaryText: string;
+  provenance: VehicleLifecycleSummaryProvenance;
+  generationJob: AiWorkerJobMetadata;
+};
+
+type FailVehicleLifecycleSummaryGenerationInput = {
+  summaryText: string;
+  generationJob: AiWorkerJobMetadata;
 };
 
 @Injectable()
@@ -98,6 +112,8 @@ export class VehicleLifecycleRepository extends BaseRepository {
         vehicleId: payload.vehicleId,
         requestedByUserId: payload.requestedByUserId,
         summaryText: payload.summaryText,
+        status: payload.status ?? 'queued',
+        generationJob: payload.generationJob,
         provenance: payload.provenance,
       })
       .returning();
@@ -118,6 +134,57 @@ export class VehicleLifecycleRepository extends BaseRepository {
       where: eq(vehicleLifecycleSummaries.vehicleId, vehicleId),
       orderBy: [desc(vehicleLifecycleSummaries.createdAt), desc(vehicleLifecycleSummaries.id)],
     });
+  }
+
+  async updateSummaryGenerationJob(summaryId: string, generationJob: AiWorkerJobMetadata, status?: VehicleLifecycleSummaryStatus) {
+    const [updatedSummary] = await this.db
+      .update(vehicleLifecycleSummaries)
+      .set({
+        generationJob,
+        ...(status ? { status } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(vehicleLifecycleSummaries.id, summaryId))
+      .returning();
+
+    return this.findSummaryById(
+      this.assertFound(updatedSummary, 'Vehicle lifecycle summary not found').id,
+    );
+  }
+
+  async completeSummaryGeneration(summaryId: string, payload: CompleteVehicleLifecycleSummaryGenerationInput) {
+    const [updatedSummary] = await this.db
+      .update(vehicleLifecycleSummaries)
+      .set({
+        summaryText: payload.summaryText,
+        provenance: payload.provenance,
+        generationJob: payload.generationJob,
+        status: 'pending_review',
+        updatedAt: new Date(),
+      })
+      .where(eq(vehicleLifecycleSummaries.id, summaryId))
+      .returning();
+
+    return this.findSummaryById(
+      this.assertFound(updatedSummary, 'Vehicle lifecycle summary not found').id,
+    );
+  }
+
+  async failSummaryGeneration(summaryId: string, payload: FailVehicleLifecycleSummaryGenerationInput) {
+    const [updatedSummary] = await this.db
+      .update(vehicleLifecycleSummaries)
+      .set({
+        summaryText: payload.summaryText,
+        generationJob: payload.generationJob,
+        status: 'generation_failed',
+        updatedAt: new Date(),
+      })
+      .where(eq(vehicleLifecycleSummaries.id, summaryId))
+      .returning();
+
+    return this.findSummaryById(
+      this.assertFound(updatedSummary, 'Vehicle lifecycle summary not found').id,
+    );
   }
 
   async reviewSummary(summaryId: string, payload: ReviewVehicleLifecycleSummaryInput) {

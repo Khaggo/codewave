@@ -2,11 +2,13 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 
-export const AUTOCARE_EVENTS_CLIENT = 'AUTOCARE_EVENTS_CLIENT';
+import { CommerceEventsModule } from './commerce-events.module';
+import { AUTOCARE_EVENTS_CLIENT } from './events.constants';
 
 @Global()
 @Module({
   imports: [
+    CommerceEventsModule,
     ClientsModule.registerAsync([
       {
         name: AUTOCARE_EVENTS_CLIENT,
@@ -25,6 +27,6 @@ export const AUTOCARE_EVENTS_CLIENT = 'AUTOCARE_EVENTS_CLIENT';
       },
     ]),
   ],
-  exports: [ClientsModule],
+  exports: [ClientsModule, CommerceEventsModule],
 })
 export class EventsModule {}

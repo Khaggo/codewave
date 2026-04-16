@@ -14,7 +14,7 @@ Implement cart flow and invoice checkout.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

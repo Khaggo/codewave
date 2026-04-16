@@ -4,10 +4,14 @@ import { boolean, jsonb, pgEnum, pgTable, text, timestamp, uuid, varchar } from 
 import { vehicleInspections } from '@main-modules/inspections/schemas/inspections.schema';
 import { users } from '@main-modules/users/schemas/users.schema';
 import { vehicles } from '@main-modules/vehicles/schemas/vehicles.schema';
+import { AiWorkerJobMetadata } from '@shared/queue/ai-worker.types';
 
 export const vehicleTimelineSourceTypeEnum = pgEnum('vehicle_timeline_source_type', [
   'booking',
   'inspection',
+  'job_order',
+  'quality_gate',
+  'lifecycle_summary',
   'manual',
 ]);
 
@@ -17,6 +21,9 @@ export const vehicleTimelineEventCategoryEnum = pgEnum('vehicle_timeline_event_c
 ]);
 
 export const vehicleLifecycleSummaryStatusEnum = pgEnum('vehicle_lifecycle_summary_status', [
+  'queued',
+  'generating',
+  'generation_failed',
   'pending_review',
   'approved',
   'rejected',
@@ -64,6 +71,7 @@ export const vehicleLifecycleSummaries = pgTable('vehicle_lifecycle_summaries', 
   reviewNotes: text('review_notes'),
   reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  generationJob: jsonb('generation_job').$type<AiWorkerJobMetadata | null>(),
   provenance: jsonb('provenance')
     .$type<VehicleLifecycleSummaryProvenance>()
     .notNull()

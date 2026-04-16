@@ -1,5 +1,6 @@
 import request from 'supertest';
 
+import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { NotificationsRepository } from '../src/modules/notifications/repositories/notifications.repository';
 
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
@@ -130,8 +131,11 @@ describe('AuthController integration', () => {
 
   it('lets super admins provision and deactivate staff accounts', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
+    const eventBus = app.get(AutocareEventBusService);
 
     try {
+      eventBus.clearPublishedEvents();
+
       await seedAuthUser({
         email: 'super.admin@example.com',
         password: 'password123',
@@ -216,10 +220,34 @@ describe('AuthController integration', () => {
         .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
         .send({
           isActive: false,
+          reason: 'Temporarily deactivated pending compliance review.',
         });
 
       expect(deactivateResponse.status).toBe(200);
       expect(deactivateResponse.body.isActive).toBe(false);
+      expect(eventBus.listPublishedEvents()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'staff_account.provisioned',
+            sourceDomain: 'main-service.auth',
+            payload: expect.objectContaining({
+              actorUserId: expect.any(String),
+              targetUserId: createStaffResponse.body.id,
+              targetEmail: 'staff@example.com',
+            }),
+          }),
+          expect.objectContaining({
+            name: 'staff_account.status_changed',
+            sourceDomain: 'main-service.auth',
+            payload: expect.objectContaining({
+              targetUserId: createStaffResponse.body.id,
+              previousIsActive: true,
+              nextIsActive: false,
+              reason: 'Temporarily deactivated pending compliance review.',
+            }),
+          }),
+        ]),
+      );
     } finally {
       await app.close();
     }

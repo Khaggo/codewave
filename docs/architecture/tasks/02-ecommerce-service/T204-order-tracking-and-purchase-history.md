@@ -14,7 +14,7 @@ Add order tracking and purchase history.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

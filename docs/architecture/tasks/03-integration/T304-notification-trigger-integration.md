@@ -14,7 +14,7 @@ Wire cross-domain notification triggers.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

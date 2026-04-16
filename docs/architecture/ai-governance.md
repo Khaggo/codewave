@@ -35,6 +35,7 @@ This file defines the approved AI scope, provider model, and safety guardrails f
 ## Operational Safety
 
 - AI jobs should run through BullMQ so retries, failure handling, and observability stay explicit.
+- Queue-backed AI work must expose queued, processing, completed, or failed job metadata on the owning domain record so staff and agents can see progress without reading queue internals directly.
 - Provider failures must not block core operational write paths such as booking creation, inspection capture, or invoice generation.
 - AI-generated artifacts should record provenance such as provider name, model configuration, prompt version, and review status.
 - If AI-generated output conflicts with inspection or job-order evidence, the evidence-backed record wins until a human resolves the mismatch.

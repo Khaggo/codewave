@@ -166,8 +166,11 @@ export class AuthController {
   @ApiConflictResponse({ description: 'The email or staff code already exists.' })
   @ApiForbiddenResponse({ description: 'Only super admins can provision staff accounts.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
-  createStaffAccount(@Body() payload: CreateStaffAccountDto) {
-    return this.authService.provisionStaffAccount(payload);
+  createStaffAccount(@Body() payload: CreateStaffAccountDto, @Req() request: Request) {
+    return this.authService.provisionStaffAccount(
+      payload,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -191,7 +194,12 @@ export class AuthController {
   updateStaffAccountStatus(
     @Param('id') userId: string,
     @Body() payload: UpdateStaffAccountStatusDto,
+    @Req() request: Request,
   ) {
-    return this.authService.updateStaffAccountStatus(userId, payload);
+    return this.authService.updateStaffAccountStatus(
+      userId,
+      payload,
+      request.user as { userId: string; role: string },
+    );
   }
 }

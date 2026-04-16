@@ -132,6 +132,40 @@ export class JobOrdersRepository extends BaseRepository {
     });
   }
 
+  async findByVehicleId(vehicleId: string) {
+    return this.db.query.jobOrders.findMany({
+      where: eq(jobOrders.vehicleId, vehicleId),
+      orderBy: asc(jobOrders.createdAt),
+      with: {
+        items: {
+          orderBy: asc(jobOrderItems.sortOrder),
+        },
+        assignments: {
+          orderBy: asc(jobOrderAssignments.assignedAt),
+        },
+        progressEntries: {
+          orderBy: desc(jobOrderProgressLogs.createdAt),
+        },
+        photos: {
+          orderBy: desc(jobOrderPhotos.createdAt),
+        },
+        invoiceRecord: true,
+      },
+    });
+  }
+
+  async listForAnalytics() {
+    return this.db.query.jobOrders.findMany({
+      orderBy: [desc(jobOrders.createdAt), desc(jobOrders.id)],
+      with: {
+        assignments: {
+          orderBy: asc(jobOrderAssignments.assignedAt),
+        },
+        invoiceRecord: true,
+      },
+    });
+  }
+
   async hasBookingSource(sourceId: string) {
     const existingJobOrder = await this.db.query.jobOrders.findFirst({
       where: and(eq(jobOrders.sourceType, 'booking'), eq(jobOrders.sourceId, sourceId)),

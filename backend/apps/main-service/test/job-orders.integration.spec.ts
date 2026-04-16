@@ -1,12 +1,17 @@
 import request from 'supertest';
 
+import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
+
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
 describe('JobOrdersController integration', () => {
   it('creates, reads, and updates a job order across adviser and technician roles', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
+    const eventBus = app.get(AutocareEventBusService);
 
     try {
+      eventBus.clearPublishedEvents();
+
       const adviser = await seedAuthUser({
         email: 'adviser.joborders@example.com',
         password: 'password123',
@@ -183,6 +188,22 @@ describe('JobOrdersController integration', () => {
           serviceAdviserCode: adviser.staffCode,
           finalizedByUserId: adviser.id,
         }),
+      );
+      expect(eventBus.listPublishedEvents()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'service.invoice_finalized',
+            sourceDomain: 'main-service.job-orders',
+            payload: expect.objectContaining({
+              jobOrderId: createJobOrderResponse.body.id,
+              invoiceRecordId: finalizeResponse.body.invoiceRecord.id,
+              invoiceReference: finalizeResponse.body.invoiceRecord.invoiceReference,
+              customerUserId: customerResponse.body.id,
+              vehicleId: vehicleResponse.body.id,
+              serviceAdviserUserId: adviser.id,
+            }),
+          }),
+        ]),
       );
     } finally {
       await app.close();

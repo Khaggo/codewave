@@ -1,4 +1,4 @@
-import { Inject, Injectable, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
@@ -7,8 +7,15 @@ import { BookingsRepository } from '@main-modules/bookings/repositories/bookings
 import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
 import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
 import { UsersService } from '@main-modules/users/services/users.service';
+import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
+import {
+  AI_WORKER_QUEUE_NAME,
+  DEFAULT_AI_WORKER_JOB_ATTEMPTS,
+  DEFAULT_AI_WORKER_JOB_BACKOFF_MS,
+  RUN_QUALITY_GATE_AUDIT_JOB_NAME,
+} from '@shared/queue/ai-worker.constants';
+import { AiWorkerJobMetadata, createQueuedAiJobMetadata } from '@shared/queue/ai-worker.types';
 
-import { QUALITY_GATE_AUDIT_JOB_NAME, QUALITY_GATES_QUEUE_NAME } from '../quality-gates.constants';
 import { QualityGatesRepository } from '../repositories/quality-gates.repository';
 import { QualityGateFindingProvenance, qualityGateStatusEnum } from '../schemas/quality-gates.schema';
 import { OverrideQualityGateDto } from '../dto/override-quality-gate.dto';
@@ -42,10 +49,11 @@ export class QualityGatesService {
     private readonly backJobsRepository: BackJobsRepository,
     private readonly inspectionsRepository: InspectionsRepository,
     private readonly usersService: UsersService,
+    private readonly eventBus: AutocareEventBusService,
     private readonly qualityGateDiscrepancyEngine: QualityGateDiscrepancyEngineService,
     private readonly qualityGateSemanticAuditor: QualityGateSemanticAuditorService,
-    @InjectQueue(QUALITY_GATES_QUEUE_NAME)
-    private readonly qualityGatesQueue: Queue,
+    @InjectQueue(AI_WORKER_QUEUE_NAME)
+    private readonly aiWorkerQueue: Queue,
   ) {}
 
   async beginQualityGate(jobOrderId: string) {
@@ -54,14 +62,30 @@ export class QualityGatesService {
       throw new ConflictException('Quality gate can only start when the job order is ready for QA');
     }
 
-    const gate = await this.qualityGatesRepository.upsertPending(jobOrderId);
-    await this.qualityGatesQueue.add(
-      QUALITY_GATE_AUDIT_JOB_NAME,
+    const requestedAt = new Date().toISOString();
+    const jobId = `quality-gate:${jobOrderId}`;
+    const queuedAuditJob = createQueuedAiJobMetadata({
+      queueName: AI_WORKER_QUEUE_NAME,
+      jobName: RUN_QUALITY_GATE_AUDIT_JOB_NAME,
+      jobId,
+      requestedAt,
+      attemptsAllowed: DEFAULT_AI_WORKER_JOB_ATTEMPTS,
+    });
+
+    const gate = await this.qualityGatesRepository.upsertPending(jobOrderId, queuedAuditJob);
+    await this.aiWorkerQueue.add(
+      RUN_QUALITY_GATE_AUDIT_JOB_NAME,
       {
         jobOrderId,
+        requestedAt,
       },
       {
-        jobId: `quality-gate:${jobOrderId}`,
+        jobId,
+        attempts: DEFAULT_AI_WORKER_JOB_ATTEMPTS,
+        backoff: {
+          type: 'fixed',
+          delay: DEFAULT_AI_WORKER_JOB_BACKOFF_MS,
+        },
         removeOnComplete: 50,
         removeOnFail: 50,
       },
@@ -70,14 +94,21 @@ export class QualityGatesService {
     return gate;
   }
 
-  async runQualityGateAudit(jobOrderId: string) {
+  async runQualityGateAudit(jobOrderId: string, auditJob?: AiWorkerJobMetadata) {
     const jobOrder = await this.jobOrdersRepository.findById(jobOrderId);
-    const gate = (await this.qualityGatesRepository.findOptionalByJobOrderId(jobOrderId))
-      ?? (await this.qualityGatesRepository.upsertPending(jobOrderId));
+    let gate = await this.qualityGatesRepository.findOptionalByJobOrderId(jobOrderId);
+
+    if (!gate) {
+      const fallbackAuditJob = auditJob ?? this.buildFallbackAuditJob(jobOrderId);
+      gate = await this.qualityGatesRepository.upsertPending(jobOrderId, fallbackAuditJob);
+    }
 
     if (jobOrder.status !== 'ready_for_qa') {
       return gate;
     }
+
+    const currentAuditJob = auditJob ?? gate.auditJob ?? this.buildFallbackAuditJob(jobOrderId);
+    await this.qualityGatesRepository.updateAuditJob(jobOrderId, currentAuditJob);
 
     const incompleteItems = (jobOrder.items as Array<{ isCompleted: boolean }>).filter((item) => !item.isCompleted);
     const findings: QualityGateFinding[] = [];
@@ -106,11 +137,19 @@ export class QualityGatesService {
 
     const riskScore = this.calculateRiskScore(findings);
     const hasBlockingFinding = riskScore >= 60;
+    const completedAuditJob = {
+      ...currentAuditJob,
+      status: 'completed' as const,
+      completedAt: new Date().toISOString(),
+      failedAt: null,
+      lastError: null,
+    };
 
     return this.qualityGatesRepository.completeAudit(jobOrderId, {
       status: hasBlockingFinding ? 'blocked' : 'passed',
       riskScore,
       blockingReason: hasBlockingFinding ? this.buildBlockingReason(findings) : null,
+      auditJob: completedAuditJob,
       findings,
     });
   }
@@ -167,10 +206,37 @@ export class QualityGatesService {
       throw new ConflictException('Only blocked quality gates can be manually overridden');
     }
 
-    return this.qualityGatesRepository.createOverride(jobOrderId, {
+    const overriddenGate = await this.qualityGatesRepository.createOverride(jobOrderId, {
       actorUserId: resolvedActor.id,
       actorRole: 'super_admin',
       reason: payload.reason,
+    });
+
+    const latestOverride = overriddenGate.overrides[0];
+    if (latestOverride) {
+      this.eventBus.publish('quality_gate.overridden', {
+        qualityGateId: overriddenGate.id,
+        jobOrderId,
+        vehicleId: jobOrder.vehicleId,
+        overrideId: latestOverride.id,
+        actorUserId: latestOverride.actorUserId,
+        actorRole: 'super_admin',
+        reason: latestOverride.reason,
+      });
+    }
+
+    return overriddenGate;
+  }
+
+  async handleQualityGateAuditWorkerFailure(
+    jobOrderId: string,
+    auditJob: AiWorkerJobMetadata,
+    errorMessage: string,
+  ) {
+    const failureMessage = `AI audit worker failed before finishing the QA run: ${errorMessage}`;
+    return this.qualityGatesRepository.updateAuditJob(jobOrderId, auditJob, {
+      blockingReason: failureMessage,
+      lastAuditCompletedAt: new Date(),
     });
   }
 
@@ -181,10 +247,6 @@ export class QualityGatesService {
       gate = await this.beginQualityGate(jobOrderId);
     }
 
-    if (gate?.status === 'pending' && jobOrderStatus === 'ready_for_qa') {
-      gate = await this.runQualityGateAudit(jobOrderId);
-    }
-
     return gate;
   }
 
@@ -193,19 +255,45 @@ export class QualityGatesService {
     completedWorkText: string,
   ): Promise<QualityGateFinding> {
     const sourceContext = await this.resolveConcernContext(jobOrder);
-    const semanticFinding = this.qualityGateSemanticAuditor.audit({
-      sourceType: sourceContext.sourceType,
-      concernText: sourceContext.concernText,
-      completedWorkText,
-    });
 
-    return {
-      gate: 'gate_1',
-      severity: semanticFinding.severity,
-      code: semanticFinding.code,
-      message: semanticFinding.message,
-      provenance: semanticFinding.provenance,
-    };
+    try {
+      const semanticFinding = this.qualityGateSemanticAuditor.audit({
+        sourceType: sourceContext.sourceType,
+        concernText: sourceContext.concernText,
+        completedWorkText,
+      });
+
+      return {
+        gate: 'gate_1',
+        severity: semanticFinding.severity,
+        code: semanticFinding.code,
+        message: semanticFinding.message,
+        provenance: semanticFinding.provenance,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown semantic audit failure';
+
+      return {
+        gate: 'gate_1',
+        severity: 'warning',
+        code: 'semantic_audit_unavailable',
+        message: 'Gate 1 semantic audit could not complete, so staff should review the concern-to-work narrative manually.',
+        provenance: {
+          provider: 'ai-worker-fallback',
+          model: 'semantic-audit-unavailable',
+          promptVersion: 'quality-gates.gate1.v1',
+          sourceType: sourceContext.sourceType,
+          recommendation: 'review_needed',
+          confidence: 'low',
+          concernSummary: sourceContext.concernText || 'Concern context unavailable.',
+          completedWorkSummary: completedWorkText || 'Completed work context unavailable.',
+          matchedKeywords: [],
+          coverageRatio: 0,
+          evidenceSummary: message,
+          riskContribution: 20,
+        },
+      };
+    }
   }
 
   private async buildGateTwoFindings(
@@ -348,5 +436,15 @@ export class QualityGatesService {
     }
 
     return user;
+  }
+
+  private buildFallbackAuditJob(jobOrderId: string): AiWorkerJobMetadata {
+    return createQueuedAiJobMetadata({
+      queueName: AI_WORKER_QUEUE_NAME,
+      jobName: RUN_QUALITY_GATE_AUDIT_JOB_NAME,
+      jobId: `quality-gate:${jobOrderId}`,
+      requestedAt: new Date().toISOString(),
+      attemptsAllowed: DEFAULT_AI_WORKER_JOB_ATTEMPTS,
+    });
   }
 }

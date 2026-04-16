@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 
+import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jobs.repository';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { QualityGatesService } from '@main-modules/quality-gates/services/quality-gates.service';
@@ -11,6 +12,9 @@ import { JobOrdersService } from '@main-modules/job-orders/services/job-orders.s
 
 describe('JobOrdersService', () => {
   it('creates a job order from a confirmed booking with adviser and technician validation', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
     const jobOrdersRepository = {
       hasBookingSource: jest.fn().mockResolvedValue(false),
       create: jest.fn().mockResolvedValue({
@@ -77,6 +81,7 @@ describe('JobOrdersService', () => {
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: vehiclesRepository },
         { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
 
@@ -110,6 +115,9 @@ describe('JobOrdersService', () => {
   });
 
   it('rejects job-order creation when the booking source is not confirmed', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
     const moduleRef = await Test.createTestingModule({
       providers: [
         JobOrdersService,
@@ -150,6 +158,7 @@ describe('JobOrdersService', () => {
           },
         },
         { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
 
@@ -175,6 +184,9 @@ describe('JobOrdersService', () => {
   });
 
   it('rejects invalid technician assignments during job-order creation', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
     const jobOrdersRepository = {
       hasBookingSource: jest.fn().mockResolvedValue(false),
       create: jest.fn(),
@@ -239,6 +251,7 @@ describe('JobOrdersService', () => {
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: vehiclesRepository },
         { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
 
@@ -265,6 +278,9 @@ describe('JobOrdersService', () => {
   });
 
   it('restricts technician status changes to assigned operational states only', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
     const moduleRef = await Test.createTestingModule({
       providers: [
         JobOrdersService,
@@ -307,6 +323,7 @@ describe('JobOrdersService', () => {
           },
         },
         { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
 
@@ -327,6 +344,9 @@ describe('JobOrdersService', () => {
   });
 
   it('lets an assigned technician append progress entries and mark completed items', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
     const updateResult = {
       id: 'job-order-1',
       progressEntries: [
@@ -371,6 +391,7 @@ describe('JobOrdersService', () => {
         },
         { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
         { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
 
@@ -401,6 +422,9 @@ describe('JobOrdersService', () => {
   });
 
   it('rejects progress entries from unassigned technicians and photo evidence on closed job orders', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
     const jobOrdersRepository = {
       findById: jest
         .fn()
@@ -441,6 +465,7 @@ describe('JobOrdersService', () => {
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
         { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
 
@@ -476,10 +501,20 @@ describe('JobOrdersService', () => {
   });
 
   it('finalizes a ready-for-QA job order into an invoice-ready record with adviser snapshot data', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
     const finalizedResult = {
       id: 'job-order-1',
+      customerUserId: 'customer-1',
+      vehicleId: 'vehicle-1',
+      sourceType: 'booking',
+      sourceId: 'booking-1',
+      serviceAdviserUserId: 'adviser-1',
+      serviceAdviserCode: 'SA-1001',
       status: 'finalized',
       invoiceRecord: {
+        id: 'invoice-record-1',
         invoiceReference: 'INV-JO-20260413-ABC12345',
         serviceAdviserUserId: 'adviser-1',
         serviceAdviserCode: 'SA-1001',
@@ -523,6 +558,7 @@ describe('JobOrdersService', () => {
             assertReleaseAllowed: jest.fn().mockResolvedValue(undefined),
           },
         },
+        { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
 
@@ -546,10 +582,25 @@ describe('JobOrdersService', () => {
         summary: 'Ready to hand off for invoice generation.',
       }),
     );
+    expect(eventBus.publish).toHaveBeenCalledWith('service.invoice_finalized', {
+      jobOrderId: 'job-order-1',
+      invoiceRecordId: 'invoice-record-1',
+      invoiceReference: 'INV-JO-20260413-ABC12345',
+      customerUserId: 'customer-1',
+      vehicleId: 'vehicle-1',
+      serviceAdviserUserId: 'adviser-1',
+      serviceAdviserCode: 'SA-1001',
+      finalizedByUserId: 'adviser-1',
+      sourceType: 'booking',
+      sourceId: 'booking-1',
+    });
     expect(result).toBe(finalizedResult);
   });
 
   it('rejects invoice generation for incomplete, blocked, or already-invoiced job orders', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
     const jobOrdersRepository = {
       findById: jest
         .fn()
@@ -606,6 +657,7 @@ describe('JobOrdersService', () => {
             assertReleaseAllowed: jest.fn(),
           },
         },
+        { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
 
@@ -645,7 +697,129 @@ describe('JobOrdersService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('restricts finalize ownership to the responsible adviser while still allowing super-admin release', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
+    const qualityGatesService = {
+      beginQualityGate: jest.fn(),
+      assertReleaseAllowed: jest.fn().mockResolvedValue(undefined),
+    };
+    const finalizedResult = {
+      id: 'job-order-1',
+      customerUserId: 'customer-1',
+      vehicleId: 'vehicle-1',
+      sourceType: 'booking',
+      sourceId: 'booking-1',
+      serviceAdviserUserId: 'adviser-owner',
+      serviceAdviserCode: 'SA-OWNER',
+      status: 'finalized',
+      invoiceRecord: {
+        id: 'invoice-record-1',
+        invoiceReference: 'INV-JO-20260413-OWNER123',
+        serviceAdviserUserId: 'adviser-owner',
+        serviceAdviserCode: 'SA-OWNER',
+      },
+    };
+    const jobOrdersRepository = {
+      findById: jest
+        .fn()
+        .mockResolvedValue({
+          id: 'job-order-1',
+          status: 'ready_for_qa',
+          serviceAdviserUserId: 'adviser-owner',
+          serviceAdviserCode: 'SA-OWNER',
+          items: [{ id: 'item-1', isCompleted: true }],
+          assignments: [{ technicianUserId: 'tech-1' }],
+          invoiceRecord: null,
+        }),
+      finalize: jest.fn().mockResolvedValue(finalizedResult),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        JobOrdersService,
+        { provide: JobOrdersRepository, useValue: jobOrdersRepository },
+        { provide: BookingsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn(), linkReworkJobOrder: jest.fn() } },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockImplementation((id: string) => {
+              if (id === 'adviser-other') {
+                return Promise.resolve({
+                  id,
+                  role: 'service_adviser',
+                  isActive: true,
+                });
+              }
+
+              if (id === 'super-admin-1') {
+                return Promise.resolve({
+                  id,
+                  role: 'super_admin',
+                  isActive: true,
+                });
+              }
+
+              return Promise.resolve(null);
+            }),
+          },
+        },
+        { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
+        { provide: QualityGatesService, useValue: qualityGatesService },
+        { provide: AutocareEventBusService, useValue: eventBus },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(JobOrdersService);
+
+    await expect(
+      service.finalize(
+        'job-order-1',
+        {
+          summary: 'Different adviser should not be able to finalize this job order.',
+        },
+        {
+          userId: 'adviser-other',
+          role: 'service_adviser',
+        },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    const result = await service.finalize(
+      'job-order-1',
+      {
+        summary: 'Super admin completed the release after escalation review.',
+      },
+      {
+        userId: 'super-admin-1',
+        role: 'super_admin',
+      },
+    );
+
+    expect(qualityGatesService.assertReleaseAllowed).toHaveBeenCalledWith('job-order-1');
+    expect(jobOrdersRepository.finalize).toHaveBeenCalledWith(
+      'job-order-1',
+      expect.objectContaining({
+        finalizedByUserId: 'super-admin-1',
+        summary: 'Super admin completed the release after escalation review.',
+      }),
+    );
+    expect(eventBus.publish).toHaveBeenCalledWith(
+      'service.invoice_finalized',
+      expect.objectContaining({
+        finalizedByUserId: 'super-admin-1',
+        serviceAdviserUserId: 'adviser-owner',
+      }),
+    );
+    expect(result).toBe(finalizedResult);
+  });
+
   it('creates a rework job order from an approved back-job case and links the lineage', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
     const backJobsRepository = {
       findOptionalById: jest.fn().mockResolvedValue({
         id: 'back-job-1',
@@ -724,6 +898,7 @@ describe('JobOrdersService', () => {
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: vehiclesRepository },
         { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
 

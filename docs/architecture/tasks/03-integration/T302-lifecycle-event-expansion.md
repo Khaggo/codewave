@@ -14,7 +14,7 @@ Expand lifecycle event inputs across operations.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 
@@ -54,6 +54,7 @@ Extend lifecycle normalization so job orders, QA outcomes, and reviewed summary 
 
 - lifecycle can ingest the new operational facts safely
 - replay or rebuild does not duplicate events
+- job-order, QA, and reviewed-summary facts now appear in the normalized vehicle timeline
 
 ## Out of Scope
 

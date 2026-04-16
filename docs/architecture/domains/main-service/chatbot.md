@@ -28,7 +28,6 @@ Provide a rule-based 24/7 inquiry assistant that routes common requests predicta
 
 - `main-service.bookings`
 - `main-service.insurance`
-- `ecommerce.orders`
 
 ## Owned Data / ERD
 
@@ -45,9 +44,14 @@ Key relations:
 ## Primary Business Logic
 
 - map user utterances to rule-based intents
-- answer with deterministic, approved flows
-- escalate to staff when rule coverage is insufficient
-- optionally route to booking, insurance, or order status lookups through allowed APIs
+- answer with deterministic, approved flows only
+- support the current V1 intents:
+  - `booking.how_to_book`
+  - `booking.latest_status`
+  - `insurance.required_documents`
+  - `insurance.latest_status`
+  - `workshop.support_window`
+- escalate unsupported prompts to staff instead of improvising a response
 - avoid autonomous AI decision-making claims
 
 ## Process Flow
@@ -60,8 +64,9 @@ Key relations:
 ## Use Cases
 
 - customer asks how to book a service
-- customer asks for order or invoice status
+- customer asks for their latest booking status
 - customer asks what documents are needed for an insurance inquiry
+- customer asks for their latest insurance inquiry status
 - customer asks a common workshop FAQ outside business hours
 - unsupported question is escalated to staff
 
@@ -75,6 +80,7 @@ Key relations:
 
 - ambiguous intent maps to the wrong workflow
 - chatbot exposes internal states that should remain staff-only
+- customer has no booking or insurance inquiry yet and still needs a safe deterministic answer
 - unsupported issue loops without escalation
 - rule updates break prior keyword matching behavior
 
@@ -88,3 +94,4 @@ Key relations:
 - generative AI decisioning
 - autonomous booking creation without confirmation
 - free-form claims assessment
+- cross-service order or invoice lookups before an approved deterministic contract exists

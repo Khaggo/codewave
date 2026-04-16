@@ -4,9 +4,12 @@ import { Test } from '@nestjs/testing';
 
 import { NOTIFICATIONS_QUEUE_NAME } from '@main-modules/notifications/notifications.constants';
 import { NotificationsRepository } from '@main-modules/notifications/repositories/notifications.repository';
+import { NotificationTriggerPlannerService } from '@main-modules/notifications/services/notification-trigger-planner.service';
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { SmtpMailService } from '@main-modules/notifications/services/smtp-mail.service';
 import { UsersService } from '@main-modules/users/services/users.service';
+import { createNotificationTrigger } from '@shared/events/contracts/notification-triggers';
+import { createCommerceEvent } from '@shared/events/contracts/commerce-events';
 
 describe('NotificationsService', () => {
   it('enqueues insurance updates and tracks queued notifications', async () => {
@@ -54,6 +57,7 @@ describe('NotificationsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         NotificationsService,
+        NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
         { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
@@ -105,6 +109,7 @@ describe('NotificationsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         NotificationsService,
+        NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: { findById: jest.fn() } },
         { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
@@ -154,6 +159,7 @@ describe('NotificationsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         NotificationsService,
+        NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: { getOrCreatePreferences: jest.fn() } },
         { provide: UsersService, useValue: usersService },
         { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
@@ -219,6 +225,7 @@ describe('NotificationsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         NotificationsService,
+        NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
         { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
@@ -281,6 +288,7 @@ describe('NotificationsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         NotificationsService,
+        NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
         { provide: SmtpMailService, useValue: smtpMailService },
@@ -307,5 +315,129 @@ describe('NotificationsService', () => {
       expect.objectContaining({ status: 'sent' }),
     );
     expect(result.status).toBe('sent');
+  });
+
+  it('maps back-job status triggers to queued operational notifications with stable dedupe keys', async () => {
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+        isActive: true,
+      }),
+    };
+
+    const notificationsRepository = {
+      findNotificationByDedupeKey: jest.fn().mockResolvedValue(null),
+      getOrCreatePreferences: jest.fn().mockResolvedValue({
+        id: 'pref-1',
+        userId: 'user-1',
+        emailEnabled: true,
+        bookingRemindersEnabled: true,
+        insuranceUpdatesEnabled: true,
+        invoiceRemindersEnabled: true,
+        serviceFollowUpEnabled: true,
+      }),
+      createNotification: jest.fn().mockResolvedValue({
+        id: 'notification-back-job-1',
+        userId: 'user-1',
+        category: 'back_job_update',
+        channel: 'email',
+        sourceType: 'back_job',
+        sourceId: 'back-job-1',
+        title: 'Back-job status update',
+        message: 'Your return or rework case is now resolved.',
+        status: 'queued',
+        dedupeKey: 'notification:back_job.status_changed:back-job-1:resolved',
+        scheduledFor: null,
+        deliveredAt: null,
+        attempts: [],
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        NotificationsService,
+        NotificationTriggerPlannerService,
+        { provide: NotificationsRepository, useValue: notificationsRepository },
+        { provide: UsersService, useValue: usersService },
+        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(NotificationsService);
+
+    const result = await service.applyTrigger(
+      createNotificationTrigger('back_job.status_changed', 'main-service.back-jobs', {
+        backJobId: 'back-job-1',
+        customerUserId: 'user-1',
+        status: 'resolved',
+      }),
+    );
+
+    expect(notificationsRepository.findNotificationByDedupeKey).toHaveBeenCalledWith(
+      'notification:back_job.status_changed:back-job-1:resolved',
+    );
+    expect(notificationsRepository.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'back_job_update',
+        sourceType: 'back_job',
+        sourceId: 'back-job-1',
+      }),
+    );
+    expect(result.triggerName).toBe('back_job.status_changed');
+  });
+
+  it('cancels invoice-aging reminders when payment facts settle the invoice', async () => {
+    const notificationsRepository = {
+      cancelReminderRulesBySource: jest.fn().mockResolvedValue([{ id: 'rule-1', status: 'cancelled' }]),
+      cancelNotificationsBySource: jest.fn().mockResolvedValue([{ id: 'notification-1', status: 'cancelled' }]),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        NotificationsService,
+        NotificationTriggerPlannerService,
+        { provide: NotificationsRepository, useValue: notificationsRepository },
+        { provide: UsersService, useValue: { findById: jest.fn() } },
+        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME),
+          useValue: { add: jest.fn() },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(NotificationsService);
+
+    const result = await service.applyTrigger(
+      createCommerceEvent('invoice.payment_recorded', {
+        invoiceId: 'invoice-1',
+        orderId: 'order-1',
+        customerUserId: 'user-1',
+        invoiceNumber: 'INV-2026-0001',
+        paymentEntryId: 'payment-entry-1',
+        amountCents: 99800,
+        paymentMethod: 'cash',
+        receivedAt: '2026-05-14T06:00:00.000Z',
+        invoiceStatus: 'paid',
+        amountPaidCents: 99800,
+        amountDueCents: 0,
+        currencyCode: 'PHP',
+      }),
+    );
+
+    expect(notificationsRepository.cancelReminderRulesBySource).toHaveBeenCalledWith({
+      sourceType: 'invoice_payment',
+      sourceId: 'invoice-1',
+      reminderType: 'invoice_aging',
+    });
+    expect(notificationsRepository.cancelNotificationsBySource).toHaveBeenCalledWith({
+      sourceType: 'invoice_payment',
+      sourceId: 'invoice-1',
+      category: 'invoice_aging',
+    });
+    expect(result.triggerName).toBe('invoice.payment_recorded');
   });
 });

@@ -74,6 +74,18 @@ export class InsuranceRepository extends BaseRepository {
     return this.assertFound(inquiry, 'Insurance inquiry not found');
   }
 
+  async findByUserId(userId: string) {
+    return this.db.query.insuranceInquiries.findMany({
+      where: eq(insuranceInquiries.userId, userId),
+      with: {
+        documents: {
+          orderBy: desc(insuranceDocuments.createdAt),
+        },
+      },
+      orderBy: desc(insuranceInquiries.createdAt),
+    });
+  }
+
   async updateStatus(id: string, payload: UpdateInsuranceInquiryStatusPersistenceInput) {
     const [updatedInquiry] = await this.db
       .update(insuranceInquiries)
@@ -146,6 +158,17 @@ export class InsuranceRepository extends BaseRepository {
     return this.db.query.insuranceRecords.findMany({
       where: eq(insuranceRecords.vehicleId, vehicleId),
       orderBy: desc(insuranceRecords.updatedAt),
+    });
+  }
+
+  async listForAnalytics() {
+    return this.db.query.insuranceInquiries.findMany({
+      with: {
+        documents: {
+          orderBy: desc(insuranceDocuments.createdAt),
+        },
+      },
+      orderBy: [desc(insuranceInquiries.createdAt), desc(insuranceInquiries.id)],
     });
   }
 }
