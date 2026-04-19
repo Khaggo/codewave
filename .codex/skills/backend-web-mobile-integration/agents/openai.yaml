@@ -1,0 +1,5 @@
+interface:
+  display_name: "Backend Web Mobile Integration"
+  short_description: "Integrate backend with web and mobile flows"
+  default_prompt: "Use $backend-web-mobile-integration to wire backend changes into the web and mobile apps."
+

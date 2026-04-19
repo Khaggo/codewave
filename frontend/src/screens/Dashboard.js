@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { useVehicles }     from '@/hooks/useVehicles'
 import { useAppointments } from '@/hooks/useAppointments'
+import StaffProvisioningPanel from '@/components/StaffProvisioningPanel'
 import { useUser }         from '@/lib/userContext'
 import { shopProducts, monthlyRevenue, bookingVolume, peakHourData } from '@/lib/mockData'
 
@@ -127,6 +128,8 @@ export default function Dashboard() {
       </section>
 
       {/* ── Charts row 1: Revenue + Booking Volume ───── */}
+      {user?.role === 'super_admin' ? <StaffProvisioningPanel /> : null}
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
         {/* Revenue Trend */}

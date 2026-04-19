@@ -1,13 +1,24 @@
 'use client'
 
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useMemo } from 'react'
 
-const UserContext = createContext(null)
+const emptyUserContext = {
+  user: null,
+  updateUser: () => {},
+}
 
-export function UserProvider({ user, children }) {
-  return <UserContext.Provider value={user}>{children}</UserContext.Provider>
+const UserContext = createContext(emptyUserContext)
+
+export function UserProvider({ user, updateUser = emptyUserContext.updateUser, children }) {
+  const value = useMemo(() => ({ user, updateUser }), [user, updateUser])
+
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>
 }
 
 export function useUser() {
-  return useContext(UserContext)
+  return useContext(UserContext)?.user ?? null
+}
+
+export function useUserContext() {
+  return useContext(UserContext) ?? emptyUserContext
 }

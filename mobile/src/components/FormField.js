@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius } from '../theme';
 
 const FormField = forwardRef(function FormField({
@@ -25,13 +25,16 @@ const FormField = forwardRef(function FormField({
   icon,
   containerStyle,
   autoComplete = 'off',
-  importantForAutofill = 'no',
+  importantForAutofill = Platform.OS === 'android' ? 'noExcludeDescendants' : 'no',
   returnKeyType,
   blurOnSubmit,
   onSubmitEditing,
 }, ref) {
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View
+      style={[styles.container, containerStyle]}
+      importantForAutofill={importantForAutofill}
+    >
       <Text style={styles.label}>{label}</Text>
 
       <View
@@ -41,6 +44,7 @@ const FormField = forwardRef(function FormField({
           !editable && styles.inputReadonly,
           error && styles.inputError,
         ]}
+        importantForAutofill={importantForAutofill}
       >
         {icon ? (
           <MaterialCommunityIcons
@@ -72,10 +76,11 @@ const FormField = forwardRef(function FormField({
           maxLength={maxLength}
           multiline={multiline}
           numberOfLines={numberOfLines}
-          textContentType={textContentType}
+          textContentType={Platform.OS === 'ios' ? textContentType : 'none'}
           autoCorrect={false}
           autoComplete={autoComplete}
           importantForAutofill={importantForAutofill}
+          disableFullscreenUI
           returnKeyType={returnKeyType}
           blurOnSubmit={blurOnSubmit}
           onSubmitEditing={onSubmitEditing}

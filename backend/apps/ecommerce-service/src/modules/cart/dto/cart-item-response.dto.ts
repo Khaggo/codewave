@@ -12,6 +12,11 @@ export class CartItemResponseDto {
   productId!: string;
 
   @ApiPropertyOptional({
+    example: '11111111-1111-4111-8111-111111111111',
+  })
+  productCategoryId!: string | null;
+
+  @ApiPropertyOptional({
     example: 'Premium Engine Oil 5W-30',
   })
   productName!: string | null;

@@ -19,6 +19,11 @@ export class RewardResponseDto {
   })
   description?: string | null;
 
+  @ApiPropertyOptional({
+    example: 'Issue one promo sticker manually at cashier after redemption.',
+  })
+  fulfillmentNote?: string | null;
+
   @ApiProperty({
     enum: rewardTypeEnum.enumValues,
     example: 'service_voucher',

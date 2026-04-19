@@ -24,14 +24,18 @@
 | `POST /api/admin/loyalty/rewards` | `live` | Swagger/controller |
 | `PATCH /api/admin/loyalty/rewards/:id` | `live` | Swagger/controller |
 | `PATCH /api/admin/loyalty/rewards/:id/status` | `live` | Swagger/controller |
+| `GET /api/admin/loyalty/earning-rules` | `live` | Swagger/controller |
+| `POST /api/admin/loyalty/earning-rules` | `live` | Swagger/controller |
+| `PATCH /api/admin/loyalty/earning-rules/:id` | `live` | Swagger/controller |
+| `PATCH /api/admin/loyalty/earning-rules/:id/status` | `live` | Swagger/controller |
 
 ## Internal Contract Status
 
 | Contract | Status | Source |
 | --- | --- | --- |
 | `applyLoyaltyAccrual` | `live` | main-service loyalty service |
-| `service.invoice_finalized` accrual ingestion | `live` | shared planner + loyalty service |
-| `invoice.payment_recorded` accrual ingestion | `live` | shared planner + loyalty service |
+| `service.payment_recorded` accrual ingestion | `live` | shared planner + loyalty service |
+| admin-configurable earning rule evaluation | `live` | loyalty service + repository |
 
 ## Frontend Contract Files
 
@@ -43,9 +47,10 @@
 ## Frontend States To Cover
 
 - empty loyalty account with zero balance
-- account with earned service and purchase points
+- account with earned service-payment points
 - active reward catalog for customer-facing views
 - inactive reward catalog entries with audit trail for super-admin views
+- active and inactive earning-rule entries with audit trail for super-admin views
 - redemption success with resulting balance update
 - insufficient-points conflict
 - foreign-customer forbidden state
@@ -53,9 +58,8 @@
 ## Notes
 
 - `T112` turns loyalty from a pure event-planning slice into a live ledger and reward catalog domain.
-- Accrual remains event-driven and idempotent: duplicate service or payment facts do not create a second award.
-- Current v1 point policy is explicit in implementation:
-  - finalized service invoice: flat `100` points
-  - recorded purchase payment: `1` point per `PHP 50` paid, rounded down with a minimum of `1`
-- Reward catalog history is audit-backed; admins can update or deactivate rewards without mutating historical loyalty transactions.
+- Accrual remains event-driven and idempotent: duplicate paid-service facts do not create a second award.
+- Loyalty no longer consumes ecommerce `invoice.payment_recorded` for point earning.
+- Current live implementation evaluates active admin-configured earning rules against `service.payment_recorded`.
+- Reward and earning-rule history is audit-backed; admins can update or deactivate policy entries without mutating historical loyalty transactions.
 - Reward redemption is ledger-backed and creates a debit transaction plus a durable redemption record.

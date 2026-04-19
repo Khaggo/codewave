@@ -36,6 +36,18 @@ export const jobOrderProgressEntryTypeEnum = pgEnum('job_order_progress_entry_ty
   'issue_found',
 ]);
 
+export const jobOrderInvoicePaymentStatusEnum = pgEnum('job_order_invoice_payment_status', [
+  'pending_payment',
+  'paid',
+]);
+
+export const jobOrderInvoicePaymentMethodEnum = pgEnum('job_order_invoice_payment_method', [
+  'cash',
+  'bank_transfer',
+  'check',
+  'other',
+]);
+
 export const jobOrders = pgTable('job_orders', {
   id: uuid('id').defaultRandom().primaryKey(),
   sourceType: jobOrderSourceTypeEnum('source_type').notNull(),
@@ -152,6 +164,12 @@ export const jobOrderInvoiceRecords = pgTable(
     finalizedByUserId: uuid('finalized_by_user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
+    paymentStatus: jobOrderInvoicePaymentStatusEnum('payment_status').notNull().default('pending_payment'),
+    amountPaidCents: integer('amount_paid_cents'),
+    paymentMethod: jobOrderInvoicePaymentMethodEnum('payment_method'),
+    paymentReference: varchar('payment_reference', { length: 120 }),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    recordedByUserId: uuid('recorded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     summary: text('summary'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -252,6 +270,10 @@ export const jobOrderInvoiceRecordsRelations = relations(jobOrderInvoiceRecords,
   }),
   finalizedBy: one(users, {
     fields: [jobOrderInvoiceRecords.finalizedByUserId],
+    references: [users.id],
+  }),
+  recordedBy: one(users, {
+    fields: [jobOrderInvoiceRecords.recordedByUserId],
     references: [users.id],
   }),
 }));

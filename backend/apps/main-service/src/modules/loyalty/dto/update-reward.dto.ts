@@ -20,6 +20,13 @@ export class UpdateRewardDto {
   description?: string;
 
   @ApiPropertyOptional({
+    example: 'Issue one promo sticker manually at cashier after redemption.',
+  })
+  @IsOptional()
+  @IsString()
+  fulfillmentNote?: string;
+
+  @ApiPropertyOptional({
     enum: rewardTypeEnum.enumValues,
     example: 'discount_coupon',
   })

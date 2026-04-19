@@ -21,17 +21,21 @@ Use the docs in this directory to build and improve the backend quickly while pr
 11. [`golden-domain-template.md`](./golden-domain-template.md) when creating or normalizing a new domain
 12. the matching role file in [`agents/`](./agents/) when agent behavior or write permissions are relevant
 13. [`tasks/README.md`](./tasks/README.md) when executing a concrete implementation task
+14. [`_backlog/agent-improvement-queue.md`](./_backlog/agent-improvement-queue.md) when reviewing routing drift, repeated confusion, or self-improvement signals
 
 ## Quick Routing
 
 - Use [`api-strategy.md`](./api-strategy.md) for REST vs RabbitMQ vs BullMQ decisions, Swagger expectations, and current integration exclusions such as firmware and third-party APIs.
 - Use [`dto-policy.md`](./dto-policy.md) for request DTOs, response DTOs, validation placement, and Swagger transport contracts.
 - Use [`frontend-backend-sync.md`](./frontend-backend-sync.md) for shared slice workflow, contract-pack rules, and live-vs-planned route labeling.
+- Start with the orchestrator for freeform prompts. Only address a worker directly when you explicitly want that role.
 - Use [`rbac-policy.md`](./rbac-policy.md) for the canonical role set, staff provisioning, and service-adviser identifier rules.
 - Use [`auth-security-policy.md`](./auth-security-policy.md) for Google+email signup activation, pending-account rules, OTP ownership, and legacy auth migration boundaries.
 - Use [`ai-governance.md`](./ai-governance.md) for approved AI scope, provider adapter rules, and human-review requirements.
 - For new domain scaffolding or normalization, load [`golden-domain-template.md`](./golden-domain-template.md), [`domains/main-service/users.md`](./domains/main-service/users.md), and [`domains/main-service/auth.md`](./domains/main-service/auth.md) first.
 - Use [`tasks/README.md`](./tasks/README.md) when you want the current execution queue or a ready-made implementation task.
+- Use [`_backlog/agent-improvement-queue.md`](./_backlog/agent-improvement-queue.md) when you want the active evidence log for stagnation, routing gaps, or repeated ambiguity.
+- Use [`tasks/04-quality-and-ops/T409-orchestrator-routing-and-improvement-intake.md`](./tasks/04-quality-and-ops/T409-orchestrator-routing-and-improvement-intake.md) for the current recovery task that makes orchestrator-first routing and improvement intake explicit.
 
 - Use [`domains/main-service/auth.md`](./domains/main-service/auth.md) for login, sessions, JWT, refresh flow, and guard behavior.
 - Use [`domains/main-service/users.md`](./domains/main-service/users.md) for identity, profile, addresses, and account-state questions.
@@ -69,10 +73,12 @@ Use the docs in this directory to build and improve the backend quickly while pr
 - [`agent-manifest.json`](./agent-manifest.json): machine-readable manifest and validation metadata
 - [`agents/`](./agents/): role-specific do's, don'ts, and handoff rules
 - [`tasks/`](./tasks/): non-canonical implementation tasks derived from the SSoT
+- [`_backlog/agent-improvement-queue.md`](./_backlog/agent-improvement-queue.md): non-canonical evidence queue for self-improvement observations and proposals
 
 ## Operating Rules
 
 - Domain docs are the first stop for business truth.
+- Freeform prompts should route through the orchestrator first unless a role is explicitly named.
 - Shared rules belong in control-plane docs, not inside individual domains.
 - Transport choices belong in [`api-strategy.md`](./api-strategy.md), while domain docs own only their local endpoints, events, and jobs.
 - REST payload contracts, validation placement, and Swagger DTO discipline belong in [`dto-policy.md`](./dto-policy.md).
@@ -88,6 +94,7 @@ Use the docs in this directory to build and improve the backend quickly while pr
 - The chatbot stays deterministic and FAQ-oriented even though AI becomes canonical Phase 2 elsewhere.
 - Firmware and device protocols remain out of scope, and third-party APIs stay excluded except for approved AI provider adapters plus approved identity providers and Nodemailer-backed SMTP delivery needed for canonical account activation.
 - SMS delivery is not part of the current canonical scope because of cost. Keep operational reminders and auth OTP on the approved email-only path.
+- Repeated clarification, validator failures, doc/code drift, stale control docs, unresolved `ready` queues, conflicting docs, and repeated frontend/backend mismatch should become improvement evidence instead of being silently ignored.
 
 ## Legacy Material
 

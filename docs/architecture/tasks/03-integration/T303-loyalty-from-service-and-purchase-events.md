@@ -1,4 +1,4 @@
-# Loyalty From Service And Purchase Events
+# Loyalty From Paid Service Events
 
 ## Task ID
 
@@ -6,7 +6,7 @@
 
 ## Title
 
-Feed loyalty from service and purchase events.
+Feed loyalty from paid service events.
 
 ## Type
 
@@ -36,24 +36,27 @@ Feed loyalty from service and purchase events.
 
 ## Goal
 
-Define the cross-service event and accrual contract so loyalty can consume finalized service invoice facts and ecommerce purchase or payment history.
+Define the service-side event and accrual contract so loyalty can consume paid service facts without depending on ecommerce payment history.
 
 ## Deliverables
 
-- loyalty event contract
+- paid-service loyalty event contract
 - accrual trigger mapping
+- admin-configurable earning-rule alignment
 - reversal and idempotency rules
 
 ## Implementation Notes
 
 - use stable event facts, not direct cross-service DB assumptions
-- include service-side invoice finalization as a first-class loyalty producer
+- include `service.payment_recorded` as the first-class loyalty producer
+- exclude ecommerce `invoice.payment_recorded` from loyalty accrual
 - events should be versionable
 
 ## Acceptance Checks
 
 - loyalty has a clear producer and consumer contract
 - duplicate event delivery does not double-award points
+- finalized-but-unpaid service work cannot trigger loyalty accrual
 - booking creation or booking confirmation cannot trigger loyalty accrual
 
 ## Out of Scope

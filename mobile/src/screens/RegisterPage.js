@@ -6,25 +6,19 @@ import FormField from '../components/FormField';
 import PasswordChecklist from '../components/PasswordChecklist';
 import PasswordField from '../components/PasswordField';
 import { colors, radius } from '../theme';
+import { ApiError, toDateOnlyString } from '../lib/authClient';
 import {
   buildUsername,
-  calculateAge,
   cloneDate,
+  formatVehicleDisplayName,
   normalizeEmail,
   normalizePhoneNumber,
+  normalizeVehicleYear,
   validateRegisterForm,
 } from '../utils/validation';
-import { useRef, useState } from 'react';
-import { ApiError } from '../lib/authClient';
+import { useState } from 'react';
 
 export default function RegisterPage({ navigation, onRegister }) {
-  const lastNameInputRef = useRef(null);
-  const emailInputRef = useRef(null);
-  const phoneInputRef = useRef(null);
-  const licensePlateInputRef = useRef(null);
-  const vehicleModelInputRef = useRef(null);
-  const passwordInputRef = useRef(null);
-  const confirmPasswordInputRef = useRef(null);
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -32,16 +26,16 @@ export default function RegisterPage({ navigation, onRegister }) {
     phoneNumber: '',
     birthday: null,
     licensePlate: '',
+    vehicleMake: '',
     vehicleModel: '',
+    vehicleYear: '',
     password: '',
     confirmPassword: '',
   });
-  const [focusedField, setFocusedField] = useState('');
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const selectedAge = calculateAge(form.birthday);
-  const shouldShowPasswordChecklist = focusedField === 'password' || form.password.length > 0;
+  const shouldShowPasswordChecklist = form.password.length > 0;
 
   const handleFieldChange = (key, value) => {
     let nextValue = value;
@@ -50,8 +44,12 @@ export default function RegisterPage({ navigation, onRegister }) {
       nextValue = normalizePhoneNumber(value);
     }
 
+    if (key === 'vehicleYear') {
+      nextValue = normalizeVehicleYear(value);
+    }
+
     if (key === 'licensePlate') {
-      nextValue = value.toUpperCase();
+      nextValue = String(value ?? '').toUpperCase();
     }
 
     setForm((currentForm) => ({
@@ -79,11 +77,18 @@ export default function RegisterPage({ navigation, onRegister }) {
       lastName: form.lastName.trim(),
       email: normalizeEmail(form.email),
       phoneNumber: normalizePhoneNumber(form.phoneNumber),
-      birthday: cloneDate(form.birthday),
       address: '',
       username: buildUsername(form.email, form.firstName, form.lastName),
+      birthday: cloneDate(form.birthday),
       licensePlate: form.licensePlate.trim().toUpperCase(),
+      vehicleMake: form.vehicleMake.trim(),
       vehicleModel: form.vehicleModel.trim(),
+      vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
+      vehicleDisplayName: formatVehicleDisplayName({
+        vehicleMake: form.vehicleMake,
+        vehicleModel: form.vehicleModel,
+        vehicleYear: form.vehicleYear,
+      }),
       password: form.password,
     };
 
@@ -94,13 +99,16 @@ export default function RegisterPage({ navigation, onRegister }) {
       try {
         const enrollment = await onRegister(trimmedAccount);
 
-        navigation.navigate('OTP', {
+        navigation.replace('OTP', {
           email: trimmedAccount.email,
           maskedEmail: enrollment.maskedEmail,
           enrollmentId: enrollment.enrollmentId,
           otpExpiresAt: enrollment.otpExpiresAt,
           otpPurpose: 'register',
-          accountDraft: trimmedAccount,
+          accountDraft: {
+            ...trimmedAccount,
+            birthday: toDateOnlyString(trimmedAccount.birthday),
+          },
         });
       } catch (error) {
         const message =
@@ -130,7 +138,7 @@ export default function RegisterPage({ navigation, onRegister }) {
       title="Create Account"
       subtitle="Create your account, then confirm the email verification code before the first session starts."
       backLabel="Back to Login"
-      onBack={() => navigation.navigate('Login')}
+      onBack={() => navigation.replace('Login')}
       contentContainerStyle={styles.content}
       cardStyle={styles.card}
     >
@@ -142,162 +150,139 @@ export default function RegisterPage({ navigation, onRegister }) {
           placeholder="Juan"
           autoCapitalize="words"
           error={errors.firstName}
-          isFocused={focusedField === 'firstName'}
-          onFocus={() => setFocusedField('firstName')}
-          onBlur={() => setFocusedField('')}
           textContentType="givenName"
           autoComplete="off"
           importantForAutofill="no"
           icon="account-outline"
           containerStyle={styles.nameField}
-          returnKeyType="next"
-          blurOnSubmit={false}
-          onSubmitEditing={() => lastNameInputRef.current?.focus()}
         />
 
         <FormField
           label="Last Name"
-          ref={lastNameInputRef}
           value={form.lastName}
           onChangeText={(value) => handleFieldChange('lastName', value)}
           placeholder="Dela Cruz"
           autoCapitalize="words"
           error={errors.lastName}
-          isFocused={focusedField === 'lastName'}
-          onFocus={() => setFocusedField('lastName')}
-          onBlur={() => setFocusedField('')}
           textContentType="familyName"
           autoComplete="off"
           importantForAutofill="no"
           icon="account-outline"
           containerStyle={styles.nameField}
-          returnKeyType="next"
-          blurOnSubmit={false}
-          onSubmitEditing={() => emailInputRef.current?.focus()}
         />
       </View>
 
       <FormField
         label="Email Address"
-        ref={emailInputRef}
         value={form.email}
         onChangeText={(value) => handleFieldChange('email', value)}
         placeholder="you@email.com"
         keyboardType="email-address"
         autoCapitalize="none"
         error={errors.email}
-        isFocused={focusedField === 'email'}
-        onFocus={() => setFocusedField('email')}
-        onBlur={() => setFocusedField('')}
         textContentType="emailAddress"
         autoComplete="off"
         importantForAutofill="no"
         icon="email-outline"
-        returnKeyType="next"
-        blurOnSubmit={false}
-        onSubmitEditing={() => phoneInputRef.current?.focus()}
       />
 
       <FormField
         label="Phone Number"
-        ref={phoneInputRef}
         value={form.phoneNumber}
         onChangeText={(value) => handleFieldChange('phoneNumber', value)}
         placeholder="+63 912-345-6789"
         keyboardType="number-pad"
         autoCapitalize="none"
         error={errors.phoneNumber}
-        helperText="Use an 11-digit PH mobile number."
-        isFocused={focusedField === 'phoneNumber'}
-        onFocus={() => setFocusedField('phoneNumber')}
-        onBlur={() => setFocusedField('')}
+        helperText="Required. Use an 11-digit PH mobile number starting with 09."
         maxLength={11}
         textContentType="telephoneNumber"
         autoComplete="off"
         importantForAutofill="no"
         icon="phone-outline"
-        returnKeyType="next"
-        blurOnSubmit={false}
-        onSubmitEditing={() => licensePlateInputRef.current?.focus()}
       />
 
       <DatePickerField
         label="Birthday"
         value={form.birthday}
-        onChange={(value) => {
-          setForm((currentForm) => ({
-            ...currentForm,
-            birthday: value,
-          }));
-          setErrors((currentErrors) => ({
-            ...currentErrors,
-            birthday: '',
-          }));
-        }}
+        onChange={(value) => handleFieldChange('birthday', value)}
         placeholder="Select your birthday"
         error={errors.birthday}
-        helperText={
-          selectedAge !== null
-            ? `Age: ${selectedAge} years old.`
-            : 'Use the quick Year -> Month -> Day picker.'
-        }
+        helperText="Choose your actual birthday. It cannot be changed from the customer app later."
       />
 
       <FormField
-        label="License Plate"
-        ref={licensePlateInputRef}
+        label="Vehicle Plate"
         value={form.licensePlate}
         onChangeText={(value) => handleFieldChange('licensePlate', value)}
         placeholder="ABC 1234"
         autoCapitalize="characters"
         error={errors.licensePlate}
-        isFocused={focusedField === 'licensePlate'}
-        onFocus={() => setFocusedField('licensePlate')}
-        onBlur={() => setFocusedField('')}
+        textContentType="none"
         autoComplete="off"
         importantForAutofill="no"
         icon="card-text-outline"
-        returnKeyType="next"
-        blurOnSubmit={false}
-        onSubmitEditing={() => vehicleModelInputRef.current?.focus()}
       />
 
+      <View style={styles.nameRow}>
+        <FormField
+          label="Vehicle Make"
+          value={form.vehicleMake}
+          onChangeText={(value) => handleFieldChange('vehicleMake', value)}
+          placeholder="Toyota"
+          autoCapitalize="words"
+          error={errors.vehicleMake}
+          textContentType="none"
+          autoComplete="off"
+          importantForAutofill="no"
+          icon="car-info"
+          containerStyle={styles.nameField}
+        />
+
+        <FormField
+          label="Vehicle Year"
+          value={form.vehicleYear}
+          onChangeText={(value) => handleFieldChange('vehicleYear', value)}
+          placeholder="2022"
+          keyboardType="number-pad"
+          autoCapitalize="none"
+          error={errors.vehicleYear}
+          maxLength={4}
+          textContentType="none"
+          autoComplete="off"
+          importantForAutofill="no"
+          icon="calendar-range"
+          containerStyle={styles.nameField}
+        />
+      </View>
+
       <FormField
-        label="Vehicle Make/Model"
-        ref={vehicleModelInputRef}
+        label="Vehicle Model"
         value={form.vehicleModel}
         onChangeText={(value) => handleFieldChange('vehicleModel', value)}
-        placeholder="Toyota Vios"
+        placeholder="Vios"
         autoCapitalize="words"
         error={errors.vehicleModel}
-        isFocused={focusedField === 'vehicleModel'}
-        onFocus={() => setFocusedField('vehicleModel')}
-        onBlur={() => setFocusedField('')}
+        textContentType="none"
         autoComplete="off"
         importantForAutofill="no"
-        icon="car-outline"
-        returnKeyType="next"
-        blurOnSubmit={false}
-        onSubmitEditing={() => passwordInputRef.current?.focus()}
+        icon="car-side"
       />
+
+      <Text style={styles.infoText}>
+        Your account will be verified first, then the app will save your birthday and first vehicle automatically.
+      </Text>
 
       <PasswordField
         label="Password"
-        ref={passwordInputRef}
         value={form.password}
         onChangeText={(value) => handleFieldChange('password', value)}
         placeholder="Create a strong password"
         error={errors.password}
         hideErrorText
-        isFocused={focusedField === 'password'}
-        onFocus={() => setFocusedField('password')}
-        onBlur={() => setFocusedField('')}
         textContentType="newPassword"
         autoComplete="off"
         importantForAutofill="no"
-        returnKeyType="next"
-        blurOnSubmit={false}
-        onSubmitEditing={() => confirmPasswordInputRef.current?.focus()}
       />
 
       <PasswordChecklist password={form.password} visible={shouldShowPasswordChecklist} />
@@ -308,14 +293,9 @@ export default function RegisterPage({ navigation, onRegister }) {
         onChangeText={(value) => handleFieldChange('confirmPassword', value)}
         placeholder="Confirm your password"
         error={errors.confirmPassword}
-        isFocused={focusedField === 'confirmPassword'}
-        onFocus={() => setFocusedField('confirmPassword')}
-        onBlur={() => setFocusedField('')}
         textContentType="password"
         autoComplete="off"
         importantForAutofill="no"
-        returnKeyType="done"
-        onSubmitEditing={handleRegister}
       />
 
       <Text style={styles.footerText}>
@@ -352,7 +332,7 @@ export default function RegisterPage({ navigation, onRegister }) {
 
       <View style={styles.signInRow}>
         <Text style={styles.signInText}>Already have an account? </Text>
-        <Text style={styles.signInLink} onPress={() => navigation.navigate('Login')}>
+        <Text style={styles.signInLink} onPress={() => navigation.replace('Login')}>
           Sign In
         </Text>
       </View>
@@ -383,6 +363,14 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 22,
     paddingHorizontal: 8,
+  },
+  infoText: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: -2,
+    marginBottom: 10,
+    textAlign: 'center',
   },
   footerLink: {
     color: colors.primary,

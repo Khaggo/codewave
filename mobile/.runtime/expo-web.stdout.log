@@ -1,0 +1,20 @@
+env: load .env.local
+env: export EXPO_PUBLIC_API_BASE_URL
+Starting project at D:\mainprojects\codewave\mobile
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8090
+Logs for your project will appear below.
+Web .\index.js ░░░░░░░░░░░░░░░░  4.6% ( 9/42)
+Web .\index.js ▓▓▓▓▓▓░░░░░░░░░░ 42.1% (124/195)
+Web .\index.js ▓▓▓▓▓▓▓▓▓░░░░░░░ 59.2% (281/407)
+Web .\index.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 68.2% (522/684)
+Web .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.7% (792/793)
+Web Bundled 18635ms index.js (795 modules)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 120ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 97ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console

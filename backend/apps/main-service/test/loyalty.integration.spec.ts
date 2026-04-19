@@ -7,7 +7,7 @@ import { LoyaltyService } from '../src/modules/loyalty/services/loyalty.service'
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
 describe('LoyaltyController integration', () => {
-  it('manages reward catalog, applies accruals, and redeems rewards through the live API surface', async () => {
+  it('manages reward catalog and earning rules, then accrues loyalty from settled service and ecommerce invoices only', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
@@ -47,8 +47,9 @@ describe('LoyaltyController integration', () => {
         .send({
           name: 'Free wheel alignment',
           description: 'Redeem for one complimentary wheel alignment service.',
+          fulfillmentNote: 'Issue one windshield sticker at cashier on redemption.',
           rewardType: 'service_voucher',
-          pointsCost: 100,
+          pointsCost: 30,
           status: 'active',
           reason: 'Initial catalog launch.',
         });
@@ -67,10 +68,43 @@ describe('LoyaltyController integration', () => {
       );
 
       const rewardId = createRewardResponse.body.id as string;
+
+      const createRuleResponse = await request(app.getHttpServer())
+        .post('/api/admin/loyalty/earning-rules')
+        .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
+        .send({
+          name: 'Collision repair points',
+          description: 'Award points only after paid collision repair jobs.',
+          accrualSource: 'both',
+          formulaType: 'amount_ratio',
+          amountStepCents: 5000,
+          pointsPerStep: 1,
+          minimumAmountCents: 100000,
+          eligibleServiceTypes: ['collision_repair'],
+          eligibleServiceCategories: ['repair'],
+          eligibleProductIds: ['product-1'],
+          promoLabel: 'Collision Week Bonus',
+          manualBenefitNote: 'Issue one loyalty sticker manually after payment.',
+          status: 'active',
+          reason: 'Launch paid-service-only loyalty.',
+        });
+      expect(createRuleResponse.status).toBe(201);
+      expect(createRuleResponse.body).toEqual(
+        expect.objectContaining({
+          name: 'Collision repair points',
+          status: 'active',
+          audits: [
+            expect.objectContaining({
+              action: 'created',
+            }),
+          ],
+        }),
+      );
+
       const loyaltyService = app.get(LoyaltyService);
 
       const serviceAccrual = await loyaltyService.applyLoyaltyAccrual(
-        createServiceEvent('service.invoice_finalized', {
+        createServiceEvent('service.payment_recorded', {
           jobOrderId: 'job-order-1',
           invoiceRecordId: 'service-invoice-record-1',
           invoiceReference: 'SRV-INV-2026-0001',
@@ -78,15 +112,22 @@ describe('LoyaltyController integration', () => {
           vehicleId: 'vehicle-1',
           serviceAdviserUserId: 'adviser-1',
           serviceAdviserCode: 'SA-1001',
-          finalizedByUserId: 'adviser-1',
+          recordedByUserId: 'cashier-1',
           sourceType: 'booking',
           sourceId: 'booking-1',
+          amountPaidCents: 159900,
+          currencyCode: 'PHP',
+          paidAt: '2026-05-14T09:00:00.000Z',
+          settlementStatus: 'paid',
+          paymentMethod: 'cash',
+          serviceTypeCode: 'collision_repair',
+          serviceCategoryCode: 'repair',
         }),
       );
       expect(serviceAccrual.wasDuplicate).toBe(false);
 
       const duplicateServiceAccrual = await loyaltyService.applyLoyaltyAccrual(
-        createServiceEvent('service.invoice_finalized', {
+        createServiceEvent('service.payment_recorded', {
           jobOrderId: 'job-order-1',
           invoiceRecordId: 'service-invoice-record-1',
           invoiceReference: 'SRV-INV-2026-0001',
@@ -94,29 +135,86 @@ describe('LoyaltyController integration', () => {
           vehicleId: 'vehicle-1',
           serviceAdviserUserId: 'adviser-1',
           serviceAdviserCode: 'SA-1001',
-          finalizedByUserId: 'adviser-1',
+          recordedByUserId: 'cashier-1',
           sourceType: 'booking',
           sourceId: 'booking-1',
+          amountPaidCents: 159900,
+          currencyCode: 'PHP',
+          paidAt: '2026-05-14T09:00:00.000Z',
+          settlementStatus: 'paid',
+          paymentMethod: 'cash',
+          serviceTypeCode: 'collision_repair',
+          serviceCategoryCode: 'repair',
         }),
       );
       expect(duplicateServiceAccrual.wasDuplicate).toBe(true);
 
-      await loyaltyService.applyLoyaltyAccrual(
+      const partialEcommerceAccrual = await loyaltyService.applyLoyaltyAccrual(
         createCommerceEvent('invoice.payment_recorded', {
-          invoiceId: 'invoice-2',
-          orderId: 'order-2',
+          invoiceId: 'invoice-1',
+          orderId: 'order-1',
           customerUserId: customer.id,
-          invoiceNumber: 'INV-2026-0002',
-          paymentEntryId: 'payment-entry-2',
-          amountCents: 159900,
-          paymentMethod: 'bank_transfer',
-          receivedAt: '2026-05-14T09:00:00.000Z',
-          invoiceStatus: 'paid',
-          amountPaidCents: 159900,
-          amountDueCents: 0,
+          invoiceNumber: 'INV-2026-2001',
+          paymentEntryId: 'payment-entry-1',
+          amountCents: 25000,
+          paymentMethod: 'cash',
+          receivedAt: '2026-05-14T12:00:00.000Z',
+          invoiceStatus: 'partially_paid',
+          amountPaidCents: 25000,
+          amountDueCents: 95000,
           currencyCode: 'PHP',
+          productIds: ['product-1'],
+          productCategoryIds: ['category-1'],
         }),
       );
+      expect(partialEcommerceAccrual).toEqual(
+        expect.objectContaining({
+          transaction: null,
+          wasAwarded: false,
+          awardedPoints: 0,
+          appliedRuleIds: [],
+        }),
+      );
+
+      const ecommerceAccrual = await loyaltyService.applyLoyaltyAccrual(
+        createCommerceEvent('invoice.payment_recorded', {
+          invoiceId: 'invoice-1',
+          orderId: 'order-1',
+          customerUserId: customer.id,
+          invoiceNumber: 'INV-2026-2001',
+          paymentEntryId: 'payment-entry-2',
+          amountCents: 95000,
+          paymentMethod: 'bank_transfer',
+          receivedAt: '2026-05-14T12:15:00.000Z',
+          invoiceStatus: 'paid',
+          amountPaidCents: 120000,
+          amountDueCents: 0,
+          currencyCode: 'PHP',
+          productIds: ['product-1'],
+          productCategoryIds: ['category-1'],
+        }),
+      );
+      expect(ecommerceAccrual.wasDuplicate).toBe(false);
+
+      const duplicateEcommerceAccrual = await loyaltyService.applyLoyaltyAccrual(
+        createCommerceEvent('invoice.payment_recorded', {
+          invoiceId: 'invoice-1',
+          orderId: 'order-1',
+          customerUserId: customer.id,
+          invoiceNumber: 'INV-2026-2001',
+          paymentEntryId: 'payment-entry-3',
+          amountCents: 0,
+          paymentMethod: 'bank_transfer',
+          receivedAt: '2026-05-14T12:20:00.000Z',
+          invoiceStatus: 'paid',
+          amountPaidCents: 120000,
+          amountDueCents: 0,
+          currencyCode: 'PHP',
+          productIds: ['product-1'],
+          productCategoryIds: ['category-1'],
+        }),
+      );
+      expect(duplicateEcommerceAccrual.wasDuplicate).toBe(true);
 
       const accountResponse = await request(app.getHttpServer())
         .get(`/api/loyalty/accounts/${customer.id}`)
@@ -125,8 +223,8 @@ describe('LoyaltyController integration', () => {
       expect(accountResponse.body).toEqual(
         expect.objectContaining({
           userId: customer.id,
-          pointsBalance: 131,
-          lifetimePointsEarned: 131,
+          pointsBalance: 55,
+          lifetimePointsEarned: 55,
         }),
       );
 
@@ -138,12 +236,12 @@ describe('LoyaltyController integration', () => {
       expect(transactionsResponse.body).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            sourceType: 'service_invoice',
-            pointsDelta: 100,
+            sourceType: 'service_payment',
+            pointsDelta: 31,
           }),
           expect.objectContaining({
             sourceType: 'purchase_payment',
-            pointsDelta: 31,
+            pointsDelta: 24,
           }),
         ]),
       );
@@ -174,10 +272,10 @@ describe('LoyaltyController integration', () => {
         expect.objectContaining({
           userId: customer.id,
           rewardId,
-          pointsCostSnapshot: 100,
-          pointsBalanceAfter: 31,
+          pointsCostSnapshot: 30,
+          pointsBalanceAfter: 25,
           transaction: expect.objectContaining({
-            pointsDelta: -100,
+            pointsDelta: -30,
             sourceType: 'reward_redemption',
           }),
         }),
@@ -219,6 +317,19 @@ describe('LoyaltyController integration', () => {
           expect.objectContaining({
             id: rewardId,
             status: 'inactive',
+          }),
+        ]),
+      );
+
+      const listRulesResponse = await request(app.getHttpServer())
+        .get('/api/admin/loyalty/earning-rules')
+        .set('Authorization', `Bearer ${adminLogin.body.accessToken}`);
+      expect(listRulesResponse.status).toBe(200);
+      expect(listRulesResponse.body).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'Collision repair points',
+            promoLabel: 'Collision Week Bonus',
           }),
         ]),
       );

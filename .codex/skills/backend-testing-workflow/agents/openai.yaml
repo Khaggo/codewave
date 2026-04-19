@@ -1,0 +1,5 @@
+interface:
+  display_name: "Backend Testing Workflow"
+  short_description: "Validate backend changes with targeted tests"
+  default_prompt: "Use $backend-testing-workflow to test backend changes in this repo."
+

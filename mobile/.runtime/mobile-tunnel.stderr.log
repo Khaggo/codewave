@@ -1,0 +1,2 @@
+  --non-interactive is not supported, use $CI=1 instead
+CommandError: ngrok tunnel took too long to connect.

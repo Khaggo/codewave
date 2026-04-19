@@ -45,6 +45,10 @@ export class CommerceEventReactionPlannerService {
   }
 
   private getAction(eventName: CommerceEventName, consumerDomain: CommerceEventConsumerDomain) {
+    if (eventName === 'invoice.payment_recorded' && consumerDomain === 'main-service.loyalty') {
+      return 'evaluate_ecommerce_accrual_if_settled';
+    }
+
     if (eventName === 'order.created' && consumerDomain === 'main-service.analytics') {
       return 'record_order_created_fact';
     }
@@ -61,14 +65,14 @@ export class CommerceEventReactionPlannerService {
       return 'refresh_invoice_notification_state';
     }
 
-    if (eventName === 'invoice.payment_recorded' && consumerDomain === 'main-service.loyalty') {
-      return 'evaluate_purchase_accrual';
-    }
-
     return 'record_commerce_event_fact';
   }
 
   private getReason(eventName: CommerceEventName, consumerDomain: CommerceEventConsumerDomain) {
+    if (eventName === 'invoice.payment_recorded' && consumerDomain === 'main-service.loyalty') {
+      return 'Loyalty evaluates ecommerce invoice payments only when the invoice reaches a paid or settled state, never from order creation, invoice issuance, or partial payment alone.';
+    }
+
     if (eventName === 'order.created' && consumerDomain === 'main-service.analytics') {
       return 'Analytics keeps a cross-service order fact without reading ecommerce tables directly.';
     }
@@ -83,10 +87,6 @@ export class CommerceEventReactionPlannerService {
 
     if (eventName === 'invoice.payment_recorded' && consumerDomain === 'main-service.notifications') {
       return 'Notifications can stop or adjust invoice-aging reminders after payment facts arrive.';
-    }
-
-    if (eventName === 'invoice.payment_recorded' && consumerDomain === 'main-service.loyalty') {
-      return 'Loyalty reacts to recorded payment facts for purchase-based accrual without owning invoice state.';
     }
 
     return 'Consumer tracks the stable commerce fact without taking ownership from ecommerce-service.';

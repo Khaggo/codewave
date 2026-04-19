@@ -205,6 +205,43 @@ describe('JobOrdersController integration', () => {
           }),
         ]),
       );
+
+      const recordPaymentResponse = await request(app.getHttpServer())
+        .post(`/api/job-orders/${createJobOrderResponse.body.id}/invoice/payments`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          amountPaidCents: 159900,
+          paymentMethod: 'cash',
+          reference: 'OR-2026-0001',
+          receivedAt: '2026-05-14T10:30:00.000Z',
+        });
+      expect(recordPaymentResponse.status).toBe(200);
+      expect(recordPaymentResponse.body.invoiceRecord).toEqual(
+        expect.objectContaining({
+          paymentStatus: 'paid',
+          amountPaidCents: 159900,
+          paymentMethod: 'cash',
+          paymentReference: 'OR-2026-0001',
+          recordedByUserId: adviser.id,
+        }),
+      );
+      expect(eventBus.listPublishedEvents()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'service.payment_recorded',
+            sourceDomain: 'main-service.job-orders',
+            payload: expect.objectContaining({
+              jobOrderId: createJobOrderResponse.body.id,
+              invoiceRecordId: finalizeResponse.body.invoiceRecord.id,
+              invoiceReference: finalizeResponse.body.invoiceRecord.invoiceReference,
+              customerUserId: customerResponse.body.id,
+              amountPaidCents: 159900,
+              settlementStatus: 'paid',
+              paymentMethod: 'cash',
+            }),
+          }),
+        ]),
+      );
     } finally {
       await app.close();
     }

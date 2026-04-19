@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 
 export const serviceEventNames = [
   'service.invoice_finalized',
+  'service.payment_recorded',
 ] as const;
 
 export type ServiceEventName = (typeof serviceEventNames)[number];
@@ -24,8 +25,30 @@ export interface ServiceInvoiceFinalizedEventPayload {
   sourceId: string;
 }
 
+export interface ServicePaymentRecordedEventPayload {
+  jobOrderId: string;
+  invoiceRecordId: string;
+  invoiceReference: string;
+  customerUserId: string;
+  vehicleId: string;
+  serviceAdviserUserId: string;
+  serviceAdviserCode: string;
+  recordedByUserId: string;
+  sourceType: 'booking' | 'back_job';
+  sourceId: string;
+  amountPaidCents: number;
+  currencyCode: 'PHP';
+  paidAt: string;
+  settlementStatus: 'paid';
+  paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'other';
+  paymentReference?: string | null;
+  serviceTypeCode?: string | null;
+  serviceCategoryCode?: string | null;
+}
+
 export interface ServiceEventPayloadByName {
   'service.invoice_finalized': ServiceInvoiceFinalizedEventPayload;
+  'service.payment_recorded': ServicePaymentRecordedEventPayload;
 }
 
 export interface ServiceEventEnvelope<
@@ -57,9 +80,16 @@ export const serviceEventRegistry: Record<
   'service.invoice_finalized': {
     producer: 'main-service',
     sourceDomain: 'main-service.job-orders',
-    consumers: ['main-service.loyalty', 'main-service.analytics'],
+    consumers: ['main-service.analytics'],
     description:
       'Emitted when a ready-for-QA job order clears release and creates an immutable invoice-ready service record.',
+  },
+  'service.payment_recorded': {
+    producer: 'main-service',
+    sourceDomain: 'main-service.job-orders',
+    consumers: ['main-service.loyalty', 'main-service.analytics'],
+    description:
+      'Emitted when a finalized service invoice record is settled as paid and downstream domains may evaluate loyalty or analytics updates.',
   },
 };
 

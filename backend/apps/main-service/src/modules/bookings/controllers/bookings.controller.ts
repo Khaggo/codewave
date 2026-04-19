@@ -20,6 +20,7 @@ import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 
 import { BookingResponseDto } from '../dto/booking-response.dto';
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { DailyScheduleQueryDto } from '../dto/daily-schedule-query.dto';
 import { DailyScheduleResponseDto } from '../dto/daily-schedule-response.dto';
 import { QueueCurrentQueryDto } from '../dto/queue-current-query.dto';
@@ -27,6 +28,7 @@ import { QueueCurrentResponseDto } from '../dto/queue-current-response.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { ServiceResponseDto } from '../dto/service-response.dto';
 import { TimeSlotResponseDto } from '../dto/time-slot-response.dto';
+import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
 import { BookingsService } from '../services/bookings.service';
 
@@ -55,6 +57,53 @@ export class BookingsController {
   })
   listTimeSlots() {
     return this.bookingsService.listTimeSlots();
+  }
+
+  @Post('time-slots')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a booking time slot definition for staff operations.' })
+  @ApiCreatedResponse({
+    description: 'The created time slot definition.',
+    type: TimeSlotResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The submitted time slot payload is invalid.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can manage time slots.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  createTimeSlot(@Body() payload: CreateTimeSlotDto, @Req() request: Request) {
+    return this.bookingsService.createTimeSlot(
+      payload,
+      (request.user as { userId: string }).userId,
+    );
+  }
+
+  @Patch('time-slots/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update a booking time slot definition for staff operations.' })
+  @ApiParam({
+    name: 'id',
+    description: 'Time slot identifier.',
+    example: 'e7318032-2fe0-4f40-b3d4-5ba2a8c94320',
+  })
+  @ApiOkResponse({
+    description: 'The updated time slot definition.',
+    type: TimeSlotResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The submitted time slot payload is invalid.' })
+  @ApiNotFoundResponse({ description: 'Time slot not found.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can manage time slots.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  updateTimeSlot(@Param('id') id: string, @Body() payload: UpdateTimeSlotDto, @Req() request: Request) {
+    return this.bookingsService.updateTimeSlot(
+      id,
+      payload,
+      (request.user as { userId: string }).userId,
+    );
   }
 
   @Post('bookings')

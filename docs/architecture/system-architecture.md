@@ -1,10 +1,10 @@
 # System Architecture
 
-This file is the global agent contract for the AUTOCARE backend SSoT. Domain workers should start in their domain doc; this file exists to define shared goals, routing rules, write limits, and anti-corruption policy.
+This file is the global agent contract for the AUTOCARE backend SSoT. Domain workers should start in their domain doc; this file exists to define shared goals, routing rules, write limits, anti-corruption policy, and the improvement loop that keeps the system useful without letting it drift.
 
 ## Shared Goal
 
-Build and maintain a correct, modular, and implementation-ready backend SSoT for AUTOCARE so agents can ship changes quickly without breaking domain boundaries, documentation integrity, or cross-service coordination.
+Build and maintain a correct, modular, self-improving, and implementation-ready backend SSoT for AUTOCARE so agents can ship changes quickly without breaking domain boundaries, documentation integrity, or cross-service coordination.
 
 ## Global Objectives
 
@@ -12,6 +12,7 @@ Build and maintain a correct, modular, and implementation-ready backend SSoT for
 - Keep cross-domain rules in shared control-plane docs only.
 - Minimize token usage by loading only the files required for the current task.
 - Prevent uncontrolled edits, heading drift, and partial Markdown updates.
+- Treat prompt routing, documentation clarity, and validation coverage as system behaviors that must improve when evidence shows they are weak.
 - Preserve a stable contract between main-service and ecommerce-service.
 - Make every accepted documentation change explainable, validated, and reversible.
 - Ensure the docs remain implementation-oriented for backend engineers and agents.
@@ -20,7 +21,7 @@ Build and maintain a correct, modular, and implementation-ready backend SSoT for
 
 ### Permanent roles
 
-- `Orchestrator`: reads routing docs, decomposes work, assigns ownership, approves or rejects proposals, and resolves conflicts. It is proposal-only and may not directly mutate domain Markdown.
+- `Orchestrator`: is the default front door for freeform user prompts, reads routing docs, decomposes work, triages improvement evidence, assigns ownership, approves or rejects proposals, and resolves conflicts. It is proposal-only and may not directly mutate domain Markdown.
 - `Domain Worker`: owns one assigned domain at a time and may edit only that domain's writable sections.
 - `Integration Worker`: owns cross-domain APIs, events, shared contracts, and service-boundary alignment.
 - `Validator`: verifies structure, links, manifest consistency, and machine-owned metadata before canonical files are replaced.
@@ -47,9 +48,11 @@ Build and maintain a correct, modular, and implementation-ready backend SSoT for
   10. the target domain doc
   11. only the target domain's direct dependency docs if needed
 - Treat `Agent Summary` in each domain doc as the cheapest routing block. It should answer "when should I load this file?" in one short paragraph.
+- Start freeform prompts in orchestrator mode unless the user explicitly names a worker role.
 - Do not load unrelated domains "just in case".
 - Do not duplicate shared rules inside domain docs.
 - Prefer narrow dependency reads over whole-service sweeps.
+- When routing or clarity problems repeat, load the smallest evidence set needed to classify them as `noise`, `observation`, or `bounded proposal`.
 - When creating or normalizing a new domain, load [`golden-domain-template.md`](./golden-domain-template.md) plus the `main-service.users` and `main-service.auth` reference pair before writing.
 
 ## Write Governance
@@ -58,6 +61,7 @@ Build and maintain a correct, modular, and implementation-ready backend SSoT for
 - `Domain Worker`: may edit only the assigned domain doc and only within declared `Writable Sections`.
 - `Integration Worker`: may edit shared contracts or multiple domain docs only when the task is explicitly cross-domain.
 - `Validator`: may update only machine-owned metadata such as hashes, versions, verification timestamps, and validation status.
+- Direct worker invocation is a narrow explicit exception. If the user does not name a role, the request starts with the orchestrator.
 - Domain workers do not directly edit `agent-manifest.json`.
 - Structural manifest changes are orchestrator-governed by proposal and validator-checked before acceptance.
 - `main-service.users` and `main-service.auth` are the current golden reference domains for documentation style and backend module shape.
@@ -102,14 +106,16 @@ Build and maintain a correct, modular, and implementation-ready backend SSoT for
 
 ## Improvement Loop
 
-1. Orchestrator identifies a gap, conflict, or repeated source of confusion.
-2. Orchestrator issues a bounded change request with target file, allowed sections, and acceptance checks.
-3. A worker edits only the permitted file scope.
-4. Validator checks heading schema, links, dependencies, and manifest integrity.
-5. Validator refreshes machine-owned metadata.
-6. Canonical Markdown is replaced only after validation passes.
+1. Orchestrator receives either a freeform user prompt or improvement evidence.
+2. Orchestrator loads the minimum routing context, identifies ownership, and classifies the evidence as `noise`, `observation`, or `bounded proposal`.
+3. Observations and proposals are recorded in the non-canonical improvement queue so stagnation, drift, and repeated confusion are visible.
+4. When change is warranted, the orchestrator issues a bounded change request with target file, allowed sections, and acceptance checks.
+5. A worker edits only the permitted file scope.
+6. Validator checks heading schema, links, dependencies, and manifest integrity.
+7. Validator refreshes machine-owned metadata.
+8. Canonical Markdown is replaced only after validation passes and the proposal remains human-approved.
 
-Use this loop only when there is evidence from implementation, tests, runtime behavior, or repeated ambiguity. Do not rewrite docs speculatively.
+Use this loop when there is evidence from implementation, tests, runtime behavior, repeated ambiguity, validator failure, doc or code drift, stale control docs, unresolved `ready` queues, conflicting docs, or repeated frontend/backend mismatch. Do not rewrite docs speculatively, but do not ignore credible evidence either.
 
 ## Markdown Integrity Rules
 
@@ -119,3 +125,4 @@ Use this loop only when there is evidence from implementation, tests, runtime be
 - Partial edits, duplicate headings, missing summaries, and undeclared cross-domain changes fail validation.
 - Failed validation means the canonical Markdown stays unchanged.
 - The validator owns hashes and verification metadata in [`agent-manifest.json`](./agent-manifest.json).
+- The improvement queue in [`_backlog/agent-improvement-queue.md`](./_backlog/agent-improvement-queue.md) is non-canonical evidence tracking and must not replace approved task or domain updates.

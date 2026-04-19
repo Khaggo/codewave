@@ -21,22 +21,22 @@ export class LoyaltyTransactionResponseDto {
 
   @ApiProperty({
     enum: loyaltySourceTypeEnum.enumValues,
-    example: 'service_invoice',
+    example: 'service_payment',
   })
   sourceType!: (typeof loyaltySourceTypeEnum.enumValues)[number];
 
   @ApiProperty({
-    example: 'service-invoice-record-1',
+    example: 'service-payment-record-1',
   })
   sourceReference!: string;
 
   @ApiPropertyOptional({
-    example: 'loyalty:service.invoice_finalized:service-invoice-record-1',
+    example: 'loyalty:service.payment_recorded:service-payment-record-1',
   })
   idempotencyKey?: string | null;
 
   @ApiPropertyOptional({
-    example: 'loyalty.service.invoice_finalized.v1',
+    example: 'loyalty.service.payment_recorded.v1',
   })
   policyKey?: string | null;
 
@@ -54,7 +54,8 @@ export class LoyaltyTransactionResponseDto {
     type: 'object',
     additionalProperties: true,
     example: {
-      triggerName: 'service.invoice_finalized',
+      triggerName: 'service.payment_recorded',
+      appliedRuleIds: ['rule-1'],
       sourceDomain: 'main-service.job-orders',
       duplicateStrategy: 'ignore_same_idempotency_key',
     },

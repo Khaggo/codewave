@@ -45,16 +45,24 @@ export class ServiceEventReactionPlannerService {
   }
 
   private getAction(eventName: ServiceEventName, consumerDomain: ServiceEventConsumerDomain) {
-    if (eventName === 'service.invoice_finalized' && consumerDomain === 'main-service.loyalty') {
+    if (eventName === 'service.payment_recorded' && consumerDomain === 'main-service.loyalty') {
       return 'evaluate_service_accrual';
+    }
+
+    if (eventName === 'service.payment_recorded') {
+      return 'record_service_payment_fact';
     }
 
     return 'record_service_invoice_fact';
   }
 
   private getReason(eventName: ServiceEventName, consumerDomain: ServiceEventConsumerDomain) {
-    if (eventName === 'service.invoice_finalized' && consumerDomain === 'main-service.loyalty') {
-      return 'Loyalty evaluates a completed service fact only after invoice-ready finalization, never from booking creation or confirmation.';
+    if (eventName === 'service.payment_recorded' && consumerDomain === 'main-service.loyalty') {
+      return 'Loyalty evaluates a paid service fact only after the service invoice is settled, never from booking, ecommerce checkout, or invoice finalization alone.';
+    }
+
+    if (eventName === 'service.payment_recorded') {
+      return 'Analytics tracks immutable service payment facts without reading operational payment state directly.';
     }
 
     return 'Analytics tracks immutable service invoice-finalization facts without reading job-order tables directly.';

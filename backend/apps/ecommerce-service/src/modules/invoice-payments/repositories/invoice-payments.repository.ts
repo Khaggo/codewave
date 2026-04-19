@@ -15,6 +15,8 @@ type InvoiceRecord = {
   totalCents: number;
   amountPaidCents: number;
   amountDueCents: number;
+  productIds: string[];
+  productCategoryIds: string[];
   issuedAt: Date;
   dueAt: Date;
   createdAt: Date;
@@ -40,7 +42,13 @@ export class InvoicePaymentsRepository {
 
   private sequence = 1;
 
-  async createInvoice(payload: { orderId: string; customerUserId: string; totalCents: number }) {
+  async createInvoice(payload: {
+    orderId: string;
+    customerUserId: string;
+    totalCents: number;
+    productIds?: string[];
+    productCategoryIds?: string[];
+  }) {
     const issuedAt = new Date();
     const dueAt = new Date(issuedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
     const invoice: InvoiceRecord = {
@@ -53,6 +61,8 @@ export class InvoicePaymentsRepository {
       totalCents: payload.totalCents,
       amountPaidCents: 0,
       amountDueCents: payload.totalCents,
+      productIds: [...(payload.productIds ?? [])],
+      productCategoryIds: [...(payload.productCategoryIds ?? [])],
       issuedAt,
       dueAt,
       createdAt: issuedAt,
@@ -61,17 +71,33 @@ export class InvoicePaymentsRepository {
 
     this.sequence += 1;
     this.invoices.set(invoice.id, invoice);
-    return { ...invoice };
+    return {
+      ...invoice,
+      productIds: [...invoice.productIds],
+      productCategoryIds: [...invoice.productCategoryIds],
+    };
   }
 
   async findInvoiceById(invoiceId: string) {
     const invoice = this.invoices.get(invoiceId);
-    return invoice ? { ...invoice } : null;
+    return invoice
+      ? {
+          ...invoice,
+          productIds: [...invoice.productIds],
+          productCategoryIds: [...invoice.productCategoryIds],
+        }
+      : null;
   }
 
   async findInvoiceByOrderId(orderId: string) {
     const invoice = Array.from(this.invoices.values()).find((entry) => entry.orderId === orderId);
-    return invoice ? { ...invoice } : null;
+    return invoice
+      ? {
+          ...invoice,
+          productIds: [...invoice.productIds],
+          productCategoryIds: [...invoice.productCategoryIds],
+        }
+      : null;
   }
 
   async listPaymentEntriesByInvoiceId(invoiceId: string) {

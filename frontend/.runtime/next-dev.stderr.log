@@ -1,0 +1,356 @@
+ ⚠ Cross origin request detected from 127.0.0.1 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>) {
+  digest: '2383511555'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>)
+    at stringify (<anonymous>)
+    at stringify (<anonymous>) {
+  digest: '1810681423'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>)
+    at stringify (<anonymous>) {
+  digest: '2993663106'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>)
+    at stringify (<anonymous>) {
+  digest: '2993663106'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>)
+    at stringify (<anonymous>) {
+  digest: '2993663106'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>)
+    at stringify (<anonymous>) {
+  digest: '2993663106'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>)
+    at stringify (<anonymous>) {
+  digest: '2993663106'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>)
+    at stringify (<anonymous>) {
+  digest: '2993663106'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>) {
+  digest: '2383511555'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>) {
+  digest: '2383511555'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>) {
+  digest: '2383511555'
+}
+ ⨯ [TypeError: __webpack_modules__[moduleId] is not a function] {
+  digest: '3740832709'
+}
+ ⨯ Error: Could not find the module "D:\mainprojects\codewave\frontend\node_modules\next\dist\next-devtools\userspace\app\segment-explorer-node.js#SegmentViewNode" in the React Client Manifest. This is probably a bug in the React Server Components bundler.
+    at stringify (<anonymous>) {
+  digest: '2383511555'
+}
+[TypeError: __webpack_modules__[moduleId] is not a function]
+ ⨯ [TypeError: __webpack_modules__[moduleId] is not a function]
+ ⨯ [TypeError: __webpack_modules__[moduleId] is not a function] {
+  page: '/admin/appointments'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\admin\appointments\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\admin\\appointments\\page.js',
+  page: '/admin/appointments'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\admin\appointments\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\admin\\appointments\\page.js',
+  page: '/admin/appointments'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\admin\appointments\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\admin\\appointments\\page.js',
+  page: '/admin/appointments'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\admin\appointments\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\admin\\appointments\\page.js',
+  page: '/admin/appointments'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\admin\appointments\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\admin\\appointments\\page.js',
+  page: '/admin/appointments'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\admin\appointments\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\admin\\appointments\\page.js',
+  page: '/admin/appointments'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\admin\appointments\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\admin\\appointments\\page.js',
+  page: '/admin/appointments'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\app\bookings\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\app\\bookings\\page.js',
+  page: '/bookings'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\mainprojects\codewave\frontend\.next\server\pages\_document.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\mainprojects\\codewave\\frontend\\.next\\server\\pages\\_document.js'
+}

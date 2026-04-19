@@ -26,6 +26,12 @@ export class UserProfileResponseDto {
   })
   phone?: string | null;
 
+  @ApiPropertyOptional({
+    example: '1998-04-12',
+    format: 'date',
+  })
+  birthday?: string | null;
+
   @ApiProperty({
     example: '2026-03-25T15:00:00.000Z',
     format: 'date-time',

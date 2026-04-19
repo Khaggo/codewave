@@ -1,4 +1,4 @@
-# T303 Loyalty From Service And Purchase Events
+# T303 Loyalty From Paid Service Events
 
 ## Slice ID
 
@@ -18,19 +18,17 @@
 
 This slice does not add new public frontend routes.
 
-It adds a live loyalty-trigger contract across service and ecommerce facts:
+It adds a live loyalty-trigger contract on paid service facts only:
 
 | Event | Status | Source |
 | --- | --- | --- |
-| `service.invoice_finalized` | `live` | shared service event contract + job-order publisher |
-| `invoice.payment_recorded` | `live` | shared commerce event contract + ecommerce publisher |
+| `service.payment_recorded` | `live` | shared service event contract + loyalty planner |
 
 It also adds a live internal loyalty accrual plan shape:
 
 | Contract | Status | Source |
 | --- | --- | --- |
-| `LoyaltyAccrualPlan` for service invoices | `live` | shared loyalty accrual planner |
-| `LoyaltyAccrualPlan` for purchase payments | `live` | shared loyalty accrual planner |
+| `LoyaltyAccrualPlan` for paid service work | `live` | shared loyalty accrual planner |
 
 ## Frontend Contract Files
 
@@ -39,15 +37,14 @@ It also adds a live internal loyalty accrual plan shape:
 
 ## Frontend States To Cover
 
-- service loyalty accrual preview from a finalized service invoice fact
-- purchase loyalty accrual preview from a recorded invoice payment fact
+- service loyalty accrual preview from a recorded paid-service fact
 - duplicate delivery state where the same source reference produces no second award
-- reversal-policy messaging for service and purchase accrual corrections
+- reversal-policy messaging for service-payment accrual corrections
 
 ## Notes
 
 - Loyalty accrual is internal and event-driven; there are no new browser-facing routes in this slice.
-- `service.invoice_finalized` is the first-class service loyalty producer and replaces any temptation to award points from booking events.
-- `invoice.payment_recorded` remains the purchase-side loyalty trigger until a broader purchase-completion fact is approved.
-- Idempotency keys are deterministic by source reference: service uses `invoiceRecordId` and purchase uses `paymentEntryId`.
-- Service accrual reversals stay manual until a dedicated service reversal fact exists; purchase accruals can later consume refund or reversal events.
+- `service.payment_recorded` is the canonical loyalty producer and replaces any temptation to award points from booking, invoice-finalized-only, or ecommerce events.
+- Ecommerce `invoice.payment_recorded` remains a commerce-only settlement fact and is no longer a loyalty trigger.
+- Idempotency keys are deterministic by source reference: paid service uses `invoiceRecordId`.
+- Service-payment accrual reversals stay manual until a dedicated service refund or reversal fact exists.

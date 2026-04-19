@@ -24,7 +24,7 @@ export default function ForgotPasswordEmail({ navigation, registeredAccount }) {
       return;
     }
 
-    navigation.navigate('ForgotPasswordOTP', {
+    navigation.replace('ForgotPasswordOTP', {
       email: normalizeEmail(email),
     });
   };
@@ -34,7 +34,7 @@ export default function ForgotPasswordEmail({ navigation, registeredAccount }) {
       title="Forgot password?"
       subtitle="Enter the registered email address and we'll move you to the 6-digit OTP reset flow."
       backLabel="Back to Login"
-      onBack={() => navigation.navigate('Login')}
+      onBack={() => navigation.replace('Login')}
       centerContent
     >
       <FormField

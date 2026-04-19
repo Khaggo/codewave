@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Contract Shapes"
+  short_description: "Keep backend DTOs, schemas, and contracts aligned"
+  default_prompt: "Use $backend-contract-shapes to update backend DTO, schema, and API contracts safely."

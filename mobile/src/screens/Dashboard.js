@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Easing,
@@ -17,12 +18,24 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { ApiError } from '../lib/authClient';
+import {
+  buildOwnedVehicleLabel,
+  createCustomerBooking,
+  formatBookingServiceDuration,
+  formatBookingTimeSlotWindow,
+  getBookingById,
+  listCustomerBookings,
+  loadBookingDiscoverySnapshot,
+  toBookingDateString,
+} from '../lib/bookingDiscoveryClient';
 import DatePickerField from '../components/DatePickerField';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import FormField from '../components/FormField';
 import PasswordChecklist from '../components/PasswordChecklist';
 import { colors, radius } from '../theme';
 import {
+  formatDate,
   normalizeEmail,
   normalizePhoneNumber,
   validateBirthday,
@@ -100,121 +113,231 @@ const rewardOffers = [
 
 const shopCategories = ['All', 'Oils', 'Tires', 'Brakes', 'Electrical', 'Coolants'];
 
-const bookingServices = [
-  {
-    key: 'oil-change',
-    icon: 'flash-outline',
-    title: 'Oil Change',
-    subtitle: 'Synthetic or mineral oil + filter',
-    priceLabel: '\u20B1850-\u20B11,200',
-    duration: '45 min',
-    popular: true,
-    enabled: true,
-  },
-  {
-    key: 'pms-package',
-    icon: 'wrench-outline',
-    title: 'PMS Package',
-    subtitle: 'Full preventive maintenance service',
-    priceLabel: '\u20B13,200-\u20B14,500',
-    duration: '2-3 hrs',
-    popular: true,
-    enabled: true,
-  },
-  {
-    key: 'tire-rotation',
-    icon: 'swap-horizontal',
-    title: 'Tire Rotation',
-    subtitle: 'Cross-pattern rotation + balancing',
-    priceLabel: '\u20B1650',
-    duration: '30 min',
-    popular: false,
-    enabled: true,
-  },
-  {
-    key: 'brake-inspection',
-    icon: 'shield-outline',
-    title: 'Brake Inspection',
-    subtitle: 'Pad, rotor & fluid check',
-    priceLabel: '\u20B1800',
-    duration: '1 hr',
-    popular: false,
-    enabled: false,
-    disabledLabel: 'Closed Today',
-  },
-  {
-    key: 'battery-check',
-    icon: 'car-battery',
-    title: 'Battery Check',
-    subtitle: 'Load test & terminal cleaning',
-    priceLabel: '\u20B1350',
-    duration: '20 min',
-    popular: false,
-    enabled: true,
-  },
-  {
-    key: 'ac-service',
-    icon: 'snowflake',
-    title: 'A/C Service',
-    subtitle: 'Clean, recharge & leak check',
-    priceLabel: '\u20B11,500',
-    duration: '1.5 hrs',
-    popular: false,
-    enabled: false,
-    disabledLabel: 'By Schedule',
-  },
-];
+const createInitialBookingDiscoveryState = () => ({
+  status: 'idle',
+  services: [],
+  timeSlots: [],
+  vehicles: [],
+  errorMessage: '',
+});
 
-const bookingDates = [
-  { key: '2026-04-14', weekday: 'Mon', day: '14', month: 'Apr', fullLabel: 'Apr 14, 2026', isOpen: true },
-  { key: '2026-04-15', weekday: 'Tue', day: '15', month: 'Apr', fullLabel: 'Apr 15, 2026', isOpen: true },
-  { key: '2026-04-16', weekday: 'Wed', day: '16', month: 'Apr', fullLabel: 'Apr 16, 2026', isOpen: false },
-  { key: '2026-04-17', weekday: 'Thu', day: '17', month: 'Apr', fullLabel: 'Apr 17, 2026', isOpen: true },
-  { key: '2026-04-18', weekday: 'Fri', day: '18', month: 'Apr', fullLabel: 'Apr 18, 2026', isOpen: false },
-  { key: '2026-04-19', weekday: 'Sat', day: '19', month: 'Apr', fullLabel: 'Apr 19, 2026', isOpen: true },
-];
+const isBookableService = (service) => Boolean(service?.isActive);
+const isBookableTimeSlot = (timeSlot) => Boolean(timeSlot?.isActive);
 
-const bookingTimeSlots = {
-  '2026-04-14': [
-    { key: '8:00 AM', label: '8:00 AM', available: false, reason: 'Full' },
-    { key: '9:00 AM', label: '9:00 AM', available: true },
-    { key: '10:00 AM', label: '10:00 AM', available: false, reason: 'Booked' },
-    { key: '11:00 AM', label: '11:00 AM', available: false, reason: 'Booked' },
-    { key: '1:00 PM', label: '1:00 PM', available: true },
-    { key: '2:00 PM', label: '2:00 PM', available: false, reason: 'Maxed' },
-    { key: '3:00 PM', label: '3:00 PM', available: false, reason: 'Maxed' },
-    { key: '4:00 PM', label: '4:00 PM', available: false, reason: 'Closed' },
-  ],
-  '2026-04-15': [
-    { key: '8:00 AM', label: '8:00 AM', available: true },
-    { key: '9:00 AM', label: '9:00 AM', available: true },
-    { key: '10:00 AM', label: '10:00 AM', available: true },
-    { key: '11:00 AM', label: '11:00 AM', available: false, reason: 'Booked' },
-    { key: '1:00 PM', label: '1:00 PM', available: true },
-    { key: '2:00 PM', label: '2:00 PM', available: true },
-    { key: '3:00 PM', label: '3:00 PM', available: false, reason: 'Maxed' },
-    { key: '4:00 PM', label: '4:00 PM', available: false, reason: 'Closed' },
-  ],
-  '2026-04-17': [
-    { key: '8:00 AM', label: '8:00 AM', available: false, reason: 'Full' },
-    { key: '9:00 AM', label: '9:00 AM', available: true },
-    { key: '10:00 AM', label: '10:00 AM', available: true },
-    { key: '11:00 AM', label: '11:00 AM', available: true },
-    { key: '1:00 PM', label: '1:00 PM', available: false, reason: 'Booked' },
-    { key: '2:00 PM', label: '2:00 PM', available: true },
-    { key: '3:00 PM', label: '3:00 PM', available: true },
-    { key: '4:00 PM', label: '4:00 PM', available: false, reason: 'Closed' },
-  ],
-  '2026-04-19': [
-    { key: '8:00 AM', label: '8:00 AM', available: false, reason: 'Closed' },
-    { key: '9:00 AM', label: '9:00 AM', available: true },
-    { key: '10:00 AM', label: '10:00 AM', available: true },
-    { key: '11:00 AM', label: '11:00 AM', available: true },
-    { key: '1:00 PM', label: '1:00 PM', available: true },
-    { key: '2:00 PM', label: '2:00 PM', available: false, reason: 'Maxed' },
-    { key: '3:00 PM', label: '3:00 PM', available: false, reason: 'Maxed' },
-    { key: '4:00 PM', label: '4:00 PM', available: false, reason: 'Closed' },
-  ],
+const getBookingDiscoveryStateKey = (bookingDiscovery) => {
+  if (bookingDiscovery.status === 'idle' || bookingDiscovery.status === 'loading') {
+    return bookingDiscovery.status;
+  }
+
+  if (bookingDiscovery.status === 'unauthorized' || bookingDiscovery.status === 'error') {
+    return bookingDiscovery.status;
+  }
+
+  if (!bookingDiscovery.vehicles.length) {
+    return 'empty-vehicles';
+  }
+
+  if (!bookingDiscovery.services.some(isBookableService)) {
+    return 'empty-services';
+  }
+
+  if (!bookingDiscovery.timeSlots.some(isBookableTimeSlot)) {
+    return 'unavailable-slots';
+  }
+
+  return 'ready';
+};
+
+const createInitialBookingCreateState = () => ({
+  status: 'idle',
+  message: '',
+  booking: null,
+});
+
+const createInitialBookingHistoryState = () => ({
+  status: 'idle',
+  bookings: [],
+  errorMessage: '',
+});
+
+const createInitialBookingDetailState = () => ({
+  status: 'idle',
+  booking: null,
+  errorMessage: '',
+});
+
+const parseDateOnly = (value) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? '').trim());
+
+  if (!match) {
+    return null;
+  }
+
+  const parsedDate = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const formatBookingDateLabel = (value) => {
+  const parsedDate = parseDateOnly(value);
+
+  return parsedDate ? formatDate(parsedDate) : String(value ?? '').trim() || '--';
+};
+
+const BOOKING_DATE_WINDOW_DAYS = 31;
+
+const buildBookingDateOptions = () => {
+  const today = new Date();
+  const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+  return Array.from({ length: BOOKING_DATE_WINDOW_DAYS }, (_, index) => {
+    const date = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + index);
+    const dateKey = toBookingDateString(date);
+
+    return {
+      key: dateKey,
+      label: formatDate(date),
+      weekday: date.toLocaleDateString(undefined, { weekday: 'short' }),
+      day: `${date.getDate()}`,
+      month: date.toLocaleDateString(undefined, { month: 'short' }),
+    };
+  });
+};
+
+const bookingStatusLabels = {
+  pending: 'Pending staff review',
+  confirmed: 'Confirmed by staff',
+  declined: 'Declined',
+  rescheduled: 'Rescheduled',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+const getBookingStatusLabel = (status) => bookingStatusLabels[status] || 'Unknown status';
+
+const getBookingReference = (booking) =>
+  booking?.id ? booking.id.slice(0, 8).toUpperCase() : '--------';
+
+const getBookingServiceNames = (booking) => {
+  const serviceNames = (booking?.requestedServices ?? [])
+    .map((requestedService) => requestedService?.service?.name)
+    .filter(Boolean);
+
+  return serviceNames.length ? serviceNames.join(', ') : 'Service request';
+};
+
+const getBookingVehicleLabel = (booking, vehicles) => {
+  const matchingVehicle = vehicles.find((vehicle) => vehicle.id === booking?.vehicleId);
+
+  return matchingVehicle ? buildOwnedVehicleLabel(matchingVehicle) : `Vehicle ${String(booking?.vehicleId ?? '').slice(0, 8)}`;
+};
+
+const getBookingTimeLabel = (booking) => {
+  if (!booking?.timeSlot) {
+    return 'Time slot pending';
+  }
+
+  return `${booking.timeSlot.label} - ${formatBookingTimeSlotWindow(booking.timeSlot)}`;
+};
+
+const buildBookingTrackingSteps = (booking) => {
+  if (!booking) {
+    return [
+      {
+        label: 'Booking Request',
+        status: 'No booking selected',
+        state: 'inactive',
+      },
+      {
+        label: 'Staff Review',
+        status: 'Offline',
+        state: 'inactive',
+        note: 'Submit a booking request to see live status here.',
+      },
+      {
+        label: 'Appointment Outcome',
+        status: 'Offline',
+        state: 'inactive',
+      },
+    ];
+  }
+
+  const status = booking.status;
+
+  if (status === 'declined' || status === 'cancelled') {
+    return [
+      {
+        label: 'Booking Request',
+        status: 'Submitted',
+        state: 'done',
+      },
+      {
+        label: status === 'declined' ? 'Declined By Staff' : 'Cancelled',
+        status: getBookingStatusLabel(status),
+        state: 'current',
+      },
+    ];
+  }
+
+  if (status === 'completed') {
+    return [
+      {
+        label: 'Booking Request',
+        status: 'Submitted',
+        state: 'done',
+      },
+      {
+        label: 'Staff Review',
+        status: 'Confirmed',
+        state: 'done',
+      },
+      {
+        label: 'Appointment Complete',
+        status: 'Completed',
+        state: 'current',
+      },
+    ];
+  }
+
+  if (status === 'confirmed' || status === 'rescheduled') {
+    return [
+      {
+        label: 'Booking Request',
+        status: 'Submitted',
+        state: 'done',
+      },
+      {
+        label: status === 'rescheduled' ? 'Rescheduled By Staff' : 'Staff Confirmed',
+        status: getBookingStatusLabel(status),
+        state: 'current',
+        note: 'Arrival, adviser assignment, and workshop progress stay separate from booking status.',
+      },
+      {
+        label: 'Appointment Outcome',
+        status: 'Upcoming',
+        state: 'upcoming',
+      },
+    ];
+  }
+
+  return [
+    {
+      label: 'Booking Request',
+      status: 'Submitted',
+      state: 'done',
+    },
+    {
+      label: 'Staff Review',
+      status: 'Pending',
+      state: 'current',
+      note: 'Your request is recorded as pending until staff confirm, decline, or reschedule it.',
+    },
+    {
+      label: 'Appointment Outcome',
+      status: 'Upcoming',
+      state: 'upcoming',
+    },
+  ];
 };
 
 const recentServiceHistory = [
@@ -316,8 +439,8 @@ const defaultNotifications = [
   {
     key: 'notif-booking',
     brand: 'AUTOCARE',
-    title: 'Booking Confirmed',
-    message: 'Your Oil Change appointment is set for April 20, 2026 at 10:00 AM.',
+    title: 'Booking Request Received',
+    message: 'Your Oil Change request is pending staff review for April 20, 2026 at 10:00 AM.',
     timeLabel: '2 days ago',
     icon: 'calendar-check-outline',
     tint: '#12D764',
@@ -890,6 +1013,75 @@ function BookingModeTab({ label, isActive, onPress }) {
   );
 }
 
+function BookingDiscoveryStatePanel({
+  icon,
+  title,
+  message,
+  actionLabel,
+  onAction,
+  isLoading = false,
+}) {
+  return (
+    <View style={styles.bookingStatePanel}>
+      <View style={styles.bookingStatePanelHeader}>
+        <View style={styles.bookingStatePanelIconWrap}>
+          {isLoading ? (
+            <ActivityIndicator color={colors.primary} size="small" />
+          ) : (
+            <MaterialCommunityIcons name={icon} size={18} color={colors.primary} />
+          )}
+        </View>
+        <View style={styles.bookingStatePanelCopy}>
+          <Text style={styles.bookingStatePanelTitle}>{title}</Text>
+          <Text style={styles.bookingStatePanelText}>{message}</Text>
+        </View>
+      </View>
+
+      {actionLabel && onAction ? (
+        <TouchableOpacity style={styles.bookingStatePanelButton} onPress={onAction} activeOpacity={0.88}>
+          <Text style={styles.bookingStatePanelButtonText}>{actionLabel}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+function BookingVehicleCard({ item, isSelected, onPress }) {
+  return (
+    <MotionPressable
+      style={[
+        styles.bookingServiceCard,
+        isSelected && styles.bookingServiceCardSelected,
+      ]}
+      onPress={onPress}
+      scaleTo={0.988}
+    >
+      <View style={styles.bookingServiceIconWrap}>
+        <MaterialCommunityIcons
+          name="car-outline"
+          size={20}
+          color={isSelected ? colors.primary : colors.labelText}
+        />
+      </View>
+
+      <View style={styles.bookingServiceCopy}>
+        <View style={styles.bookingServiceTitleRow}>
+          <Text style={styles.bookingServiceTitle}>{item.title}</Text>
+          <View style={styles.bookingVehicleBadge}>
+            <Text style={styles.bookingVehicleBadgeText}>OWNED</Text>
+          </View>
+        </View>
+        <Text style={styles.bookingServiceSubtitle}>{item.subtitle}</Text>
+      </View>
+
+      <View style={styles.bookingVehicleMeta}>
+        <Text style={styles.bookingVehicleMetaLabel}>PLATE</Text>
+        <Text style={styles.bookingVehicleMetaValue}>{item.plateNumber}</Text>
+      </View>
+    </MotionPressable>
+  );
+}
+
 function BookingServiceCard({ item, isSelected, onPress }) {
   return (
     <MotionPressable
@@ -904,7 +1096,7 @@ function BookingServiceCard({ item, isSelected, onPress }) {
     >
       <View style={[styles.bookingServiceIconWrap, !item.enabled && styles.bookingServiceIconWrapDisabled]}>
         <MaterialCommunityIcons
-          name={item.icon}
+          name={item.icon || 'wrench-outline'}
           size={20}
           color={!item.enabled ? colors.mutedText : isSelected ? colors.primary : colors.labelText}
         />
@@ -915,14 +1107,9 @@ function BookingServiceCard({ item, isSelected, onPress }) {
           <Text style={[styles.bookingServiceTitle, !item.enabled && styles.bookingDisabledText]}>
             {item.title}
           </Text>
-          {item.popular ? (
-            <View style={styles.bookingPopularBadge}>
-              <Text style={styles.bookingPopularBadgeText}>POPULAR</Text>
-            </View>
-          ) : null}
-          {!item.enabled && item.disabledLabel ? (
+          {item.badgeLabel ? (
             <View style={styles.bookingUnavailableBadge}>
-              <Text style={styles.bookingUnavailableBadgeText}>{item.disabledLabel}</Text>
+              <Text style={styles.bookingUnavailableBadgeText}>{item.badgeLabel}</Text>
             </View>
           ) : null}
         </View>
@@ -933,23 +1120,26 @@ function BookingServiceCard({ item, isSelected, onPress }) {
       </View>
 
       <View style={styles.bookingServiceMeta}>
-        <Text style={[styles.bookingServicePrice, !item.enabled && styles.bookingDisabledText]}>
-          {item.priceLabel}
-        </Text>
+        {item.metaLabel ? (
+          <Text style={[styles.bookingServicePrice, !item.enabled && styles.bookingDisabledText]}>
+            {item.metaLabel}
+          </Text>
+        ) : null}
         <View style={styles.bookingServiceDurationRow}>
           <MaterialCommunityIcons name="clock-outline" size={12} color={colors.mutedText} />
-          <Text style={styles.bookingServiceDuration}>{item.duration}</Text>
+          <Text style={styles.bookingServiceDuration}>{item.durationLabel}</Text>
         </View>
       </View>
     </MotionPressable>
   );
 }
 
-function BookingDateCard({ item, isSelected, onPress }) {
+function BookingDateCard({ item, isSelected, onPress, isCompact }) {
   return (
     <MotionPressable
       style={[
         styles.bookingDateCard,
+        isCompact && styles.bookingDateCardCompact,
         isSelected && styles.bookingDateCardActive,
         !item.isOpen && styles.bookingDateCardDisabled,
       ]}
@@ -970,12 +1160,16 @@ function BookingDateCard({ item, isSelected, onPress }) {
   );
 }
 
-function BookingTimeSlot({ item, isSelected, onPress }) {
+function BookingTimeSlot({ item, isSelected, onPress, isCompact }) {
   return (
     <MotionPressable
-      containerStyle={styles.bookingTimeSlotContainer}
+      containerStyle={[
+        styles.bookingTimeSlotContainer,
+        isCompact && styles.bookingTimeSlotContainerCompact,
+      ]}
       style={[
         styles.bookingTimeSlot,
+        isCompact && styles.bookingTimeSlotCompact,
         isSelected && styles.bookingTimeSlotActive,
         !item.available && styles.bookingTimeSlotDisabled,
       ]}
@@ -985,9 +1179,42 @@ function BookingTimeSlot({ item, isSelected, onPress }) {
       <Text style={[styles.bookingTimeSlotText, isSelected && styles.bookingTimeSlotTextActive, !item.available && styles.bookingTimeSlotTextDisabled]}>
         {item.label}
       </Text>
+      {item.timeRangeLabel ? (
+        <Text style={[styles.bookingTimeSlotSubtext, isSelected && styles.bookingTimeSlotSubtextActive, !item.available && styles.bookingTimeSlotTextDisabled]}>
+          {item.timeRangeLabel}
+        </Text>
+      ) : null}
+      {item.capacityLabel ? (
+        <Text style={[styles.bookingTimeSlotReason, isSelected && styles.bookingTimeSlotReasonActive]}>
+          {item.capacityLabel}
+        </Text>
+      ) : null}
       {!item.available && item.reason ? (
         <Text style={styles.bookingTimeSlotReason}>{item.reason}</Text>
       ) : null}
+    </MotionPressable>
+  );
+}
+
+function BookingHistoryCard({ booking, vehicles, isSelected, onPress }) {
+  return (
+    <MotionPressable
+      style={[styles.bookingHistoryCard, isSelected && styles.bookingHistoryCardActive]}
+      onPress={onPress}
+      scaleTo={0.988}
+    >
+      <View style={styles.bookingHistoryCardHeader}>
+        <Text style={styles.bookingHistoryReference}>#{getBookingReference(booking)}</Text>
+        <View style={styles.bookingHistoryStatusPill}>
+          <Text style={styles.bookingHistoryStatusText}>{getBookingStatusLabel(booking.status)}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.bookingHistoryTitle}>{getBookingServiceNames(booking)}</Text>
+      <Text style={styles.bookingHistoryMeta}>
+        {formatBookingDateLabel(booking.scheduledDate)} - {getBookingTimeLabel(booking)}
+      </Text>
+      <Text style={styles.bookingHistoryMeta}>{getBookingVehicleLabel(booking, vehicles)}</Text>
     </MotionPressable>
   );
 }
@@ -1139,18 +1366,22 @@ function TimelineEventCard({ item }) {
 export default function Dashboard({ account, navigation, onSignOut, onSaveProfile, onDeleteAccount }) {
   const isWeb = Platform.OS === 'web';
   const { width: windowWidth } = useWindowDimensions();
+  const isCompactPhone = !isWeb && windowWidth < 390;
   const [activeTab, setActiveTab] = useState('explore');
   const [menuScreen, setMenuScreen] = useState('root');
   const [bookingMode, setBookingMode] = useState('book');
-  const [selectedBookingServiceKey, setSelectedBookingServiceKey] = useState(
-    bookingServices.find((service) => service.enabled)?.key || bookingServices[0].key
-  );
-  const [selectedBookingDateKey, setSelectedBookingDateKey] = useState(
-    bookingDates.find((date) => date.isOpen)?.key || bookingDates[0].key
-  );
+  const [bookingDiscovery, setBookingDiscovery] = useState(createInitialBookingDiscoveryState);
+  const [selectedBookingServiceKey, setSelectedBookingServiceKey] = useState(null);
   const [selectedBookingTimeKey, setSelectedBookingTimeKey] = useState(null);
+  const [selectedBookingVehicleId, setSelectedBookingVehicleId] = useState(null);
+  const [selectedBookingDateKey, setSelectedBookingDateKey] = useState(
+    () => buildBookingDateOptions()[0]?.key ?? '',
+  );
   const [bookingNotes, setBookingNotes] = useState('');
-  const [trackingBooking, setTrackingBooking] = useState(null);
+  const [bookingCreateState, setBookingCreateState] = useState(createInitialBookingCreateState);
+  const [bookingHistory, setBookingHistory] = useState(createInitialBookingHistoryState);
+  const [selectedHistoryBookingId, setSelectedHistoryBookingId] = useState(null);
+  const [bookingDetailState, setBookingDetailState] = useState(createInitialBookingDetailState);
   const [notificationsFeed, setNotificationsFeed] = useState(defaultNotifications);
   const [isNotificationsVisible, setIsNotificationsVisible] = useState(false);
   const [isProfileTooltipVisible, setIsProfileTooltipVisible] = useState(false);
@@ -1166,6 +1397,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   const [deletePasswordError, setDeletePasswordError] = useState('');
   const [isProfileEditing, setIsProfileEditing] = useState(false);
   const [profileForm, setProfileForm] = useState(createProfileForm(account));
+  const primaryVehicleLabel = account?.vehicleDisplayName || account?.vehicleModel || 'Toyota Vios 1.3 E';
   const [profileErrors, setProfileErrors] = useState({});
   const [securityForm, setSecurityForm] = useState({
     currentPassword: '',
@@ -1188,6 +1420,19 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   useEffect(() => {
     setProfileForm(createProfileForm(account));
   }, [account]);
+
+  useEffect(() => {
+    setBookingDiscovery(createInitialBookingDiscoveryState());
+    setSelectedBookingServiceKey(null);
+    setSelectedBookingTimeKey(null);
+    setSelectedBookingVehicleId(null);
+    setSelectedBookingDateKey(buildBookingDateOptions()[0]?.key ?? '');
+    setBookingNotes('');
+    setBookingCreateState(createInitialBookingCreateState());
+    setBookingHistory(createInitialBookingHistoryState());
+    setSelectedHistoryBookingId(null);
+    setBookingDetailState(createInitialBookingDetailState());
+  }, [account?.accessToken, account?.userId]);
 
   useEffect(() => {
     screenFadeAnim.stopAnimation();
@@ -1238,6 +1483,240 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   }, [selectedProduct, productOverlayAnim]);
 
   useEffect(() => {
+    if (activeTab !== 'notifications' || bookingMode !== 'book') {
+      return;
+    }
+
+    if (bookingDiscovery.status !== 'idle') {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadBookingDiscovery = async () => {
+      setBookingDiscovery((currentState) => ({
+        ...currentState,
+        status: 'loading',
+        errorMessage: '',
+      }));
+
+      try {
+        const nextSnapshot = await loadBookingDiscoverySnapshot({
+          userId: account?.userId,
+          accessToken: account?.accessToken,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setBookingDiscovery({
+          status: 'ready',
+          services: nextSnapshot.services,
+          timeSlots: nextSnapshot.timeSlots,
+          vehicles: nextSnapshot.vehicles,
+          errorMessage: '',
+        });
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Unable to load booking discovery right now.';
+        const isUnauthorized = error instanceof ApiError && [401, 403].includes(error.status);
+
+        setBookingDiscovery((currentState) => ({
+          ...currentState,
+          status: isUnauthorized ? 'unauthorized' : 'error',
+          errorMessage: message,
+        }));
+      }
+    };
+
+    void loadBookingDiscovery();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    account?.accessToken,
+    account?.userId,
+    activeTab,
+    bookingMode,
+  ]);
+
+  useEffect(() => {
+    const matchingVehicle = bookingDiscovery.vehicles.find(
+      (vehicle) => vehicle.id === selectedBookingVehicleId,
+    );
+    if (!matchingVehicle) {
+      setSelectedBookingVehicleId(bookingDiscovery.vehicles[0]?.id ?? null);
+    }
+
+    const matchingService = bookingDiscovery.services.find(
+      (service) => service.id === selectedBookingServiceKey && service.isActive,
+    );
+    if (!matchingService) {
+      setSelectedBookingServiceKey(
+        bookingDiscovery.services.find(isBookableService)?.id ?? bookingDiscovery.services[0]?.id ?? null,
+      );
+    }
+
+    const matchingTimeSlot = bookingDiscovery.timeSlots.find(
+      (timeSlot) => timeSlot.id === selectedBookingTimeKey && timeSlot.isActive,
+    );
+    if (!matchingTimeSlot) {
+      setSelectedBookingTimeKey(
+        bookingDiscovery.timeSlots.find(isBookableTimeSlot)?.id ?? bookingDiscovery.timeSlots[0]?.id ?? null,
+      );
+    }
+  }, [
+    bookingDiscovery.services,
+    bookingDiscovery.timeSlots,
+    bookingDiscovery.vehicles,
+    selectedBookingServiceKey,
+    selectedBookingTimeKey,
+    selectedBookingVehicleId,
+  ]);
+
+  useEffect(() => {
+    if (activeTab !== 'notifications' || bookingMode !== 'track') {
+      return;
+    }
+
+    if (bookingHistory.status !== 'idle') {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadBookingHistory = async () => {
+      setBookingHistory((currentState) => ({
+        ...currentState,
+        status: 'loading',
+        errorMessage: '',
+      }));
+
+      try {
+        const bookings = await listCustomerBookings({
+          userId: account?.userId,
+          accessToken: account?.accessToken,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setBookingHistory({
+          status: 'ready',
+          bookings,
+          errorMessage: '',
+        });
+        setSelectedHistoryBookingId((currentBookingId) =>
+          bookings.some((booking) => booking.id === currentBookingId)
+            ? currentBookingId
+            : bookings[0]?.id ?? null,
+        );
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Unable to load booking history right now.';
+        const isUnauthorized = error instanceof ApiError && [401, 403].includes(error.status);
+
+        setBookingHistory((currentState) => ({
+          ...currentState,
+          status: isUnauthorized ? 'unauthorized' : 'error',
+          errorMessage: message,
+        }));
+      }
+    };
+
+    void loadBookingHistory();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    account?.accessToken,
+    account?.userId,
+    activeTab,
+    bookingMode,
+  ]);
+
+  useEffect(() => {
+    if (activeTab !== 'notifications' || bookingMode !== 'track') {
+      return;
+    }
+
+    if (!selectedHistoryBookingId) {
+      setBookingDetailState(createInitialBookingDetailState());
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadBookingDetail = async () => {
+      setBookingDetailState((currentState) => ({
+        ...currentState,
+        status: 'loading',
+        errorMessage: '',
+      }));
+
+      try {
+        const booking = await getBookingById({
+          bookingId: selectedHistoryBookingId,
+          accessToken: account?.accessToken,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setBookingDetailState({
+          status: 'ready',
+          booking,
+          errorMessage: '',
+        });
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Unable to load booking detail right now.';
+        const isUnauthorized = error instanceof ApiError && [401, 403].includes(error.status);
+
+        setBookingDetailState({
+          status: isUnauthorized ? 'unauthorized' : 'error',
+          booking: null,
+          errorMessage: message,
+        });
+      }
+    };
+
+    void loadBookingDetail();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    account?.accessToken,
+    activeTab,
+    bookingMode,
+    selectedHistoryBookingId,
+  ]);
+
+  useEffect(() => {
     if (isNotificationsVisible) {
       notificationPanelAnim.stopAnimation();
       notificationPanelAnim.setValue(0);
@@ -1251,15 +1730,6 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   }, [isNotificationsVisible, notificationPanelAnim]);
 
   useEffect(() => {
-    const slots = bookingTimeSlots[selectedBookingDateKey] || [];
-    const selectedSlot = slots.find((slot) => slot.key === selectedBookingTimeKey && slot.available);
-
-    if (!selectedSlot) {
-      setSelectedBookingTimeKey(slots.find((slot) => slot.available)?.key || null);
-    }
-  }, [selectedBookingDateKey, selectedBookingTimeKey]);
-
-  useEffect(() => {
     setIsNotificationsVisible(false);
     setIsProfileTooltipVisible(false);
   }, [activeTab, menuScreen]);
@@ -1270,16 +1740,17 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
       0
     );
     const slotWidth = windowWidth / tabs.length;
+    const itemInset = isCompactPhone ? 3 : 6;
 
     bottomNavIndicatorAnim.stopAnimation();
     Animated.spring(bottomNavIndicatorAnim, {
-      toValue: activeIndex * slotWidth + 6,
+      toValue: activeIndex * slotWidth + itemInset,
       stiffness: 220,
       damping: 26,
       mass: 0.8,
       useNativeDriver: true,
     }).start();
-  }, [activeTab, windowWidth, bottomNavIndicatorAnim]);
+  }, [activeTab, isCompactPhone, windowWidth, bottomNavIndicatorAnim]);
 
   const handleTabPress = (tabKey) => {
     setActiveTab(tabKey);
@@ -1307,35 +1778,179 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     setSelectedProduct(null);
   };
 
-  const handleConfirmBooking = () => {
-    const selectedService = bookingServices.find((service) => service.key === selectedBookingServiceKey);
-    const selectedDate = bookingDates.find((date) => date.key === selectedBookingDateKey);
-    const selectedTimeSlot = (bookingTimeSlots[selectedBookingDateKey] || []).find(
-      (slot) => slot.key === selectedBookingTimeKey
-    );
+  const handleRefreshBookingDiscovery = async () => {
+    setBookingDiscovery((currentState) => ({
+      ...currentState,
+      status: 'loading',
+      errorMessage: '',
+    }));
 
-    if (!selectedService || !selectedDate || !selectedTimeSlot || !selectedTimeSlot.available) {
+    try {
+      const nextSnapshot = await loadBookingDiscoverySnapshot({
+        userId: account?.userId,
+        accessToken: account?.accessToken,
+      });
+
+      setBookingDiscovery({
+        status: 'ready',
+        services: nextSnapshot.services,
+        timeSlots: nextSnapshot.timeSlots,
+        vehicles: nextSnapshot.vehicles,
+        errorMessage: '',
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Unable to refresh booking discovery right now.';
+      const isUnauthorized = error instanceof ApiError && [401, 403].includes(error.status);
+
+      setBookingDiscovery((currentState) => ({
+        ...currentState,
+        status: isUnauthorized ? 'unauthorized' : 'error',
+        errorMessage: message,
+      }));
+    }
+  };
+
+  const handleRefreshBookingHistory = async () => {
+    setBookingHistory((currentState) => ({
+      ...currentState,
+      status: 'loading',
+      errorMessage: '',
+    }));
+
+    try {
+      const bookings = await listCustomerBookings({
+        userId: account?.userId,
+        accessToken: account?.accessToken,
+      });
+
+      setBookingHistory({
+        status: 'ready',
+        bookings,
+        errorMessage: '',
+      });
+      setSelectedHistoryBookingId((currentBookingId) =>
+        bookings.some((booking) => booking.id === currentBookingId)
+          ? currentBookingId
+          : bookings[0]?.id ?? null,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Unable to refresh booking history right now.';
+      const isUnauthorized = error instanceof ApiError && [401, 403].includes(error.status);
+
+      setBookingHistory((currentState) => ({
+        ...currentState,
+        status: isUnauthorized ? 'unauthorized' : 'error',
+        errorMessage: message,
+      }));
+    }
+  };
+
+  const handleSubmitBooking = async () => {
+    if (bookingCreateState.status === 'submitting') {
       return;
     }
 
-    setTrackingBooking({
-      reference: `CC-${selectedBookingDateKey.replace(/-/g, '')}`,
-      serviceTitle: selectedService.title,
-      vehicle: account?.vehicleModel || 'Toyota Vios',
-      dateLabel: selectedDate.fullLabel,
-      timeLabel: selectedTimeSlot.label,
-      baySlot: 'Assigned on arrival',
-      mechanic: 'To be assigned',
-      estimatedReady: selectedService.duration,
-      status: 'Scheduled',
-      stage: 'scheduled',
-      note:
-        bookingNotes.trim() ||
-        'Your booking is confirmed. Please arrive 10 minutes before your selected slot.',
-      recommendation: null,
+    const selectedVehicle = bookingDiscovery.vehicles.find(
+      (vehicle) => vehicle.id === selectedBookingVehicleId,
+    );
+    const selectedService = bookingDiscovery.services.find(
+      (service) => service.id === selectedBookingServiceKey,
+    );
+    const selectedTimeSlot = bookingDiscovery.timeSlots.find(
+      (timeSlot) => timeSlot.id === selectedBookingTimeKey,
+    );
+
+    if (!account?.userId) {
+      setBookingCreateState({
+        status: 'unauthorized',
+        message: 'Sign in again before submitting a booking request.',
+        booking: null,
+      });
+      return;
+    }
+
+    if (!selectedVehicle || !selectedService?.isActive || !selectedTimeSlot?.isActive || !selectedBookingDateKey) {
+      setBookingCreateState({
+        status: 'validation-error',
+        message: 'Choose an owned vehicle, active service, active time slot, and appointment date.',
+        booking: null,
+      });
+      return;
+    }
+
+    setBookingCreateState({
+      status: 'submitting',
+      message: 'Submitting your booking request. Duplicate taps are locked while this is in progress.',
+      booking: null,
     });
-    setBookingMode('track');
-    Alert.alert('Booking Confirmed', 'Your appointment has been added to Track Progress.');
+
+    try {
+      const createdBooking = await createCustomerBooking({
+        userId: account.userId,
+        vehicleId: selectedVehicle.id,
+        timeSlotId: selectedTimeSlot.id,
+        scheduledDate: selectedBookingDateKey,
+        serviceIds: [selectedService.id],
+        notes: bookingNotes.trim() || undefined,
+        accessToken: account?.accessToken,
+      });
+
+      setBookingCreateState({
+        status: 'success',
+        message: 'Booking request submitted. It remains pending until staff review it.',
+        booking: createdBooking,
+      });
+      setBookingHistory((currentState) => ({
+        status: 'ready',
+        errorMessage: '',
+        bookings: [
+          createdBooking,
+          ...currentState.bookings.filter((booking) => booking.id !== createdBooking.id),
+        ],
+      }));
+      setSelectedHistoryBookingId(createdBooking.id);
+      setBookingDetailState({
+        status: 'ready',
+        booking: createdBooking,
+        errorMessage: '',
+      });
+      setBookingMode('track');
+      setBookingNotes('');
+    } catch (error) {
+      const statusCode = error instanceof ApiError ? error.status : null;
+      const fallbackMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Unable to submit booking right now.';
+      let status = 'error';
+      let message = fallbackMessage;
+
+      if (statusCode === 400) {
+        status = 'validation-error';
+        message = 'The booking request is missing or has invalid fields. Check the date and service selection.';
+      } else if (statusCode === 401 || statusCode === 403) {
+        status = 'unauthorized';
+        message = 'Your session could not submit this booking. Sign in again and retry.';
+      } else if (statusCode === 404) {
+        status = 'not-found';
+        message = 'The user, owned vehicle, service, or time slot could not be found.';
+      } else if (statusCode === 409) {
+        status = 'conflict';
+        message = 'That slot is no longer available or another booking conflict exists. Refresh options and retry.';
+      }
+
+      setBookingCreateState({
+        status,
+        message,
+        booking: null,
+      });
+    }
   };
 
   const navigateToTimeline = () => {
@@ -2188,96 +2803,64 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   };
 
   const renderBookingContent = () => {
-    const selectedService = bookingServices.find((service) => service.key === selectedBookingServiceKey);
-    const selectedDate = bookingDates.find((date) => date.key === selectedBookingDateKey);
-    const selectedDateSlots = bookingTimeSlots[selectedBookingDateKey] || [];
+    const bookingDiscoveryStateKey = getBookingDiscoveryStateKey(bookingDiscovery);
+    const selectedVehicle = bookingDiscovery.vehicles.find(
+      (vehicle) => vehicle.id === selectedBookingVehicleId,
+    );
+    const selectedService = bookingDiscovery.services.find(
+      (service) => service.id === selectedBookingServiceKey,
+    );
+    const selectedTimeSlot = bookingDiscovery.timeSlots.find(
+      (timeSlot) => timeSlot.id === selectedBookingTimeKey,
+    );
+    const bookingDateOptions = buildBookingDateOptions();
+    const bookingVehicleOptions = bookingDiscovery.vehicles.map((vehicle) => ({
+      id: vehicle.id,
+      title: buildOwnedVehicleLabel(vehicle),
+      subtitle: `${vehicle.make} ${vehicle.model} - ${vehicle.year}`,
+      plateNumber: vehicle.plateNumber,
+    }));
+    const bookingServiceOptions = bookingDiscovery.services.map((service) => ({
+      key: service.id,
+      icon: 'wrench-outline',
+      title: service.name,
+      subtitle: service.description || 'No service description has been published for this offering yet.',
+      enabled: service.isActive,
+      badgeLabel: service.isActive ? null : 'Inactive',
+      metaLabel: service.categoryId ? 'Categorized' : null,
+      durationLabel: formatBookingServiceDuration(service.durationMinutes),
+    }));
+    const bookingTimeSlotOptions = bookingDiscovery.timeSlots.map((timeSlot) => ({
+      key: timeSlot.id,
+      label: timeSlot.label,
+      timeRangeLabel: formatBookingTimeSlotWindow(timeSlot),
+      capacityLabel: `Capacity ${timeSlot.capacity}`,
+      available: timeSlot.isActive,
+      reason: timeSlot.isActive ? null : 'Unavailable',
+    }));
     const isBookingReady =
-      Boolean(selectedService?.enabled) &&
-      Boolean(selectedDate?.isOpen) &&
-      selectedDateSlots.some((slot) => slot.key === selectedBookingTimeKey && slot.available);
-
-    const trackingSteps = trackingBooking
-      ? trackingBooking.stage === 'scheduled'
-        ? [
-            {
-              label: 'Booking Confirmed',
-              status: 'Reserved',
-              state: 'done',
-            },
-            {
-              label: 'Awaiting Service',
-              status: 'Vehicle not checked in yet',
-              state: 'current',
-              note: 'Your slot is secured. Progress updates will appear once your vehicle is received.',
-            },
-            {
-              label: 'Quality Audit',
-              status: 'Pending',
-              state: 'upcoming',
-            },
-            {
-              label: 'Ready for Release',
-              status: 'Pending',
-              state: 'upcoming',
-            },
-          ]
-        : [
-            {
-              label: 'Intake',
-              status: 'Done',
-              state: 'done',
-            },
-            {
-              label: 'In Progress',
-              status: 'Currently in this stage',
-              state: 'current',
-              note: trackingBooking.note,
-            },
-            {
-              label: 'Quality Audit',
-              status: 'Upcoming',
-              state: 'upcoming',
-            },
-            {
-              label: 'Ready',
-              status: 'Upcoming',
-              state: 'upcoming',
-            },
-          ]
-      : [
-          {
-            label: 'Check-In',
-            status: 'No active booking',
-            state: 'inactive',
-          },
-          {
-            label: 'No Active Service',
-            status: 'Offline',
-            state: 'inactive',
-            note: 'Tracking becomes active once a booking is confirmed and the vehicle is checked in.',
-          },
-          {
-            label: 'Quality Audit',
-            status: 'Offline',
-            state: 'inactive',
-          },
-          {
-            label: 'Ready for Release',
-            status: 'Offline',
-            state: 'inactive',
-          },
-        ];
+      bookingDiscoveryStateKey === 'ready' &&
+      Boolean(selectedVehicle) &&
+      Boolean(selectedService?.isActive) &&
+      Boolean(selectedTimeSlot?.isActive) &&
+      Boolean(selectedBookingDateKey) &&
+      bookingCreateState.status !== 'submitting';
+    const selectedHistoryBooking = bookingHistory.bookings.find(
+      (booking) => booking.id === selectedHistoryBookingId,
+    );
+    const selectedBookingDetail = bookingDetailState.booking ?? selectedHistoryBooking ?? null;
+    const trackingSteps = buildBookingTrackingSteps(selectedBookingDetail);
 
     return renderScrollableContent(styles.bookingScrollContent, (
       <>
       <View style={styles.bookingHeader}>
         <Text style={styles.bookingEyebrow}>SERVICE CENTER</Text>
-        <Text style={styles.bookingTitle}>Book & Track</Text>
+        <Text style={styles.bookingTitle}>Discover & Track</Text>
       </View>
 
       <View style={styles.bookingModeWrap}>
         <BookingModeTab
-          label="Book Service"
+          label="Discover Options"
           isActive={bookingMode === 'book'}
           onPress={() => setBookingMode('book')}
         />
@@ -2290,188 +2873,443 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
 
       {bookingMode === 'book' ? (
         <>
-          <Text style={styles.bookingSectionLabel}>Select Service</Text>
-          {bookingServices.map((service) => (
-            <BookingServiceCard
-              key={service.key}
-              item={service}
-              isSelected={selectedBookingServiceKey === service.key}
-              onPress={() => setSelectedBookingServiceKey(service.key)}
-            />
-          ))}
-
-          <Text style={styles.bookingSectionLabel}>Select Date</Text>
-          <ScrollView
-            horizontal
-            style={styles.bookingDateScroller}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.bookingDateRow}
-          >
-            {bookingDates.map((date) => (
-              <BookingDateCard
-                key={date.key}
-                item={date}
-                isSelected={selectedBookingDateKey === date.key}
-                onPress={() => setSelectedBookingDateKey(date.key)}
-              />
-            ))}
-          </ScrollView>
-
-          <Text style={styles.bookingSectionLabel}>Available Time Slots</Text>
-          <View style={styles.bookingTimeGrid}>
-            {selectedDate?.isOpen ? (
-              selectedDateSlots.map((slot) => (
-                <BookingTimeSlot
-                  key={slot.key}
-                  item={slot}
-                  isSelected={selectedBookingTimeKey === slot.key}
-                  onPress={() => setSelectedBookingTimeKey(slot.key)}
-                />
-              ))
-            ) : (
-              <View style={styles.bookingInfoPanel}>
-                <Text style={styles.bookingInfoPanelTitle}>This day is unavailable</Text>
-                <Text style={styles.bookingInfoPanelText}>
-                  The admin can close dates like this from the web dashboard when the shop is not open.
+          <View style={styles.bookingDiscoveryBanner}>
+            <View style={styles.bookingDiscoveryBannerCopyWrap}>
+              <View style={styles.bookingDiscoveryBannerIconWrap}>
+                <MaterialCommunityIcons name="source-branch-sync" size={18} color={colors.primary} />
+              </View>
+              <View style={styles.bookingDiscoveryBannerCopy}>
+                <Text style={styles.bookingDiscoveryBannerTitle}>Live booking discovery</Text>
+                <Text style={styles.bookingDiscoveryBannerText}>
+                  Services and slot definitions come from live backend routes. Choosing a slot here does not hold capacity until booking create.
                 </Text>
               </View>
-            )}
-          </View>
+            </View>
 
-          <Text style={styles.bookingSectionLabel}>Special Notes</Text>
-          <View style={styles.bookingNotesCard}>
-            <TextInput
-              value={bookingNotes}
-              onChangeText={setBookingNotes}
-              placeholder="Describe any additional issues or concerns..."
-              placeholderTextColor={colors.mutedText}
-              multiline
-              textAlignVertical="top"
-              style={styles.bookingNotesInput}
-              selectionColor={colors.primary}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.bookingConfirmButton, !isBookingReady && styles.bookingConfirmButtonDisabled]}
-            onPress={isBookingReady ? handleConfirmBooking : undefined}
-            activeOpacity={isBookingReady ? 0.88 : 1}
-            disabled={!isBookingReady}
-          >
-            <Text
-              style={[
-                styles.bookingConfirmButtonText,
-                !isBookingReady && styles.bookingConfirmButtonTextDisabled,
-              ]}
+            <TouchableOpacity
+              style={styles.bookingDiscoveryRefreshButton}
+              onPress={handleRefreshBookingDiscovery}
+              activeOpacity={bookingDiscovery.status === 'loading' ? 1 : 0.86}
+              disabled={bookingDiscovery.status === 'loading'}
             >
-              Confirm Booking
-            </Text>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={20}
-              color={isBookingReady ? colors.onPrimary : colors.mutedText}
+              {bookingDiscovery.status === 'loading' ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <MaterialCommunityIcons name="refresh" size={18} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {bookingDiscoveryStateKey === 'loading' ? (
+            <BookingDiscoveryStatePanel
+              icon="timer-sand"
+              title="Loading booking discovery"
+              message="Fetching live services, time-slot definitions, and your eligible vehicles now."
+              isLoading
             />
-          </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          <View style={styles.trackingSummaryCard}>
-            <View style={styles.trackingSummaryHeader}>
-              <Text style={styles.trackingReferenceText}>
-                {trackingBooking ? `Booking #${trackingBooking.reference}` : 'No active service'}
+          ) : bookingDiscoveryStateKey === 'unauthorized' ? (
+            <BookingDiscoveryStatePanel
+              icon="lock-outline"
+              title="Your session needs attention"
+              message={bookingDiscovery.errorMessage || 'Sign in again to read your eligible vehicle list before booking.'}
+              actionLabel="Retry"
+              onAction={handleRefreshBookingDiscovery}
+            />
+          ) : bookingDiscoveryStateKey === 'error' ? (
+            <BookingDiscoveryStatePanel
+              icon="alert-circle-outline"
+              title="Booking discovery is unavailable"
+              message={bookingDiscovery.errorMessage || 'We could not refresh the discovery data right now.'}
+              actionLabel="Retry"
+              onAction={handleRefreshBookingDiscovery}
+            />
+          ) : (
+            <>
+              <Text style={styles.bookingSectionLabel}>Select Vehicle</Text>
+              {bookingVehicleOptions.length ? (
+                bookingVehicleOptions.map((vehicle) => (
+                  <BookingVehicleCard
+                    key={vehicle.id}
+                    item={vehicle}
+                    isSelected={selectedBookingVehicleId === vehicle.id}
+                    onPress={() => {
+                      setSelectedBookingVehicleId(vehicle.id);
+                      if (bookingCreateState.status !== 'submitting') {
+                        setBookingCreateState(createInitialBookingCreateState());
+                      }
+                    }}
+                  />
+                ))
+              ) : (
+                <BookingDiscoveryStatePanel
+                  icon="car-off"
+                  title="No eligible vehicles found"
+                  message="Only vehicles already attached to your account can be used for booking discovery. Add one from your profile flow to continue."
+                />
+              )}
+
+              <Text style={styles.bookingSectionLabel}>Available Services</Text>
+              {!bookingDiscovery.services.some(isBookableService) ? (
+                <BookingDiscoveryStatePanel
+                  icon="wrench-clock"
+                  title="No services are available right now"
+                  message="The live services route returned no active booking services. Keep this state explicit instead of filling the list with placeholders."
+                />
+              ) : null}
+              {bookingServiceOptions.map((service) => (
+                <BookingServiceCard
+                  key={service.key}
+                  item={service}
+                  isSelected={selectedBookingServiceKey === service.key}
+                  onPress={() => {
+                    setSelectedBookingServiceKey(service.key);
+                    if (bookingCreateState.status !== 'submitting') {
+                      setBookingCreateState(createInitialBookingCreateState());
+                    }
+                  }}
+                />
+              ))}
+
+              <Text style={styles.bookingSectionLabel}>Slot Definitions</Text>
+              <Text style={styles.bookingDateHint}>
+                Pick the shop window that works best. Staff can accept, decline, cancel, or complete the request from the admin schedule.
               </Text>
-              <View
-                style={[
-                  styles.trackingStatusPill,
-                  trackingBooking ? styles.trackingStatusPillActive : styles.trackingStatusPillIdle,
-                ]}
+              {!bookingDiscovery.timeSlots.some(isBookableTimeSlot) ? (
+                <BookingDiscoveryStatePanel
+                  icon="calendar-remove-outline"
+                  title="No bookable time slots are open"
+                  message="The live time-slot route returned no active slots. Keep this visible to the customer instead of pretending a slot is available."
+                />
+              ) : null}
+              {bookingTimeSlotOptions.length ? (
+                <View style={styles.bookingTimeGrid}>
+                  {bookingTimeSlotOptions.map((slot) => (
+                    <BookingTimeSlot
+                      key={slot.key}
+                      item={slot}
+                      isSelected={selectedBookingTimeKey === slot.key}
+                      isCompact={isCompactPhone}
+                      onPress={() => {
+                        setSelectedBookingTimeKey(slot.key);
+                        if (bookingCreateState.status !== 'submitting') {
+                          setBookingCreateState(createInitialBookingCreateState());
+                        }
+                      }}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <BookingDiscoveryStatePanel
+                  icon="clock-remove-outline"
+                  title="No slot definitions returned"
+                  message="Time-slot definitions will appear here once the backend publishes them."
+                />
+              )}
+
+              <Text style={styles.bookingSectionLabel}>Appointment Date</Text>
+              <Text style={styles.bookingDateHint}>
+                Showing the next month of available appointment dates, starting tomorrow.
+              </Text>
+              <ScrollView
+                horizontal
+                style={styles.bookingDateScroller}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.bookingDateRow}
+              >
+                {bookingDateOptions.map((dateOption) => (
+                  <BookingDateCard
+                    key={dateOption.key}
+                    item={{
+                      ...dateOption,
+                      isOpen: true,
+                    }}
+                    isSelected={selectedBookingDateKey === dateOption.key}
+                    isCompact={isCompactPhone}
+                    onPress={() => {
+                      setSelectedBookingDateKey(dateOption.key);
+                      if (bookingCreateState.status !== 'submitting') {
+                        setBookingCreateState(createInitialBookingCreateState());
+                      }
+                    }}
+                  />
+                ))}
+              </ScrollView>
+
+              <Text style={styles.bookingSectionLabel}>Special Notes</Text>
+              <View style={styles.bookingNotesCard}>
+                <TextInput
+                  value={bookingNotes}
+                  onChangeText={(value) => {
+                    setBookingNotes(value);
+                    if (bookingCreateState.status !== 'submitting') {
+                      setBookingCreateState(createInitialBookingCreateState());
+                    }
+                  }}
+                  placeholder="Optional concerns for staff review..."
+                  placeholderTextColor={colors.mutedText}
+                  multiline
+                  textAlignVertical="top"
+                  style={styles.bookingNotesInput}
+                  selectionColor={colors.primary}
+                />
+              </View>
+
+              <View style={styles.bookingSummaryCard}>
+                <Text style={styles.bookingSummaryTitle}>Discovery Summary</Text>
+
+                <View style={styles.bookingSummaryRow}>
+                  <Text style={styles.bookingSummaryLabel}>Vehicle</Text>
+                  <Text style={styles.bookingSummaryValue}>
+                    {selectedVehicle ? buildOwnedVehicleLabel(selectedVehicle) : 'Choose an owned vehicle'}
+                  </Text>
+                </View>
+
+                <View style={styles.bookingSummaryRow}>
+                  <Text style={styles.bookingSummaryLabel}>Service</Text>
+                  <Text style={styles.bookingSummaryValue}>
+                    {selectedService?.name || 'Choose a service'}
+                  </Text>
+                </View>
+
+                <View style={styles.bookingSummaryRow}>
+                  <Text style={styles.bookingSummaryLabel}>Slot</Text>
+                  <Text style={styles.bookingSummaryValue}>
+                    {selectedTimeSlot
+                      ? `${selectedTimeSlot.label} - ${formatBookingTimeSlotWindow(selectedTimeSlot)}`
+                      : 'Choose a live slot definition'}
+                  </Text>
+                </View>
+
+                <View style={styles.bookingSummaryRow}>
+                  <Text style={styles.bookingSummaryLabel}>Date</Text>
+                  <Text style={styles.bookingSummaryValue}>
+                    {selectedBookingDateKey ? formatBookingDateLabel(selectedBookingDateKey) : 'Choose a date'}
+                  </Text>
+                </View>
+
+                <Text style={styles.bookingSummaryNote}>
+                  Submitting creates a pending booking request. Staff confirmation, decline, or reschedule decisions remain separate later booking states.
+                </Text>
+              </View>
+
+              {bookingCreateState.status !== 'idle' ? (
+                <BookingDiscoveryStatePanel
+                  icon={
+                    bookingCreateState.status === 'success'
+                      ? 'check-circle-outline'
+                      : bookingCreateState.status === 'conflict'
+                        ? 'calendar-alert'
+                        : bookingCreateState.status === 'submitting'
+                          ? 'timer-sand'
+                          : 'alert-circle-outline'
+                  }
+                  title={
+                    bookingCreateState.status === 'success'
+                      ? 'Booking request submitted'
+                      : bookingCreateState.status === 'conflict'
+                        ? 'Slot conflict'
+                        : bookingCreateState.status === 'submitting'
+                          ? 'Submitting request'
+                          : bookingCreateState.status === 'unauthorized'
+                            ? 'Session required'
+                            : 'Booking request needs attention'
+                  }
+                  message={bookingCreateState.message}
+                  isLoading={bookingCreateState.status === 'submitting'}
+                  actionLabel={bookingCreateState.status === 'conflict' ? 'Refresh Options' : undefined}
+                  onAction={bookingCreateState.status === 'conflict' ? handleRefreshBookingDiscovery : undefined}
+                />
+              ) : null}
+
+              <TouchableOpacity
+                style={[styles.bookingConfirmButton, !isBookingReady && styles.bookingConfirmButtonDisabled]}
+                onPress={isBookingReady ? handleSubmitBooking : undefined}
+                activeOpacity={isBookingReady ? 0.88 : 1}
+                disabled={!isBookingReady}
               >
                 <Text
                   style={[
-                    styles.trackingStatusPillText,
-                    !trackingBooking && styles.trackingStatusPillTextIdle,
+                    styles.bookingConfirmButtonText,
+                    !isBookingReady && styles.bookingConfirmButtonTextDisabled,
                   ]}
                 >
-                  {trackingBooking ? trackingBooking.status : 'Offline'}
+                  {bookingCreateState.status === 'submitting'
+                    ? 'Submitting...'
+                    : isBookingReady
+                      ? 'Submit Booking Request'
+                      : 'Select Vehicle, Service, Slot, And Date'}
                 </Text>
-              </View>
-            </View>
-
-            <Text style={styles.trackingSummaryTitle}>
-              {trackingBooking ? trackingBooking.serviceTitle : 'No booking in progress'}
-            </Text>
-
-            <View style={styles.trackingMetaGrid}>
-              <View style={styles.trackingMetaItem}>
-                <Text style={styles.trackingMetaLabel}>Vehicle</Text>
-                <Text style={styles.trackingMetaValue}>
-                  {trackingBooking ? trackingBooking.vehicle : account?.vehicleModel || 'Toyota Vios'}
-                </Text>
-              </View>
-              <View style={styles.trackingMetaItem}>
-                <Text style={styles.trackingMetaLabel}>Date</Text>
-                <Text style={styles.trackingMetaValue}>
-                  {trackingBooking ? trackingBooking.dateLabel : '--'}
-                </Text>
-              </View>
-              <View style={styles.trackingMetaItem}>
-                <Text style={styles.trackingMetaLabel}>Time</Text>
-                <Text style={styles.trackingMetaValue}>
-                  {trackingBooking ? trackingBooking.timeLabel : '--'}
-                </Text>
-              </View>
-              <View style={styles.trackingMetaItem}>
-                <Text style={styles.trackingMetaLabel}>Bay / Slot</Text>
-                <Text style={styles.trackingMetaValue}>
-                  {trackingBooking ? trackingBooking.baySlot : '--'}
-                </Text>
-              </View>
-              <View style={styles.trackingMetaItem}>
-                <Text style={styles.trackingMetaLabel}>Mechanic</Text>
-                <Text style={styles.trackingMetaValue}>
-                  {trackingBooking ? trackingBooking.mechanic : '--'}
-                </Text>
-              </View>
-              <View style={styles.trackingMetaItem}>
-                <Text style={styles.trackingMetaLabel}>Est. Ready</Text>
-                <Text style={styles.trackingMetaValue}>
-                  {trackingBooking ? trackingBooking.estimatedReady : '--'}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.trackingProgressCard}>
-            <Text style={styles.bookingSectionLabel}>Service Progress</Text>
-            {trackingSteps.map((step, index) => (
-              <TrackingStep
-                key={step.label}
-                item={step}
-                isLast={index === trackingSteps.length - 1}
-              />
-            ))}
-          </View>
-
-          {trackingBooking?.recommendation ? (
-            <View style={styles.trackingRecommendationCard}>
-              <View style={styles.trackingRecommendationHeader}>
-                <MaterialCommunityIcons name="alert-outline" size={20} color="#FFD24A" />
-                <Text style={styles.trackingRecommendationTitle}>Additional Service Needed</Text>
-              </View>
-              <Text style={styles.trackingRecommendationText}>
-                {trackingBooking.recommendation.message}
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={20}
+                  color={isBookingReady ? colors.onPrimary : colors.mutedText}
+                />
+              </TouchableOpacity>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <View style={styles.bookingHistoryToolbar}>
+            <View>
+              <Text style={styles.bookingSectionLabel}>Booking History</Text>
+              <Text style={styles.bookingHistoryToolbarText}>
+                Customer-visible records from your booking history endpoint.
               </Text>
-              <View style={styles.trackingRecommendationActions}>
-                <TouchableOpacity style={styles.trackingApproveButton} activeOpacity={0.86}>
-                  <Text style={styles.trackingApproveButtonText}>
-                    Approve ({trackingBooking.recommendation.priceLabel})
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.trackingDeclineButton} activeOpacity={0.86}>
-                  <Text style={styles.trackingDeclineButtonText}>Decline</Text>
-                </TouchableOpacity>
-              </View>
             </View>
+            <TouchableOpacity
+              style={styles.bookingDiscoveryRefreshButton}
+              onPress={handleRefreshBookingHistory}
+              activeOpacity={bookingHistory.status === 'loading' ? 1 : 0.86}
+              disabled={bookingHistory.status === 'loading'}
+            >
+              {bookingHistory.status === 'loading' ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <MaterialCommunityIcons name="refresh" size={18} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {bookingHistory.status === 'loading' && !bookingHistory.bookings.length ? (
+            <BookingDiscoveryStatePanel
+              icon="timer-sand"
+              title="Loading booking history"
+              message="Fetching your customer booking history now."
+              isLoading
+            />
+          ) : bookingHistory.status === 'unauthorized' ? (
+            <BookingDiscoveryStatePanel
+              icon="lock-outline"
+              title="Session required"
+              message={bookingHistory.errorMessage || 'Sign in again to load booking history.'}
+              actionLabel="Retry"
+              onAction={handleRefreshBookingHistory}
+            />
+          ) : bookingHistory.status === 'error' ? (
+            <BookingDiscoveryStatePanel
+              icon="alert-circle-outline"
+              title="History unavailable"
+              message={bookingHistory.errorMessage || 'Unable to load booking history right now.'}
+              actionLabel="Retry"
+              onAction={handleRefreshBookingHistory}
+            />
+          ) : bookingHistory.bookings.length ? (
+            <View style={styles.bookingHistoryList}>
+              {bookingHistory.bookings.map((booking) => (
+                <BookingHistoryCard
+                  key={booking.id}
+                  booking={booking}
+                  vehicles={bookingDiscovery.vehicles}
+                  isSelected={selectedHistoryBookingId === booking.id}
+                  onPress={() => setSelectedHistoryBookingId(booking.id)}
+                />
+              ))}
+            </View>
+          ) : (
+            <BookingDiscoveryStatePanel
+              icon="calendar-blank-outline"
+              title="No bookings yet"
+              message="Submitted bookings will appear here after the create endpoint returns a booking record."
+            />
+          )}
+
+          {bookingDetailState.status === 'loading' && selectedHistoryBookingId ? (
+            <BookingDiscoveryStatePanel
+              icon="timer-sand"
+              title="Refreshing booking detail"
+              message="Loading the selected booking detail from the live detail endpoint."
+              isLoading
+            />
+          ) : null}
+
+          {bookingDetailState.status === 'unauthorized' || bookingDetailState.status === 'error' ? (
+            <BookingDiscoveryStatePanel
+              icon="alert-circle-outline"
+              title="Detail unavailable"
+              message={bookingDetailState.errorMessage || 'Unable to load selected booking detail right now.'}
+            />
+          ) : null}
+
+          {selectedBookingDetail ? (
+            <>
+              <View style={styles.trackingSummaryCard}>
+                <View style={styles.trackingSummaryHeader}>
+                  <Text style={styles.trackingReferenceText}>
+                    Booking #{getBookingReference(selectedBookingDetail)}
+                  </Text>
+                  <View style={[styles.trackingStatusPill, styles.trackingStatusPillActive]}>
+                    <Text style={styles.trackingStatusPillText}>
+                      {getBookingStatusLabel(selectedBookingDetail.status)}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.trackingSummaryTitle}>
+                  {getBookingServiceNames(selectedBookingDetail)}
+                </Text>
+
+                <View style={styles.trackingMetaGrid}>
+                  <View style={styles.trackingMetaItem}>
+                    <Text style={styles.trackingMetaLabel}>Vehicle</Text>
+                    <Text style={styles.trackingMetaValue}>
+                      {getBookingVehicleLabel(selectedBookingDetail, bookingDiscovery.vehicles)}
+                    </Text>
+                  </View>
+                  <View style={styles.trackingMetaItem}>
+                    <Text style={styles.trackingMetaLabel}>Date</Text>
+                    <Text style={styles.trackingMetaValue}>
+                      {formatBookingDateLabel(selectedBookingDetail.scheduledDate)}
+                    </Text>
+                  </View>
+                  <View style={styles.trackingMetaItem}>
+                    <Text style={styles.trackingMetaLabel}>Time</Text>
+                    <Text style={styles.trackingMetaValue}>
+                      {getBookingTimeLabel(selectedBookingDetail)}
+                    </Text>
+                  </View>
+                  <View style={styles.trackingMetaItem}>
+                    <Text style={styles.trackingMetaLabel}>Status</Text>
+                    <Text style={styles.trackingMetaValue}>
+                      {getBookingStatusLabel(selectedBookingDetail.status)}
+                    </Text>
+                  </View>
+                  <View style={styles.trackingMetaItemWide}>
+                    <Text style={styles.trackingMetaLabel}>Notes</Text>
+                    <Text style={styles.trackingMetaValue}>
+                      {selectedBookingDetail.notes || 'No notes submitted.'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.trackingProgressCard}>
+                <Text style={styles.bookingSectionLabel}>Booking Status</Text>
+                {trackingSteps.map((step, index) => (
+                  <TrackingStep
+                    key={step.label}
+                    item={step}
+                    isLast={index === trackingSteps.length - 1}
+                  />
+                ))}
+              </View>
+
+              {selectedBookingDetail.statusHistory?.length ? (
+                <View style={styles.bookingStatusHistoryCard}>
+                  <Text style={styles.bookingSectionLabel}>Recorded Status Changes</Text>
+                  {selectedBookingDetail.statusHistory.slice(0, 4).map((historyItem) => (
+                    <View key={historyItem.id} style={styles.bookingStatusHistoryRow}>
+                      <Text style={styles.bookingStatusHistoryTitle}>
+                        {getBookingStatusLabel(historyItem.nextStatus)}
+                      </Text>
+                      <Text style={styles.bookingStatusHistoryMeta}>
+                        {historyItem.reason || 'No reason provided'} - {historyItem.changedAt}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </>
           ) : null}
         </>
       )}
@@ -2487,30 +3325,33 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     const lastName = account?.lastName || 'dela Cruz';
     const unreadCount = notificationsFeed.filter((item) => item.unread).length;
     const pinnedNotification = notificationsFeed[0] || null;
-    const topStatus =
-      trackingBooking?.stage === 'inProgress'
-        ? {
-            badge: 'IN PROGRESS',
-            title: trackingBooking.serviceTitle,
-            subtitle: `${trackingBooking.vehicle} • ${trackingBooking.baySlot} • ${trackingBooking.estimatedReady} left`,
-            progressWidth: '55%',
-            steps: ['Intake', 'In Progress', 'Quality Audit', 'Ready'],
-          }
-        : trackingBooking
-          ? {
-              badge: 'BOOKED',
-              title: trackingBooking.serviceTitle,
-              subtitle: `${trackingBooking.vehicle} • ${trackingBooking.timeLabel} • ${trackingBooking.dateLabel}`,
-              progressWidth: '25%',
-              steps: ['Booked', 'Check-In', 'Service', 'Ready'],
-            }
-          : {
-              badge: 'NO ACTIVE SERVICE',
-              title: 'Vehicle standing by',
-              subtitle: 'No ongoing service right now. Book anytime when a slot is available.',
-              progressWidth: '0%',
-              steps: ['Book', 'Check-In', 'Service', 'Ready'],
-            };
+    const latestCustomerBooking = bookingHistory.bookings[0] ?? bookingCreateState.booking ?? null;
+    const latestBookingProgress =
+      latestCustomerBooking?.status === 'completed' ||
+      latestCustomerBooking?.status === 'declined' ||
+      latestCustomerBooking?.status === 'cancelled'
+        ? '100%'
+        : latestCustomerBooking?.status === 'confirmed' ||
+            latestCustomerBooking?.status === 'rescheduled'
+          ? '55%'
+          : latestCustomerBooking
+            ? '25%'
+            : '0%';
+    const topStatus = latestCustomerBooking
+      ? {
+          badge: getBookingStatusLabel(latestCustomerBooking.status).toUpperCase(),
+          title: getBookingServiceNames(latestCustomerBooking),
+          subtitle: `${getBookingVehicleLabel(latestCustomerBooking, bookingDiscovery.vehicles)} - ${getBookingTimeLabel(latestCustomerBooking)} - ${formatBookingDateLabel(latestCustomerBooking.scheduledDate)}`,
+          progressWidth: latestBookingProgress,
+          steps: ['Submitted', 'Staff Review', 'Appointment', 'Outcome'],
+        }
+      : {
+          badge: 'NO ACTIVE SERVICE',
+          title: 'Vehicle standing by',
+          subtitle: 'No ongoing service right now. Book anytime when a slot is available.',
+          progressWidth: '0%',
+          steps: ['Book', 'Check-In', 'Service', 'Ready'],
+        };
     const quickActions = [
       {
         key: 'book',
@@ -2602,10 +3443,10 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         <Text style={styles.homeWave}>👋</Text>
       </View>
 
-      <View style={[styles.homeStatusCard, !trackingBooking && styles.homeStatusCardIdle]}>
+      <View style={[styles.homeStatusCard, !latestCustomerBooking && styles.homeStatusCardIdle]}>
         <View style={styles.homeStatusHeader}>
           <View>
-            <Text style={[styles.homeStatusBadge, !trackingBooking && styles.homeStatusBadgeIdle]}>
+            <Text style={[styles.homeStatusBadge, !latestCustomerBooking && styles.homeStatusBadgeIdle]}>
               {topStatus.badge}
             </Text>
             <Text style={styles.homeStatusTitle}>{topStatus.title}</Text>
@@ -2613,12 +3454,12 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
           </View>
 
           <TouchableOpacity
-            style={[styles.homeTrackButton, !trackingBooking && styles.homeTrackButtonIdle]}
+            style={[styles.homeTrackButton, !latestCustomerBooking && styles.homeTrackButtonIdle]}
             onPress={() => navigateToBooking('track')}
             activeOpacity={0.86}
           >
-            <Text style={[styles.homeTrackButtonText, !trackingBooking && styles.homeTrackButtonTextIdle]}>
-              {trackingBooking ? 'Track' : 'Open'}
+            <Text style={[styles.homeTrackButtonText, !latestCustomerBooking && styles.homeTrackButtonTextIdle]}>
+              {latestCustomerBooking ? 'Track' : 'Open'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -2644,7 +3485,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         />
         <View style={styles.homeVehicleShade} />
         <View style={styles.homeVehicleTopCopy}>
-          <Text style={styles.homeVehicleTitle}>{account?.vehicleModel || 'Toyota Vios 1.3 E'}</Text>
+          <Text style={styles.homeVehicleTitle}>{primaryVehicleLabel}</Text>
           <Text style={styles.homeVehicleMeta}>ABC-1234 • 2021 Model</Text>
         </View>
 
@@ -2829,7 +3670,11 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   const selectedProductQuantity = selectedProduct ? cartItems[selectedProduct.key]?.quantity || 0 : 0;
   const unreadNotificationCount = notificationsFeed.filter((item) => item.unread).length;
   const bottomNavSlotWidth = windowWidth / tabs.length;
-  const bottomNavIndicatorWidth = Math.max(bottomNavSlotWidth - 12, 58);
+  const bottomNavItemInset = isCompactPhone ? 3 : 6;
+  const bottomNavIndicatorWidth = Math.max(
+    bottomNavSlotWidth - bottomNavItemInset * 2,
+    isCompactPhone ? 44 : 58,
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -3152,16 +3997,30 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
                 <MotionPressable
                   key={tab.key}
                   containerStyle={styles.tabButtonContainer}
-                  style={[styles.tabButton, isActive && styles.tabButtonActive]}
+                  style={[
+                    styles.tabButton,
+                    { marginHorizontal: bottomNavItemInset },
+                    isActive && styles.tabButtonActive,
+                  ]}
                   onPress={() => handleTabPress(tab.key)}
                   scaleTo={0.94}
                 >
                   <MaterialCommunityIcons
                     name={tab.icon}
-                    size={22}
+                    size={isCompactPhone ? 20 : 22}
                     color={isActive ? colors.primary : colors.mutedText}
                   />
-                  <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>{tab.label}</Text>
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    style={[
+                      styles.tabLabel,
+                      isCompactPhone && styles.tabLabelCompact,
+                      isActive && styles.tabLabelActive,
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
                 </MotionPressable>
               );
             })}
@@ -4053,6 +4912,109 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 12,
   },
+  bookingDiscoveryBanner: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    marginBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bookingDiscoveryBannerCopyWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingRight: 12,
+  },
+  bookingDiscoveryBannerIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  bookingDiscoveryBannerCopy: {
+    flex: 1,
+  },
+  bookingDiscoveryBannerTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  bookingDiscoveryBannerText: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  bookingDiscoveryRefreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookingStatePanel: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 18,
+  },
+  bookingStatePanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  bookingStatePanelIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  bookingStatePanelCopy: {
+    flex: 1,
+  },
+  bookingStatePanelTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  bookingStatePanelText: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  bookingStatePanelButton: {
+    alignSelf: 'flex-start',
+    minHeight: 34,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primaryGlow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+  },
+  bookingStatePanelButtonText: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
   bookingServiceCard: {
     backgroundColor: colors.surfaceStrong,
     borderRadius: 20,
@@ -4153,6 +5115,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: 4,
   },
+  bookingVehicleBadge: {
+    minHeight: 20,
+    paddingHorizontal: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookingVehicleBadgeText: {
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  bookingVehicleMeta: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  bookingVehicleMetaLabel: {
+    color: colors.mutedText,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  bookingVehicleMetaValue: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
   bookingDateScroller: {
     flexGrow: 0,
     marginBottom: 22,
@@ -4171,6 +5162,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
     paddingVertical: 12,
+  },
+  bookingDateCardCompact: {
+    width: 60,
+    minHeight: 86,
+    marginRight: 9,
   },
   bookingDateCardActive: {
     backgroundColor: colors.primary,
@@ -4208,6 +5204,13 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textTransform: 'uppercase',
   },
+  bookingDateHint: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -4,
+    marginBottom: 12,
+  },
   bookingTimeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -4216,6 +5219,9 @@ const styles = StyleSheet.create({
   },
   bookingTimeSlotContainer: {
     width: '48.6%',
+  },
+  bookingTimeSlotContainerCompact: {
+    width: '100%',
   },
   bookingTimeSlot: {
     minHeight: 38,
@@ -4227,6 +5233,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
     paddingVertical: 8,
+  },
+  bookingTimeSlotCompact: {
+    alignItems: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   bookingTimeSlotActive: {
     backgroundColor: colors.primary,
@@ -4241,7 +5252,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
+  bookingTimeSlotSubtext: {
+    color: colors.mutedText,
+    fontSize: 12,
+    marginTop: 4,
+  },
   bookingTimeSlotTextActive: {
+    color: colors.onPrimary,
+  },
+  bookingTimeSlotSubtextActive: {
     color: colors.onPrimary,
   },
   bookingTimeSlotTextDisabled: {
@@ -4253,6 +5272,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 3,
     textTransform: 'uppercase',
+  },
+  bookingTimeSlotReasonActive: {
+    color: colors.onPrimary,
   },
   bookingInfoPanel: {
     width: '100%',
@@ -4272,6 +5294,111 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 14,
     lineHeight: 22,
+  },
+  bookingSummaryCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18,
+    marginBottom: 20,
+  },
+  bookingSummaryTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 14,
+  },
+  bookingSummaryRow: {
+    marginBottom: 12,
+  },
+  bookingSummaryLabel: {
+    color: colors.mutedText,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  bookingSummaryValue: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  bookingSummaryNote: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 21,
+    marginTop: 4,
+  },
+  bookingHistoryToolbar: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bookingHistoryToolbarText: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+    maxWidth: 250,
+  },
+  bookingHistoryList: {
+    marginBottom: 16,
+  },
+  bookingHistoryCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 12,
+  },
+  bookingHistoryCardActive: {
+    borderColor: '#5A4608',
+    backgroundColor: '#1E2232',
+  },
+  bookingHistoryCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  bookingHistoryReference: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+  },
+  bookingHistoryStatusPill: {
+    minHeight: 26,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookingHistoryStatusText: {
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  bookingHistoryTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  bookingHistoryMeta: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
   },
   bookingNotesCard: {
     backgroundColor: colors.surfaceStrong,
@@ -4376,6 +5503,10 @@ const styles = StyleSheet.create({
   },
   trackingMetaItem: {
     width: '48%',
+    marginBottom: 14,
+  },
+  trackingMetaItemWide: {
+    width: '100%',
     marginBottom: 14,
   },
   trackingMetaLabel: {
@@ -4558,6 +5689,31 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 14,
     fontWeight: '800',
+  },
+  bookingStatusHistoryCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18,
+    marginBottom: 18,
+  },
+  bookingStatusHistoryRow: {
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    paddingTop: 12,
+    marginTop: 12,
+  },
+  bookingStatusHistoryTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  bookingStatusHistoryMeta: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
   },
   shopScrollContent: {
     flexGrow: 1,
@@ -6098,6 +7254,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
+  },
+  tabLabelCompact: {
+    fontSize: 9,
+    maxWidth: 58,
   },
   tabLabelActive: {
     color: colors.primary,

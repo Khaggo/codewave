@@ -1,0 +1,5 @@
+interface:
+  display_name: "Frontend Data Shapes"
+  short_description: "Keep frontend request and response shapes aligned"
+  default_prompt: "Use $frontend-data-shapes to align frontend state and API shapes."
+

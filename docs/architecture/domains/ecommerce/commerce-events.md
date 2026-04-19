@@ -6,11 +6,11 @@
 
 ## Agent Summary
 
-Load this doc for outbox, inbox, and cross-service event publication from e-commerce domains. Skip it for local order or inventory business rules.
+Load this doc for outbox, inbox, and cross-service event publication from e-commerce domains. Skip it for local order, inventory, or loyalty earning rules.
 
 ## Primary Objective
 
-Own durable asynchronous communication from e-commerce domains without replacing source-domain ownership or immediate consistency reads.
+Own durable asynchronous communication from ecommerce domains without replacing source-domain ownership or immediate consistency reads.
 
 ## Inputs
 
@@ -43,12 +43,13 @@ Key relations:
 
 ## Primary Business Logic
 
-- publish durable business events from e-commerce modules
+- publish durable business events from ecommerce modules
 - keep the first stable commerce facts limited to `order.created`, `order.invoice_issued`, and `invoice.payment_recorded`
 - consume relevant upstream events if the commerce domain needs them
 - guarantee idempotent event processing and replay safety
 - keep cross-service communication decoupled from direct table access
-- keep `invoice.payment_recorded` as the purchase-accrual fact for loyalty, while service-side loyalty accrual stays outside ecommerce on `service.invoice_finalized`
+- keep `invoice.payment_recorded` as a commerce settlement fact for notifications and analytics only
+- never treat ecommerce payment events as loyalty earning triggers for workshop/service loyalty
 
 ## Process Flow
 
@@ -61,8 +62,8 @@ Key relations:
 
 - order creation triggers analytics without direct main-service reads into ecommerce tables
 - invoice issuance triggers notifications and analytics refresh planning
-- invoice payment recorded triggers loyalty, notifications, and analytics reactions
-- downstream services use `invoice.payment_recorded` for purchase accrual only, not as proof that a service invoice was finalized
+- invoice payment recorded refreshes invoice-related notification policy and analytics facts
+- downstream services use `invoice.payment_recorded` as a billing fact only, not as proof of workshop loyalty eligibility
 - inventory change emits stock-related events for downstream summaries
 
 ## API Surface
@@ -76,8 +77,8 @@ Key relations:
 - event published twice after retry
 - consumer processes a message after source state was corrected
 - outbox rows accumulate because the publisher is stalled
-- consumer treats `invoice.payment_recorded` as settlement proof for gateway logic that does not exist in scope
-- downstream loyalty logic awards points from `order.created` instead of `invoice.payment_recorded`
+- consumer treats `invoice.payment_recorded` as proof of service completion or workshop payment
+- downstream loyalty logic awards points from ecommerce events
 - downstream service assumes global delivery order that is not guaranteed
 
 ## Writable Sections

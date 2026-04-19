@@ -13,7 +13,13 @@ export class InvoicePaymentsService {
     private readonly eventBus: AutocareEventBusService,
   ) {}
 
-  async createInvoiceForOrder(payload: { orderId: string; customerUserId: string; totalCents: number }) {
+  async createInvoiceForOrder(payload: {
+    orderId: string;
+    customerUserId: string;
+    totalCents: number;
+    productIds?: string[];
+    productCategoryIds?: string[];
+  }) {
     return this.invoicePaymentsRepository.createInvoice(payload);
   }
 
@@ -73,6 +79,8 @@ export class InvoicePaymentsService {
       amountPaidCents: hydratedInvoice.amountPaidCents,
       amountDueCents: hydratedInvoice.amountDueCents,
       currencyCode: hydratedInvoice.currencyCode,
+      productIds: hydratedInvoice.productIds,
+      productCategoryIds: hydratedInvoice.productCategoryIds,
     });
     return hydratedInvoice;
   }
@@ -145,6 +153,8 @@ export class InvoicePaymentsService {
     totalCents: number;
     amountPaidCents: number;
     amountDueCents: number;
+    productIds: string[];
+    productCategoryIds: string[];
     issuedAt: Date;
     dueAt: Date;
     createdAt: Date;
@@ -157,6 +167,8 @@ export class InvoicePaymentsService {
       ...invoice,
       agingBucket: aging.bucket,
       daysPastDue: aging.daysPastDue,
+      productIds: [...invoice.productIds],
+      productCategoryIds: [...invoice.productCategoryIds],
       paymentEntries,
     };
   }

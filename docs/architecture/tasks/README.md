@@ -26,6 +26,7 @@ This folder is the execution layer derived from the canonical SSoT in `docs/arch
 - `02-ecommerce-service/`: ecommerce-service delivery tasks
 - `03-integration/`: cross-service events, contracts, and orchestration tasks
 - `04-quality-and-ops/`: validation, regression, CI, and observability tasks
+- `05-client-integration/`: web/mobile-facing slice coordination, client contracts, mocks, and acceptance tasks
 - `_archive/`: completed or superseded task files
 
 ## Status Legend
@@ -78,8 +79,37 @@ This folder is the execution layer derived from the canonical SSoT in `docs/arch
   - `T406-job-order-and-qa-regression-suite`
   - `T407-openapi-contract-expansion`
   - `T408-audit-and-override-observability`
+  - `T501-booking-cross-surface-contract-foundation`
+  - `T502-customer-booking-discovery-mobile-flow`
+  - `T503-customer-booking-create-and-history-mobile-flow`
+  - `T504-staff-booking-schedule-and-queue-web-flow`
+  - `T505-staff-booking-decision-actions-web-flow`
+  - `T506-booking-status-sync-reminders-and-cross-surface-acceptance`
+  - `T507-auth-users-cross-surface-identity-foundation`
+  - `T508-customer-google-email-activation-mobile-flow`
+  - `T509-staff-auth-session-and-role-gating-web-flow`
 - current priority queue:
-  - no seeded tasks are currently queued
+  - `T510-customer-profile-address-and-account-states-mobile-flow`
+  - `T511-customer-vehicle-onboarding-and-management-mobile-flow`
+  - `T512-inspection-capture-and-verification-web-flow`
+  - `T513-vehicle-timeline-and-reviewed-summary-mobile-flow`
+  - `T514-insurance-customer-intake-mobile-flow`
+  - `T515-insurance-review-and-status-web-flow`
+  - `T516-job-order-workbench-web-flow`
+  - `T517-job-order-progress-photos-and-finalization-web-flow`
+  - `T518-quality-gates-review-release-and-override-web-flow`
+  - `T519-back-jobs-review-and-rework-web-flow`
+  - `T520-notification-preferences-delivery-states-and-reminder-sync`
+  - `T521-loyalty-balance-history-rewards-and-redemption-mobile-flow`
+  - `T522-faq-chatbot-customer-support-mobile-flow`
+  - `T523-admin-analytics-dashboard-web-flow`
+  - `T524-catalog-and-product-discovery-mobile-flow`
+  - `T525-cart-and-invoice-checkout-mobile-flow`
+  - `T526-order-history-and-invoice-tracking-mobile-flow`
+  - `T527-inventory-and-stock-visibility-web-flow`
+  - `T528-commerce-and-main-service-derived-state-sync`
+  - `T529-client-rbac-navigation-and-surface-guardrails`
+  - `T530-openapi-contract-mock-and-client-regression-pack`
 
 ## Operating Rules
 

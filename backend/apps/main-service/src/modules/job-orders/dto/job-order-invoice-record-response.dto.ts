@@ -51,6 +51,44 @@ export class JobOrderInvoiceRecordResponseDto {
   })
   finalizedByUserId!: string;
 
+  @ApiProperty({
+    example: 'pending_payment',
+    enum: ['pending_payment', 'paid'],
+  })
+  paymentStatus!: 'pending_payment' | 'paid';
+
+  @ApiPropertyOptional({
+    example: 159900,
+    nullable: true,
+  })
+  amountPaidCents!: number | null;
+
+  @ApiPropertyOptional({
+    example: 'cash',
+    enum: ['cash', 'bank_transfer', 'check', 'other'],
+    nullable: true,
+  })
+  paymentMethod!: 'cash' | 'bank_transfer' | 'check' | 'other' | null;
+
+  @ApiPropertyOptional({
+    example: 'OR-2026-0001',
+    nullable: true,
+  })
+  paymentReference!: string | null;
+
+  @ApiPropertyOptional({
+    example: 'cashier-1',
+    nullable: true,
+  })
+  recordedByUserId!: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-05-14T10:30:00.000Z',
+    format: 'date-time',
+    nullable: true,
+  })
+  paidAt!: string | null;
+
   @ApiPropertyOptional({
     example: 'All planned work items completed and ready for invoice generation.',
   })

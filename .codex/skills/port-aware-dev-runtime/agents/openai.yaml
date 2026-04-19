@@ -1,0 +1,4 @@
+interface:
+  display_name: "Port-Aware Dev Runtime"
+  short_description: "Check ports before starting dev servers"
+  default_prompt: "Use $port-aware-dev-runtime to inspect active backend, web, and Expo ports before starting or stopping local dev servers."

@@ -41,4 +41,5 @@ It adds live internal RabbitMQ event contracts:
 - These events are internal cross-service contracts, not browser-facing REST endpoints.
 - Payloads carry stable identifiers and metadata only; consumers must not assume direct ecommerce table access.
 - `order.invoice_issued` is the reminder trigger fact for notifications.
-- `invoice.payment_recorded` is the purchase-accrual and reminder-refresh fact for downstream domains.
+- `invoice.payment_recorded` is the reminder-refresh and analytics fact for downstream domains.
+- workshop/service loyalty accrual must not consume ecommerce payment events

@@ -10,8 +10,8 @@ export type CommerceEventName = (typeof commerceEventNames)[number];
 export type CommerceEventProducer = 'ecommerce-service';
 export type CommerceEventSourceDomain = 'ecommerce.orders' | 'ecommerce.invoice-payments';
 export type CommerceEventConsumerDomain =
-  | 'main-service.notifications'
   | 'main-service.loyalty'
+  | 'main-service.notifications'
   | 'main-service.analytics';
 
 export interface OrderCreatedEventPayload {
@@ -50,6 +50,8 @@ export interface InvoicePaymentRecordedEventPayload {
   amountPaidCents: number;
   amountDueCents: number;
   currencyCode: 'PHP';
+  productIds?: string[];
+  productCategoryIds?: string[];
 }
 
 export interface CommerceEventPayloadByName {
@@ -99,8 +101,9 @@ export const commerceEventRegistry: Record<
   'invoice.payment_recorded': {
     producer: 'ecommerce-service',
     sourceDomain: 'ecommerce.invoice-payments',
-    consumers: ['main-service.notifications', 'main-service.loyalty', 'main-service.analytics'],
-    description: 'Emitted when a manual invoice payment entry is recorded and balances are recalculated.',
+    consumers: ['main-service.loyalty', 'main-service.notifications', 'main-service.analytics'],
+    description:
+      'Emitted when a manual invoice payment entry is recorded and balances are recalculated for downstream settlement-aware consumers.',
   },
 };
 

@@ -5,8 +5,10 @@ import ScreenShell from '../components/ScreenShell';
 import { colors, radius } from '../theme';
 import {
   calculateAge,
+  formatVehicleDisplayName,
   formatDate,
   normalizePhoneNumber,
+  normalizeVehicleYear,
   validateProfileForm,
 } from '../utils/validation';
 
@@ -20,7 +22,12 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
     phoneNumber: profile?.phoneNumber || '',
     address: profile?.address || '',
     licensePlate: profile?.licensePlate || '',
+    vehicleMake: profile?.vehicleMake || '',
     vehicleModel: profile?.vehicleModel || '',
+    vehicleYear:
+      profile?.vehicleYear !== null && profile?.vehicleYear !== undefined
+        ? String(profile.vehicleYear)
+        : '',
   });
 
   const [form, setForm] = useState(createProfileForm(account));
@@ -42,6 +49,10 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
 
     if (key === 'licensePlate') {
       nextValue = value.toUpperCase();
+    }
+
+    if (key === 'vehicleYear') {
+      nextValue = normalizeVehicleYear(value);
     }
 
     setForm((currentForm) => ({
@@ -67,7 +78,14 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
       phoneNumber: normalizePhoneNumber(form.phoneNumber),
       address: form.address.trim(),
       licensePlate: form.licensePlate.trim().toUpperCase(),
+      vehicleMake: form.vehicleMake.trim(),
       vehicleModel: form.vehicleModel.trim(),
+      vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
+      vehicleDisplayName: formatVehicleDisplayName({
+        vehicleMake: form.vehicleMake,
+        vehicleModel: form.vehicleModel,
+        vehicleYear: form.vehicleYear,
+      }),
     });
 
     setIsEditing(false);
@@ -194,16 +212,44 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
       />
 
       <FormField
-        label="Vehicle Make/Model"
+        label="Vehicle Make"
+        value={form.vehicleMake}
+        onChangeText={(value) => handleFieldChange('vehicleMake', value)}
+        placeholder="Toyota"
+        autoCapitalize="words"
+        error={errors.vehicleMake}
+        isFocused={focusedField === 'vehicleMake'}
+        onFocus={() => setFocusedField('vehicleMake')}
+        onBlur={() => setFocusedField('')}
+        editable={isEditing}
+      />
+
+      <FormField
+        label="Vehicle Model"
         value={form.vehicleModel}
         onChangeText={(value) => handleFieldChange('vehicleModel', value)}
-        placeholder="Toyota Vios"
+        placeholder="Vios"
         autoCapitalize="words"
         error={errors.vehicleModel}
         isFocused={focusedField === 'vehicleModel'}
         onFocus={() => setFocusedField('vehicleModel')}
         onBlur={() => setFocusedField('')}
         editable={isEditing}
+      />
+
+      <FormField
+        label="Vehicle Year"
+        value={form.vehicleYear}
+        onChangeText={(value) => handleFieldChange('vehicleYear', value)}
+        placeholder="2022"
+        keyboardType="number-pad"
+        autoCapitalize="none"
+        error={errors.vehicleYear}
+        isFocused={focusedField === 'vehicleYear'}
+        onFocus={() => setFocusedField('vehicleYear')}
+        onBlur={() => setFocusedField('')}
+        editable={isEditing}
+        maxLength={4}
       />
 
       {isEditing ? (

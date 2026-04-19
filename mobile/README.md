@@ -100,6 +100,63 @@ npm run start:tunnel
 
 Keep `EXPO_PUBLIC_API_BASE_URL` set to your LAN IP even if you use tunnel mode for Metro.
 
+## Expo MCP Setup
+
+Expo MCP has two pieces:
+
+1. The remote Expo MCP server connected to Codex
+2. Local Expo app capabilities enabled by the `expo-mcp` dev dependency and MCP startup flag
+
+Per Expo's April 3, 2026 docs, the remote server requires an Expo account with an EAS paid plan.
+
+### 1. Add the remote Expo MCP server to Codex
+
+Run this once in PowerShell:
+
+```powershell
+codex mcp add expo-mcp --url https://mcp.expo.dev/mcp
+```
+
+Then authenticate the server in Codex:
+
+```powershell
+codex mcp login expo-mcp
+```
+
+Expo recommends using a personal access token from the EAS dashboard during the OAuth flow.
+
+### 2. Install local Expo MCP support
+
+This repo includes `expo-mcp` as a dev dependency. If you have not refreshed dependencies since it was added, run:
+
+```powershell
+cd d:\mainprojects\codewave\mobile
+npm install
+```
+
+### 3. Log in to Expo CLI with the same account
+
+Before using local MCP tools, make sure Expo CLI is authenticated with the same Expo account you used for `expo-mcp`:
+
+```powershell
+npx expo whoami
+npx expo login
+```
+
+### 4. Start Expo with MCP capabilities enabled
+
+Use one of these commands:
+
+```powershell
+npm run start:mcp
+npm run start:lan:mcp
+npm run start:tunnel:mcp
+```
+
+These commands set `EXPO_UNSTABLE_MCP_SERVER=1` before launching Expo so Codex can use local MCP tools like screenshots, taps, logs, and DevTools access.
+
+Whenever you restart Expo in MCP mode, reconnect or restart the Expo MCP server in Codex so the local tools refresh.
+
 ### 5. Open the app on the phone
 
 1. Install `Expo Go` on the phone.

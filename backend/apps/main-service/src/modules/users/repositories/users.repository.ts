@@ -36,6 +36,7 @@ export class UsersRepository extends BaseRepository {
           firstName: payload.firstName,
           lastName: payload.lastName,
           phone: payload.phone,
+          birthday: null,
         })
         .returning();
 
@@ -99,12 +100,23 @@ export class UsersRepository extends BaseRepository {
             firstName: updateUserDto.firstName ?? currentProfile.firstName,
             lastName: updateUserDto.lastName ?? currentProfile.lastName,
             phone: updateUserDto.phone ?? currentProfile.phone ?? null,
+            birthday: updateUserDto.birthday ?? currentProfile.birthday ?? null,
             updatedAt: new Date(),
           })
           .where(eq(userProfiles.userId, id));
       }
 
-      return this.findById(id);
+      const updatedUser = await tx.query.users.findFirst({
+        where: eq(users.id, id),
+        with: {
+          profile: true,
+          addresses: {
+            orderBy: desc(addresses.createdAt),
+          },
+        },
+      });
+
+      return this.assertFound(updatedUser, 'User not found');
     });
   }
 

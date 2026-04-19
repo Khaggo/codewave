@@ -1,0 +1,23 @@
+env: load .env.local
+env: export EXPO_PUBLIC_API_BASE_URL
+Starting project at D:\mainprojects\codewave\mobile
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8085
+Logs for your project will appear below.
+Android .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android .\index.js ░░░░░░░░░░░░░░░░  4.0% ( 4/34)
+Android .\index.js ▓▓░░░░░░░░░░░░░░ 13.1% (30/83)
+Android .\index.js ▓▓░░░░░░░░░░░░░░ 15.8% ( 84/223)
+Android .\index.js ▓▓▓░░░░░░░░░░░░░ 22.7% (150/315)
+Android .\index.js ▓▓▓▓▓░░░░░░░░░░░ 34.4% (304/520)
+Android .\index.js ▓▓▓▓▓▓▓░░░░░░░░░ 45.2% (457/680)
+Android .\index.js ▓▓▓▓▓▓▓▓▓░░░░░░░ 58.9% (598/781)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 62.8% (728/919)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.9% ( 986/1023)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.8% (1137/1138)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1138/1138)
+Android Bundled 39355ms index.js (1138 modules)
+Android .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 237ms index.js (1 module)
+ WARN  SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/th3rdwave/react-native-safe-area-context

@@ -33,16 +33,16 @@ describe('commerce event contracts', () => {
       sourceDomain: 'ecommerce.invoice-payments',
       targets: [
         {
+          consumerDomain: 'main-service.loyalty',
+          action: 'evaluate_ecommerce_accrual_if_settled',
+          reason:
+            'Loyalty evaluates ecommerce invoice payments only when the invoice reaches a paid or settled state, never from order creation, invoice issuance, or partial payment alone.',
+        },
+        {
           consumerDomain: 'main-service.notifications',
           action: 'refresh_invoice_notification_state',
           reason:
             'Notifications can stop or adjust invoice-aging reminders after payment facts arrive.',
-        },
-        {
-          consumerDomain: 'main-service.loyalty',
-          action: 'evaluate_purchase_accrual',
-          reason:
-            'Loyalty reacts to recorded payment facts for purchase-based accrual without owning invoice state.',
         },
         {
           consumerDomain: 'main-service.analytics',

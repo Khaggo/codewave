@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { boolean, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, date, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
 export const userRoleEnum = pgEnum('user_role', [
   'customer',
@@ -27,6 +27,7 @@ export const userProfiles = pgTable('user_profiles', {
   firstName: varchar('first_name', { length: 120 }).notNull(),
   lastName: varchar('last_name', { length: 120 }).notNull(),
   phone: varchar('phone', { length: 30 }),
+  birthday: date('birthday'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

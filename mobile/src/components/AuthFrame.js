@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { colors, radius } from '../theme';
 import ScreenShell from './ScreenShell';
 
@@ -17,10 +17,17 @@ export default function AuthFrame({
 }) {
   const { width } = useWindowDimensions();
   const isCompactLayout = width < 720;
+  const shouldAnimate = Platform.OS === 'web';
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const cardTranslate = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
+    if (!shouldAnimate) {
+      cardOpacity.setValue(1);
+      cardTranslate.setValue(0);
+      return undefined;
+    }
+
     cardOpacity.stopAnimation();
     cardTranslate.stopAnimation();
     cardOpacity.setValue(0);
@@ -40,7 +47,16 @@ export default function AuthFrame({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [cardOpacity, cardTranslate]);
+  }, [cardOpacity, cardTranslate, shouldAnimate]);
+
+  const cardWrapStyle = [
+    styles.cardWrap,
+    isCompactLayout && styles.cardWrapCompact,
+    shouldAnimate && {
+      opacity: cardOpacity,
+      transform: [{ translateY: cardTranslate }],
+    },
+  ];
 
   return (
     <ScreenShell
@@ -51,16 +67,7 @@ export default function AuthFrame({
         contentContainerStyle,
       ]}
     >
-      <Animated.View
-        style={[
-          styles.cardWrap,
-          isCompactLayout && styles.cardWrapCompact,
-          {
-            opacity: cardOpacity,
-            transform: [{ translateY: cardTranslate }],
-          },
-        ]}
-      >
+      <View style={cardWrapStyle}>
         <View
           pointerEvents="none"
           style={[styles.orbTopRight, isCompactLayout && styles.orbTopRightCompact]}
@@ -96,9 +103,14 @@ export default function AuthFrame({
 
           <View style={styles.divider} />
 
-          <View style={[styles.body, bodyStyle]}>{children}</View>
+          <View
+            style={[styles.body, bodyStyle]}
+            importantForAutofill={Platform.OS === 'android' ? 'noExcludeDescendants' : 'auto'}
+          >
+            {children}
+          </View>
         </View>
-      </Animated.View>
+      </View>
     </ScreenShell>
   );
 }
@@ -120,7 +132,11 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     alignSelf: 'center',
     position: 'relative',
-    minHeight: '100%',
+    ...Platform.select({
+      web: {
+        minHeight: '100%',
+      },
+    }),
   },
   cardWrapCompact: {
     maxWidth: '100%',
@@ -162,7 +178,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.34,
     shadowRadius: 28,
     elevation: 12,
-    minHeight: '100%',
+    ...Platform.select({
+      web: {
+        minHeight: '100%',
+      },
+    }),
   },
   cardCompact: {
     borderRadius: 0,

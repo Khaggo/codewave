@@ -36,27 +36,30 @@ Implement loyalty points and rewards core.
 
 ## Goal
 
-Build the loyalty ledger and reward catalog that consume completed service invoice facts and commerce purchase facts.
+Build the loyalty ledger, reward catalog, and earning-rule configuration that consume **paid successful service facts only**.
 
 ## Deliverables
 
 - points ledger
 - accrual and redemption rules
 - admin reward-catalog management endpoints
+- admin earning-rule management endpoints
 - customer-facing reward visibility endpoints
 
 ## Implementation Notes
 
-- keep loyalty derived from finalized service invoice records and purchase or payment facts
+- keep loyalty derived from `service.payment_recorded` only
 - include admin-managed reward add, edit, activate, deactivate, and audit behavior
+- include admin-managed earning-rule add, edit, activate, deactivate, and audit behavior
 - reversals must be audit-visible
 
 ## Acceptance Checks
 
 - points can be earned and redeemed through stable rules
-- finalized service invoice facts and commerce events can feed the ledger
-- admins can manage reward-catalog lifecycle without rewriting ledger history
+- a finalized-but-unpaid service does not award loyalty
+- ecommerce events do not feed the loyalty ledger
+- admins can manage reward and earning-rule lifecycle without rewriting ledger history
 
 ## Out of Scope
 
-- marketing campaigns
+- automated marketing campaigns beyond reward definitions and earning rules

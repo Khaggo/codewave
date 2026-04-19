@@ -107,6 +107,15 @@ export const loginAccount = async (payload) =>
     }),
   );
 
+export const createStaffAccount = async (payload, accessToken) =>
+  request('/api/admin/staff-accounts', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: payload,
+  });
+
 export const refreshAuthSession = async (refreshToken) =>
   normalizeSession(
     await request('/api/auth/refresh', {

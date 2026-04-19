@@ -31,10 +31,12 @@ describe('UsersController integration', () => {
         .patch(`/api/users/${createResponse.body.id}`)
         .send({
           firstName: 'Janet',
+          birthday: '1998-04-12',
         });
 
       expect(updateResponse.status).toBe(200);
       expect(updateResponse.body.profile.firstName).toBe('Janet');
+      expect(updateResponse.body.profile.birthday).toBe('1998-04-12');
       expect(updateResponse.body.isActive).toBe(true);
     } finally {
       await app.close();

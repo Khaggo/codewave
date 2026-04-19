@@ -194,8 +194,23 @@ describe('AnalyticsController integration', () => {
       );
 
       const loyaltyService = app.get(LoyaltyService);
+      await loyaltyService.createEarningRule(
+        {
+          name: 'Analytics paid service rule',
+          accrualSource: 'service',
+          formulaType: 'amount_ratio',
+          amountStepCents: 5000,
+          pointsPerStep: 1,
+          minimumAmountCents: 5000,
+          status: 'active',
+        },
+        {
+          userId: superAdmin.id,
+          role: 'super_admin',
+        },
+      );
       await loyaltyService.applyLoyaltyAccrual(
-        createServiceEvent('service.invoice_finalized', {
+        createServiceEvent('service.payment_recorded', {
           jobOrderId: createJobOrderResponse.body.id,
           invoiceRecordId: finalizeResponse.body.invoiceRecord.id,
           invoiceReference: finalizeResponse.body.invoiceRecord.invoiceReference,
@@ -203,9 +218,14 @@ describe('AnalyticsController integration', () => {
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode!,
-          finalizedByUserId: adviser.id,
+          recordedByUserId: adviser.id,
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
+          amountPaidCents: 250000,
+          currencyCode: 'PHP',
+          paidAt: '2026-05-14T09:30:00.000Z',
+          settlementStatus: 'paid',
+          paymentMethod: 'cash',
         }),
       );
 

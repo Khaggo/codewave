@@ -23,6 +23,7 @@ import { AddJobOrderProgressDto } from '../dto/add-job-order-progress.dto';
 import { CreateJobOrderDto } from '../dto/create-job-order.dto';
 import { FinalizeJobOrderDto } from '../dto/finalize-job-order.dto';
 import { JobOrderResponseDto } from '../dto/job-order-response.dto';
+import { RecordJobOrderInvoicePaymentDto } from '../dto/record-job-order-invoice-payment.dto';
 import { UpdateJobOrderStatusDto } from '../dto/update-job-order-status.dto';
 import { JobOrdersService } from '../services/job-orders.service';
 
@@ -176,5 +177,37 @@ export class JobOrdersController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   finalize(@Param('id') id: string, @Body() payload: FinalizeJobOrderDto, @Req() request: Request) {
     return this.jobOrdersService.finalize(id, payload, request.user as { userId: string; role: string });
+  }
+
+  @Post(':id/invoice/payments')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Record the settlement of a finalized service invoice.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Job-order identifier.',
+    example: '7bc8926d-8eb7-4c97-85ab-4597a58e1f43',
+  })
+  @ApiOkResponse({
+    description: 'The updated job order after invoice payment was recorded.',
+    type: JobOrderResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The invoice-payment payload is invalid.' })
+  @ApiConflictResponse({ description: 'The job order is not finalized, is missing an invoice, or is already paid.' })
+  @ApiForbiddenResponse({ description: 'Only the responsible service adviser or a super admin can record invoice settlement.' })
+  @ApiNotFoundResponse({ description: 'Job order not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  recordInvoicePayment(
+    @Param('id') id: string,
+    @Body() payload: RecordJobOrderInvoicePaymentDto,
+    @Req() request: Request,
+  ) {
+    return this.jobOrdersService.recordInvoicePayment(
+      id,
+      payload,
+      request.user as { userId: string; role: string },
+    );
   }
 }

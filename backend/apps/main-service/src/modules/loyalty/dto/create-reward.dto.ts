@@ -18,6 +18,13 @@ export class CreateRewardDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({
+    example: 'Issue one promo sticker manually at cashier after redemption.',
+  })
+  @IsOptional()
+  @IsString()
+  fulfillmentNote?: string;
+
   @ApiProperty({
     enum: rewardTypeEnum.enumValues,
     example: 'service_voucher',

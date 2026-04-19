@@ -115,6 +115,7 @@ Recommended event families:
 - `quality_gate.blocked`
 - `quality_gate.overridden`
 - `service.invoice_finalized`
+- `service.payment_recorded`
 - `order.created`
 - `order.invoice_issued`
 - `invoice.payment_recorded`

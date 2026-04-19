@@ -10,9 +10,11 @@ import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
 
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { DailyScheduleQueryDto } from '../dto/daily-schedule-query.dto';
 import { QueueCurrentQueryDto } from '../dto/queue-current-query.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
+import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
 import { BookingsRepository } from '../repositories/bookings.repository';
 import { bookingStatusEnum } from '../schemas/bookings.schema';
@@ -48,6 +50,29 @@ export class BookingsService {
 
   async listTimeSlots() {
     return this.bookingsRepository.listTimeSlots();
+  }
+
+  async createTimeSlot(payload: CreateTimeSlotDto, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+    this.assertTimeWindow(payload.startTime, payload.endTime);
+
+    return this.bookingsRepository.createTimeSlot(payload);
+  }
+
+  async updateTimeSlot(id: string, payload: UpdateTimeSlotDto, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+    const existingTimeSlot = await this.bookingsRepository.findTimeSlotById(id);
+
+    if (!existingTimeSlot) {
+      throw new NotFoundException('Time slot not found');
+    }
+
+    this.assertTimeWindow(
+      payload.startTime ?? existingTimeSlot.startTime,
+      payload.endTime ?? existingTimeSlot.endTime,
+    );
+
+    return this.bookingsRepository.updateTimeSlot(id, payload);
   }
 
   async create(createBookingDto: CreateBookingDto) {
@@ -220,6 +245,12 @@ export class BookingsService {
 
     if (activeBookings >= timeSlot.capacity) {
       throw new ConflictException('Selected time slot is already full');
+    }
+  }
+
+  private assertTimeWindow(startTime: string, endTime: string) {
+    if (startTime >= endTime) {
+      throw new BadRequestException('Time slot start time must be earlier than end time');
     }
   }
 

@@ -45,6 +45,14 @@ export class OrdersService {
       orderId: order.id,
       customerUserId: payload.customerUserId,
       totalCents: preview.subtotalCents,
+      productIds: preview.items.map((item) => item.productId),
+      productCategoryIds: Array.from(
+        new Set(
+          preview.items
+            .map((item) => item.productCategoryId)
+            .filter((categoryId): categoryId is string => Boolean(categoryId)),
+        ),
+      ),
     });
 
     await this.ordersRepository.attachInvoice(order.id, invoice.id);

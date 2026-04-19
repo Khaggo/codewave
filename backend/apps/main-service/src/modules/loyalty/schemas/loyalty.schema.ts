@@ -11,6 +11,7 @@ export const loyaltyTransactionTypeEnum = pgEnum('loyalty_transaction_type', [
 ]);
 
 export const loyaltySourceTypeEnum = pgEnum('loyalty_source_type', [
+  'service_payment',
   'service_invoice',
   'purchase_payment',
   'reward_redemption',
@@ -23,7 +24,27 @@ export const rewardTypeEnum = pgEnum('reward_type', ['service_voucher', 'discoun
 
 export const rewardStatusEnum = pgEnum('reward_status', ['active', 'inactive']);
 
+export const earningRuleFormulaTypeEnum = pgEnum('earning_rule_formula_type', [
+  'flat_points',
+  'amount_ratio',
+]);
+
+export const earningRuleAccrualSourceEnum = pgEnum('earning_rule_accrual_source', [
+  'service',
+  'ecommerce',
+  'both',
+]);
+
+export const earningRuleStatusEnum = pgEnum('earning_rule_status', ['active', 'inactive']);
+
 export const rewardCatalogAuditActionEnum = pgEnum('reward_catalog_audit_action', [
+  'created',
+  'updated',
+  'activated',
+  'deactivated',
+]);
+
+export const earningRuleAuditActionEnum = pgEnum('earning_rule_audit_action', [
   'created',
   'updated',
   'activated',
@@ -44,10 +65,31 @@ export type LoyaltyTransactionMetadata = {
 export type RewardCatalogSnapshot = {
   name: string;
   description: string | null;
+  fulfillmentNote: string | null;
   rewardType: (typeof rewardTypeEnum.enumValues)[number];
   pointsCost: number;
   discountPercent: number | null;
   status: (typeof rewardStatusEnum.enumValues)[number];
+};
+
+export type LoyaltyEarningRuleSnapshot = {
+  name: string;
+  description: string | null;
+  accrualSource: (typeof earningRuleAccrualSourceEnum.enumValues)[number];
+  formulaType: (typeof earningRuleFormulaTypeEnum.enumValues)[number];
+  flatPoints: number | null;
+  amountStepCents: number | null;
+  pointsPerStep: number | null;
+  minimumAmountCents: number | null;
+  eligibleServiceTypes: string[];
+  eligibleServiceCategories: string[];
+  eligibleProductIds: string[];
+  eligibleProductCategoryIds: string[];
+  promoLabel: string | null;
+  manualBenefitNote: string | null;
+  activeFrom: string | null;
+  activeUntil: string | null;
+  status: (typeof earningRuleStatusEnum.enumValues)[number];
 };
 
 export const loyaltyAccounts = pgTable('loyalty_accounts', {
@@ -68,10 +110,44 @@ export const rewards = pgTable('rewards', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 160 }).notNull(),
   description: text('description'),
+  fulfillmentNote: text('fulfillment_note'),
   rewardType: rewardTypeEnum('reward_type').notNull(),
   pointsCost: integer('points_cost').notNull(),
   discountPercent: integer('discount_percent'),
   status: rewardStatusEnum('status').notNull().default('active'),
+  createdByUserId: uuid('created_by_user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'restrict' }),
+  updatedByUserId: uuid('updated_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const loyaltyEarningRules = pgTable('loyalty_earning_rules', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 160 }).notNull(),
+  description: text('description'),
+  accrualSource: earningRuleAccrualSourceEnum('accrual_source').notNull().default('service'),
+  formulaType: earningRuleFormulaTypeEnum('formula_type').notNull(),
+  flatPoints: integer('flat_points'),
+  amountStepCents: integer('amount_step_cents'),
+  pointsPerStep: integer('points_per_step'),
+  minimumAmountCents: integer('minimum_amount_cents'),
+  eligibleServiceTypes: jsonb('eligible_service_types').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  eligibleServiceCategories: jsonb('eligible_service_categories')
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  eligibleProductIds: jsonb('eligible_product_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  eligibleProductCategoryIds: jsonb('eligible_product_category_ids')
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  promoLabel: varchar('promo_label', { length: 160 }),
+  manualBenefitNote: text('manual_benefit_note'),
+  activeFrom: timestamp('active_from', { withTimezone: true }),
+  activeUntil: timestamp('active_until', { withTimezone: true }),
+  status: earningRuleStatusEnum('status').notNull().default('inactive'),
   createdByUserId: uuid('created_by_user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'restrict' }),
@@ -137,6 +213,23 @@ export const rewardCatalogAudits = pgTable('reward_catalog_audits', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const loyaltyEarningRuleAudits = pgTable('loyalty_earning_rule_audits', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  earningRuleId: uuid('earning_rule_id')
+    .notNull()
+    .references(() => loyaltyEarningRules.id, { onDelete: 'cascade' }),
+  actorUserId: uuid('actor_user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'restrict' }),
+  action: earningRuleAuditActionEnum('action').notNull(),
+  reason: text('reason'),
+  snapshot: jsonb('snapshot')
+    .$type<LoyaltyEarningRuleSnapshot>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const loyaltyAccountsRelations = relations(loyaltyAccounts, ({ one, many }) => ({
   user: one(users, {
     fields: [loyaltyAccounts.userId],
@@ -172,6 +265,20 @@ export const rewardsRelations = relations(rewards, ({ one, many }) => ({
   redemptions: many(rewardRedemptions),
 }));
 
+export const loyaltyEarningRulesRelations = relations(loyaltyEarningRules, ({ one, many }) => ({
+  createdByUser: one(users, {
+    fields: [loyaltyEarningRules.createdByUserId],
+    references: [users.id],
+    relationName: 'earning_rule_created_by',
+  }),
+  updatedByUser: one(users, {
+    fields: [loyaltyEarningRules.updatedByUserId],
+    references: [users.id],
+    relationName: 'earning_rule_updated_by',
+  }),
+  audits: many(loyaltyEarningRuleAudits),
+}));
+
 export const rewardRedemptionsRelations = relations(rewardRedemptions, ({ one }) => ({
   account: one(loyaltyAccounts, {
     fields: [rewardRedemptions.loyaltyAccountId],
@@ -198,6 +305,17 @@ export const rewardCatalogAuditsRelations = relations(rewardCatalogAudits, ({ on
   }),
   actorUser: one(users, {
     fields: [rewardCatalogAudits.actorUserId],
+    references: [users.id],
+  }),
+}));
+
+export const loyaltyEarningRuleAuditsRelations = relations(loyaltyEarningRuleAudits, ({ one }) => ({
+  earningRule: one(loyaltyEarningRules, {
+    fields: [loyaltyEarningRuleAudits.earningRuleId],
+    references: [loyaltyEarningRules.id],
+  }),
+  actorUser: one(users, {
+    fields: [loyaltyEarningRuleAudits.actorUserId],
     references: [users.id],
   }),
 }));

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-16T09:51:27.4510031+08:00",
+  "generatedAt": "2026-04-18T14:30:37.4177697+08:00",
   "policy": {
     "orchestratorWriteMode": "proposal-only",
     "validatorMode": "content-strict",
@@ -31,10 +31,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "d9b4045b49c0686b834ef4caec320e3099955c8deabe26018e48ff84698e46cb"
+        "value": "69b7d3e27c7840800bfe015cdbf7edc5f3cc60913c7e98a5b23828332ca28cec"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "agents/domain-worker.md",
@@ -59,10 +59,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "7c89c96563d2f61ff0d678b4afcd9382b78678bb0078fa5b0ea4e526213f7179"
+        "value": "189bb789a11e328be8b2f23cca21c6dd7b1e878725aa0ec9ae8e276db31cf684"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "agents/integration-worker.md",
@@ -87,10 +87,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "48d6bc7a5d77c0f4e38ab6d3a16504b25883f8a8255696dd71f8ca27ddc26789"
+        "value": "1c6af86c7be0ed9ecbda8257402d619236db406b3349dd661ba2e7f1ce74c2a7"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "agents/operating-rules.md",
@@ -115,10 +115,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "a65a0fabf6cc862bf0830815df643d38ba790e55f4eb72d06021eb4f6e2da568"
+        "value": "718a2b12e2cf401fb20bfc9d84007677aac3ac8dd110e28457e41c41585e6c8a"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "agents/orchestrator.md",
@@ -143,10 +143,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "8171199182daa23b40e107fe64d182ff8c2ecbf087c45327805b3e3137fba0c4"
+        "value": "0462117e13171f5c08c51d31bc1a887ee20fa6ebdf7167f7ff2d74f6bd07769d"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "agents/refactor-worker.md",
@@ -170,10 +170,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "1c28939cea3baf7c00b63de733d9c1e3b26ea3e97fd86fa8fa47c3d165d53724"
+        "value": "ee696c60bea1b2cf2f9615cabf5afb1bf50fede728c7d73db32d9c771602c94f"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "agents/test-worker.md",
@@ -197,10 +197,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "eb50504ac08b903c9db712df958bc571bc00f326b9cf95386632f7ae13e54aa1"
+        "value": "0b0be4b51be7038fee5f2a85479551685c80ad3d6bd05843a7cf667bcfc5b1fb"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "agents/validator.md",
@@ -224,10 +224,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "92b44cdb1b3b57db5c3326f0e4a5960bcac939a792343ff44f7d0ec647b7fbab"
+        "value": "7001eb56f5c3658cfc79e1024bcf2293d4b2aca427409f5a9f0fd6f9a8108444"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "ai-governance.md",
@@ -286,10 +286,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "2ee309157117f25614a5b4405d14600daf2379a115518144c835695a1c1d2572"
+        "value": "034ddb8baa0a8e186e7044e0b059a0630992550dcf35baed3e724028c541011e"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-16T18:04:53.8708379+08:00"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "domain-map.md",
@@ -317,10 +317,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "18a25c4d65c0e97ba76e0c853a4bd0656f48719e59ece57330e7311bb960915c"
+        "value": "04a2e2f2912b8430c4e713f0f8af409369c8fa82391b7f13f7448ceabecc9e4d"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T21:21:42.489Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "domains/ecommerce/cart.md",
@@ -420,10 +420,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "c19bdcece1e42456e68315f02e42e32af0bb079d0dd3c5e889ec0c978da9506f"
+        "value": "bdac730819c529355081dfcc800f9656989f4c5f4fbb7056bf9ca2a5d014ac86"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-16T17:48:31.3912174+08:00"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "domains/ecommerce/inventory.md",
@@ -844,10 +844,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "53c67dc7e46494d237d8a627b7faa24d74128d0b17be1a2b7bdb73cf5f925f83"
+        "value": "62f5cc12767070d6d38c6cbbbc92351cdd187a64c8f81b16a99ef4a16c97970a"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-16T23:41:00+08:00"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "domains/main-service/notifications.md",
@@ -1084,10 +1084,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "c52ebe6860135fb5e9a947ba239bb0317de84fac5034cbe7d8a424e4bc0ea67b"
+        "value": "bbe5bb2668e151574c91649bf8c5612aacdbdc8cd818f6eea0b39f35ded8e2f8"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "golden-domain-template.md",
@@ -1208,10 +1208,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "74490c770d0413017b806de7fa436ab85d35d4d176b63dfd89f8000d8d76c4b0"
+        "value": "132a8cadb871e9229afcc45f1c19bb4b1d83ac277594d50e802cab575d717f79"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T21:21:42.489Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "system-architecture.md",
@@ -1243,10 +1243,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "151c47354cc927bdeb01adb65b5c503b8d8c1df2a451b67c7eb93f2162921e45"
+        "value": "f80311cd5e99647b9fe4445a3bbb94e945d94f24482ef4cdb1ad153ef5d8a0d0"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T21:21:42.489Z"
+      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
     },
     {
       "path": "auth-security-policy.md",

@@ -19,6 +19,13 @@ export const normalizeEmail = (value) => value.trim().toLowerCase();
 
 // PH mobile numbers must stay numeric-only and capped to 11 digits while typing.
 export const normalizePhoneNumber = (value) => value.replace(/\D/g, '').slice(0, 11);
+export const normalizeVehicleYear = (value) => String(value ?? '').replace(/\D/g, '').slice(0, 4);
+
+export const formatVehicleDisplayName = ({ vehicleMake, vehicleModel, vehicleYear }) =>
+  [vehicleYear, vehicleMake, vehicleModel]
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean)
+    .join(' ');
 
 export const buildUsername = (email, firstName, lastName) => {
   const emailLocalPart = normalizeEmail(email).split('@')[0]?.replace(/[^a-z0-9._-]/gi, '');
@@ -50,12 +57,29 @@ export const formatMonthYear = (value) => {
   return `${monthLabels[value.getMonth()]} ${value.getFullYear()}`;
 };
 
-export const cloneDate = (value) => {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+const parseDateValue = (value) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  if (typeof value !== 'string' || !value.trim()) {
     return null;
   }
 
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  const normalizedValue = /^\d{4}-\d{2}-\d{2}$/.test(value.trim())
+    ? `${value.trim()}T00:00:00`
+    : value.trim();
+  const parsedDate = new Date(normalizedValue);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
+};
+
+export const cloneDate = (value) => {
+  return parseDateValue(value);
 };
 
 export const calculateAge = (birthday) => {
@@ -123,6 +147,16 @@ export const validatePhoneNumber = (phoneNumber) => {
   return '';
 };
 
+export const validateOptionalPhoneNumber = (phoneNumber) => {
+  const digits = normalizePhoneNumber(phoneNumber);
+
+  if (!digits) {
+    return '';
+  }
+
+  return validatePhoneNumber(digits);
+};
+
 export const validateBirthday = (birthday) => {
   if (!(birthday instanceof Date) || Number.isNaN(birthday.getTime())) {
     return 'Select your birthday.';
@@ -133,6 +167,26 @@ export const validateBirthday = (birthday) => {
 
   if (birthday > normalizedToday) {
     return 'Birthday cannot be in the future.';
+  }
+
+  return '';
+};
+
+export const validateVehicleYear = (vehicleYear) => {
+  const digits = normalizeVehicleYear(vehicleYear);
+  const numericYear = Number(digits);
+  const currentYear = new Date().getFullYear();
+
+  if (!digits) {
+    return 'Enter your vehicle year.';
+  }
+
+  if (digits.length !== 4 || Number.isNaN(numericYear)) {
+    return 'Use a valid 4-digit vehicle year.';
+  }
+
+  if (numericYear < 1900 || numericYear > currentYear + 1) {
+    return 'Vehicle year must be between 1900 and next year.';
   }
 
   return '';
@@ -177,11 +231,20 @@ export const validateRegisterForm = (form) => {
   }
 
   if (!form.licensePlate.trim()) {
-    errors.licensePlate = 'Enter your license plate.';
+    errors.licensePlate = 'Enter your vehicle plate.';
+  }
+
+  if (!form.vehicleMake.trim()) {
+    errors.vehicleMake = 'Enter your vehicle make.';
   }
 
   if (!form.vehicleModel.trim()) {
-    errors.vehicleModel = 'Enter your vehicle make and model.';
+    errors.vehicleModel = 'Enter your vehicle model.';
+  }
+
+  const vehicleYearError = validateVehicleYear(form.vehicleYear);
+  if (vehicleYearError) {
+    errors.vehicleYear = vehicleYearError;
   }
 
   const passwordError = validatePassword(form.password);
@@ -214,8 +277,17 @@ export const validateProfileForm = (form) => {
     errors.licensePlate = 'Enter your vehicle plate.';
   }
 
+  if (!form.vehicleMake.trim()) {
+    errors.vehicleMake = 'Enter your vehicle make.';
+  }
+
   if (!form.vehicleModel.trim()) {
-    errors.vehicleModel = 'Enter your vehicle make and model.';
+    errors.vehicleModel = 'Enter your vehicle model.';
+  }
+
+  const vehicleYearError = validateVehicleYear(form.vehicleYear);
+  if (vehicleYearError) {
+    errors.vehicleYear = vehicleYearError;
   }
 
   return errors;

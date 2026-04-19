@@ -597,6 +597,135 @@ describe('JobOrdersService', () => {
     expect(result).toBe(finalizedResult);
   });
 
+  it('records invoice settlement only for finalized job orders and emits the paid service event', async () => {
+    const eventBus = {
+      publish: jest.fn(),
+    };
+    const paidResult = {
+      id: 'job-order-1',
+      customerUserId: 'customer-1',
+      vehicleId: 'vehicle-1',
+      sourceType: 'booking',
+      sourceId: 'booking-1',
+      serviceAdviserUserId: 'adviser-1',
+      serviceAdviserCode: 'SA-1001',
+      status: 'finalized',
+      invoiceRecord: {
+        id: 'invoice-record-1',
+        invoiceReference: 'INV-JO-20260413-ABC12345',
+        paymentStatus: 'paid',
+        amountPaidCents: 159900,
+        paymentMethod: 'cash',
+        paymentReference: 'OR-2026-0001',
+        paidAt: new Date('2026-05-14T10:30:00.000Z'),
+      },
+    };
+
+    const jobOrdersRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'job-order-1',
+        customerUserId: 'customer-1',
+        vehicleId: 'vehicle-1',
+        sourceType: 'booking',
+        sourceId: 'booking-1',
+        status: 'finalized',
+        serviceAdviserUserId: 'adviser-1',
+        serviceAdviserCode: 'SA-1001',
+        items: [{ id: 'item-1', isCompleted: true }],
+        assignments: [{ technicianUserId: 'tech-1' }],
+        invoiceRecord: {
+          id: 'invoice-record-1',
+          invoiceReference: 'INV-JO-20260413-ABC12345',
+          paymentStatus: 'pending_payment',
+        },
+      }),
+      recordInvoicePayment: jest.fn().mockResolvedValue(paidResult),
+    };
+
+    const bookingsRepository = {
+      findOptionalById: jest.fn().mockResolvedValue({
+        id: 'booking-1',
+        requestedServices: [
+          {
+            service: {
+              id: 'collision_repair',
+              categoryId: 'repair',
+            },
+          },
+        ],
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        JobOrdersService,
+        { provide: JobOrdersRepository, useValue: jobOrdersRepository },
+        { provide: BookingsRepository, useValue: bookingsRepository },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn(), linkReworkJobOrder: jest.fn() } },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: eventBus },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(JobOrdersService);
+
+    const result = await service.recordInvoicePayment(
+      'job-order-1',
+      {
+        amountPaidCents: 159900,
+        paymentMethod: 'cash',
+        reference: 'OR-2026-0001',
+        receivedAt: '2026-05-14T10:30:00.000Z',
+      },
+      {
+        userId: 'adviser-1',
+        role: 'service_adviser',
+      },
+    );
+
+    expect(jobOrdersRepository.recordInvoicePayment).toHaveBeenCalledWith(
+      'job-order-1',
+      expect.objectContaining({
+        amountPaidCents: 159900,
+        paymentMethod: 'cash',
+        reference: 'OR-2026-0001',
+        recordedByUserId: 'adviser-1',
+      }),
+    );
+    expect(eventBus.publish).toHaveBeenCalledWith('service.payment_recorded', {
+      jobOrderId: 'job-order-1',
+      invoiceRecordId: 'invoice-record-1',
+      invoiceReference: 'INV-JO-20260413-ABC12345',
+      customerUserId: 'customer-1',
+      vehicleId: 'vehicle-1',
+      serviceAdviserUserId: 'adviser-1',
+      serviceAdviserCode: 'SA-1001',
+      recordedByUserId: 'adviser-1',
+      sourceType: 'booking',
+      sourceId: 'booking-1',
+      amountPaidCents: 159900,
+      currencyCode: 'PHP',
+      paidAt: '2026-05-14T10:30:00.000Z',
+      settlementStatus: 'paid',
+      paymentMethod: 'cash',
+      paymentReference: 'OR-2026-0001',
+      serviceTypeCode: 'collision_repair',
+      serviceCategoryCode: 'repair',
+    });
+    expect(result).toBe(paidResult);
+  });
+
   it('rejects invoice generation for incomplete, blocked, or already-invoiced job orders', async () => {
     const eventBus = {
       publish: jest.fn(),

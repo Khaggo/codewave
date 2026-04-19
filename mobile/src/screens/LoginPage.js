@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AuthFrame from '../components/AuthFrame';
@@ -9,12 +9,10 @@ import { normalizeEmail, validateEmail, validateLoginForm } from '../utils/valid
 import { ApiError } from '../lib/authClient';
 
 export default function LoginPage({ navigation, route, onLogin }) {
-  const passwordInputRef = useRef(null);
   const [form, setForm] = useState({
     email: '',
     password: '',
   });
-  const [focusedField, setFocusedField] = useState('');
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -80,7 +78,7 @@ export default function LoginPage({ navigation, route, onLogin }) {
       title="Welcome back"
       subtitle="Sign in with your email and password. OTP is only required when creating a new account."
       backLabel="Back to Home"
-      onBack={() => navigation.navigate('Landing')}
+      onBack={() => navigation.replace('Landing')}
       centerContent
     >
       <FormField
@@ -91,10 +89,7 @@ export default function LoginPage({ navigation, route, onLogin }) {
         keyboardType="email-address"
         autoCapitalize="none"
         error={errors.email}
-        isFocused={focusedField === 'email'}
-        onFocus={() => setFocusedField('email')}
         onBlur={() => {
-          setFocusedField('');
           const emailError = validateEmail(form.email);
 
           if (emailError) {
@@ -108,31 +103,22 @@ export default function LoginPage({ navigation, route, onLogin }) {
         autoComplete="off"
         importantForAutofill="no"
         icon="email-outline"
-        returnKeyType="next"
-        blurOnSubmit={false}
-        onSubmitEditing={() => passwordInputRef.current?.focus()}
       />
 
       <PasswordField
-        ref={passwordInputRef}
         label="Password"
         value={form.password}
         onChangeText={(value) => handleFieldChange('password', value)}
         placeholder="Enter your password"
         error={errors.password}
-        isFocused={focusedField === 'password'}
-        onFocus={() => setFocusedField('password')}
-        onBlur={() => setFocusedField('')}
         textContentType="password"
         autoComplete="off"
         importantForAutofill="no"
-        returnKeyType="done"
-        onSubmitEditing={handleLogin}
       />
 
       <TouchableOpacity
         style={styles.forgotPasswordLink}
-        onPress={() => navigation.navigate('ForgotPasswordEmail')}
+        onPress={() => navigation.replace('ForgotPasswordEmail')}
         disabled={submitting}
       >
         <Text style={styles.forgotPasswordText}>Forgot password?</Text>
@@ -158,7 +144,7 @@ export default function LoginPage({ navigation, route, onLogin }) {
 
       <View style={styles.footerRow}>
         <Text style={styles.footerText}>Don't have an account? </Text>
-        <Text style={styles.footerLink} onPress={() => navigation.navigate('Register')}>
+        <Text style={styles.footerLink} onPress={() => navigation.replace('Register')}>
           Sign Up
         </Text>
       </View>

@@ -65,9 +65,12 @@ import { AddJobOrderPhotoDto } from '../../src/modules/job-orders/dto/add-job-or
 import { AddJobOrderProgressDto } from '../../src/modules/job-orders/dto/add-job-order-progress.dto';
 import { CreateJobOrderDto } from '../../src/modules/job-orders/dto/create-job-order.dto';
 import { FinalizeJobOrderDto } from '../../src/modules/job-orders/dto/finalize-job-order.dto';
+import { RecordJobOrderInvoicePaymentDto } from '../../src/modules/job-orders/dto/record-job-order-invoice-payment.dto';
 import { UpdateJobOrderStatusDto } from '../../src/modules/job-orders/dto/update-job-order-status.dto';
 import { JobOrdersRepository } from '../../src/modules/job-orders/repositories/job-orders.repository';
 import {
+  jobOrderInvoicePaymentMethodEnum,
+  jobOrderInvoicePaymentStatusEnum,
   jobOrderProgressEntryTypeEnum,
   jobOrderSourceTypeEnum,
   jobOrderStatusEnum,
@@ -75,14 +78,22 @@ import {
 } from '../../src/modules/job-orders/schemas/job-orders.schema';
 import { JobOrdersService } from '../../src/modules/job-orders/services/job-orders.service';
 import { LoyaltyController } from '../../src/modules/loyalty/controllers/loyalty.controller';
+import { CreateEarningRuleDto } from '../../src/modules/loyalty/dto/create-earning-rule.dto';
 import { CreateRewardDto } from '../../src/modules/loyalty/dto/create-reward.dto';
 import { RedeemRewardDto } from '../../src/modules/loyalty/dto/redeem-reward.dto';
+import { UpdateEarningRuleDto } from '../../src/modules/loyalty/dto/update-earning-rule.dto';
+import { UpdateEarningRuleStatusDto } from '../../src/modules/loyalty/dto/update-earning-rule-status.dto';
 import { UpdateRewardDto } from '../../src/modules/loyalty/dto/update-reward.dto';
 import { UpdateRewardStatusDto } from '../../src/modules/loyalty/dto/update-reward-status.dto';
 import { LoyaltyRepository } from '../../src/modules/loyalty/repositories/loyalty.repository';
 import {
+  earningRuleAccrualSourceEnum,
+  earningRuleAuditActionEnum,
+  earningRuleFormulaTypeEnum,
+  earningRuleStatusEnum,
   loyaltySourceTypeEnum,
   loyaltyTransactionTypeEnum,
+  LoyaltyEarningRuleSnapshot,
   rewardCatalogAuditActionEnum,
   RewardCatalogSnapshot,
   rewardStatusEnum,
@@ -155,6 +166,7 @@ type UserProfileRecord = {
   firstName: string;
   lastName: string;
   phone: string | null;
+  birthday: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -350,6 +362,8 @@ type JobOrderSourceType = (typeof jobOrderSourceTypeEnum.enumValues)[number];
 type JobOrderType = (typeof jobOrderTypeEnum.enumValues)[number];
 type JobOrderStatus = (typeof jobOrderStatusEnum.enumValues)[number];
 type JobOrderProgressEntryType = (typeof jobOrderProgressEntryTypeEnum.enumValues)[number];
+type JobOrderInvoicePaymentStatus = (typeof jobOrderInvoicePaymentStatusEnum.enumValues)[number];
+type JobOrderInvoicePaymentMethod = (typeof jobOrderInvoicePaymentMethodEnum.enumValues)[number];
 
 type JobOrderRecord = {
   id: string;
@@ -417,6 +431,12 @@ type JobOrderInvoiceRecord = {
   serviceAdviserUserId: string;
   serviceAdviserCode: string;
   finalizedByUserId: string;
+  paymentStatus: JobOrderInvoicePaymentStatus;
+  amountPaidCents: number | null;
+  paymentMethod: JobOrderInvoicePaymentMethod | null;
+  paymentReference: string | null;
+  paidAt: Date | null;
+  recordedByUserId: string | null;
   summary: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -535,7 +555,11 @@ type LoyaltyTransactionType = (typeof loyaltyTransactionTypeEnum.enumValues)[num
 type LoyaltySourceType = (typeof loyaltySourceTypeEnum.enumValues)[number];
 type RewardStatus = (typeof rewardStatusEnum.enumValues)[number];
 type RewardType = (typeof rewardTypeEnum.enumValues)[number];
+type EarningRuleStatus = (typeof earningRuleStatusEnum.enumValues)[number];
+type EarningRuleFormulaType = (typeof earningRuleFormulaTypeEnum.enumValues)[number];
+type EarningRuleAccrualSource = (typeof earningRuleAccrualSourceEnum.enumValues)[number];
 type RewardCatalogAuditAction = (typeof rewardCatalogAuditActionEnum.enumValues)[number];
+type EarningRuleAuditAction = (typeof earningRuleAuditActionEnum.enumValues)[number];
 
 type LoyaltyAccountRecord = {
   id: string;
@@ -566,6 +590,7 @@ type RewardRecord = {
   id: string;
   name: string;
   description: string | null;
+  fulfillmentNote: string | null;
   rewardType: RewardType;
   pointsCost: number;
   discountPercent: number | null;
@@ -583,6 +608,41 @@ type RewardCatalogAuditRecord = {
   action: RewardCatalogAuditAction;
   reason: string | null;
   snapshot: RewardCatalogSnapshot;
+  createdAt: Date;
+};
+
+type EarningRuleRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  accrualSource: EarningRuleAccrualSource;
+  formulaType: EarningRuleFormulaType;
+  flatPoints: number | null;
+  amountStepCents: number | null;
+  pointsPerStep: number | null;
+  minimumAmountCents: number | null;
+  eligibleServiceTypes: string[];
+  eligibleServiceCategories: string[];
+  eligibleProductIds: string[];
+  eligibleProductCategoryIds: string[];
+  promoLabel: string | null;
+  manualBenefitNote: string | null;
+  activeFrom: Date | null;
+  activeUntil: Date | null;
+  status: EarningRuleStatus;
+  createdByUserId: string;
+  updatedByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type EarningRuleAuditRecord = {
+  id: string;
+  earningRuleId: string;
+  actorUserId: string;
+  action: EarningRuleAuditAction;
+  reason: string | null;
+  snapshot: LoyaltyEarningRuleSnapshot;
   createdAt: Date;
 };
 
@@ -872,7 +932,8 @@ const cloneJobOrder = (
     invoiceRecord:
       invoiceRecords
         .filter((record) => record.jobOrderId === jobOrder.id)
-        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0] ?? null,
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .map((record) => ({ ...record }))[0] ?? null,
   };
 };
 
@@ -971,6 +1032,7 @@ class InMemoryUsersRepository {
         firstName: createUserDto.firstName,
         lastName: createUserDto.lastName,
         phone: createUserDto.phone ?? null,
+        birthday: null,
         createdAt: now,
         updatedAt: now,
       },
@@ -1008,6 +1070,7 @@ class InMemoryUsersRepository {
       firstName: updateUserDto.firstName ?? user.profile.firstName,
       lastName: updateUserDto.lastName ?? user.profile.lastName,
       phone: updateUserDto.phone ?? user.profile.phone,
+      birthday: updateUserDto.birthday ?? user.profile.birthday,
       updatedAt: new Date(),
     };
 
@@ -1840,6 +1903,12 @@ class InMemoryJobOrdersRepository {
       serviceAdviserUserId: jobOrder.serviceAdviserUserId,
       serviceAdviserCode: jobOrder.serviceAdviserCode,
       finalizedByUserId: payload.finalizedByUserId,
+      paymentStatus: 'pending_payment',
+      amountPaidCents: null,
+      paymentMethod: null,
+      paymentReference: null,
+      paidAt: null,
+      recordedByUserId: null,
       summary: payload.summary ?? null,
       createdAt: now,
       updatedAt: now,
@@ -1850,6 +1919,29 @@ class InMemoryJobOrdersRepository {
       status: 'finalized',
       updatedAt: now,
     });
+
+    return this.findById(id);
+  }
+
+  async recordInvoicePayment(
+    id: string,
+    payload: RecordJobOrderInvoicePaymentDto & {
+      receivedAt: Date;
+      recordedByUserId: string;
+    },
+  ) {
+    const invoiceRecord = this.invoiceRecords.find((record) => record.jobOrderId === id);
+    if (!invoiceRecord) {
+      throw new NotFoundException('Job order invoice record not found');
+    }
+
+    invoiceRecord.paymentStatus = 'paid';
+    invoiceRecord.amountPaidCents = payload.amountPaidCents;
+    invoiceRecord.paymentMethod = payload.paymentMethod;
+    invoiceRecord.paymentReference = payload.reference ?? null;
+    invoiceRecord.paidAt = payload.receivedAt;
+    invoiceRecord.recordedByUserId = payload.recordedByUserId;
+    invoiceRecord.updatedAt = new Date();
 
     return this.findById(id);
   }
@@ -2828,6 +2920,8 @@ class InMemoryLoyaltyRepository {
   private readonly transactions = new Map<string, LoyaltyTransactionRecord>();
   private readonly rewards = new Map<string, RewardRecord>();
   private readonly rewardAudits = new Map<string, RewardCatalogAuditRecord>();
+  private readonly earningRules = new Map<string, EarningRuleRecord>();
+  private readonly earningRuleAudits = new Map<string, EarningRuleAuditRecord>();
   private readonly redemptions = new Map<string, RewardRedemptionRecord>();
 
   async findAccountById(accountId: string) {
@@ -2899,6 +2993,34 @@ class InMemoryLoyaltyRepository {
       .map((reward) => this.cloneReward(reward));
   }
 
+  async listEarningRules(options?: { includeInactive?: boolean }) {
+    return Array.from(this.earningRules.values())
+      .filter((rule) => (options?.includeInactive ? true : rule.status === 'active'))
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+      .map((rule) => this.cloneEarningRule(rule));
+  }
+
+  async listActiveEarningRules(at = new Date()) {
+    return Array.from(this.earningRules.values())
+      .filter((rule) => {
+        if (rule.status !== 'active') {
+          return false;
+        }
+
+        if (rule.activeFrom && rule.activeFrom.getTime() > at.getTime()) {
+          return false;
+        }
+
+        if (rule.activeUntil && rule.activeUntil.getTime() < at.getTime()) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+      .map((rule) => this.cloneEarningRule(rule));
+  }
+
   async findRewardById(id: string) {
     const reward = this.rewards.get(id);
     if (!reward) {
@@ -2908,12 +3030,22 @@ class InMemoryLoyaltyRepository {
     return this.cloneReward(reward);
   }
 
+  async findEarningRuleById(id: string) {
+    const earningRule = this.earningRules.get(id);
+    if (!earningRule) {
+      throw new NotFoundException('Earning rule not found');
+    }
+
+    return this.cloneEarningRule(earningRule);
+  }
+
   async createReward(payload: CreateRewardDto & { actorUserId: string }) {
     const now = new Date();
     const reward: RewardRecord = {
       id: randomUUID(),
       name: payload.name,
       description: payload.description ?? null,
+      fulfillmentNote: payload.fulfillmentNote ?? null,
       rewardType: payload.rewardType,
       pointsCost: payload.pointsCost,
       discountPercent: payload.discountPercent ?? null,
@@ -2936,6 +3068,45 @@ class InMemoryLoyaltyRepository {
     return this.cloneReward(reward);
   }
 
+  async createEarningRule(payload: CreateEarningRuleDto & { actorUserId: string }) {
+    const now = new Date();
+    const earningRule: EarningRuleRecord = {
+      id: randomUUID(),
+      name: payload.name,
+      description: payload.description ?? null,
+      accrualSource: payload.accrualSource,
+      formulaType: payload.formulaType,
+      flatPoints: payload.flatPoints ?? null,
+      amountStepCents: payload.amountStepCents ?? null,
+      pointsPerStep: payload.pointsPerStep ?? null,
+      minimumAmountCents: payload.minimumAmountCents ?? null,
+      eligibleServiceTypes: [...(payload.eligibleServiceTypes ?? [])],
+      eligibleServiceCategories: [...(payload.eligibleServiceCategories ?? [])],
+      eligibleProductIds: [...(payload.eligibleProductIds ?? [])],
+      eligibleProductCategoryIds: [...(payload.eligibleProductCategoryIds ?? [])],
+      promoLabel: payload.promoLabel ?? null,
+      manualBenefitNote: payload.manualBenefitNote ?? null,
+      activeFrom: payload.activeFrom ? new Date(payload.activeFrom) : null,
+      activeUntil: payload.activeUntil ? new Date(payload.activeUntil) : null,
+      status: payload.status ?? 'inactive',
+      createdByUserId: payload.actorUserId,
+      updatedByUserId: payload.actorUserId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.earningRules.set(earningRule.id, earningRule);
+    await this.insertEarningRuleAudit({
+      earningRuleId: earningRule.id,
+      actorUserId: payload.actorUserId,
+      action: 'created',
+      reason: payload.reason ?? null,
+      snapshot: this.toEarningRuleSnapshot(earningRule),
+    });
+
+    return this.cloneEarningRule(earningRule);
+  }
+
   async updateReward(id: string, payload: UpdateRewardDto & { actorUserId: string }) {
     const existingReward = this.rewards.get(id);
     if (!existingReward) {
@@ -2946,6 +3117,10 @@ class InMemoryLoyaltyRepository {
       ...existingReward,
       name: payload.name ?? existingReward.name,
       description: payload.description ?? existingReward.description,
+      fulfillmentNote:
+        payload.fulfillmentNote !== undefined
+          ? payload.fulfillmentNote
+          : existingReward.fulfillmentNote,
       rewardType: payload.rewardType ?? existingReward.rewardType,
       pointsCost: payload.pointsCost ?? existingReward.pointsCost,
       discountPercent:
@@ -2966,6 +3141,77 @@ class InMemoryLoyaltyRepository {
     });
 
     return this.cloneReward(updatedReward);
+  }
+
+  async updateEarningRule(id: string, payload: UpdateEarningRuleDto & { actorUserId: string }) {
+    const existingRule = this.earningRules.get(id);
+    if (!existingRule) {
+      throw new NotFoundException('Earning rule not found');
+    }
+
+    const updatedRule: EarningRuleRecord = {
+      ...existingRule,
+      name: payload.name ?? existingRule.name,
+      description:
+        payload.description !== undefined ? payload.description : existingRule.description,
+      accrualSource: payload.accrualSource ?? existingRule.accrualSource,
+      formulaType: payload.formulaType ?? existingRule.formulaType,
+      flatPoints: payload.flatPoints !== undefined ? payload.flatPoints : existingRule.flatPoints,
+      amountStepCents:
+        payload.amountStepCents !== undefined ? payload.amountStepCents : existingRule.amountStepCents,
+      pointsPerStep:
+        payload.pointsPerStep !== undefined ? payload.pointsPerStep : existingRule.pointsPerStep,
+      minimumAmountCents:
+        payload.minimumAmountCents !== undefined
+          ? payload.minimumAmountCents
+          : existingRule.minimumAmountCents,
+      eligibleServiceTypes:
+        payload.eligibleServiceTypes !== undefined
+          ? [...payload.eligibleServiceTypes]
+          : [...existingRule.eligibleServiceTypes],
+      eligibleServiceCategories:
+        payload.eligibleServiceCategories !== undefined
+          ? [...payload.eligibleServiceCategories]
+          : [...existingRule.eligibleServiceCategories],
+      eligibleProductIds:
+        payload.eligibleProductIds !== undefined
+          ? [...payload.eligibleProductIds]
+          : [...existingRule.eligibleProductIds],
+      eligibleProductCategoryIds:
+        payload.eligibleProductCategoryIds !== undefined
+          ? [...payload.eligibleProductCategoryIds]
+          : [...existingRule.eligibleProductCategoryIds],
+      promoLabel: payload.promoLabel !== undefined ? payload.promoLabel : existingRule.promoLabel,
+      manualBenefitNote:
+        payload.manualBenefitNote !== undefined
+          ? payload.manualBenefitNote
+          : existingRule.manualBenefitNote,
+      activeFrom:
+        payload.activeFrom !== undefined
+          ? payload.activeFrom
+            ? new Date(payload.activeFrom)
+            : null
+          : existingRule.activeFrom,
+      activeUntil:
+        payload.activeUntil !== undefined
+          ? payload.activeUntil
+            ? new Date(payload.activeUntil)
+            : null
+          : existingRule.activeUntil,
+      updatedByUserId: payload.actorUserId,
+      updatedAt: new Date(),
+    };
+
+    this.earningRules.set(updatedRule.id, updatedRule);
+    await this.insertEarningRuleAudit({
+      earningRuleId: updatedRule.id,
+      actorUserId: payload.actorUserId,
+      action: 'updated',
+      reason: payload.reason ?? null,
+      snapshot: this.toEarningRuleSnapshot(updatedRule),
+    });
+
+    return this.cloneEarningRule(updatedRule);
   }
 
   async updateRewardStatus(id: string, payload: UpdateRewardStatusDto & { actorUserId: string }) {
@@ -2993,6 +3239,34 @@ class InMemoryLoyaltyRepository {
     return this.cloneReward(updatedReward);
   }
 
+  async updateEarningRuleStatus(
+    id: string,
+    payload: UpdateEarningRuleStatusDto & { actorUserId: string },
+  ) {
+    const existingRule = this.earningRules.get(id);
+    if (!existingRule) {
+      throw new NotFoundException('Earning rule not found');
+    }
+
+    const updatedRule: EarningRuleRecord = {
+      ...existingRule,
+      status: payload.status,
+      updatedByUserId: payload.actorUserId,
+      updatedAt: new Date(),
+    };
+
+    this.earningRules.set(updatedRule.id, updatedRule);
+    await this.insertEarningRuleAudit({
+      earningRuleId: updatedRule.id,
+      actorUserId: payload.actorUserId,
+      action: payload.status === 'active' ? 'activated' : 'deactivated',
+      reason: payload.reason ?? null,
+      snapshot: this.toEarningRuleSnapshot(updatedRule),
+    });
+
+    return this.cloneEarningRule(updatedRule);
+  }
+
   async applyAccrual(payload: {
     plan: {
       loyaltyUserId: string;
@@ -3008,6 +3282,7 @@ class InMemoryLoyaltyRepository {
     };
     pointsAwarded: number;
     occurredAt?: Date;
+    metadata?: Record<string, unknown>;
   }) {
     const account = await this.getOrCreateAccount(payload.plan.loyaltyUserId);
     const existingTransaction = Array.from(this.transactions.values()).find(
@@ -3048,6 +3323,7 @@ class InMemoryLoyaltyRepository {
         duplicateStrategy: payload.plan.duplicateStrategy,
         reversalStrategy: payload.plan.reversalStrategy,
         pointsInput: payload.plan.pointsInput,
+        ...(payload.metadata ?? {}),
       },
       createdAt: payload.occurredAt ?? new Date(),
     };
@@ -3152,6 +3428,26 @@ class InMemoryLoyaltyRepository {
     return { ...audit, snapshot: { ...audit.snapshot } };
   }
 
+  private async insertEarningRuleAudit(payload: {
+    earningRuleId: string;
+    actorUserId: string;
+    action: EarningRuleAuditAction;
+    reason?: string | null;
+    snapshot: LoyaltyEarningRuleSnapshot;
+  }) {
+    const audit: EarningRuleAuditRecord = {
+      id: randomUUID(),
+      earningRuleId: payload.earningRuleId,
+      actorUserId: payload.actorUserId,
+      action: payload.action,
+      reason: payload.reason ?? null,
+      snapshot: payload.snapshot,
+      createdAt: new Date(),
+    };
+    this.earningRuleAudits.set(audit.id, audit);
+    return { ...audit, snapshot: { ...audit.snapshot } };
+  }
+
   private cloneReward(reward: RewardRecord) {
     const audits = Array.from(this.rewardAudits.values())
       .filter((audit) => audit.rewardId === reward.id)
@@ -3164,14 +3460,53 @@ class InMemoryLoyaltyRepository {
     };
   }
 
+  private cloneEarningRule(rule: EarningRuleRecord) {
+    const audits = Array.from(this.earningRuleAudits.values())
+      .filter((audit) => audit.earningRuleId === rule.id)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((audit) => ({ ...audit, snapshot: { ...audit.snapshot } }));
+
+    return {
+      ...rule,
+      eligibleServiceTypes: [...rule.eligibleServiceTypes],
+      eligibleServiceCategories: [...rule.eligibleServiceCategories],
+      eligibleProductIds: [...rule.eligibleProductIds],
+      eligibleProductCategoryIds: [...rule.eligibleProductCategoryIds],
+      audits,
+    };
+  }
+
   private toRewardSnapshot(reward: RewardRecord): RewardCatalogSnapshot {
     return {
       name: reward.name,
       description: reward.description ?? null,
+      fulfillmentNote: reward.fulfillmentNote ?? null,
       rewardType: reward.rewardType,
       pointsCost: reward.pointsCost,
       discountPercent: reward.discountPercent ?? null,
       status: reward.status,
+    };
+  }
+
+  private toEarningRuleSnapshot(rule: EarningRuleRecord): LoyaltyEarningRuleSnapshot {
+    return {
+      name: rule.name,
+      description: rule.description ?? null,
+      accrualSource: rule.accrualSource,
+      formulaType: rule.formulaType,
+      flatPoints: rule.flatPoints ?? null,
+      amountStepCents: rule.amountStepCents ?? null,
+      pointsPerStep: rule.pointsPerStep ?? null,
+      minimumAmountCents: rule.minimumAmountCents ?? null,
+      eligibleServiceTypes: [...rule.eligibleServiceTypes],
+      eligibleServiceCategories: [...rule.eligibleServiceCategories],
+      eligibleProductIds: [...rule.eligibleProductIds],
+      eligibleProductCategoryIds: [...rule.eligibleProductCategoryIds],
+      promoLabel: rule.promoLabel ?? null,
+      manualBenefitNote: rule.manualBenefitNote ?? null,
+      activeFrom: rule.activeFrom ? rule.activeFrom.toISOString() : null,
+      activeUntil: rule.activeUntil ? rule.activeUntil.toISOString() : null,
+      status: rule.status,
     };
   }
 }

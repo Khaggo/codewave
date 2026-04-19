@@ -1,0 +1,5 @@
+interface:
+  display_name: "Frontend Testing Workflow"
+  short_description: "Validate web and mobile frontend changes"
+  default_prompt: "Use $frontend-testing-workflow to test frontend changes in this repo."
+

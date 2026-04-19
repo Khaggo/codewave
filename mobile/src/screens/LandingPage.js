@@ -119,11 +119,11 @@ export default function LandingPage({ navigation }) {
       </View>
 
       <View style={styles.buttonGroup}>
-        <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('Register')}>
+        <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.replace('Register')}>
           <Text style={styles.primaryButtonText}>Create Account</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('Login')}>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.replace('Login')}>
           <Text style={styles.secondaryButtonText}>Login</Text>
         </TouchableOpacity>
       </View>

@@ -3,10 +3,12 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
+import { enableScreens } from 'react-native-screens';
 import LandingPage from './src/screens/LandingPage';
 import RegisterPage from './src/screens/RegisterPage';
 import LoginPage from './src/screens/LoginPage';
 import OTPScreen from './src/screens/OTPScreen';
+import CompleteOnboardingPage from './src/screens/CompleteOnboardingPage';
 import Dashboard from './src/screens/Dashboard';
 import ForgotPasswordEmail from './src/screens/ForgotPasswordEmail';
 import ForgotPasswordOTP from './src/screens/ForgotPasswordOTP';
@@ -16,11 +18,16 @@ import ChangePassword from './src/screens/ChangePassword';
 import FeatureModuleScreen from './src/screens/FeatureModuleScreen';
 import {
   buildMobileAccountProfile,
+  createCustomerVehicle,
   loginAccount,
   registerAccount,
+  updateCustomerProfile,
   verifyRegistrationOtp,
 } from './src/lib/authClient';
+import { cloneDate, formatVehicleDisplayName } from './src/utils/validation';
 import { colors } from './src/theme';
+
+enableScreens(false);
 
 const Stack = createStackNavigator();
 const AppSessionContext = createContext(null);
@@ -59,6 +66,19 @@ function OtpScreen(props) {
   );
 }
 
+function CompleteOnboardingScreen(props) {
+  const { pendingOnboardingCompletion, handleCompleteOnboarding } = useAppSessionContext();
+
+  return (
+    <CompleteOnboardingPage
+      {...props}
+      onboardingDraft={pendingOnboardingCompletion?.draft}
+      onboardingMessage={pendingOnboardingCompletion?.message}
+      onComplete={handleCompleteOnboarding}
+    />
+  );
+}
+
 function ForgotPasswordEmailScreen(props) {
   const { registeredAccount } = useAppSessionContext();
 
@@ -82,8 +102,15 @@ function ResetPasswordScreen(props) {
 }
 
 function MenuScreen(props) {
-  const { activeAccount, registeredAccount, syncAccount, handleDeleteAccount, setPendingAccount, setActiveAccount } =
-    useAppSessionContext();
+  const {
+    activeAccount,
+    registeredAccount,
+    syncAccount,
+    handleDeleteAccount,
+    setPendingAccount,
+    setActiveAccount,
+    setPendingOnboardingCompletion,
+  } = useAppSessionContext();
 
   return (
     <Dashboard
@@ -97,6 +124,7 @@ function MenuScreen(props) {
       }}
       onSignOut={() => {
         setPendingAccount(null);
+        setPendingOnboardingCompletion(null);
         setActiveAccount(null);
       }}
       onDeleteAccount={handleDeleteAccount}
@@ -151,11 +179,40 @@ const navigationTheme = {
 };
 
 const normalizeEmail = (value) => String(value ?? '').trim().toLowerCase();
+const buildVehicleSnapshot = (draftAccount = {}) => {
+  const vehicleMake = String(draftAccount.vehicleMake ?? '').trim();
+  const vehicleModel = String(draftAccount.vehicleModel ?? '').trim();
+  const vehicleYear = draftAccount.vehicleYear ?? null;
+
+  return {
+    licensePlate: String(draftAccount.licensePlate ?? '').trim().toUpperCase(),
+    vehicleMake,
+    vehicleModel,
+    vehicleYear,
+    vehicleDisplayName: formatVehicleDisplayName({
+      vehicleMake,
+      vehicleModel,
+      vehicleYear,
+    }),
+  };
+};
+
+const mergeAccountWithOnboarding = (account, draftAccount = {}) => {
+  const vehicleSnapshot = buildVehicleSnapshot(draftAccount);
+
+  return {
+    ...account,
+    birthday: cloneDate(draftAccount?.birthday ?? account?.birthday),
+    phoneNumber: draftAccount.phoneNumber ?? account?.phoneNumber ?? '',
+    ...vehicleSnapshot,
+  };
+};
 
 export default function App() {
   const [registeredAccount, setRegisteredAccount] = useState(null);
   const [pendingAccount, setPendingAccount] = useState(null);
   const [activeAccount, setActiveAccount] = useState(null);
+  const [pendingOnboardingCompletion, setPendingOnboardingCompletion] = useState(null);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
@@ -271,14 +328,76 @@ export default function App() {
         setActiveAccount(nextAccount);
       }
 
+      if (
+        pendingOnboardingCompletion?.draft?.email &&
+        normalizeEmail(pendingOnboardingCompletion.draft.email) === normalizeEmail(currentAccount.email)
+      ) {
+        setPendingOnboardingCompletion((currentState) =>
+          currentState
+            ? {
+                ...currentState,
+                draft: {
+                  ...currentState.draft,
+                  ...nextAccount,
+                },
+              }
+            : currentState,
+        );
+      }
+
       return nextAccount;
     });
   };
 
   const handleDeleteAccount = () => {
     setPendingAccount(null);
+    setPendingOnboardingCompletion(null);
     setActiveAccount(null);
     setRegisteredAccount(null);
+  };
+
+  const persistCustomerOnboarding = async ({ session, draftAccount, existingAccount, password }) => {
+    const userId = session?.user?.id ?? existingAccount?.userId;
+    const accessToken = session?.accessToken ?? existingAccount?.accessToken;
+
+    if (!userId || !accessToken) {
+      throw new Error('Your session is missing the required onboarding credentials.');
+    }
+
+    const updatedUser = await updateCustomerProfile({
+      userId,
+      birthday: draftAccount?.birthday,
+      phoneNumber: draftAccount?.phoneNumber,
+      accessToken,
+    });
+
+    const vehicle = await createCustomerVehicle({
+      userId,
+      licensePlate: draftAccount?.licensePlate,
+      vehicleMake: draftAccount?.vehicleMake,
+      vehicleModel: draftAccount?.vehicleModel,
+      vehicleYear: draftAccount?.vehicleYear,
+      accessToken,
+    });
+
+    return mergeAccountWithOnboarding(
+      buildMobileAccountProfile({
+        session: {
+          ...session,
+          user: updatedUser,
+        },
+        password,
+        draftAccount,
+        existingAccount,
+      }),
+      {
+        ...draftAccount,
+        licensePlate: vehicle?.plateNumber ?? draftAccount?.licensePlate,
+        vehicleMake: vehicle?.make ?? draftAccount?.vehicleMake,
+        vehicleModel: vehicle?.model ?? draftAccount?.vehicleModel,
+        vehicleYear: vehicle?.year ?? draftAccount?.vehicleYear,
+      },
+    );
   };
 
   const handleRegisterRequest = async (draftAccount) => {
@@ -291,6 +410,7 @@ export default function App() {
     });
 
     setPendingAccount(draftAccount);
+    setPendingOnboardingCompletion(null);
     setActiveAccount(null);
 
     return enrollment;
@@ -302,18 +422,59 @@ export default function App() {
       otp,
     });
 
-    const verifiedAccount = buildMobileAccountProfile({
-      session,
-      password: accountDraft?.password ?? pendingAccount?.password ?? '',
-      draftAccount: accountDraft ?? pendingAccount ?? undefined,
-      existingAccount: registeredAccount,
-    });
+    const onboardingDraft = accountDraft ?? pendingAccount ?? undefined;
+    const verifiedAccount = mergeAccountWithOnboarding(
+      buildMobileAccountProfile({
+        session,
+        password: onboardingDraft?.password ?? pendingAccount?.password ?? '',
+        draftAccount: onboardingDraft,
+        existingAccount: registeredAccount,
+      }),
+      onboardingDraft,
+    );
 
     rememberKnownAccount(verifiedAccount);
     setActiveAccount(verifiedAccount);
     setPendingAccount(null);
 
-    return verifiedAccount;
+    try {
+      const completedAccount = await persistCustomerOnboarding({
+        session,
+        draftAccount: onboardingDraft,
+        existingAccount: verifiedAccount,
+        password: onboardingDraft?.password ?? pendingAccount?.password ?? '',
+      });
+
+      rememberKnownAccount(completedAccount);
+      setActiveAccount(completedAccount);
+      setPendingOnboardingCompletion(null);
+
+      return {
+        status: 'success',
+        nextRoute: 'Menu',
+        resetStack: true,
+        account: completedAccount,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Your account is verified, but we still need to finish saving your profile details.';
+
+      setPendingOnboardingCompletion({
+        draft: onboardingDraft,
+        message,
+      });
+
+      return {
+        status: 'success',
+        nextRoute: 'CompleteOnboarding',
+        resetStack: true,
+        account: verifiedAccount,
+        onboardingRequired: true,
+        onboardingMessage: message,
+      };
+    }
   };
 
   const handleLoginRequest = async ({ email, password }) => {
@@ -331,8 +492,42 @@ export default function App() {
     rememberKnownAccount(nextAccount);
     setActiveAccount(nextAccount);
     setPendingAccount(null);
+    setPendingOnboardingCompletion(null);
 
     return nextAccount;
+  };
+
+  const handleCompleteOnboarding = async (draftAccount) => {
+    const session = {
+      accessToken: activeAccount?.accessToken ?? registeredAccount?.accessToken,
+      refreshToken: activeAccount?.refreshToken ?? registeredAccount?.refreshToken,
+      user: {
+        id: activeAccount?.userId ?? registeredAccount?.userId,
+        email: activeAccount?.email ?? registeredAccount?.email,
+        role: activeAccount?.role ?? registeredAccount?.role ?? 'customer',
+        staffCode: activeAccount?.staffCode ?? registeredAccount?.staffCode ?? null,
+        isActive: activeAccount?.isActive ?? registeredAccount?.isActive ?? true,
+        profile: {
+          firstName: activeAccount?.firstName ?? registeredAccount?.firstName ?? '',
+          lastName: activeAccount?.lastName ?? registeredAccount?.lastName ?? '',
+          phone: activeAccount?.phoneNumber ?? registeredAccount?.phoneNumber ?? '',
+          birthday: activeAccount?.birthday ?? registeredAccount?.birthday ?? null,
+        },
+      },
+    };
+
+    const completedAccount = await persistCustomerOnboarding({
+      session,
+      draftAccount,
+      existingAccount: activeAccount ?? registeredAccount,
+      password: activeAccount?.password ?? registeredAccount?.password ?? '',
+    });
+
+    rememberKnownAccount(completedAccount);
+    setActiveAccount(completedAccount);
+    setPendingOnboardingCompletion(null);
+
+    return completedAccount;
   };
 
   const handleOtpVerified = (otpParams) => {
@@ -372,14 +567,17 @@ export default function App() {
   const appSessionContextValue = {
     registeredAccount,
     pendingAccount,
+    pendingOnboardingCompletion,
     activeAccount,
     setPendingAccount,
     setActiveAccount,
+    setPendingOnboardingCompletion,
     syncAccount,
     handleDeleteAccount,
     handleRegisterRequest,
     handleVerifyRegistrationOtp,
     handleLoginRequest,
+    handleCompleteOnboarding,
     handleOtpVerified,
   };
 
@@ -390,6 +588,7 @@ export default function App() {
         <NavigationContainer theme={navigationTheme}>
           <Stack.Navigator
             initialRouteName="Landing"
+            detachInactiveScreens={false}
             screenOptions={{
               headerStyle: {
                 backgroundColor: colors.primary,
@@ -422,6 +621,11 @@ export default function App() {
             />
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="OTP" component={OtpScreen} options={{ headerShown: false }} />
+            <Stack.Screen
+              name="CompleteOnboarding"
+              component={CompleteOnboardingScreen}
+              options={{ headerShown: false }}
+            />
             <Stack.Screen
               name="ForgotPasswordEmail"
               component={ForgotPasswordEmailScreen}

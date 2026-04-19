@@ -6,7 +6,9 @@ import { DRIZZLE_DB } from '@shared/db/database.constants';
 import { AppDatabase } from '@shared/db/database.types';
 
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
+import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
 import {
   bookingServices,
@@ -50,6 +52,38 @@ export class BookingsRepository extends BaseRepository {
     return this.db.query.timeSlots.findFirst({
       where: eq(timeSlots.id, id),
     });
+  }
+
+  async createTimeSlot(payload: CreateTimeSlotDto) {
+    const [createdTimeSlot] = await this.db
+      .insert(timeSlots)
+      .values({
+        label: payload.label.trim(),
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        capacity: payload.capacity,
+        isActive: payload.isActive ?? true,
+      })
+      .returning();
+
+    return createdTimeSlot;
+  }
+
+  async updateTimeSlot(id: string, payload: UpdateTimeSlotDto) {
+    const [updatedTimeSlot] = await this.db
+      .update(timeSlots)
+      .set({
+        ...(payload.label !== undefined ? { label: payload.label.trim() } : {}),
+        ...(payload.startTime !== undefined ? { startTime: payload.startTime } : {}),
+        ...(payload.endTime !== undefined ? { endTime: payload.endTime } : {}),
+        ...(payload.capacity !== undefined ? { capacity: payload.capacity } : {}),
+        ...(payload.isActive !== undefined ? { isActive: payload.isActive } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(timeSlots.id, id))
+      .returning();
+
+    return this.assertFound(updatedTimeSlot, 'Time slot not found');
   }
 
   async countActiveBookingsForSlot(timeSlotId: string, scheduledDate: string, excludeBookingId?: string) {

@@ -33,8 +33,14 @@ export const authErrorCases: Record<string, ApiErrorResponse[]> = {
     {
       statusCode: 409,
       code: 'CONFLICT',
+      message: 'Email is already registered.',
+      source: 'task',
+    },
+    {
+      statusCode: 409,
+      code: 'CONFLICT',
       message: 'Google identity is already linked to an account.',
-      source: 'swagger',
+      source: 'task',
     },
   ],
   googleSignupVerifyEmail: [
@@ -45,9 +51,21 @@ export const authErrorCases: Record<string, ApiErrorResponse[]> = {
       source: 'swagger',
     },
     {
+      statusCode: 400,
+      code: 'BAD_REQUEST',
+      message: 'OTP has expired.',
+      source: 'task',
+    },
+    {
       statusCode: 409,
       code: 'CONFLICT',
       message: 'OTP has already been used.',
+      source: 'swagger',
+    },
+    {
+      statusCode: 404,
+      code: 'NOT_FOUND',
+      message: 'OTP enrollment not found.',
       source: 'swagger',
     },
   ],

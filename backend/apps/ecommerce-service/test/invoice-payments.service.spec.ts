@@ -61,6 +61,8 @@ describe('InvoicePaymentsService', () => {
       amountPaidCents: 30000,
       amountDueCents: 60000,
       currencyCode: 'PHP',
+      productIds: [],
+      productCategoryIds: [],
     });
     expect(eventBus.publish).toHaveBeenNthCalledWith(2, 'invoice.payment_recorded', {
       invoiceId: invoice.id,
@@ -75,6 +77,8 @@ describe('InvoicePaymentsService', () => {
       amountPaidCents: 90000,
       amountDueCents: 0,
       currencyCode: 'PHP',
+      productIds: [],
+      productCategoryIds: [],
     });
   });
 

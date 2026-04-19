@@ -1,0 +1,16 @@
+
+> autocare-web@1.0.0 dev
+> next dev --port 3002
+
+   ▲ Next.js 15.5.15
+   - Local:        http://localhost:3002
+   - Network:      http://169.254.83.107:3002
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 5.9s
+ ○ Compiling / ...
+ ✓ Compiled / in 9.6s (1721 modules)
+ GET / 200 in 10974ms
+ GET / 200 in 97ms
+ GET / 200 in 90ms

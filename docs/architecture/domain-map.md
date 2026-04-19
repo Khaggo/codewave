@@ -13,7 +13,7 @@ This file is the one-page routing and dependency map for backend implementation 
 | `main-service.vehicle-lifecycle` | `domain-worker` | unified vehicle timeline and review-gated AI summaries | `main-service.vehicles`, `main-service.bookings`, `main-service.inspections`, `main-service.job-orders`, `main-service.quality-gates` | `vehicles`, `bookings`, `inspections`, `job-orders`, `quality-gates` |
 | `main-service.inspections` | `domain-worker` | physical verification records | `main-service.vehicles`, `main-service.bookings`, `main-service.job-orders`, `main-service.back-jobs` | `vehicles`, `bookings`, `job-orders`, `back-jobs` |
 | `main-service.insurance` | `domain-worker` | inquiries, supporting docs, insurance status tracking | `main-service.users`, `main-service.vehicles` | `users`, `vehicles` |
-| `main-service.loyalty` | `domain-worker` | points ledger, admin reward catalog, and redemption | `main-service.users`, `main-service.job-orders`, `ecommerce.commerce-events` | `users`, `job-orders`, `commerce-events` |
+| `main-service.loyalty` | `domain-worker` | points ledger, admin reward catalog, admin earning rules, and redemption | `main-service.users`, `main-service.job-orders` | `users`, `job-orders` |
 | `main-service.back-jobs` | `domain-worker` | return and rework handling with service-history validation | `main-service.vehicles`, `main-service.inspections`, `main-service.job-orders` | `vehicles`, `inspections`, `job-orders` |
 | `main-service.job-orders` | `domain-worker` | digital job orders, technician assignments, work execution, and invoice readiness | `main-service.bookings`, `main-service.back-jobs`, `main-service.users` | `bookings`, `back-jobs`, `users` |
 | `main-service.quality-gates` | `integration-worker` | AI-assisted release audits and manual override controls | `main-service.bookings`, `main-service.inspections`, `main-service.job-orders`, `main-service.back-jobs` | `bookings`, `inspections`, `job-orders`, `back-jobs` |
@@ -53,7 +53,7 @@ Reference-first domains:
 
 - `vehicle-lifecycle`: combines verified and administrative events from many operational domains
 - `quality-gates`: sits between operational completion and release approval
-- `loyalty`: depends on finalized service invoice facts and commerce payment or purchase facts
+- `loyalty`: depends on paid service facts and admin-configured reward or earning-rule policy
 - `notifications`: consumes operational triggers plus auth OTP email delivery requests
 - `analytics`: must stay derived and rebuildable, not transactional
 - `commerce-events`: owns the asynchronous handoff between e-commerce and main-service

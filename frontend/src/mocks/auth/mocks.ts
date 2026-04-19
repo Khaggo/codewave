@@ -1,4 +1,23 @@
 import type { ApiErrorResponse } from '../../lib/api/generated/shared';
+import {
+  customerGoogleActivationDuplicateIdentityError,
+  customerGoogleActivationEmailRegisteredError,
+  customerGoogleActivationEnrollmentMissingError,
+  customerGoogleActivationErrorCases,
+  customerGoogleActivationExpiredOtpError,
+  customerGoogleActivationHandoffStates,
+  customerGoogleActivationMismatchError,
+  customerGoogleActivationRoutePack,
+  customerGoogleActivationStateRules,
+} from '../../lib/api/generated/auth/customer-google-activation';
+import { sharedIdentityStateGlossary } from '../../lib/api/generated/auth/identity-foundation';
+import {
+  staffPortalBlockedStateErrors,
+  staffPortalNavigationRules,
+  staffPortalRoleCapabilities,
+  staffPortalSessionRoutes,
+  staffPortalStateRules,
+} from '../../lib/api/generated/auth/staff-web-session';
 import type {
   AuthSessionResponse,
   AuthenticatedUserResponse,
@@ -54,3 +73,86 @@ export const authInvalidOtpMock: ApiErrorResponse = {
   message: 'Invalid OTP.',
   source: 'swagger',
 };
+
+export const deactivatedAuthSessionMock: AuthSessionResponse = {
+  accessToken: 'access-token-deactivated',
+  refreshToken: 'refresh-token-deactivated',
+  user: {
+    id: 'b7137c9a-cb5d-4d37-b313-cbf779ce9d3a',
+    email: 'deactivated.staff@example.com',
+    role: 'service_adviser',
+    staffCode: 'SA-0098',
+    isActive: false,
+  },
+};
+
+export const technicianAuthSessionMock: AuthSessionResponse = {
+  accessToken: 'access-token-technician',
+  refreshToken: 'refresh-token-technician',
+  user: {
+    id: 'technician-user-1',
+    email: 'technician@example.com',
+    role: 'technician',
+    staffCode: 'TECH-0021',
+    isActive: true,
+  },
+};
+
+export const serviceAdviserAuthSessionMock: AuthSessionResponse = {
+  accessToken: 'access-token-adviser',
+  refreshToken: 'refresh-token-adviser',
+  user: {
+    id: 'service-adviser-user-1',
+    email: 'service.adviser@example.com',
+    role: 'service_adviser',
+    staffCode: 'SA-0048',
+    isActive: true,
+  },
+};
+
+export const superAdminAuthSessionMock: AuthSessionResponse = {
+  accessToken: 'access-token-super-admin',
+  refreshToken: 'refresh-token-super-admin',
+  user: {
+    id: 'super-admin-user-1',
+    email: 'super.admin@example.com',
+    role: 'super_admin',
+    staffCode: 'SA-9001',
+    isActive: true,
+  },
+};
+
+export const sharedIdentityStateGlossaryMock = sharedIdentityStateGlossary;
+
+export const customerGoogleActivationRoutePackMock = customerGoogleActivationRoutePack;
+
+export const customerGoogleActivationStateRulesMock = customerGoogleActivationStateRules;
+
+export const customerGoogleActivationStartMock = googleSignupStartMock;
+
+export const customerGoogleActivationDuplicateIdentityMock =
+  customerGoogleActivationDuplicateIdentityError;
+
+export const customerGoogleActivationEmailRegisteredMock =
+  customerGoogleActivationEmailRegisteredError;
+
+export const customerGoogleActivationExpiredOtpMock = customerGoogleActivationExpiredOtpError;
+
+export const customerGoogleActivationEnrollmentMissingMock =
+  customerGoogleActivationEnrollmentMissingError;
+
+export const customerGoogleActivationMismatchMock = customerGoogleActivationMismatchError;
+
+export const customerGoogleActivationErrorCasesMock = customerGoogleActivationErrorCases;
+
+export const customerGoogleActivationHandoffMock = customerGoogleActivationHandoffStates;
+
+export const staffPortalSessionRoutesMock = staffPortalSessionRoutes;
+
+export const staffPortalStateRulesMock = staffPortalStateRules;
+
+export const staffPortalNavigationRulesMock = staffPortalNavigationRules;
+
+export const staffPortalRoleCapabilitiesMock = staffPortalRoleCapabilities;
+
+export const staffPortalBlockedStateErrorsMock = staffPortalBlockedStateErrors;

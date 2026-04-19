@@ -54,6 +54,7 @@ Create the first stable event contract layer so `ecommerce-service` can publish 
 - recommended first events: `order.created`, `order.invoice_issued`, `invoice.payment_recorded`
 - payloads should use stable IDs and metadata only
 - keep domain ownership explicit: ecommerce publishes commerce facts, main-service reacts
+- `invoice.payment_recorded` remains a commerce settlement and reminder-refresh fact, not a loyalty earning trigger
 
 ## Acceptance Checks
 

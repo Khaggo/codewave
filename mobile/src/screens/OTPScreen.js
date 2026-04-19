@@ -170,7 +170,7 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
       const submitVerification = async () => {
         setSubmitting(true);
         try {
-          await onVerifyRegistrationOtp({
+          const verificationResult = await onVerifyRegistrationOtp({
             enrollmentId: route.params?.enrollmentId,
             otp,
             accountDraft: route.params?.accountDraft,
@@ -180,11 +180,13 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
 
           if (Platform.OS === 'web') {
             navigationTimeoutRef.current = setTimeout(() => {
-              navigateAfterVerification({
-                status: 'success',
-                nextRoute: 'Menu',
-                resetStack: true,
-              });
+              navigateAfterVerification(
+                verificationResult ?? {
+                  status: 'success',
+                  nextRoute: 'Menu',
+                  resetStack: true,
+                },
+              );
             }, 1500);
             return;
           }
@@ -193,11 +195,13 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
             {
               text: 'Continue',
               onPress: () =>
-                navigateAfterVerification({
-                  status: 'success',
-                  nextRoute: 'Menu',
-                  resetStack: true,
-                }),
+                navigateAfterVerification(
+                  verificationResult ?? {
+                    status: 'success',
+                    nextRoute: 'Menu',
+                    resetStack: true,
+                  },
+                ),
             },
           ]);
         } catch (verificationError) {

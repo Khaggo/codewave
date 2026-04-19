@@ -22,6 +22,11 @@ export interface TimeSlotResponse {
   updatedAt: string;
 }
 
+export interface BookingDiscoverySnapshotResponse {
+  services: ServiceResponse[];
+  timeSlots: TimeSlotResponse[];
+}
+
 export interface BookingServiceResponse {
   id: string;
   bookingId: string;

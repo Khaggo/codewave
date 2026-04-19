@@ -1,6 +1,6 @@
 import { forwardRef, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { colors, radius } from '../theme';
 
 const PasswordField = forwardRef(function PasswordField({
@@ -19,7 +19,7 @@ const PasswordField = forwardRef(function PasswordField({
   containerStyle,
   icon = 'lock-outline',
   autoComplete = 'off',
-  importantForAutofill = 'no',
+  importantForAutofill = Platform.OS === 'android' ? 'noExcludeDescendants' : 'no',
   returnKeyType,
   blurOnSubmit,
   onSubmitEditing,
@@ -27,7 +27,10 @@ const PasswordField = forwardRef(function PasswordField({
   const [isVisible, setIsVisible] = useState(false);
 
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View
+      style={[styles.container, containerStyle]}
+      importantForAutofill={importantForAutofill}
+    >
       <Text style={styles.label}>{label}</Text>
 
       <View
@@ -37,6 +40,7 @@ const PasswordField = forwardRef(function PasswordField({
           !editable && styles.inputReadonly,
           error && styles.inputError,
         ]}
+        importantForAutofill={importantForAutofill}
       >
         <MaterialCommunityIcons
           name={icon}
@@ -58,9 +62,10 @@ const PasswordField = forwardRef(function PasswordField({
           onFocus={onFocus}
           onBlur={onBlur}
           editable={editable}
-          textContentType={textContentType}
+          textContentType={Platform.OS === 'ios' ? textContentType : 'none'}
           autoComplete={autoComplete}
           importantForAutofill={importantForAutofill}
+          disableFullscreenUI
           returnKeyType={returnKeyType}
           blurOnSubmit={blurOnSubmit}
           onSubmitEditing={onSubmitEditing}

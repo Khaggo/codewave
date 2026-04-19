@@ -17,6 +17,7 @@ import { AddJobOrderPhotoDto } from '../dto/add-job-order-photo.dto';
 import { AddJobOrderProgressDto } from '../dto/add-job-order-progress.dto';
 import { CreateJobOrderDto } from '../dto/create-job-order.dto';
 import { FinalizeJobOrderDto } from '../dto/finalize-job-order.dto';
+import { RecordJobOrderInvoicePaymentDto } from '../dto/record-job-order-invoice-payment.dto';
 import { UpdateJobOrderStatusDto } from '../dto/update-job-order-status.dto';
 import { JobOrdersRepository } from '../repositories/job-orders.repository';
 import { jobOrderStatusEnum } from '../schemas/job-orders.schema';
@@ -256,6 +257,66 @@ export class JobOrdersService {
     return finalizedJobOrder;
   }
 
+  async recordInvoicePayment(id: string, payload: RecordJobOrderInvoicePaymentDto, actor: JobOrderActor) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    const jobOrder = await this.jobOrdersRepository.findById(id);
+    const actorInfo = {
+      userId: resolvedActor.id,
+      role: resolvedActor.role as JobOrderActorRole,
+    };
+
+    if (!['service_adviser', 'super_admin'].includes(actorInfo.role)) {
+      throw new ForbiddenException('Only service advisers or super admins can record service invoice payments');
+    }
+
+    if (actorInfo.role === 'service_adviser' && actorInfo.userId !== jobOrder.serviceAdviserUserId) {
+      throw new ForbiddenException('Service advisers can only record payments for their own job orders');
+    }
+
+    if (jobOrder.status !== 'finalized') {
+      throw new ConflictException('Only finalized job orders can record invoice payments');
+    }
+
+    if (!jobOrder.invoiceRecord) {
+      throw new ConflictException('Finalize the job order before recording invoice payment');
+    }
+
+    if (jobOrder.invoiceRecord.paymentStatus === 'paid') {
+      throw new ConflictException('This service invoice is already marked as paid');
+    }
+
+    const paidAt = payload.receivedAt ? new Date(payload.receivedAt) : new Date();
+    const updatedJobOrder = await this.jobOrdersRepository.recordInvoicePayment(id, {
+      ...payload,
+      recordedByUserId: actorInfo.userId,
+      receivedAt: paidAt,
+    });
+    const serviceAccrualMetadata = await this.resolveServiceAccrualMetadata(updatedJobOrder);
+
+    this.eventBus.publish('service.payment_recorded', {
+      jobOrderId: updatedJobOrder.id,
+      invoiceRecordId: updatedJobOrder.invoiceRecord.id,
+      invoiceReference: updatedJobOrder.invoiceRecord.invoiceReference,
+      customerUserId: updatedJobOrder.customerUserId,
+      vehicleId: updatedJobOrder.vehicleId,
+      serviceAdviserUserId: updatedJobOrder.serviceAdviserUserId,
+      serviceAdviserCode: updatedJobOrder.serviceAdviserCode,
+      recordedByUserId: actorInfo.userId,
+      sourceType: updatedJobOrder.sourceType,
+      sourceId: updatedJobOrder.sourceId,
+      amountPaidCents: updatedJobOrder.invoiceRecord.amountPaidCents ?? payload.amountPaidCents,
+      currencyCode: 'PHP',
+      paidAt: (updatedJobOrder.invoiceRecord.paidAt ?? paidAt).toISOString(),
+      settlementStatus: 'paid',
+      paymentMethod: updatedJobOrder.invoiceRecord.paymentMethod ?? payload.paymentMethod,
+      paymentReference: updatedJobOrder.invoiceRecord.paymentReference ?? payload.reference ?? null,
+      serviceTypeCode: serviceAccrualMetadata.serviceTypeCode,
+      serviceCategoryCode: serviceAccrualMetadata.serviceCategoryCode,
+    });
+
+    return updatedJobOrder;
+  }
+
   private async assertSource(payload: CreateJobOrderDto) {
     if (payload.sourceType === 'back_job') {
       const backJob = await this.backJobsRepository.findOptionalById(payload.sourceId);
@@ -385,6 +446,25 @@ export class JobOrdersService {
   private generateInvoiceReference(jobOrderId: string) {
     const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     return `INV-JO-${compactDate}-${jobOrderId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+  }
+
+  private async resolveServiceAccrualMetadata(
+    jobOrder: Awaited<ReturnType<JobOrdersRepository['findById']>>,
+  ) {
+    if (jobOrder.sourceType !== 'booking') {
+      return {
+        serviceTypeCode: null,
+        serviceCategoryCode: null,
+      };
+    }
+
+    const booking = await this.bookingsRepository.findOptionalById(jobOrder.sourceId);
+    const firstRequestedService = booking?.requestedServices?.[0]?.service;
+
+    return {
+      serviceTypeCode: firstRequestedService?.id ?? null,
+      serviceCategoryCode: firstRequestedService?.categoryId ?? null,
+    };
   }
 
   private async assertStaffActor(userId: string) {

@@ -184,7 +184,12 @@ export class AuthService {
     await this.usersService.setActivationStatus(user.id, true);
     await this.authRepository.updateAccountStatus(user.id, true);
 
-    return this.issueTokens(user);
+    const activatedUser = await this.usersService.findById(user.id);
+    if (!activatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.issueTokens(activatedUser);
   }
 
   async verifyStaffEmailOtp(payload: VerifyEmailOtpDto) {
@@ -233,7 +238,12 @@ export class AuthService {
     await this.usersService.setActivationStatus(user.id, true);
     await this.authRepository.updateAccountStatus(user.id, true);
 
-    return this.issueTokens(user);
+    const activatedUser = await this.usersService.findById(user.id);
+    if (!activatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.issueTokens(activatedUser);
   }
 
   async register(registerDto: RegisterDto) {

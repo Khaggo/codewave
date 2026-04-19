@@ -9,6 +9,7 @@ import { CartRepository } from '../repositories/cart.repository';
 type HydratedCartItem = {
   id: string;
   productId: string;
+  productCategoryId: string | null;
   productName: string | null;
   productSlug: string | null;
   productSku: string | null;
@@ -132,6 +133,7 @@ export class CartService {
         return {
           id: item.id,
           productId: item.productId,
+          productCategoryId: product?.categoryId ?? null,
           productName: product?.name ?? null,
           productSlug: product?.slug ?? null,
           productSku: product?.sku ?? null,

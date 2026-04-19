@@ -1,0 +1,74 @@
+
+> autocare-web@1.0.0 dev
+> next dev -p 3002
+
+   ▲ Next.js 15.5.15
+   - Local:        http://localhost:3002
+   - Network:      http://169.254.83.107:3002
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 3.1s
+ ○ Compiling /admin/appointments ...
+ ✓ Compiled /admin/appointments in 6.9s (1572 modules)
+ GET /admin/appointments 200 in 7718ms
+ ✓ Compiled in 1762ms (734 modules)
+ GET /admin/appointments 200 in 224ms
+ GET /admin/appointments 200 in 312ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 4.5s (1066 modules)
+ GET /admin/appointments 500 in 10914ms
+ GET /admin/appointments 200 in 3060ms
+ ○ Compiling /bookings ...
+ ✓ Compiled / in 12.5s (2100 modules)
+ GET /bookings 200 in 13573ms
+ GET / 200 in 10287ms
+ GET /admin/appointments 200 in 2146ms
+ GET /vehicles 200 in 13749ms
+ GET / 200 in 705ms
+ GET /vehicles 200 in 715ms
+ GET /bookings 200 in 91ms
+ GET / 200 in 39ms
+ GET /bookings 200 in 66ms
+ ○ Compiling /backjobs ...
+ ✓ Compiled /timeline in 4.2s (2139 modules)
+ GET /timeline 200 in 2056ms
+ GET /backjobs 200 in 4576ms
+ GET /backjobs 200 in 93ms
+ GET /timeline 200 in 35ms
+ GET /bookings 200 in 62ms
+ ✓ Compiled /vehicles in 365ms (1171 modules)
+ GET /vehicles 200 in 525ms
+ GET / 200 in 41ms
+ GET /vehicles 200 in 53ms
+ GET /bookings 200 in 46ms
+ GET /vehicles 200 in 68ms
+ GET / 200 in 98ms
+ GET / 200 in 239ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1346ms (2104 modules)
+ GET /bookings 404 in 1531ms
+ GET /bookings 200 in 13ms
+ GET / 200 in 902ms
+ GET /bookings 500 in 97ms
+ GET /bookings 500 in 115ms
+ GET / 200 in 70ms
+ GET /bookings 500 in 144ms
+ GET /bookings 500 in 117ms
+ GET / 200 in 69ms
+ GET /bookings 500 in 328ms
+ GET /bookings 500 in 128ms
+ GET /admin/appointments 500 in 130ms
+ GET /bookings 500 in 259ms
+ GET /admin/appointments 500 in 184ms
+ GET /bookings 500 in 217ms
+ GET /admin/appointments 500 in 165ms
+ GET /bookings 500 in 132ms
+ GET /admin/appointments 500 in 167ms
+ GET /bookings 500 in 159ms
+ GET /admin/appointments 500 in 165ms
+ GET /bookings 500 in 155ms
+ GET /admin/appointments 500 in 200ms
+ GET /bookings 500 in 150ms
+ GET /admin/appointments 500 in 291ms
+ GET /bookings 500 in 693ms

@@ -9,6 +9,7 @@ import { CreateJobOrderDto } from '../dto/create-job-order.dto';
 import { AddJobOrderPhotoDto } from '../dto/add-job-order-photo.dto';
 import { AddJobOrderProgressDto } from '../dto/add-job-order-progress.dto';
 import { FinalizeJobOrderDto } from '../dto/finalize-job-order.dto';
+import { RecordJobOrderInvoicePaymentDto } from '../dto/record-job-order-invoice-payment.dto';
 import { UpdateJobOrderStatusDto } from '../dto/update-job-order-status.dto';
 import {
   jobOrders,
@@ -40,6 +41,14 @@ type UpdateJobOrderStatusPersistenceInput = UpdateJobOrderStatusDto;
 type FinalizeJobOrderPersistenceInput = FinalizeJobOrderDto & {
   finalizedByUserId: string;
   invoiceReference: string;
+};
+
+type RecordJobOrderInvoicePaymentPersistenceInput = Omit<
+  RecordJobOrderInvoicePaymentDto,
+  'receivedAt'
+> & {
+  recordedByUserId: string;
+  receivedAt: Date;
 };
 
 @Injectable()
@@ -247,6 +256,12 @@ export class JobOrdersRepository extends BaseRepository {
       serviceAdviserUserId: jobOrder.serviceAdviserUserId,
       serviceAdviserCode: jobOrder.serviceAdviserCode,
       finalizedByUserId: payload.finalizedByUserId,
+      paymentStatus: 'pending_payment',
+      amountPaidCents: null,
+      paymentMethod: null,
+      paymentReference: null,
+      paidAt: null,
+      recordedByUserId: null,
       summary: payload.summary ?? null,
     });
 
@@ -260,6 +275,28 @@ export class JobOrdersRepository extends BaseRepository {
       .returning();
 
     this.assertFound(updatedJobOrder, 'Job order not found');
+    return this.findById(id);
+  }
+
+  async recordInvoicePayment(id: string, payload: RecordJobOrderInvoicePaymentPersistenceInput) {
+    const jobOrder = await this.findById(id);
+    const invoiceRecord = this.assertFound(jobOrder.invoiceRecord, 'Job order invoice record not found');
+
+    const [updatedInvoiceRecord] = await this.db
+      .update(jobOrderInvoiceRecords)
+      .set({
+        paymentStatus: 'paid',
+        amountPaidCents: payload.amountPaidCents,
+        paymentMethod: payload.paymentMethod,
+        paymentReference: payload.reference ?? null,
+        paidAt: payload.receivedAt,
+        recordedByUserId: payload.recordedByUserId,
+        updatedAt: new Date(),
+      })
+      .where(eq(jobOrderInvoiceRecords.id, invoiceRecord.id))
+      .returning();
+
+    this.assertFound(updatedInvoiceRecord, 'Job order invoice record not found');
     return this.findById(id);
   }
 }

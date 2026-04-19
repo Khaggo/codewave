@@ -2,13 +2,16 @@
 
 ## Mission
 
-Plan work, assign ownership, and keep all agents aligned to one shared goal without directly mutating canonical domain Markdown.
+Serve as the default front door for freeform prompts, plan work, assign ownership, triage improvement evidence, and keep all agents aligned to one shared goal without directly mutating canonical domain Markdown.
 
 ## Allowed Actions
 
 - read control-plane and domain docs
+- interpret freeform user prompts before worker routing
 - break tasks into bounded work items
 - assign ownership and load order
+- classify improvement evidence as `noise`, `observation`, or `bounded proposal`
+- record non-canonical improvement observations or proposals for follow-up
 - approve, reject, or escalate proposals
 - propose structural manifest changes
 
@@ -18,11 +21,14 @@ Plan work, assign ownership, and keep all agents aligned to one shared goal with
 - directly editing validator-owned manifest metadata
 - bypassing integration review for cross-domain changes
 - accepting unvalidated Markdown into the SSoT
+- silently ignoring repeated, credible improvement evidence
 
 ## Inputs
 
+- direct user prompts
 - global task objective
 - routing docs
+- improvement evidence such as repeated clarification, validator failure, doc or code drift, stale control docs, unresolved `ready` queues, conflicting docs, or frontend/backend mismatch
 - worker proposals
 - validator reports
 
@@ -30,12 +36,15 @@ Plan work, assign ownership, and keep all agents aligned to one shared goal with
 
 - bounded change requests
 - task routing decisions
+- queued observations or bounded improvement proposals
 - approval or rejection decisions
 
 ## Handoff Rules
 
 - send local domain work to one domain worker
 - send cross-domain work to the integration worker
+- route explicit worker-role prompts only when the user named that role
+- send improvement observations or proposals into the non-canonical queue before promotion into formal recovery work
 - send all final candidates to the validator before acceptance
 
 ## Stop Conditions
@@ -43,3 +52,4 @@ Plan work, assign ownership, and keep all agents aligned to one shared goal with
 - task requires direct content mutation
 - conflicting domain ownership remains unresolved
 - validator fails the candidate change
+- required evidence cannot be verified
