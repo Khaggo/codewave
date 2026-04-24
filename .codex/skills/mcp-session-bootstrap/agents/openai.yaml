@@ -1,0 +1,4 @@
+interface:
+  display_name: "MCP Session Bootstrap"
+  short_description: "Warm and verify the workspace MCP tools before task work begins."
+  default_prompt: "Bootstrap the workspace MCP tools and report what is ready before continuing."

@@ -327,4 +327,89 @@ describe('AuthController integration', () => {
       await app.close();
     }
   });
+
+  it('soft deletes a customer account and allows the same email to register again', async () => {
+    const { app } = await createMainServiceTestApp();
+
+    try {
+      const registerResponse = await request(app.getHttpServer()).post('/api/auth/register').send({
+        email: 'customer.reuse@example.com',
+        password: 'password123',
+        firstName: 'Jamie',
+        lastName: 'Reuse',
+      });
+
+      const notificationsRepository = app.get(NotificationsRepository);
+      const otpNotification = await notificationsRepository.findNotificationByDedupeKey(
+        `auth-otp-${registerResponse.body.enrollmentId}`,
+      );
+
+      if (!otpNotification) {
+        throw new Error('OTP notification not found');
+      }
+
+      const otpMatch = otpNotification.message.match(/(\d{4,8})/);
+
+      const verifyResponse = await request(app.getHttpServer())
+        .post('/api/auth/register/verify-email')
+        .send({
+          enrollmentId: registerResponse.body.enrollmentId,
+          otp: otpMatch?.[1],
+        });
+
+      expect(verifyResponse.status).toBe(200);
+
+      const deleteStartResponse = await request(app.getHttpServer())
+        .post('/api/auth/account/delete/start')
+        .set('Authorization', `Bearer ${verifyResponse.body.accessToken}`)
+        .send({
+          currentPassword: 'password123',
+        });
+
+      expect(deleteStartResponse.status).toBe(201);
+      expect(deleteStartResponse.body.status).toBe('pending_delete_verification');
+
+      const deleteOtpNotification = await notificationsRepository.findNotificationByDedupeKey(
+        `auth-otp-${deleteStartResponse.body.enrollmentId}`,
+      );
+
+      if (!deleteOtpNotification) {
+        throw new Error('Delete OTP notification not found');
+      }
+
+      const deleteOtpMatch = deleteOtpNotification.message.match(/(\d{4,8})/);
+
+      const deleteVerifyResponse = await request(app.getHttpServer())
+        .post('/api/auth/account/delete/verify')
+        .set('Authorization', `Bearer ${verifyResponse.body.accessToken}`)
+        .send({
+          enrollmentId: deleteStartResponse.body.enrollmentId,
+          otp: deleteOtpMatch?.[1],
+        });
+
+      expect(deleteVerifyResponse.status).toBe(200);
+      expect(deleteVerifyResponse.body).toEqual({
+        status: 'account_soft_deleted',
+        message: 'The account was archived successfully. You can sign up again with the same email later.',
+      });
+
+      const loginAfterDelete = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: 'customer.reuse@example.com',
+        password: 'password123',
+      });
+      expect(loginAfterDelete.status).toBe(401);
+
+      const reRegisterResponse = await request(app.getHttpServer()).post('/api/auth/register').send({
+        email: 'customer.reuse@example.com',
+        password: 'NewPassword123',
+        firstName: 'Jamie',
+        lastName: 'Return',
+      });
+
+      expect(reRegisterResponse.status).toBe(201);
+      expect(reRegisterResponse.body.status).toBe('pending_activation');
+    } finally {
+      await app.close();
+    }
+  });
 });

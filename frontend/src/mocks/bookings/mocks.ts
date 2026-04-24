@@ -11,10 +11,14 @@ import type {
   CustomerBookingDiscoverySnapshotResponse,
 } from '../../lib/api/generated/bookings/discovery';
 import {
+  customerBookingAvailabilityStateRules,
   customerBookingDiscoveryStateRules,
+  getCustomerBookingAvailabilityState,
   getCustomerBookingDiscoveryState,
 } from '../../lib/api/generated/bookings/discovery';
 import type {
+  BookingAvailabilityDayResponse,
+  BookingAvailabilityResponse,
   BookingDiscoverySnapshotResponse,
   BookingResponse,
   DailyScheduleResponse,
@@ -88,6 +92,126 @@ export const bookingsOwnedVehiclesMock: BookingDiscoveryVehicleResponse[] = [
   },
 ];
 
+const bookingsAvailabilityDayFixtures: BookingAvailabilityDayResponse[] = [
+  {
+    scheduledDate: '2026-04-20',
+    status: 'bookable',
+    isBookable: true,
+    activeSlotCount: 1,
+    availableSlotCount: 1,
+    totalCapacity: 4,
+    remainingCapacity: 4,
+    slots: [
+      {
+        timeSlotId: bookingsTimeSlotsMock[0].id,
+        label: bookingsTimeSlotsMock[0].label,
+        startTime: bookingsTimeSlotsMock[0].startTime,
+        endTime: bookingsTimeSlotsMock[0].endTime,
+        capacity: 4,
+        bookingCount: 0,
+        remainingCapacity: 4,
+        status: 'available',
+        isAvailable: true,
+      },
+    ],
+  },
+  {
+    scheduledDate: '2026-04-21',
+    status: 'limited',
+    isBookable: true,
+    activeSlotCount: 1,
+    availableSlotCount: 1,
+    totalCapacity: 4,
+    remainingCapacity: 1,
+    slots: [
+      {
+        timeSlotId: bookingsTimeSlotsMock[0].id,
+        label: bookingsTimeSlotsMock[0].label,
+        startTime: bookingsTimeSlotsMock[0].startTime,
+        endTime: bookingsTimeSlotsMock[0].endTime,
+        capacity: 4,
+        bookingCount: 3,
+        remainingCapacity: 1,
+        status: 'available',
+        isAvailable: true,
+      },
+    ],
+  },
+  {
+    scheduledDate: '2026-04-22',
+    status: 'full',
+    isBookable: false,
+    activeSlotCount: 1,
+    availableSlotCount: 0,
+    totalCapacity: 4,
+    remainingCapacity: 0,
+    slots: [
+      {
+        timeSlotId: bookingsTimeSlotsMock[0].id,
+        label: bookingsTimeSlotsMock[0].label,
+        startTime: bookingsTimeSlotsMock[0].startTime,
+        endTime: bookingsTimeSlotsMock[0].endTime,
+        capacity: 4,
+        bookingCount: 4,
+        remainingCapacity: 0,
+        status: 'full',
+        isAvailable: false,
+      },
+    ],
+  },
+];
+
+export const bookingsAvailabilityHappyMock: BookingAvailabilityResponse = {
+  generatedAt: '2026-04-19T03:00:00.000Z',
+  startDate: '2026-04-20',
+  endDate: '2026-05-03',
+  minBookableDate: '2026-04-20',
+  maxBookableDate: '2026-10-16',
+  days: bookingsAvailabilityDayFixtures,
+};
+
+export const bookingsAvailabilityNoActiveSlotsMock: BookingAvailabilityResponse = {
+  ...bookingsAvailabilityHappyMock,
+  days: bookingsAvailabilityDayFixtures.map((day) => ({
+    ...day,
+    status: 'no_active_slots',
+    isBookable: false,
+    availableSlotCount: 0,
+    totalCapacity: 0,
+    remainingCapacity: 0,
+    slots: [],
+  })),
+};
+
+export const bookingsAvailabilityOutsideWindowMock: BookingAvailabilityResponse = {
+  ...bookingsAvailabilityHappyMock,
+  startDate: '2026-04-18',
+  endDate: '2026-04-22',
+  days: [
+    {
+      scheduledDate: '2026-04-18',
+      status: 'outside_window',
+      isBookable: false,
+      activeSlotCount: 0,
+      availableSlotCount: 0,
+      totalCapacity: 0,
+      remainingCapacity: 0,
+      slots: [],
+    },
+    {
+      scheduledDate: '2026-04-19',
+      status: 'outside_window',
+      isBookable: false,
+      activeSlotCount: 0,
+      availableSlotCount: 0,
+      totalCapacity: 0,
+      remainingCapacity: 0,
+      slots: [],
+    },
+    ...bookingsAvailabilityDayFixtures,
+  ],
+};
+
 export const bookingsDiscoveryHappyMock: BookingDiscoverySnapshotResponse = {
   services: bookingsServicesMock,
   timeSlots: bookingsTimeSlotsMock,
@@ -110,18 +234,21 @@ export const customerBookingDiscoveryHappyMock: CustomerBookingDiscoverySnapshot
   services: bookingsServicesMock,
   timeSlots: bookingsTimeSlotsMock,
   vehicles: bookingsOwnedVehiclesMock,
+  availability: bookingsAvailabilityHappyMock,
 };
 
 export const customerBookingDiscoveryNoServicesMock: CustomerBookingDiscoverySnapshotResponse = {
   services: [],
   timeSlots: bookingsTimeSlotsMock,
   vehicles: bookingsOwnedVehiclesMock,
+  availability: bookingsAvailabilityHappyMock,
 };
 
 export const customerBookingDiscoveryNoTimeSlotsMock: CustomerBookingDiscoverySnapshotResponse = {
   services: bookingsServicesMock,
   timeSlots: [],
   vehicles: bookingsOwnedVehiclesMock,
+  availability: bookingsAvailabilityHappyMock,
 };
 
 export const customerBookingDiscoveryUnavailableSlotsMock: CustomerBookingDiscoverySnapshotResponse = {
@@ -131,15 +258,19 @@ export const customerBookingDiscoveryUnavailableSlotsMock: CustomerBookingDiscov
     isActive: false,
   })),
   vehicles: bookingsOwnedVehiclesMock,
+  availability: bookingsAvailabilityNoActiveSlotsMock,
 };
 
 export const customerBookingDiscoveryNoOwnedVehiclesMock: CustomerBookingDiscoverySnapshotResponse = {
   services: bookingsServicesMock,
   timeSlots: bookingsTimeSlotsMock,
   vehicles: [],
+  availability: bookingsAvailabilityHappyMock,
 };
 
 export const customerBookingDiscoveryStateRuleMocks = customerBookingDiscoveryStateRules;
+
+export const customerBookingAvailabilityStateRuleMocks = customerBookingAvailabilityStateRules;
 
 export const customerBookingDiscoveryResolvedStateMocks = {
   happy: getCustomerBookingDiscoveryState(customerBookingDiscoveryHappyMock),
@@ -147,6 +278,12 @@ export const customerBookingDiscoveryResolvedStateMocks = {
   noTimeSlots: getCustomerBookingDiscoveryState(customerBookingDiscoveryNoTimeSlotsMock),
   unavailableSlots: getCustomerBookingDiscoveryState(customerBookingDiscoveryUnavailableSlotsMock),
   noOwnedVehicles: getCustomerBookingDiscoveryState(customerBookingDiscoveryNoOwnedVehiclesMock),
+} as const;
+
+export const customerBookingAvailabilityResolvedStateMocks = {
+  happy: getCustomerBookingAvailabilityState(bookingsAvailabilityHappyMock),
+  noActiveSlots: getCustomerBookingAvailabilityState(bookingsAvailabilityNoActiveSlotsMock),
+  outsideWindow: getCustomerBookingAvailabilityState(bookingsAvailabilityOutsideWindowMock),
 } as const;
 
 export const bookingDetailMock: BookingResponse = {
@@ -506,6 +643,20 @@ export const bookingsDiscoveryUnauthorizedMock: ApiErrorResponse = {
   statusCode: 401,
   code: 'UNAUTHORIZED',
   message: 'Missing or invalid access token.',
+  source: 'swagger',
+};
+
+export const bookingsAvailabilityUnauthorizedMock: ApiErrorResponse = {
+  statusCode: 401,
+  code: 'UNAUTHORIZED',
+  message: 'Missing or invalid access token.',
+  source: 'swagger',
+};
+
+export const bookingsAvailabilityInvalidQueryMock: ApiErrorResponse = {
+  statusCode: 400,
+  code: 'INVALID_AVAILABILITY_QUERY',
+  message: 'The requested availability window is invalid or too large.',
   source: 'swagger',
 };
 

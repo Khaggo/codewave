@@ -55,6 +55,7 @@ Key relations:
 - track complaint, findings, ownership, rework linkage, and final resolution
 - feed quality metrics to analytics and visible history to lifecycle
 - ensure return diagnosis is supported by inspection records when needed
+- keep customer-facing back-job visibility limited to approved customer-safe states and dedicated read models
 
 ## Process Flow
 
@@ -81,6 +82,7 @@ Key relations:
 - `GET /back-jobs/:id`
 - `PATCH /back-jobs/:id/status`
 - `GET /vehicles/:id/back-jobs`
+- planned dedicated customer back-job list if mobile gets a standalone back-job screen
 
 ## Edge Cases
 
@@ -91,6 +93,7 @@ Key relations:
 - staff tries to approve rework without return-inspection evidence
 - staff tries to move rework forward before a linked rework job order exists
 - internal quality notes are exposed to customers
+- mobile client depends on staff-only review records instead of a customer-safe back-job read model
 
 ## Writable Sections
 
@@ -100,3 +103,4 @@ Key relations:
 ## Out of Scope
 
 - generic service complaints not tied to a return workflow
+- staff-only review fields in customer mobile back-job history

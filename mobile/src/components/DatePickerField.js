@@ -31,8 +31,8 @@ const buildCalendarDays = (visibleMonth) => {
   });
 };
 
-const buildYearOptions = (startYear) =>
-  Array.from({ length: 101 }, (_, index) => startYear - index);
+const buildYearOptions = (maxYear, minYear) =>
+  Array.from({ length: Math.max(maxYear - minYear + 1, 1) }, (_, index) => maxYear - index);
 
 const isSameDay = (left, right) =>
   left instanceof Date &&
@@ -49,24 +49,38 @@ export default function DatePickerField({
   error,
   helperText,
   editable = true,
+  title = 'Select Date',
+  subtitle = 'Choose Year, then Month, then Day.',
+  trailingLabel = 'Pick Date',
+  minimumDate = null,
+  maximumDate = null,
+  initialPickerStep = 'year',
 }) {
   const today = new Date();
   const normalizedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const normalizedMinimumDate = minimumDate ? cloneDate(minimumDate) : null;
+  const normalizedMaximumDate = maximumDate ? cloneDate(maximumDate) : normalizedToday;
   const [isVisible, setIsVisible] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState(() => cloneDate(value) || normalizedToday);
+  const [visibleMonth, setVisibleMonth] = useState(
+    () => cloneDate(value) || normalizedMinimumDate || normalizedMaximumDate || normalizedToday,
+  );
   const [pickerStep, setPickerStep] = useState('year');
 
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const yearOptions = useMemo(
-    () => buildYearOptions(normalizedToday.getFullYear()),
-    [normalizedToday],
+    () =>
+      buildYearOptions(
+        (normalizedMaximumDate || normalizedToday).getFullYear(),
+        (normalizedMinimumDate || new Date(normalizedToday.getFullYear() - 100, 0, 1)).getFullYear(),
+      ),
+    [normalizedMaximumDate, normalizedMinimumDate, normalizedToday],
   );
   const displayValue = formatDate(value);
 
   const handleOpen = () => {
-    const nextMonth = cloneDate(value) || normalizedToday;
+    const nextMonth = cloneDate(value) || normalizedMinimumDate || normalizedMaximumDate || normalizedToday;
     setVisibleMonth(nextMonth);
-    setPickerStep(value ? 'day' : 'year');
+    setPickerStep(value ? 'day' : initialPickerStep);
     setIsVisible(true);
   };
 
@@ -104,7 +118,7 @@ export default function DatePickerField({
           {displayValue || placeholder}
         </Text>
         <Text style={[styles.trailingText, !editable && styles.trailingTextReadonly]}>
-          {editable ? 'Pick Date' : 'Locked'}
+          {editable ? trailingLabel : 'Locked'}
         </Text>
       </TouchableOpacity>
 
@@ -119,8 +133,8 @@ export default function DatePickerField({
       >
         <Pressable style={styles.overlay} onPress={() => setIsVisible(false)}>
           <Pressable style={styles.modalCard} onPress={() => null}>
-            <Text style={styles.modalTitle}>Select Birthday</Text>
-            <Text style={styles.modalSubtitle}>Choose Year, then Month, then Day.</Text>
+            <Text style={styles.modalTitle}>{title}</Text>
+            <Text style={styles.modalSubtitle}>{subtitle}</Text>
 
             <View style={styles.stepRow}>
               <TouchableOpacity
@@ -205,7 +219,11 @@ export default function DatePickerField({
 
                 <View style={styles.daysGrid}>
                   {calendarDays.map((dateValue, index) => {
-                    const isFutureDate = dateValue ? dateValue > normalizedToday : false;
+                    const isBeforeMinimumDate =
+                      dateValue && normalizedMinimumDate ? dateValue < normalizedMinimumDate : false;
+                    const isAfterMaximumDate =
+                      dateValue && normalizedMaximumDate ? dateValue > normalizedMaximumDate : false;
+                    const isDisabled = isBeforeMinimumDate || isAfterMaximumDate;
                     const isSelected = dateValue ? isSameDay(dateValue, value) : false;
 
                     return (
@@ -216,13 +234,13 @@ export default function DatePickerField({
                           !dateValue && styles.dayCellEmpty,
                           isSelected && styles.dayCellSelected,
                         ]}
-                        disabled={!dateValue || isFutureDate}
+                        disabled={!dateValue || isDisabled}
                         onPress={() => handleSelectDay(dateValue)}
                       >
                         <Text
                           style={[
                             styles.dayText,
-                            isFutureDate && styles.dayTextDisabled,
+                            isDisabled && styles.dayTextDisabled,
                             isSelected && styles.dayTextSelected,
                           ]}
                         >

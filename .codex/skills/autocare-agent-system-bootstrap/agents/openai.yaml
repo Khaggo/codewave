@@ -1,0 +1,4 @@
+interface:
+  display_name: "AUTOCARE Agent System Bootstrap"
+  short_description: "Bootstrap MCPs, skills, task queue context, and handoffs."
+  default_prompt: "Activate the AUTOCARE agent system for the next build-order task: bootstrap MCPs and repo skills, read the task queue, prepare role handoffs, and avoid spawning subagents unless explicitly requested."

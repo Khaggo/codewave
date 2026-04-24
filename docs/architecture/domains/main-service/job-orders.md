@@ -62,7 +62,7 @@ Key relations:
 - generate one invoice-ready record from a finalized job order while carrying adviser snapshot data forward
 - link rework job orders back to the original finalized job order when source type is `back_job`
 - separate workshop execution state from booking state and payment tracking
-- reserve ecommerce payment tracking for later slices
+- record invoice payment tracking only after invoice-ready finalization while avoiding automated payment-gateway settlement assumptions
 
 ## Process Flow
 
@@ -74,7 +74,8 @@ Key relations:
 6. Staff attach supporting photos while the job order is still active.
 7. Staff update the job-order status through draft, assigned, in-progress, blocked, or ready-for-QA transitions.
 8. The responsible service adviser or super admin finalizes the job order and generates an invoice-ready record.
-9. Downstream quality-gates and invoice-tracking flows build on this enriched job-order and invoice-ready record set.
+9. The responsible service adviser or super admin may record invoice settlement against that invoice-ready record.
+10. Downstream quality-gates, payment-recorded events, and analytics flows build on this enriched job-order and invoice-ready record set.
 
 ## Use Cases
 
@@ -83,6 +84,7 @@ Key relations:
 - technician reads assigned work, updates execution status, and records progress
 - service adviser or super admin attaches supporting evidence photos
 - service adviser or super admin finalizes a ready-for-QA job order into an invoice-ready record
+- service adviser or super admin records settlement against a finalized service invoice
 - super admin reviews adviser and technician accountability
 - release workflow prepares invoice tracking without implying payment settlement
 
@@ -95,6 +97,7 @@ Live in the current slice:
 - `POST /job-orders/:id/progress`
 - `POST /job-orders/:id/photos`
 - `POST /job-orders/:id/finalize`
+- `POST /job-orders/:id/invoice/payments`
 
 Planned for later slices:
 - none in the current job-orders contract pack
@@ -107,6 +110,7 @@ Planned for later slices:
 - staff attach evidence after the job order is cancelled or finalized
 - staff attempt invoice generation before all work items are complete
 - duplicate invoice-ready records are generated for the same job order
+- staff attempt to record payment before finalization or after the invoice is already paid
 - service adviser snapshot is mismatched or missing
 - adviser snapshot is missing when an invoice-ready job order is created
 - job-order lineage for back-job rework becomes inconsistent
@@ -114,11 +118,11 @@ Planned for later slices:
 
 ## Writable Sections
 
-- job-order lifecycle, assignment rules, work evidence, invoice-readiness triggers, and job-order APIs
-- do not redefine booking intake, inspection ownership, QA override policy, or invoice payment tracking here
+- job-order lifecycle, assignment rules, work evidence, invoice-readiness triggers, invoice-record payment tracking, and job-order APIs
+- do not redefine booking intake, inspection ownership, QA override policy, or external payment-gateway behavior here
 
 ## Out of Scope
 
 - appointment-slot ownership
 - quality-gate override authority
-- payment settlement
+- automated payment-gateway settlement

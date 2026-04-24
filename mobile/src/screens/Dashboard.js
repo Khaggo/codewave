@@ -12,6 +12,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -21,14 +22,52 @@ import {
 import { ApiError } from '../lib/authClient';
 import {
   buildOwnedVehicleLabel,
+  createEmptyBookingAvailability,
   createCustomerBooking,
   formatBookingServiceDuration,
   formatBookingTimeSlotWindow,
+  getBookingAvailability,
   getBookingById,
   listCustomerBookings,
   loadBookingDiscoverySnapshot,
   toBookingDateString,
 } from '../lib/bookingDiscoveryClient';
+import {
+  createEmptyCustomerVehicleLifecycleSnapshot,
+  loadCustomerVehicleLifecycleSnapshot,
+} from '../lib/vehicleLifecycleClient';
+import {
+  createEmptyCustomerLoyaltySnapshot,
+  customerLoyaltyTiers,
+  loadCustomerLoyaltySnapshot,
+  redeemCustomerReward,
+} from '../lib/loyaltyClient';
+import {
+  createEmptyCustomerCatalogSnapshot,
+  getEcommerceApiBaseUrl,
+  loadCustomerCatalogProductDetail,
+  loadCustomerCatalogSnapshot,
+} from '../lib/catalogClient';
+import {
+  addCustomerCartItem,
+  checkoutCustomerInvoice,
+  createEmptyCustomerCartSnapshot,
+  createEmptyCustomerOrderHistorySnapshot,
+  formatEcommerceCurrency,
+  getCustomerOrderDetail,
+  getCustomerOrderInvoice,
+  getCustomerCart,
+  listCustomerOrders,
+  loadCustomerCheckoutPreview,
+  removeCustomerCartItem,
+  updateCustomerCartItem,
+} from '../lib/ecommerceCheckoutClient';
+import {
+  createEmptyCustomerNotificationSnapshot,
+  loadCustomerNotificationSnapshot,
+  updateCustomerNotificationPreferences,
+} from '../lib/notificationClient';
+import ShopCatalogSection from '../components/shop/ShopCatalogSection';
 import DatePickerField from '../components/DatePickerField';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import FormField from '../components/FormField';
@@ -56,68 +95,56 @@ const tabs = [
 ];
 
 const genderOptions = ['Male', 'Female', 'Prefer not to say'];
-const loyaltyPoints = 1240;
-const tierThresholds = [
-  { key: 'silver', label: 'Silver', minPoints: 0 },
-  { key: 'gold', label: 'Gold', minPoints: 500 },
-  { key: 'platinum', label: 'Platinum', minPoints: 1500 },
-  { key: 'diamond', label: 'Diamond', minPoints: 2500 },
-];
 const profileSections = [
   { key: 'rewards', label: 'Rewards', icon: 'star-four-points-outline' },
   { key: 'insurance', label: 'Insurance', icon: 'shield-outline' },
   { key: 'backJobs', label: 'Back-Jobs', icon: 'information-outline' },
 ];
-const rewardOffers = [
+const storeSections = [
+  { key: 'catalog', label: 'Catalog', icon: 'shopping-outline' },
+  { key: 'orders', label: 'Orders', icon: 'receipt-text-outline' },
+];
+const notificationPreferenceOptions = [
   {
-    key: 'oil',
-    icon: 'flash-outline',
-    title: '10% Off Next Oil Change',
-    pointsLabel: '300 points',
-    progress: 300,
-    target: 300,
-    accent: '#24E37A',
-    available: true,
+    key: 'emailEnabled',
+    label: 'Email Delivery',
+    description: 'Turn customer email notifications on or off for all operational updates.',
   },
   {
-    key: 'rotation',
-    icon: 'wrench-outline',
-    title: 'Free Tire Rotation',
-    pointsLabel: '650 points',
-    progress: 650,
-    target: 650,
-    accent: '#24E37A',
-    available: true,
+    key: 'bookingRemindersEnabled',
+    label: 'Booking Reminders',
+    description: 'Receive reminders when appointments are approaching or change schedule.',
   },
   {
-    key: 'pms',
-    icon: 'gift-outline',
-    title: 'Free PMS Package',
-    pointsLabel: '1,500 points',
-    progress: loyaltyPoints,
-    target: 1500,
-    accent: colors.primary,
-    available: false,
+    key: 'insuranceUpdatesEnabled',
+    label: 'Insurance Updates',
+    description: 'Get notified when insurance inquiries move through review or need more documents.',
   },
   {
-    key: 'voucher',
-    icon: 'star-outline',
-    title: '₱500 Shop Voucher',
-    pointsLabel: '1,000 points',
-    progress: 1000,
-    target: 1000,
-    accent: '#24E37A',
-    available: true,
+    key: 'invoiceRemindersEnabled',
+    label: 'Invoice Reminders',
+    description: 'Keep invoice-aging and payment follow-up notices enabled for your account.',
+  },
+  {
+    key: 'serviceFollowUpEnabled',
+    label: 'Service Follow-ups',
+    description: 'Receive service follow-up reminders tied to back-jobs and post-service outreach.',
   },
 ];
-
 const shopCategories = ['All', 'Oils', 'Tires', 'Brakes', 'Electrical', 'Coolants'];
+
+const createInitialBookingAvailabilityState = () => ({
+  status: 'idle',
+  errorMessage: '',
+  ...createEmptyBookingAvailability(),
+});
 
 const createInitialBookingDiscoveryState = () => ({
   status: 'idle',
   services: [],
   timeSlots: [],
   vehicles: [],
+  availability: createInitialBookingAvailabilityState(),
   errorMessage: '',
 });
 
@@ -166,6 +193,211 @@ const createInitialBookingDetailState = () => ({
   errorMessage: '',
 });
 
+const createInitialVehicleLifecycleState = () => ({
+  status: 'idle',
+  errorMessage: '',
+  ...createEmptyCustomerVehicleLifecycleSnapshot(),
+});
+
+const createInitialLoyaltyState = () => ({
+  status: 'idle',
+  errorMessage: '',
+  redeemingRewardId: null,
+  ...createEmptyCustomerLoyaltySnapshot(),
+});
+
+const createInitialNotificationModuleState = () => ({
+  status: 'idle',
+  errorMessage: '',
+  savingKey: null,
+  ...createEmptyCustomerNotificationSnapshot(),
+});
+
+const createInitialCatalogState = () => ({
+  status: 'idle',
+  errorMessage: '',
+  apiBaseUrl: getEcommerceApiBaseUrl(),
+  ...createEmptyCustomerCatalogSnapshot(),
+});
+
+const createInitialCatalogDetailState = () => ({
+  status: 'idle',
+  product: null,
+  previewProduct: null,
+  errorMessage: '',
+});
+
+const createInitialCartState = () => ({
+  status: 'idle',
+  errorMessage: '',
+  savingItemId: null,
+  ...createEmptyCustomerCartSnapshot(),
+});
+
+const createInitialStoreOrderHistoryState = () => ({
+  status: 'idle',
+  errorMessage: '',
+  ...createEmptyCustomerOrderHistorySnapshot(),
+});
+
+const createInitialStoreOrderTrackingState = () => ({
+  status: 'idle',
+  order: null,
+  invoiceStatus: 'idle',
+  invoice: null,
+  errorMessage: '',
+  invoiceErrorMessage: '',
+});
+
+const buildInvoiceCheckoutName = (account) =>
+  `${account?.firstName || ''} ${account?.lastName || ''}`.trim() ||
+  account?.username ||
+  '';
+
+const createInitialInvoiceCheckoutForm = (account) => ({
+  recipientName: buildInvoiceCheckoutName(account),
+  email: account?.email || '',
+  contactPhone: account?.phoneNumber || '',
+  addressLine1: account?.defaultAddress?.addressLine1 || '',
+  addressLine2: account?.defaultAddress?.addressLine2 || '',
+  city: account?.defaultAddress?.city || account?.city || '',
+  province: account?.defaultAddress?.province || '',
+  postalCode: account?.defaultAddress?.postalCode || '',
+  notes: '',
+});
+
+const createInitialCheckoutState = (account) => ({
+  stage: 'cart',
+  previewStatus: 'idle',
+  preview: null,
+  submitting: false,
+  order: null,
+  errorMessage: '',
+  form: createInitialInvoiceCheckoutForm(account),
+  fieldErrors: {},
+});
+
+const trimCheckoutValue = (value) => String(value ?? '').trim();
+
+const validateInvoiceCheckoutForm = (form) => {
+  const errors = {};
+  const normalizedPhoneNumber = normalizePhoneNumber(form.contactPhone || '');
+  const normalizedPostalCode = String(form.postalCode ?? '').replace(/\D/g, '').slice(0, 4);
+
+  if (!trimCheckoutValue(form.recipientName)) {
+    errors.recipientName = 'Enter the billing recipient name.';
+  }
+
+  const emailError = validateEmail(form.email || '');
+  if (emailError) {
+    errors.email = emailError;
+  }
+
+  if (normalizedPhoneNumber) {
+    const phoneError = validatePhoneNumber(normalizedPhoneNumber);
+    if (phoneError) {
+      errors.contactPhone = phoneError;
+    }
+  }
+
+  if (!trimCheckoutValue(form.addressLine1)) {
+    errors.addressLine1 = 'Enter the billing street address.';
+  }
+
+  if (!trimCheckoutValue(form.city)) {
+    errors.city = 'Enter the billing city.';
+  }
+
+  if (!trimCheckoutValue(form.province)) {
+    errors.province = 'Enter the billing province.';
+  }
+
+  if (normalizedPostalCode && normalizedPostalCode.length !== 4) {
+    errors.postalCode = 'Use a 4-digit postal code.';
+  }
+
+  return errors;
+};
+
+const buildInvoiceCheckoutPayload = (form) => {
+  const normalizedPhoneNumber = normalizePhoneNumber(form.contactPhone || '');
+  const normalizedPostalCode = String(form.postalCode ?? '').replace(/\D/g, '').slice(0, 4);
+
+  return {
+    recipientName: trimCheckoutValue(form.recipientName),
+    email: normalizeEmail(form.email || ''),
+    contactPhone: normalizedPhoneNumber || undefined,
+    addressLine1: trimCheckoutValue(form.addressLine1),
+    addressLine2: trimCheckoutValue(form.addressLine2) || undefined,
+    city: trimCheckoutValue(form.city),
+    province: trimCheckoutValue(form.province),
+    postalCode: normalizedPostalCode || undefined,
+  };
+};
+
+const buildCheckoutAddressLabel = (address) =>
+  [
+    address?.addressLine1,
+    address?.addressLine2,
+    address?.city,
+    address?.province,
+    address?.postalCode,
+  ]
+    .map((value) => trimCheckoutValue(value))
+    .filter(Boolean)
+    .join(', ');
+
+const formatStoreDateLabel = (value) => {
+  if (!value) {
+    return '--';
+  }
+
+  const parsedDate = new Date(value);
+
+  return Number.isNaN(parsedDate.getTime()) ? '--' : formatDate(parsedDate);
+};
+
+const formatStoreDateTimeLabel = (value) => {
+  if (!value) {
+    return '--';
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '--';
+  }
+
+  return parsedDate.toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const buildStoreOrderTitle = (order) => {
+  if (order?.items?.length === 1) {
+    return order.items[0].productName || 'Order snapshot';
+  }
+
+  if (order?.items?.length > 1) {
+    return `${order.items[0]?.productName || 'Order snapshot'} +${order.items.length - 1} more`;
+  }
+
+  return 'Order snapshot';
+};
+
+const buildStoreOrderSelectionState = (order = null) => ({
+  status: order ? 'ready' : 'idle',
+  order,
+  invoiceStatus: 'idle',
+  invoice: null,
+  errorMessage: '',
+  invoiceErrorMessage: '',
+});
+
 const parseDateOnly = (value) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? '').trim());
 
@@ -184,24 +416,168 @@ const formatBookingDateLabel = (value) => {
   return parsedDate ? formatDate(parsedDate) : String(value ?? '').trim() || '--';
 };
 
-const BOOKING_DATE_WINDOW_DAYS = 31;
+const BOOKING_AVAILABILITY_PAGE_DAYS = 14;
+const BOOKING_SERVICE_PAGE_SIZE = 6;
 
-const buildBookingDateOptions = () => {
-  const today = new Date();
-  const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+const addDaysToDate = (value, offsetDays) => {
+  const parsedDate = value instanceof Date ? new Date(value) : parseDateOnly(value);
 
-  return Array.from({ length: BOOKING_DATE_WINDOW_DAYS }, (_, index) => {
-    const date = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + index);
-    const dateKey = toBookingDateString(date);
+  if (!(parsedDate instanceof Date) || Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
 
-    return {
-      key: dateKey,
-      label: formatDate(date),
-      weekday: date.toLocaleDateString(undefined, { weekday: 'short' }),
-      day: `${date.getDate()}`,
-      month: date.toLocaleDateString(undefined, { month: 'short' }),
-    };
+  const nextDate = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
+  nextDate.setDate(nextDate.getDate() + offsetDays);
+  return nextDate;
+};
+
+const clampDateKeyToRange = (dateKey, minimumDateKey, maximumDateKey) => {
+  const normalizedDateKey = toBookingDateString(parseDateOnly(dateKey));
+
+  if (!normalizedDateKey) {
+    return minimumDateKey || maximumDateKey || '';
+  }
+
+  if (minimumDateKey && normalizedDateKey < minimumDateKey) {
+    return minimumDateKey;
+  }
+
+  if (maximumDateKey && normalizedDateKey > maximumDateKey) {
+    return maximumDateKey;
+  }
+
+  return normalizedDateKey;
+};
+
+const buildBookingAvailabilityWindow = ({
+  anchorDateKey,
+  minimumDateKey = '',
+  maximumDateKey = '',
+  pageDays = BOOKING_AVAILABILITY_PAGE_DAYS,
+}) => {
+  const fallbackAnchorDate =
+    minimumDateKey || toBookingDateString(addDaysToDate(new Date(), 1) ?? new Date());
+  const clampedAnchorDateKey = clampDateKeyToRange(
+    anchorDateKey || fallbackAnchorDate,
+    minimumDateKey,
+    maximumDateKey,
+  );
+  const maximumPageEndCandidate = toBookingDateString(
+    addDaysToDate(clampedAnchorDateKey, Math.max(pageDays - 1, 0)) ?? parseDateOnly(clampedAnchorDateKey),
+  );
+  let endDateKey = maximumPageEndCandidate || clampedAnchorDateKey;
+  let startDateKey = clampedAnchorDateKey;
+
+  if (maximumDateKey && endDateKey > maximumDateKey) {
+    endDateKey = maximumDateKey;
+    const shiftedStartDate = toBookingDateString(
+      addDaysToDate(endDateKey, -(Math.max(pageDays - 1, 0))) ?? parseDateOnly(endDateKey),
+    );
+    startDateKey = minimumDateKey
+      ? clampDateKeyToRange(shiftedStartDate, minimumDateKey, maximumDateKey)
+      : shiftedStartDate;
+  }
+
+  return {
+    startDate: startDateKey,
+    endDate: endDateKey,
+  };
+};
+
+const getInitialBookingAvailabilityWindow = () =>
+  buildBookingAvailabilityWindow({
+    anchorDateKey: toBookingDateString(addDaysToDate(new Date(), 1) ?? new Date()),
   });
+
+const getBookingAvailabilityDayByDate = (availability, scheduledDate) =>
+  availability?.days?.find((day) => day.scheduledDate === scheduledDate) ?? null;
+
+const getBookingAvailabilitySlotForTime = (availabilityDay, timeSlotId) =>
+  availabilityDay?.slots?.find((slot) => slot.timeSlotId === timeSlotId) ?? null;
+
+const getFirstBookableBookingDateKey = (availability, timeSlotId) => {
+  const days = Array.isArray(availability?.days) ? availability.days : [];
+  const matchingDay = days.find((day) => {
+    const matchingSlot = getBookingAvailabilitySlotForTime(day, timeSlotId);
+
+    if (matchingSlot) {
+      return matchingSlot.isAvailable;
+    }
+
+    return day.isBookable;
+  });
+
+  return matchingDay?.scheduledDate ?? availability?.minBookableDate ?? '';
+};
+
+const formatBookingAvailabilityStatusLabel = (status) => {
+  switch (status) {
+    case 'bookable':
+      return 'Open';
+    case 'limited':
+      return 'Limited';
+    case 'full':
+      return 'Full';
+    case 'no_active_slots':
+      return 'Closed';
+    case 'outside_window':
+      return 'Window';
+    default:
+      return 'Status';
+  }
+};
+
+const getBookingAvailabilityTone = (status) => {
+  switch (status) {
+    case 'bookable':
+      return 'success';
+    case 'limited':
+      return 'warning';
+    case 'full':
+      return 'danger';
+    default:
+      return 'muted';
+  }
+};
+
+const getBookingAvailabilityWindowLabel = (availability) => {
+  if (!availability?.startDate || !availability?.endDate) {
+    return 'Live window unavailable';
+  }
+
+  return `${formatBookingDateLabel(availability.startDate)} to ${formatBookingDateLabel(
+    availability.endDate,
+  )}`;
+};
+
+const buildBookingDateCardItem = (availabilityDay, selectedTimeSlot) => {
+  const parsedDate = parseDateOnly(availabilityDay?.scheduledDate);
+  const matchingSlot = getBookingAvailabilitySlotForTime(availabilityDay, selectedTimeSlot?.id);
+  const effectiveStatus =
+    matchingSlot && !matchingSlot.isAvailable ? 'full' : availabilityDay?.status || 'full';
+  const isSelectable = matchingSlot ? matchingSlot.isAvailable : Boolean(availabilityDay?.isBookable);
+  const detailLabel = matchingSlot
+    ? matchingSlot.isAvailable
+      ? `${matchingSlot.remainingCapacity} left in ${selectedTimeSlot?.label || 'selected slot'}`
+      : `${selectedTimeSlot?.label || 'Selected slot'} is full`
+    : availabilityDay?.status === 'no_active_slots'
+      ? 'No live slots'
+      : `${availabilityDay?.availableSlotCount ?? 0} of ${availabilityDay?.activeSlotCount ?? 0} slots open`;
+  const capacityLabel = matchingSlot
+    ? `${matchingSlot.bookingCount}/${matchingSlot.capacity} booked`
+    : `${availabilityDay?.remainingCapacity ?? 0}/${availabilityDay?.totalCapacity ?? 0} capacity left`;
+
+  return {
+    key: availabilityDay?.scheduledDate || 'booking-date',
+    weekday: parsedDate ? parsedDate.toLocaleDateString('en-US', { weekday: 'short' }) : '--',
+    day: parsedDate ? `${parsedDate.getDate()}` : '--',
+    month: parsedDate ? parsedDate.toLocaleDateString('en-US', { month: 'short' }) : '--',
+    statusLabel: formatBookingAvailabilityStatusLabel(effectiveStatus),
+    statusTone: getBookingAvailabilityTone(effectiveStatus),
+    capacityLabel,
+    detailLabel,
+    isSelectable,
+  };
 };
 
 const bookingStatusLabels = {
@@ -388,75 +764,6 @@ const recentServiceHistory = [
     priceLabel: '\u20B1800',
     mechanic: 'Mech. Rico Santos',
     statusTone: 'info',
-  },
-];
-
-const defaultNotifications = [
-  {
-    key: 'notif-service-complete',
-    brand: 'AUTOCARE',
-    title: 'Service Complete!',
-    message: 'Your Toyota Vios oil change is done. Ready for pickup at Cruisers Crib!',
-    timeLabel: 'just now',
-    icon: 'wrench-outline',
-    tint: colors.primary,
-    bgColor: 'rgba(255, 122, 0, 0.14)',
-    unread: true,
-  },
-  {
-    key: 'notif-service-progress',
-    brand: 'AUTOCARE',
-    title: 'Service In Progress',
-    message: 'Your Brake Inspection is now being worked on. Estimated completion in 45 minutes.',
-    timeLabel: '5 min ago',
-    icon: 'hammer-wrench',
-    tint: '#347FFF',
-    bgColor: 'rgba(52, 127, 255, 0.14)',
-    unread: true,
-  },
-  {
-    key: 'notif-points-earned',
-    brand: 'AUTOCARE',
-    title: 'Points Earned! 🎉',
-    message: 'You earned 120 points from your recent PMS service. You are 360 points away from Platinum tier.',
-    timeLabel: '2 hours ago',
-    icon: 'star-outline',
-    tint: '#FFC500',
-    bgColor: 'rgba(255, 197, 0, 0.14)',
-    unread: false,
-  },
-  {
-    key: 'notif-member-offer',
-    brand: 'AUTOCARE',
-    title: 'Exclusive Gold Member Offer',
-    message: '15% off your next PMS! Valid until April 30. Use code: GOLD15',
-    timeLabel: '1 day ago',
-    icon: 'arrow-top-right',
-    tint: '#12D764',
-    bgColor: 'rgba(18, 215, 100, 0.14)',
-    unread: false,
-  },
-  {
-    key: 'notif-booking',
-    brand: 'AUTOCARE',
-    title: 'Booking Request Received',
-    message: 'Your Oil Change request is pending staff review for April 20, 2026 at 10:00 AM.',
-    timeLabel: '2 days ago',
-    icon: 'calendar-check-outline',
-    tint: '#12D764',
-    bgColor: 'rgba(18, 215, 100, 0.14)',
-    unread: false,
-  },
-  {
-    key: 'notif-pms-reminder',
-    brand: 'AUTOCARE',
-    title: 'PMS Reminder',
-    message: 'Your next PMS is due in 2,750 km or by May 2026.',
-    timeLabel: '3 days ago',
-    icon: 'clock-outline',
-    tint: '#9B5CF6',
-    bgColor: 'rgba(155, 92, 246, 0.14)',
-    unread: false,
   },
 ];
 
@@ -680,6 +987,33 @@ function MenuRow({ icon, label, onPress, rightLabel, danger = false }) {
   );
 }
 
+function NotificationPreferenceToggleRow({
+  label,
+  description,
+  value,
+  disabled,
+  onValueChange,
+}) {
+  return (
+    <View style={styles.preferenceRow}>
+      <View style={styles.preferenceCopy}>
+        <Text style={styles.preferenceTitle}>{label}</Text>
+        <Text style={styles.preferenceDescription}>{description}</Text>
+      </View>
+      <Switch
+        value={Boolean(value)}
+        disabled={disabled}
+        onValueChange={onValueChange}
+        trackColor={{
+          false: '#2D334A',
+          true: colors.primary,
+        }}
+        thumbColor={Boolean(value) ? '#FFF5EB' : '#E6E9F5'}
+      />
+    </View>
+  );
+}
+
 function ScreenBackHeader({ title, subtitle, onBack }) {
   return (
     <View style={styles.subHeader}>
@@ -842,6 +1176,10 @@ function ProfileSectionTab({ item, isActive, onPress }) {
 
 function RewardOfferCard({ item, onClaim }) {
   const progressRatio = Math.min(item.progress / item.target, 1);
+  const buttonLabel = item.loading
+    ? 'Claiming...'
+    : item.buttonLabel ?? (item.available ? 'Claim' : 'Locked');
+  const isButtonDisabled = !item.available || item.loading;
 
   return (
     <View style={styles.rewardCard}>
@@ -856,12 +1194,12 @@ function RewardOfferCard({ item, onClaim }) {
         </View>
 
         <TouchableOpacity
-          style={[styles.claimButton, !item.available && styles.claimButtonLocked]}
-          onPress={item.available ? onClaim : undefined}
-          activeOpacity={item.available ? 0.86 : 1}
+          style={[styles.claimButton, isButtonDisabled && styles.claimButtonLocked]}
+          onPress={isButtonDisabled ? undefined : onClaim}
+          activeOpacity={isButtonDisabled ? 1 : 0.86}
         >
-          <Text style={[styles.claimButtonText, !item.available && styles.claimButtonTextLocked]}>
-            {item.available ? 'Claim' : 'Locked'}
+          <Text style={[styles.claimButtonText, isButtonDisabled && styles.claimButtonTextLocked]}>
+            {buttonLabel}
           </Text>
         </TouchableOpacity>
       </View>
@@ -883,6 +1221,37 @@ function RewardOfferCard({ item, onClaim }) {
             },
           ]}
         />
+      </View>
+
+      <Text style={styles.rewardHelperText}>{item.helperText}</Text>
+    </View>
+  );
+}
+
+function LoyaltyTransactionRow({ item }) {
+  const isPositive = item.pointsDelta >= 0;
+
+  return (
+    <View style={styles.loyaltyTransactionRow}>
+      <View style={styles.loyaltyTransactionCopy}>
+        <Text style={styles.loyaltyTransactionTitle}>{item.sourceLabel}</Text>
+        <Text style={styles.loyaltyTransactionMeta}>
+          {item.dateLabel}
+          {item.sourceReference ? ` - ${item.sourceReference}` : ''}
+        </Text>
+      </View>
+      <View style={styles.loyaltyTransactionAmountWrap}>
+        <Text
+          style={[
+            styles.loyaltyTransactionAmount,
+            isPositive ? styles.loyaltyTransactionAmountPositive : styles.loyaltyTransactionAmountNegative,
+          ]}
+        >
+          {item.pointsDeltaLabel}
+        </Text>
+        <Text style={styles.loyaltyTransactionBalance}>
+          Balance {item.resultingBalance.toLocaleString()}
+        </Text>
       </View>
     </View>
   );
@@ -974,26 +1343,152 @@ function ProductCard({ item, quantity, onAdd, onOpen }) {
   );
 }
 
-function CartLineItem({ item, onDecrease, onIncrease }) {
+function CartLineItem({ item, onDecrease, onIncrease, disabled = false }) {
+  const isUnavailable = item.availabilityStatus !== 'available';
+
   return (
     <View style={styles.cartItemCard}>
-      <Image source={{ uri: item.image }} style={styles.cartItemImage} />
+      <View style={styles.cartItemImage}>
+        <MaterialCommunityIcons
+          name={isUnavailable ? 'package-variant-remove' : 'package-variant-closed'}
+          size={22}
+          color={isUnavailable ? '#FFB86B' : colors.primary}
+        />
+      </View>
 
       <View style={styles.cartItemCopy}>
         <Text style={styles.cartItemName} numberOfLines={2}>
-          {item.name}
+          {item.productName}
         </Text>
-        <Text style={styles.cartItemPrice}>{formatCurrency(item.price)}</Text>
+        <Text style={styles.cartItemMeta}>
+          {item.productSku ? `SKU ${item.productSku}` : 'Customer catalog item'}
+        </Text>
+        <View style={styles.cartItemPriceRow}>
+          <Text style={styles.cartItemPrice}>{item.unitPriceLabel}</Text>
+          <Text style={styles.cartItemLineTotal}>{item.lineTotalLabel}</Text>
+        </View>
+        {isUnavailable ? (
+          <Text style={styles.cartItemWarning}>
+            This item is unavailable for checkout until staff republishes it.
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.cartQuantityControls}>
-        <TouchableOpacity style={styles.cartQuantityButton} onPress={onDecrease} activeOpacity={0.86}>
-          <MaterialCommunityIcons name="minus" size={16} color={colors.text} />
+        <TouchableOpacity
+          style={[styles.cartQuantityButton, disabled && styles.cartQuantityButtonDisabled]}
+          onPress={onDecrease}
+          activeOpacity={disabled ? 1 : 0.86}
+          disabled={disabled}
+        >
+          <MaterialCommunityIcons
+            name={item.quantity <= 1 ? 'trash-can-outline' : 'minus'}
+            size={16}
+            color={colors.text}
+          />
         </TouchableOpacity>
         <Text style={styles.cartQuantityValue}>{item.quantity}</Text>
-        <TouchableOpacity style={styles.cartQuantityButton} onPress={onIncrease} activeOpacity={0.86}>
-          <MaterialCommunityIcons name="plus" size={16} color={colors.text} />
+        <TouchableOpacity
+          style={[styles.cartQuantityButton, disabled && styles.cartQuantityButtonDisabled]}
+          onPress={onIncrease}
+          activeOpacity={disabled ? 1 : 0.86}
+          disabled={disabled}
+        >
+          {disabled ? (
+            <ActivityIndicator size="small" color={colors.text} />
+          ) : (
+            <MaterialCommunityIcons name="plus" size={16} color={colors.text} />
+          )}
         </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+function StoreOrderCard({ order, isSelected, onPress }) {
+  const invoiceSummary = order.invoice
+    ? `${order.invoice.invoiceNumber} - ${order.invoice.statusLabel}`
+    : 'Invoice tracking is still being prepared.';
+
+  return (
+    <MotionPressable
+      style={[styles.storeOrderCard, isSelected && styles.storeOrderCardActive]}
+      onPress={onPress}
+      scaleTo={0.986}
+    >
+      <View style={styles.storeOrderCardHeader}>
+        <View style={styles.storeOrderCardCopy}>
+          <Text style={styles.storeOrderCardEyebrow}>{order.orderNumber}</Text>
+          <Text style={styles.storeOrderCardTitle}>{buildStoreOrderTitle(order)}</Text>
+          <Text style={styles.storeOrderCardMeta}>
+            {formatStoreDateTimeLabel(order.createdAt)}
+          </Text>
+        </View>
+
+        <View style={[styles.storeStatusPill, isSelected && styles.storeStatusPillActive]}>
+          <Text style={[styles.storeStatusPillText, isSelected && styles.storeStatusPillTextActive]}>
+            {order.statusLabel}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.storeOrderCardMetrics}>
+        <Text style={styles.storeOrderCardMetric}>
+          {order.items.length} item{order.items.length === 1 ? '' : 's'}
+        </Text>
+        <Text style={styles.storeOrderCardMetric}>{order.subtotalLabel}</Text>
+      </View>
+
+      <Text style={styles.storeOrderCardInvoiceMeta}>{invoiceSummary}</Text>
+    </MotionPressable>
+  );
+}
+
+function StoreOrderHistoryEntry({ item, isLast }) {
+  return (
+    <View style={styles.storeTimelineRow}>
+      <View style={styles.storeTimelineRail}>
+        <View style={styles.storeTimelineDot} />
+        {!isLast ? <View style={styles.storeTimelineLine} /> : null}
+      </View>
+
+      <View style={styles.storeTimelineContent}>
+        <View style={styles.storeTimelineHeader}>
+          <Text style={styles.storeTimelineTitle}>{item.nextStatusLabel}</Text>
+          <Text style={styles.storeTimelineTime}>{formatStoreDateTimeLabel(item.changedAt)}</Text>
+        </View>
+
+        <Text style={styles.storeTimelineBadge}>{item.transitionTypeLabel}</Text>
+
+        {item.previousStatusLabel ? (
+          <Text style={styles.storeTimelineCopy}>
+            {item.previousStatusLabel} -> {item.nextStatusLabel}
+          </Text>
+        ) : null}
+
+        <Text style={styles.storeTimelineCopy}>
+          {item.reason || 'No transition note was recorded for this status change.'}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function StorePaymentEntryRow({ item }) {
+  return (
+    <View style={styles.storePaymentEntryRow}>
+      <View style={styles.storePaymentEntryCopy}>
+        <Text style={styles.storePaymentEntryTitle}>{item.amountLabel}</Text>
+        <Text style={styles.storePaymentEntryMeta}>
+          {item.paymentMethodLabel}
+          {item.reference ? ` - ${item.reference}` : ''}
+        </Text>
+        <Text style={styles.storePaymentEntryMeta}>{formatStoreDateTimeLabel(item.receivedAt)}</Text>
+        {item.notes ? <Text style={styles.storePaymentEntryNotes}>{item.notes}</Text> : null}
+      </View>
+
+      <View style={styles.storePaymentEntryIconWrap}>
+        <MaterialCommunityIcons name="cash-check" size={18} color={colors.primary} />
       </View>
     </View>
   );
@@ -1141,21 +1636,72 @@ function BookingDateCard({ item, isSelected, onPress, isCompact }) {
         styles.bookingDateCard,
         isCompact && styles.bookingDateCardCompact,
         isSelected && styles.bookingDateCardActive,
-        !item.isOpen && styles.bookingDateCardDisabled,
+        item.statusTone === 'success' && styles.bookingDateCardSuccess,
+        item.statusTone === 'warning' && styles.bookingDateCardLimited,
+        item.statusTone === 'danger' && styles.bookingDateCardDanger,
+        !item.isSelectable && styles.bookingDateCardDisabled,
       ]}
-      onPress={item.isOpen ? onPress : undefined}
-      disabled={!item.isOpen}
+      onPress={item.isSelectable ? onPress : undefined}
+      disabled={!item.isSelectable}
     >
-      <Text style={[styles.bookingDateWeekday, isSelected && styles.bookingDateTextActive, !item.isOpen && styles.bookingDisabledSubtext]}>
-        {item.weekday}
-      </Text>
-      <Text style={[styles.bookingDateDay, isSelected && styles.bookingDateTextActive, !item.isOpen && styles.bookingDisabledText]}>
+      <View style={styles.bookingDateCardHeader}>
+        <Text
+          style={[
+            styles.bookingDateWeekday,
+            isSelected && styles.bookingDateTextActive,
+            !item.isSelectable && styles.bookingDisabledSubtext,
+          ]}
+        >
+          {item.weekday}
+        </Text>
+        <View
+          style={[
+            styles.bookingDateStatusBadge,
+            item.statusTone === 'success' && styles.bookingDateStatusBadgeSuccess,
+            item.statusTone === 'warning' && styles.bookingDateStatusBadgeWarning,
+            item.statusTone === 'danger' && styles.bookingDateStatusBadgeDanger,
+            !item.isSelectable && styles.bookingDateStatusBadgeMuted,
+          ]}
+        >
+          <Text style={styles.bookingDateStatusText}>{item.statusLabel}</Text>
+        </View>
+      </View>
+      <Text
+        style={[
+          styles.bookingDateDay,
+          isSelected && styles.bookingDateTextActive,
+          !item.isSelectable && styles.bookingDisabledText,
+        ]}
+      >
         {item.day}
       </Text>
-      <Text style={[styles.bookingDateMonth, isSelected && styles.bookingDateTextActive, !item.isOpen && styles.bookingDisabledSubtext]}>
+      <Text
+        style={[
+          styles.bookingDateMonth,
+          isSelected && styles.bookingDateTextActive,
+          !item.isSelectable && styles.bookingDisabledSubtext,
+        ]}
+      >
         {item.month}
       </Text>
-      {!item.isOpen ? <Text style={styles.bookingDateClosedLabel}>Off</Text> : null}
+      <Text
+        style={[
+          styles.bookingDateCapacityText,
+          isSelected && styles.bookingDateTextActive,
+          !item.isSelectable && styles.bookingDisabledSubtext,
+        ]}
+      >
+        {item.capacityLabel}
+      </Text>
+      <Text
+        style={[
+          styles.bookingDateDetailText,
+          isSelected && styles.bookingDateTextActive,
+          !item.isSelectable && styles.bookingDisabledSubtext,
+        ]}
+      >
+        {item.detailLabel}
+      </Text>
     </MotionPressable>
   );
 }
@@ -1312,23 +1858,19 @@ function HomeServiceRow({ item }) {
 
 function TimelineEventCard({ item }) {
   const statusToneStyle =
-    item.statusTone === 'success'
+    item.statusTone === 'verified'
       ? styles.timelineStatusPillSuccess
-      : item.statusTone === 'info'
-        ? styles.timelineStatusPillInfo
-        : styles.timelineStatusPillDefault;
+      : styles.timelineStatusPillDefault;
   const statusTextToneStyle =
-    item.statusTone === 'success'
+    item.statusTone === 'verified'
       ? styles.timelineStatusTextSuccess
-      : item.statusTone === 'info'
-        ? styles.timelineStatusTextInfo
-        : styles.timelineStatusTextDefault;
+      : styles.timelineStatusTextDefault;
   const typeToneStyle =
-    item.type === 'Insurance'
-      ? styles.timelineTypePillInsurance
-      : item.type === 'Booking'
-        ? styles.timelineTypePillBooking
-        : styles.timelineTypePillService;
+    item.typeTone === 'summary'
+      ? styles.timelineTypePillSummary
+      : item.typeTone === 'verified'
+        ? styles.timelineTypePillVerified
+        : styles.timelineTypePillAdministrative;
 
   return (
     <View style={styles.timelineEventCard}>
@@ -1343,27 +1885,93 @@ function TimelineEventCard({ item }) {
         <View style={styles.timelineEventHeader}>
           <Text style={styles.timelineEventTitle}>{item.title}</Text>
           <View style={[styles.timelineStatusPill, statusToneStyle]}>
-            <Text style={[styles.timelineStatusText, statusTextToneStyle]}>{item.status}</Text>
+            <Text style={[styles.timelineStatusText, statusTextToneStyle]}>
+              {item.statusLabel}
+            </Text>
           </View>
         </View>
         <Text style={styles.timelineEventSummary}>{item.summary}</Text>
-        <Text style={styles.timelineEventMechanic}>• {item.mechanic}</Text>
+        {item.metaLabel ? (
+          <Text style={styles.timelineEventMechanic}>{`\u2022 ${item.metaLabel}`}</Text>
+        ) : null}
         <View style={styles.timelineEventFooter}>
           <View style={styles.timelineEventMetaRow}>
             <MaterialCommunityIcons name="clock-outline" size={14} color={colors.mutedText} />
             <Text style={styles.timelineEventDate}>{item.dateLabel}</Text>
           </View>
-          <Text style={styles.timelineEventPrice}>{item.priceLabel}</Text>
+          <Text style={styles.timelineEventPrice}>{item.sourceLabel}</Text>
         </View>
         <View style={[styles.timelineTypePill, typeToneStyle]}>
-          <Text style={styles.timelineTypeText}>{item.type}</Text>
+          <Text style={styles.timelineTypeText}>{item.typeLabel}</Text>
         </View>
       </View>
     </View>
   );
 }
 
-export default function Dashboard({ account, navigation, onSignOut, onSaveProfile, onDeleteAccount }) {
+function TimelineStateCard({ icon, title, message }) {
+  return (
+    <View style={styles.timelineStateCard}>
+      <View style={styles.timelineStateIconWrap}>
+        <MaterialCommunityIcons name={icon} size={20} color={colors.primary} />
+      </View>
+      <Text style={styles.timelineStateTitle}>{title}</Text>
+      <Text style={styles.timelineStateText}>{message}</Text>
+    </View>
+  );
+}
+
+function LifecycleSummaryCard({ summaryCard }) {
+  const pillStyle =
+    summaryCard.state === 'reviewed_summary_visible'
+      ? styles.timelineSummaryPillVisible
+      : summaryCard.state === 'pending_summary_hidden'
+        ? styles.timelineSummaryPillPending
+        : styles.timelineSummaryPillHidden;
+  const pillTextStyle =
+    summaryCard.state === 'reviewed_summary_visible'
+      ? styles.timelineSummaryPillTextVisible
+      : summaryCard.state === 'pending_summary_hidden'
+        ? styles.timelineSummaryPillTextPending
+        : styles.timelineSummaryPillTextHidden;
+
+  return (
+    <View style={styles.timelineSummaryCard}>
+      <View style={styles.timelineSummaryHeader}>
+        <View>
+          <Text style={styles.bookingEyebrow}>REVIEWED SUMMARY</Text>
+          <Text style={styles.timelineSummaryTitle}>{summaryCard.title}</Text>
+        </View>
+        <View style={[styles.timelineSummaryPill, pillStyle]}>
+          <Text style={[styles.timelineSummaryPillText, pillTextStyle]}>
+            {summaryCard.stateLabel}
+          </Text>
+        </View>
+      </View>
+
+      {summaryCard.summaryText ? (
+        <Text style={styles.timelineSummaryBody}>{summaryCard.summaryText}</Text>
+      ) : null}
+
+      <Text style={styles.timelineSummaryHelperText}>{summaryCard.helperText}</Text>
+
+      {summaryCard.reviewedAt ? (
+        <Text style={styles.timelineSummaryMeta}>
+          {`Updated ${formatDate(new Date(summaryCard.reviewedAt))}`}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+export default function Dashboard({
+  account,
+  navigation,
+  route,
+  onSignOut,
+  onSaveProfile,
+  onStartDeleteAccountOtp,
+}) {
   const isWeb = Platform.OS === 'web';
   const { width: windowWidth } = useWindowDimensions();
   const isCompactPhone = !isWeb && windowWidth < 390;
@@ -1374,30 +1982,96 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   const [selectedBookingServiceKey, setSelectedBookingServiceKey] = useState(null);
   const [selectedBookingTimeKey, setSelectedBookingTimeKey] = useState(null);
   const [selectedBookingVehicleId, setSelectedBookingVehicleId] = useState(null);
-  const [selectedBookingDateKey, setSelectedBookingDateKey] = useState(
-    () => buildBookingDateOptions()[0]?.key ?? '',
-  );
+  const [selectedBookingDateKey, setSelectedBookingDateKey] = useState(null);
+  const [bookingServicePage, setBookingServicePage] = useState(0);
   const [bookingNotes, setBookingNotes] = useState('');
   const [bookingCreateState, setBookingCreateState] = useState(createInitialBookingCreateState);
   const [bookingHistory, setBookingHistory] = useState(createInitialBookingHistoryState);
   const [selectedHistoryBookingId, setSelectedHistoryBookingId] = useState(null);
   const [bookingDetailState, setBookingDetailState] = useState(createInitialBookingDetailState);
-  const [notificationsFeed, setNotificationsFeed] = useState(defaultNotifications);
+  const [notificationsFeed, setNotificationsFeed] = useState([]);
+  const [notificationModuleState, setNotificationModuleState] = useState(
+    createInitialNotificationModuleState,
+  );
+  const [catalogState, setCatalogState] = useState(createInitialCatalogState);
+  const [catalogDetailState, setCatalogDetailState] = useState(createInitialCatalogDetailState);
+  const [cartState, setCartState] = useState(createInitialCartState);
+  const [checkoutState, setCheckoutState] = useState(() => createInitialCheckoutState(account));
+  const [storeSection, setStoreSection] = useState('catalog');
+  const [storeOrderHistoryState, setStoreOrderHistoryState] = useState(
+    createInitialStoreOrderHistoryState,
+  );
+  const [selectedStoreOrderId, setSelectedStoreOrderId] = useState(null);
+  const [storeOrderTrackingState, setStoreOrderTrackingState] = useState(
+    createInitialStoreOrderTrackingState,
+  );
   const [isNotificationsVisible, setIsNotificationsVisible] = useState(false);
   const [isProfileTooltipVisible, setIsProfileTooltipVisible] = useState(false);
   const [timelineFilter, setTimelineFilter] = useState('All');
-  const [activeShopCategory, setActiveShopCategory] = useState('All');
-  const [shopSearch, setShopSearch] = useState('');
+  const [vehicleLifecycleState, setVehicleLifecycleState] = useState(
+    createInitialVehicleLifecycleState,
+  );
+  const [loyaltyState, setLoyaltyState] = useState(createInitialLoyaltyState);
   const [isCartVisible, setIsCartVisible] = useState(false);
-  const [cartItems, setCartItems] = useState({});
-  const [selectedProduct, setSelectedProduct] = useState(null);
   const [profileSection, setProfileSection] = useState('rewards');
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deletePasswordError, setDeletePasswordError] = useState('');
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [isProfileEditing, setIsProfileEditing] = useState(false);
   const [profileForm, setProfileForm] = useState(createProfileForm(account));
-  const primaryVehicleLabel = account?.vehicleDisplayName || account?.vehicleModel || 'Toyota Vios 1.3 E';
+  const primaryVehicleLabel =
+    account?.primaryVehicle?.displayName ||
+    account?.vehicleDisplayName ||
+    account?.vehicleModel ||
+    'No vehicle selected';
+  const primaryVehicleMetaLabel = [
+    account?.licensePlate,
+    account?.vehicleYear ? `${account.vehicleYear} Model` : null,
+  ]
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean)
+    .join(' - ') || 'Add vehicle details to personalize this card.';
+  const loyaltyPointsBalance = loyaltyState.account?.pointsBalance ?? 0;
+  const loyaltyTier = loyaltyState.tier ?? {
+    key: customerLoyaltyTiers[0].key,
+    label: customerLoyaltyTiers[0].label,
+    nextTierLabel: customerLoyaltyTiers[1]?.label ?? null,
+    pointsToNext: customerLoyaltyTiers[1]?.minPoints ?? 0,
+    progressRatio: 0,
+  };
+  const loyaltyRewards = loyaltyState.rewards ?? [];
+  const loyaltyTransactions = loyaltyState.transactions ?? [];
+  const featuredReward = loyaltyState.featuredReward ?? null;
+  const recentHomeServices = bookingHistory.bookings.length
+    ? bookingHistory.bookings.slice(0, 3).map((booking) => ({
+        key: booking.id ?? getBookingReference(booking),
+        icon:
+          booking.status === 'completed'
+            ? 'check-decagram-outline'
+            : booking.status === 'declined' || booking.status === 'cancelled'
+              ? 'close-circle-outline'
+              : 'calendar-check-outline',
+        title: getBookingServiceNames(booking),
+        dateLabel: `${formatBookingDateLabel(booking.scheduledDate)} - ${getBookingTimeLabel(booking)}`,
+        status: getBookingStatusLabel(booking.status),
+      }))
+    : recentServiceHistory.slice(0, 3);
+  const featuredRewardEyebrow = featuredReward
+    ? featuredReward.available
+      ? 'READY TO REDEEM'
+      : 'LIVE LOYALTY REWARD'
+    : 'LOYALTY REWARDS';
+  const featuredRewardTitle = featuredReward?.title ?? 'Loyalty rewards are now live';
+  const featuredRewardSubtitle = featuredReward
+    ? featuredReward.available
+      ? `${featuredReward.description} Redeem now for ${featuredReward.pointsLabel}.`
+      : `${featuredReward.description} ${featuredReward.remainingPoints.toLocaleString()} more points needed to unlock it.`
+    : 'Your points wallet is connected. Active rewards will appear here once staff publish the customer catalog.';
+  const featuredRewardButtonLabel =
+    featuredReward && featuredReward.available ? 'Claim Reward' : 'Open Rewards';
+  const lastHandledSupportJumpRef = useRef(null);
+  const activeStoreOrderRequestRef = useRef(null);
   const [profileErrors, setProfileErrors] = useState({});
   const [securityForm, setSecurityForm] = useState({
     currentPassword: '',
@@ -1426,13 +2100,411 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     setSelectedBookingServiceKey(null);
     setSelectedBookingTimeKey(null);
     setSelectedBookingVehicleId(null);
-    setSelectedBookingDateKey(buildBookingDateOptions()[0]?.key ?? '');
+    setSelectedBookingDateKey(null);
+    setBookingServicePage(0);
     setBookingNotes('');
     setBookingCreateState(createInitialBookingCreateState());
     setBookingHistory(createInitialBookingHistoryState());
     setSelectedHistoryBookingId(null);
     setBookingDetailState(createInitialBookingDetailState());
+    setNotificationsFeed([]);
+    setNotificationModuleState(createInitialNotificationModuleState());
+    setTimelineFilter('All');
+    setVehicleLifecycleState(createInitialVehicleLifecycleState());
+    setLoyaltyState(createInitialLoyaltyState());
+    setCatalogState(createInitialCatalogState());
+    setCatalogDetailState(createInitialCatalogDetailState());
+    setCartState(createInitialCartState());
+    setCheckoutState(createInitialCheckoutState(account));
+    setStoreSection('catalog');
+    setStoreOrderHistoryState(createInitialStoreOrderHistoryState());
+    setSelectedStoreOrderId(null);
+    setStoreOrderTrackingState(createInitialStoreOrderTrackingState());
+    activeStoreOrderRequestRef.current = null;
   }, [account?.accessToken, account?.userId]);
+
+  useEffect(() => {
+    const supportJump = route?.params?.supportJump;
+
+    if (!supportJump?.id || lastHandledSupportJumpRef.current === supportJump.id) {
+      return;
+    }
+
+    lastHandledSupportJumpRef.current = supportJump.id;
+
+    if (supportJump.activeTab) {
+      setActiveTab(supportJump.activeTab);
+    }
+
+    if (supportJump.bookingMode) {
+      setBookingMode(supportJump.bookingMode);
+    }
+
+    if (supportJump.menuScreen) {
+      setMenuScreen(supportJump.menuScreen);
+    }
+
+    if (supportJump.profileSection) {
+      setProfileSection(supportJump.profileSection);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(supportJump, 'selectedHistoryBookingId')) {
+      setSelectedHistoryBookingId(supportJump.selectedHistoryBookingId ?? null);
+    }
+
+    setIsProfileTooltipVisible(false);
+  }, [route?.params?.supportJump]);
+
+  const loadNotificationModuleState = async () => {
+    if (!account?.accessToken || !account?.userId) {
+      setNotificationsFeed([]);
+      setNotificationModuleState(createInitialNotificationModuleState());
+      return;
+    }
+
+    setNotificationModuleState((currentState) => ({
+      ...currentState,
+      status: 'loading',
+      errorMessage: '',
+    }));
+
+    try {
+      const notificationSnapshot = await loadCustomerNotificationSnapshot({
+        userId: account.userId,
+        accessToken: account.accessToken,
+      });
+
+      setNotificationsFeed(notificationSnapshot.notifications);
+      setNotificationModuleState({
+        status: 'ready',
+        preferences: notificationSnapshot.preferences,
+        notifications: notificationSnapshot.notifications,
+        errorMessage: '',
+        savingKey: null,
+      });
+    } catch (error) {
+      const nextMessage =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not load your notification settings right now.';
+
+      setNotificationsFeed([]);
+      setNotificationModuleState({
+        status: 'error',
+        preferences: null,
+        notifications: [],
+        errorMessage: nextMessage,
+        savingKey: null,
+      });
+    }
+  };
+
+  const loadLoyaltyModuleState = async () => {
+    if (!account?.accessToken || !account?.userId) {
+      setLoyaltyState(createInitialLoyaltyState());
+      return;
+    }
+
+    setLoyaltyState((currentState) => ({
+      ...currentState,
+      status: 'loading',
+      errorMessage: '',
+    }));
+
+    try {
+      const loyaltySnapshot = await loadCustomerLoyaltySnapshot({
+        userId: account.userId,
+        accessToken: account.accessToken,
+      });
+
+      setLoyaltyState({
+        status: 'ready',
+        ...loyaltySnapshot,
+        errorMessage: '',
+        redeemingRewardId: null,
+      });
+    } catch (error) {
+      const nextMessage =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not load your loyalty data right now.';
+
+      setLoyaltyState((currentState) => ({
+        ...currentState,
+        status: currentState.account ? 'ready' : 'error',
+        errorMessage: nextMessage,
+        redeemingRewardId: null,
+      }));
+    }
+  };
+
+  const loadCatalogModuleState = async () => {
+    setCatalogState((currentState) => ({
+      ...currentState,
+      status: 'loading',
+      errorMessage: '',
+    }));
+
+    try {
+      const snapshot = await loadCustomerCatalogSnapshot({
+        accessToken: account?.accessToken,
+      });
+
+      setCatalogState({
+        status: snapshot.products.length > 0 ? 'ready' : 'empty',
+        categories: snapshot.categories,
+        products: snapshot.products,
+        errorMessage: '',
+        apiBaseUrl: getEcommerceApiBaseUrl(),
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not load the live product catalog right now.';
+
+      setCatalogState((currentState) => ({
+        ...currentState,
+        status: 'error',
+        errorMessage: message,
+        categories: [],
+        products: [],
+        apiBaseUrl: getEcommerceApiBaseUrl(),
+      }));
+    }
+  };
+
+  const applyCartSnapshot = (snapshot, options = {}) => {
+    const nextSnapshot = snapshot ?? createEmptyCustomerCartSnapshot();
+
+    setCartState({
+      status: nextSnapshot.totalQuantity > 0 ? 'ready' : 'empty',
+      errorMessage: options.errorMessage ?? '',
+      savingItemId: options.savingItemId ?? null,
+      ...nextSnapshot,
+    });
+  };
+
+  const applyStoreOrderHistorySnapshot = (snapshot, options = {}) => {
+    const nextSnapshot = snapshot ?? createEmptyCustomerOrderHistorySnapshot();
+    const preferredOrderId = String(options.preferredOrderId ?? '').trim();
+
+    setStoreOrderHistoryState({
+      status: nextSnapshot.orders.length > 0 ? 'ready' : 'empty',
+      errorMessage: options.errorMessage ?? '',
+      ...nextSnapshot,
+    });
+    setSelectedStoreOrderId((currentOrderId) => {
+      if (nextSnapshot.orders.some((order) => order.id === currentOrderId)) {
+        return currentOrderId;
+      }
+
+      if (preferredOrderId && nextSnapshot.orders.some((order) => order.id === preferredOrderId)) {
+        return preferredOrderId;
+      }
+
+      return nextSnapshot.orders[0]?.id ?? null;
+    });
+  };
+
+  const loadCartModuleState = async () => {
+    if (!account?.userId) {
+      setCartState({
+        ...createInitialCartState(),
+        status: 'error',
+        errorMessage: 'Sign in again to load your ecommerce cart.',
+      });
+      return;
+    }
+
+    setCartState((currentState) => ({
+      ...currentState,
+      status: currentState.totalQuantity > 0 ? 'ready' : 'loading',
+      errorMessage: '',
+    }));
+
+    try {
+      const snapshot = await getCustomerCart({
+        customerUserId: account.userId,
+        accessToken: account.accessToken,
+      });
+
+      applyCartSnapshot(snapshot);
+    } catch (error) {
+      const message =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not load your ecommerce cart right now.';
+
+      setCartState((currentState) => ({
+        ...currentState,
+        status: 'error',
+        errorMessage: message,
+        savingItemId: null,
+      }));
+    }
+  };
+
+  const loadStoreOrderHistoryState = async (options = {}) => {
+    if (!account?.userId) {
+      setStoreOrderHistoryState({
+        ...createInitialStoreOrderHistoryState(),
+        status: 'error',
+        errorMessage: 'Sign in again to load your order history.',
+      });
+      return;
+    }
+
+    setStoreOrderHistoryState((currentState) => ({
+      ...currentState,
+      status: currentState.orders.length > 0 ? 'ready' : 'loading',
+      errorMessage: '',
+    }));
+
+    try {
+      const snapshot = await listCustomerOrders({
+        customerUserId: account.userId,
+        accessToken: account.accessToken,
+      });
+
+      applyStoreOrderHistorySnapshot(snapshot, {
+        preferredOrderId: options.preferredOrderId,
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not load your order history right now.';
+
+      setStoreOrderHistoryState((currentState) => ({
+        ...currentState,
+        status: 'error',
+        errorMessage: message,
+      }));
+    }
+  };
+
+  const loadStoreOrderTrackingState = async (orderId, options = {}) => {
+    const normalizedOrderId = String(orderId ?? '').trim();
+
+    if (!normalizedOrderId) {
+      setStoreOrderTrackingState(createInitialStoreOrderTrackingState());
+      return;
+    }
+
+    const seededOrder =
+      options.seedOrder && options.seedOrder.id === normalizedOrderId ? options.seedOrder : null;
+    activeStoreOrderRequestRef.current = normalizedOrderId;
+
+    setStoreOrderTrackingState((currentState) => ({
+      status:
+        currentState.order?.id === normalizedOrderId && currentState.status === 'ready' && !options.force
+          ? 'ready'
+          : seededOrder
+            ? 'ready'
+            : 'loading',
+      order:
+        seededOrder ||
+        (currentState.order?.id === normalizedOrderId ? currentState.order : null),
+      invoiceStatus:
+        currentState.order?.id === normalizedOrderId && currentState.invoiceStatus === 'ready' && !options.force
+          ? 'ready'
+          : 'loading',
+      invoice:
+        currentState.order?.id === normalizedOrderId && !options.force
+          ? currentState.invoice
+          : null,
+      errorMessage: '',
+      invoiceErrorMessage: '',
+    }));
+
+    try {
+      const order = await getCustomerOrderDetail({
+        orderId: normalizedOrderId,
+        accessToken: account?.accessToken,
+      });
+
+      if (activeStoreOrderRequestRef.current !== normalizedOrderId) {
+        return;
+      }
+
+      setStoreOrderTrackingState((currentState) => ({
+        ...currentState,
+        status: 'ready',
+        order,
+        errorMessage: '',
+      }));
+      setStoreOrderHistoryState((currentState) => {
+        if (!currentState.orders.length) {
+          return currentState;
+        }
+
+        return {
+          ...currentState,
+          orders: currentState.orders.map((currentOrder) =>
+            currentOrder.id === order.id ? order : currentOrder
+          ),
+        };
+      });
+
+      try {
+        const invoice = await getCustomerOrderInvoice({
+          orderId: normalizedOrderId,
+          accessToken: account?.accessToken,
+        });
+
+        if (activeStoreOrderRequestRef.current !== normalizedOrderId) {
+          return;
+        }
+
+        setStoreOrderTrackingState((currentState) => ({
+          ...currentState,
+          status: 'ready',
+          order,
+          invoiceStatus: 'ready',
+          invoice,
+          invoiceErrorMessage: '',
+        }));
+      } catch (error) {
+        if (activeStoreOrderRequestRef.current !== normalizedOrderId) {
+          return;
+        }
+
+        const isMissingInvoice = error instanceof ApiError && error.status === 404;
+        const invoiceMessage = isMissingInvoice
+          ? 'No invoice tracking record was returned for this order yet.'
+          : error instanceof ApiError && error.message
+            ? error.message
+            : 'We could not load invoice tracking for this order right now.';
+
+        setStoreOrderTrackingState((currentState) => ({
+          ...currentState,
+          status: 'ready',
+          order,
+          invoiceStatus: isMissingInvoice ? 'not_found' : 'error',
+          invoice: null,
+          invoiceErrorMessage: invoiceMessage,
+        }));
+      }
+    } catch (error) {
+      if (activeStoreOrderRequestRef.current !== normalizedOrderId) {
+        return;
+      }
+
+      const message =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not load order tracking right now.';
+      const nextStatus =
+        error instanceof ApiError && [401, 403].includes(error.status) ? 'unauthorized' : 'error';
+
+      setStoreOrderTrackingState({
+        ...buildStoreOrderSelectionState(seededOrder),
+        status: nextStatus,
+        errorMessage: message,
+      });
+    }
+  };
 
   useEffect(() => {
     screenFadeAnim.stopAnimation();
@@ -1470,7 +2542,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   }, [isCartVisible, cartOverlayAnim]);
 
   useEffect(() => {
-    if (selectedProduct) {
+    if (catalogDetailState.status !== 'idle') {
       productOverlayAnim.stopAnimation();
       productOverlayAnim.setValue(0);
       Animated.timing(productOverlayAnim, {
@@ -1480,7 +2552,188 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         useNativeDriver: true,
       }).start();
     }
-  }, [selectedProduct, productOverlayAnim]);
+  }, [catalogDetailState.status, productOverlayAnim]);
+
+  useEffect(() => {
+    if (activeTab !== 'messages') {
+      return undefined;
+    }
+
+    if (!account?.accessToken) {
+      const emptyLifecycleSnapshot = createEmptyCustomerVehicleLifecycleSnapshot();
+      setVehicleLifecycleState({
+        status: 'timeline_forbidden',
+        errorMessage: 'Sign in again to view your vehicle lifecycle history.',
+        ...emptyLifecycleSnapshot,
+      });
+      return undefined;
+    }
+
+    if (!account?.primaryVehicleId) {
+      const emptyLifecycleSnapshot = createEmptyCustomerVehicleLifecycleSnapshot();
+      setVehicleLifecycleState({
+        status: 'timeline_empty',
+        errorMessage: 'Add a vehicle first to unlock lifecycle history.',
+        ...emptyLifecycleSnapshot,
+      });
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const loadVehicleLifecycle = async () => {
+      setVehicleLifecycleState((currentState) => ({
+        ...currentState,
+        status: 'timeline_loading',
+        errorMessage: '',
+      }));
+
+      try {
+        const lifecycleSnapshot = await loadCustomerVehicleLifecycleSnapshot({
+          vehicleId: account.primaryVehicleId,
+          accessToken: account.accessToken,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setVehicleLifecycleState({
+          status: lifecycleSnapshot.timelineState,
+          errorMessage: '',
+          ...lifecycleSnapshot,
+        });
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        const emptyLifecycleSnapshot = createEmptyCustomerVehicleLifecycleSnapshot();
+        let nextStatus = 'timeline_load_failed';
+        let nextMessage =
+          'We could not load your lifecycle history right now. Please try again in a moment.';
+
+        if (error instanceof ApiError) {
+          if (error.status === 401 || error.status === 403) {
+            nextStatus = 'timeline_forbidden';
+            nextMessage = 'Your customer session cannot access lifecycle history right now.';
+          } else if (error.status === 404) {
+            nextStatus = 'timeline_not_found';
+            nextMessage = 'We could not find lifecycle history for the selected vehicle.';
+          } else if (error.message) {
+            nextMessage = error.message;
+          }
+        }
+
+        setVehicleLifecycleState({
+          status: nextStatus,
+          errorMessage: nextMessage,
+          ...emptyLifecycleSnapshot,
+        });
+      }
+    };
+
+    loadVehicleLifecycle();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTab, account?.accessToken, account?.primaryVehicleId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadCustomerEngagementModules = async () => {
+      if (isCancelled) {
+        return;
+      }
+
+      await loadNotificationModuleState();
+
+      if (isCancelled) {
+        return;
+      }
+
+      await loadLoyaltyModuleState();
+    };
+
+    loadCustomerEngagementModules();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [account?.accessToken, account?.userId]);
+
+  useEffect(() => {
+    if (activeTab !== 'store') {
+      return;
+    }
+
+    if (catalogState.status !== 'idle') {
+      return;
+    }
+
+    void loadCatalogModuleState();
+  }, [activeTab, catalogState.status]);
+
+  useEffect(() => {
+    if (activeTab !== 'store') {
+      return;
+    }
+
+    if (cartState.status !== 'idle') {
+      return;
+    }
+
+    void loadCartModuleState();
+  }, [activeTab, cartState.status]);
+
+  useEffect(() => {
+    if (activeTab !== 'store' || storeSection !== 'orders') {
+      return;
+    }
+
+    if (storeOrderHistoryState.status !== 'idle') {
+      return;
+    }
+
+    void loadStoreOrderHistoryState();
+  }, [activeTab, storeOrderHistoryState.status, storeSection]);
+
+  useEffect(() => {
+    if (activeTab !== 'store' || storeSection !== 'orders') {
+      return;
+    }
+
+    if (!selectedStoreOrderId) {
+      activeStoreOrderRequestRef.current = null;
+      setStoreOrderTrackingState(createInitialStoreOrderTrackingState());
+      return;
+    }
+
+    if (
+      storeOrderTrackingState.order?.id === selectedStoreOrderId &&
+      storeOrderTrackingState.status === 'ready' &&
+      storeOrderTrackingState.invoiceStatus !== 'idle'
+    ) {
+      return;
+    }
+
+    const seededOrder =
+      storeOrderHistoryState.orders.find((order) => order.id === selectedStoreOrderId) ?? null;
+
+    void loadStoreOrderTrackingState(selectedStoreOrderId, {
+      seedOrder: seededOrder,
+    });
+  }, [
+    activeTab,
+    selectedStoreOrderId,
+    storeOrderHistoryState.orders,
+    storeOrderTrackingState.invoiceStatus,
+    storeOrderTrackingState.order?.id,
+    storeOrderTrackingState.status,
+    storeSection,
+  ]);
 
   useEffect(() => {
     if (activeTab !== 'notifications' || bookingMode !== 'book') {
@@ -1497,6 +2750,14 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
       setBookingDiscovery((currentState) => ({
         ...currentState,
         status: 'loading',
+        availability:
+          currentState.availability.status === 'ready'
+            ? {
+                ...currentState.availability,
+                status: 'loading',
+                errorMessage: '',
+              }
+            : currentState.availability,
         errorMessage: '',
       }));
 
@@ -1504,6 +2765,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         const nextSnapshot = await loadBookingDiscoverySnapshot({
           userId: account?.userId,
           accessToken: account?.accessToken,
+          availabilityWindow: getInitialBookingAvailabilityWindow(),
         });
 
         if (isCancelled) {
@@ -1515,6 +2777,11 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
           services: nextSnapshot.services,
           timeSlots: nextSnapshot.timeSlots,
           vehicles: nextSnapshot.vehicles,
+          availability: {
+            status: 'ready',
+            errorMessage: '',
+            ...nextSnapshot.availability,
+          },
           errorMessage: '',
         });
       } catch (error) {
@@ -1531,6 +2798,11 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         setBookingDiscovery((currentState) => ({
           ...currentState,
           status: isUnauthorized ? 'unauthorized' : 'error',
+          availability: {
+            ...currentState.availability,
+            status: isUnauthorized ? 'unauthorized' : 'error',
+            errorMessage: message,
+          },
           errorMessage: message,
         }));
       }
@@ -1583,7 +2855,39 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   ]);
 
   useEffect(() => {
-    if (activeTab !== 'notifications' || bookingMode !== 'track') {
+    if (bookingDiscovery.availability.status !== 'ready') {
+      return;
+    }
+
+    const nextDateKey =
+      selectedBookingDateKey &&
+      getBookingAvailabilityDayByDate(bookingDiscovery.availability, selectedBookingDateKey)
+        ? selectedBookingDateKey
+        : getFirstBookableBookingDateKey(bookingDiscovery.availability, selectedBookingTimeKey);
+
+    if (nextDateKey && nextDateKey !== selectedBookingDateKey) {
+      setSelectedBookingDateKey(nextDateKey);
+    }
+  }, [
+    bookingDiscovery.availability,
+    selectedBookingDateKey,
+    selectedBookingTimeKey,
+  ]);
+
+  useEffect(() => {
+    const totalPages = Math.max(
+      1,
+      Math.ceil((bookingDiscovery.services?.length || 0) / BOOKING_SERVICE_PAGE_SIZE),
+    );
+
+    setBookingServicePage((currentPage) => Math.min(currentPage, totalPages - 1));
+  }, [bookingDiscovery.services]);
+
+  useEffect(() => {
+    const shouldLoadBookingHistory =
+      activeTab === 'explore' || (activeTab === 'notifications' && bookingMode === 'track');
+
+    if (!shouldLoadBookingHistory) {
       return;
     }
 
@@ -1760,28 +3064,412 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     }
   };
 
-  const handleAddToCart = (product) => {
-    setCartItems((currentItems) => ({
-      ...currentItems,
-      [product.key]: {
-        ...product,
-        quantity: (currentItems[product.key]?.quantity || 0) + 1,
-      },
-    }));
+  const handleOpenCart = () => {
+    setIsCartVisible(true);
+
+    if (cartState.status === 'idle') {
+      void loadCartModuleState();
+    }
   };
 
-  const handleOpenProduct = (product) => {
-    setSelectedProduct(product);
+  const handleAddToCart = async (product) => {
+    if (!product?.id) {
+      return;
+    }
+
+    setCartState((currentState) => ({
+      ...currentState,
+      savingItemId: product.id,
+      errorMessage: '',
+    }));
+
+    try {
+      const snapshot = await addCustomerCartItem({
+        customerUserId: account?.userId,
+        productId: product.id,
+        quantity: 1,
+        accessToken: account?.accessToken,
+      });
+
+      applyCartSnapshot(snapshot);
+      resetCheckoutFlow();
+    } catch (error) {
+      const message =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not add this product to your cart right now.';
+
+      setCartState((currentState) => ({
+        ...currentState,
+        status: currentState.totalQuantity > 0 ? 'ready' : 'error',
+        errorMessage: message,
+        savingItemId: null,
+      }));
+    }
+  };
+
+  const handleOpenProduct = async (product) => {
+    setCatalogDetailState({
+      status: 'loading',
+      product: null,
+      previewProduct: product,
+      errorMessage: '',
+    });
+
+    try {
+      const nextProduct = await loadCustomerCatalogProductDetail({
+        productId: product?.id,
+        accessToken: account?.accessToken,
+      });
+
+      setCatalogDetailState({
+        status: 'ready',
+        product: nextProduct,
+        previewProduct: product,
+        errorMessage: '',
+      });
+    } catch (error) {
+      const isHiddenProduct = error instanceof ApiError && error.status === 404;
+      const nextMessage = isHiddenProduct
+        ? 'This product is no longer published in the customer catalog.'
+        : error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not load this product right now.';
+
+      setCatalogDetailState({
+        status: isHiddenProduct ? 'hidden' : 'error',
+        product: null,
+        previewProduct: product,
+        errorMessage: nextMessage,
+      });
+    }
   };
 
   const handleCloseProduct = () => {
-    setSelectedProduct(null);
+    setCatalogDetailState(createInitialCatalogDetailState());
+  };
+
+  const handleRetrySelectedProduct = () => {
+    if (!catalogDetailState.previewProduct) {
+      return;
+    }
+
+    void handleOpenProduct(catalogDetailState.previewProduct);
+  };
+
+  const handleCheckoutFieldChange = (key, value) => {
+    let nextValue = value;
+
+    if (key === 'contactPhone') {
+      nextValue = normalizePhoneNumber(value);
+    }
+
+    if (key === 'postalCode') {
+      nextValue = String(value ?? '').replace(/\D/g, '').slice(0, 4);
+    }
+
+    if (key === 'email') {
+      nextValue = value.trimStart();
+    }
+
+    setCheckoutState((currentState) => ({
+      ...currentState,
+      form: {
+        ...currentState.form,
+        [key]: nextValue,
+      },
+      fieldErrors: {
+        ...currentState.fieldErrors,
+        [key]: '',
+      },
+      errorMessage: '',
+    }));
+  };
+
+  const resetCheckoutFlow = () => {
+    setCheckoutState((currentState) => ({
+      ...currentState,
+      stage: 'cart',
+      previewStatus: 'idle',
+      preview: null,
+      submitting: false,
+      order: null,
+      errorMessage: '',
+      fieldErrors: {},
+    }));
+  };
+
+  const handleSelectStoreOrder = (order) => {
+    if (!order?.id) {
+      return;
+    }
+
+    activeStoreOrderRequestRef.current = order.id;
+    setSelectedStoreOrderId(order.id);
+    setStoreOrderTrackingState(buildStoreOrderSelectionState(order));
+  };
+
+  const handleOpenStoreOrders = (order = null) => {
+    setActiveTab('store');
+    setStoreSection('orders');
+
+    if (order?.id) {
+      activeStoreOrderRequestRef.current = order.id;
+      setSelectedStoreOrderId(order.id);
+      setStoreOrderTrackingState(buildStoreOrderSelectionState(order));
+    }
+  };
+
+  const handleRefreshStoreOrders = async () => {
+    await loadStoreOrderHistoryState({
+      preferredOrderId: selectedStoreOrderId,
+    });
+
+    if (selectedStoreOrderId) {
+      const seededOrder =
+        storeOrderHistoryState.orders.find((order) => order.id === selectedStoreOrderId) ?? null;
+
+      await loadStoreOrderTrackingState(selectedStoreOrderId, {
+        force: true,
+        seedOrder: seededOrder,
+      });
+    }
+  };
+
+  const handleStartCheckoutPreview = async () => {
+    if (!account?.userId || checkoutState.previewStatus === 'loading' || cartState.totalQuantity === 0) {
+      return;
+    }
+
+    setCheckoutState((currentState) => ({
+      ...currentState,
+      stage: 'preview',
+      previewStatus: 'loading',
+      preview: null,
+      order: null,
+      errorMessage: '',
+      fieldErrors: {},
+    }));
+
+    try {
+      const preview = await loadCustomerCheckoutPreview({
+        customerUserId: account.userId,
+        accessToken: account.accessToken,
+      });
+
+      setCheckoutState((currentState) => ({
+        ...currentState,
+        stage: 'preview',
+        previewStatus: 'ready',
+        preview,
+        errorMessage: '',
+      }));
+    } catch (error) {
+      const nextMessage =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not load the invoice preview right now.';
+
+      setCheckoutState((currentState) => ({
+        ...currentState,
+        stage: 'preview',
+        previewStatus: 'error',
+        preview: null,
+        errorMessage: nextMessage,
+      }));
+    }
+  };
+
+  const handleSubmitInvoiceCheckout = async () => {
+    if (!account?.userId || checkoutState.submitting) {
+      return;
+    }
+
+    const fieldErrors = validateInvoiceCheckoutForm(checkoutState.form);
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setCheckoutState((currentState) => ({
+        ...currentState,
+        stage: 'preview',
+        previewStatus: currentState.previewStatus === 'ready' ? 'ready' : currentState.previewStatus,
+        fieldErrors,
+        errorMessage: 'Complete the billing address details before creating the invoice checkout.',
+      }));
+      return;
+    }
+
+    setCheckoutState((currentState) => ({
+      ...currentState,
+      submitting: true,
+      errorMessage: '',
+    }));
+
+    try {
+      const order = await checkoutCustomerInvoice({
+        customerUserId: account.userId,
+        billingAddress: buildInvoiceCheckoutPayload(checkoutState.form),
+        notes: trimCheckoutValue(checkoutState.form.notes),
+        accessToken: account.accessToken,
+      });
+
+      setStoreOrderHistoryState((currentState) => {
+        const nextOrders = [order, ...currentState.orders.filter((currentOrder) => currentOrder.id !== order.id)];
+
+        return {
+          status: 'ready',
+          errorMessage: '',
+          orders: nextOrders,
+        };
+      });
+      activeStoreOrderRequestRef.current = order.id;
+      setSelectedStoreOrderId(order.id);
+      setStoreOrderTrackingState(buildStoreOrderSelectionState(order));
+      setCartState({
+        status: 'empty',
+        errorMessage: '',
+        savingItemId: null,
+        ...createEmptyCustomerCartSnapshot(),
+      });
+      setCheckoutState((currentState) => ({
+        ...currentState,
+        stage: 'complete',
+        previewStatus: 'ready',
+        preview: null,
+        submitting: false,
+        order,
+        errorMessage: '',
+        fieldErrors: {},
+      }));
+    } catch (error) {
+      const nextMessage =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not create the invoice checkout right now.';
+
+      setCheckoutState((currentState) => ({
+        ...currentState,
+        stage: 'preview',
+        previewStatus: currentState.previewStatus === 'ready' ? 'ready' : currentState.previewStatus,
+        submitting: false,
+        errorMessage: nextMessage,
+      }));
+    }
+  };
+
+  const getCurrentBookingAvailabilityWindow = () => {
+    if (bookingDiscovery.availability.startDate && bookingDiscovery.availability.endDate) {
+      return {
+        startDate: bookingDiscovery.availability.startDate,
+        endDate: bookingDiscovery.availability.endDate,
+      };
+    }
+
+    return getInitialBookingAvailabilityWindow();
+  };
+
+  const loadBookingAvailabilityWindow = async (
+    windowQuery,
+    { selectedDateKey = null, conflictRecovery = false } = {},
+  ) => {
+    setBookingDiscovery((currentState) => ({
+      ...currentState,
+      availability: {
+        ...currentState.availability,
+        status: 'loading',
+        errorMessage: '',
+      },
+    }));
+
+    try {
+      const availability = await getBookingAvailability({
+        ...windowQuery,
+        accessToken: account?.accessToken,
+      });
+
+      setBookingDiscovery((currentState) => ({
+        ...currentState,
+        status: 'ready',
+        errorMessage: '',
+        availability: {
+          status: 'ready',
+          errorMessage: '',
+          ...availability,
+        },
+      }));
+
+      if (selectedDateKey) {
+        setSelectedBookingDateKey(
+          clampDateKeyToRange(
+            selectedDateKey,
+            availability.minBookableDate,
+            availability.maxBookableDate,
+          ),
+        );
+      }
+
+      if (conflictRecovery) {
+        setBookingCreateState((currentState) =>
+          currentState.status === 'conflict'
+            ? {
+                ...currentState,
+                message: 'That slot is no longer available. Live availability has been refreshed below.',
+              }
+            : currentState,
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Unable to refresh live booking availability right now.';
+      const isUnauthorized = error instanceof ApiError && [401, 403].includes(error.status);
+
+      if (isUnauthorized) {
+        setBookingDiscovery((currentState) => ({
+          ...currentState,
+          status: 'unauthorized',
+          errorMessage: message,
+          availability: {
+            ...currentState.availability,
+            status: 'unauthorized',
+            errorMessage: message,
+          },
+        }));
+        return;
+      }
+
+      setBookingDiscovery((currentState) => ({
+        ...currentState,
+        availability: {
+          ...currentState.availability,
+          status: 'error',
+          errorMessage: message,
+        },
+      }));
+
+      if (conflictRecovery) {
+        setBookingCreateState((currentState) =>
+          currentState.status === 'conflict'
+            ? {
+                ...currentState,
+                message:
+                  'That slot is no longer available, and live availability could not be refreshed automatically. Use refresh and retry.',
+              }
+            : currentState,
+        );
+      }
+    }
   };
 
   const handleRefreshBookingDiscovery = async () => {
     setBookingDiscovery((currentState) => ({
       ...currentState,
       status: 'loading',
+      availability: {
+        ...currentState.availability,
+        status: currentState.availability.status === 'ready' ? 'loading' : currentState.availability.status,
+        errorMessage: '',
+      },
       errorMessage: '',
     }));
 
@@ -1789,6 +3477,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
       const nextSnapshot = await loadBookingDiscoverySnapshot({
         userId: account?.userId,
         accessToken: account?.accessToken,
+        availabilityWindow: getCurrentBookingAvailabilityWindow(),
       });
 
       setBookingDiscovery({
@@ -1796,6 +3485,11 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         services: nextSnapshot.services,
         timeSlots: nextSnapshot.timeSlots,
         vehicles: nextSnapshot.vehicles,
+        availability: {
+          status: 'ready',
+          errorMessage: '',
+          ...nextSnapshot.availability,
+        },
         errorMessage: '',
       });
     } catch (error) {
@@ -1808,9 +3502,60 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
       setBookingDiscovery((currentState) => ({
         ...currentState,
         status: isUnauthorized ? 'unauthorized' : 'error',
+        availability: {
+          ...currentState.availability,
+          status: isUnauthorized ? 'unauthorized' : 'error',
+          errorMessage: message,
+        },
         errorMessage: message,
       }));
     }
+  };
+
+  const handleShiftBookingAvailabilityWindow = async (direction) => {
+    if (bookingDiscovery.availability.status === 'loading') {
+      return;
+    }
+
+    const currentWindow = getCurrentBookingAvailabilityWindow();
+    const anchorDate =
+      direction === 'next'
+        ? toBookingDateString(addDaysToDate(currentWindow.endDate, 1) ?? parseDateOnly(currentWindow.endDate))
+        : toBookingDateString(addDaysToDate(currentWindow.startDate, -BOOKING_AVAILABILITY_PAGE_DAYS) ?? parseDateOnly(currentWindow.startDate));
+    const nextWindow = buildBookingAvailabilityWindow({
+      anchorDateKey: anchorDate,
+      minimumDateKey: bookingDiscovery.availability.minBookableDate,
+      maximumDateKey: bookingDiscovery.availability.maxBookableDate,
+    });
+
+    await loadBookingAvailabilityWindow(nextWindow);
+  };
+
+  const handleChangeBookingDate = async (nextDate) => {
+    const nextDateKey = toBookingDateString(nextDate);
+
+    if (!nextDateKey) {
+      return;
+    }
+
+    if (bookingCreateState.status !== 'submitting') {
+      setBookingCreateState(createInitialBookingCreateState());
+    }
+
+    if (getBookingAvailabilityDayByDate(bookingDiscovery.availability, nextDateKey)) {
+      setSelectedBookingDateKey(nextDateKey);
+      return;
+    }
+
+    const nextWindow = buildBookingAvailabilityWindow({
+      anchorDateKey: nextDateKey,
+      minimumDateKey: bookingDiscovery.availability.minBookableDate,
+      maximumDateKey: bookingDiscovery.availability.maxBookableDate,
+    });
+
+    await loadBookingAvailabilityWindow(nextWindow, {
+      selectedDateKey: nextDateKey,
+    });
   };
 
   const handleRefreshBookingHistory = async () => {
@@ -1865,6 +3610,17 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     const selectedTimeSlot = bookingDiscovery.timeSlots.find(
       (timeSlot) => timeSlot.id === selectedBookingTimeKey,
     );
+    const selectedAvailabilityDay = getBookingAvailabilityDayByDate(
+      bookingDiscovery.availability,
+      selectedBookingDateKey,
+    );
+    const selectedAvailabilitySlot = getBookingAvailabilitySlotForTime(
+      selectedAvailabilityDay,
+      selectedTimeSlot?.id,
+    );
+    const isSelectedDateAvailable = selectedAvailabilitySlot
+      ? selectedAvailabilitySlot.isAvailable
+      : Boolean(selectedAvailabilityDay?.isBookable);
 
     if (!account?.userId) {
       setBookingCreateState({
@@ -1875,10 +3631,17 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
       return;
     }
 
-    if (!selectedVehicle || !selectedService?.isActive || !selectedTimeSlot?.isActive || !selectedBookingDateKey) {
+    if (
+      !selectedVehicle ||
+      !selectedService?.isActive ||
+      !selectedTimeSlot?.isActive ||
+      !selectedBookingDateKey ||
+      !isSelectedDateAvailable
+    ) {
       setBookingCreateState({
         status: 'validation-error',
-        message: 'Choose an owned vehicle, active service, active time slot, and appointment date.',
+        message:
+          'Choose an owned vehicle, active service, active time slot, and a live available appointment date.',
         booking: null,
       });
       return;
@@ -1942,7 +3705,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         message = 'The user, owned vehicle, service, or time slot could not be found.';
       } else if (statusCode === 409) {
         status = 'conflict';
-        message = 'That slot is no longer available or another booking conflict exists. Refresh options and retry.';
+        message = 'That slot is no longer available or another booking conflict exists. Refreshing live availability now.';
       }
 
       setBookingCreateState({
@@ -1950,6 +3713,12 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         message,
         booking: null,
       });
+
+      if (statusCode === 409) {
+        await loadBookingAvailabilityWindow(getCurrentBookingAvailabilityWindow(), {
+          conflictRecovery: true,
+        });
+      }
     }
   };
 
@@ -1969,10 +3738,121 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     setIsProfileTooltipVisible(false);
   };
 
+  const navigateToInsuranceInquiry = () => {
+    navigation.navigate('InsuranceInquiryScreen', {
+      vehicleId: account?.primaryVehicleId ?? null,
+    });
+  };
+
+  const navigateToSupport = () => {
+    navigation.navigate('ChatbotScreen');
+  };
+
   const navigateToProfileModule = () => {
     setActiveTab('menu');
     setMenuScreen('root');
     setIsProfileTooltipVisible(false);
+  };
+
+  const handleUpdateNotificationPreference = async (preferenceKey, value) => {
+    const currentPreferences = notificationModuleState.preferences;
+
+    if (!account?.accessToken || !account?.userId || !currentPreferences) {
+      Alert.alert(
+        'Notification Preferences',
+        'Sign in again before changing customer notification settings.',
+      );
+      return;
+    }
+
+    setNotificationModuleState((currentState) => ({
+      ...currentState,
+      status: 'ready',
+      errorMessage: '',
+      savingKey: preferenceKey,
+      preferences: {
+        ...currentState.preferences,
+        [preferenceKey]: value,
+      },
+    }));
+
+    try {
+      const updatedPreferences = await updateCustomerNotificationPreferences({
+        userId: account.userId,
+        accessToken: account.accessToken,
+        preferences: {
+          [preferenceKey]: value,
+        },
+      });
+
+      setNotificationModuleState((currentState) => ({
+        ...currentState,
+        status: 'ready',
+        preferences: updatedPreferences,
+        errorMessage: '',
+        savingKey: null,
+      }));
+    } catch (error) {
+      const nextMessage =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not save your notification preferences right now.';
+
+      setNotificationModuleState((currentState) => ({
+        ...currentState,
+        status: currentState.notifications?.length ? 'ready' : 'error',
+        preferences: currentPreferences,
+        errorMessage: nextMessage,
+        savingKey: null,
+      }));
+      Alert.alert('Notification Preferences', nextMessage);
+    }
+  };
+
+  const handleRedeemReward = async (reward) => {
+    if (!account?.accessToken || !account?.userId) {
+      Alert.alert('Rewards', 'Sign in again before redeeming rewards.');
+      return;
+    }
+
+    if (!reward?.id || !reward.available) {
+      return;
+    }
+
+    setLoyaltyState((currentState) => ({
+      ...currentState,
+      redeemingRewardId: reward.id,
+      errorMessage: '',
+    }));
+
+    try {
+      const redemption = await redeemCustomerReward({
+        userId: account.userId,
+        rewardId: reward.id,
+        note: `Redeemed from mobile rewards screen: ${reward.title}`,
+        accessToken: account.accessToken,
+      });
+
+      await loadLoyaltyModuleState();
+
+      const remainingBalance = Number(redemption?.pointsBalanceAfter ?? 0);
+      Alert.alert(
+        'Reward Claimed',
+        `${reward.title} has been redeemed. Remaining balance: ${remainingBalance.toLocaleString()} points.`,
+      );
+    } catch (error) {
+      const nextMessage =
+        error instanceof ApiError && error.message
+          ? error.message
+          : 'We could not redeem that reward right now.';
+
+      setLoyaltyState((currentState) => ({
+        ...currentState,
+        redeemingRewardId: null,
+        errorMessage: nextMessage,
+      }));
+      Alert.alert('Rewards', nextMessage);
+    }
   };
 
   const handleToggleNotifications = () => {
@@ -2004,14 +3884,14 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
       )
     );
 
-    if (
-      item.key === 'notif-service-progress' ||
-      item.key === 'notif-service-complete' ||
-      item.key === 'notif-booking'
-    ) {
+    if (item.action === 'booking' || item.category === 'booking_reminder') {
       navigateToBooking('track');
-    } else if (item.key === 'notif-points-earned' || item.key === 'notif-member-offer') {
+    } else if (item.action === 'insurance' || item.category === 'insurance_update') {
+      navigateToInsuranceInquiry();
+    } else if (item.action === 'rewards' || item.category === 'invoice_aging') {
       navigateToProfileSection('rewards');
+    } else if (item.action === 'timeline') {
+      navigateToTimeline();
     }
 
     setIsNotificationsVisible(false);
@@ -2051,21 +3931,50 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   };
 
   const handleUpdateCartQuantity = (productKey, nextQuantity) => {
-    setCartItems((currentItems) => {
-      if (nextQuantity <= 0) {
-        const nextItems = { ...currentItems };
-        delete nextItems[productKey];
-        return nextItems;
-      }
+    const existingItem = cartState.items.find((item) => item.id === productKey);
 
-      return {
-        ...currentItems,
-        [productKey]: {
-          ...currentItems[productKey],
-          quantity: nextQuantity,
-        },
-      };
-    });
+    if (!existingItem || !account?.userId) {
+      return;
+    }
+
+    setCartState((currentState) => ({
+      ...currentState,
+      savingItemId: existingItem.id,
+      errorMessage: '',
+    }));
+
+    void (async () => {
+      try {
+        const snapshot =
+          nextQuantity <= 0
+            ? await removeCustomerCartItem({
+                itemId: existingItem.id,
+                customerUserId: account.userId,
+                accessToken: account.accessToken,
+              })
+            : await updateCustomerCartItem({
+                itemId: existingItem.id,
+                customerUserId: account.userId,
+                quantity: nextQuantity,
+                accessToken: account.accessToken,
+              });
+
+        applyCartSnapshot(snapshot);
+        resetCheckoutFlow();
+      } catch (error) {
+        const nextMessage =
+          error instanceof ApiError && error.message
+            ? error.message
+            : 'We could not update that cart item right now.';
+
+        setCartState((currentState) => ({
+          ...currentState,
+          status: currentState.totalQuantity > 0 ? 'ready' : 'error',
+          errorMessage: nextMessage,
+          savingItemId: null,
+        }));
+      }
+    })();
   };
 
   const handleSignOut = () => {
@@ -2083,29 +3992,55 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
   };
 
   const handleCancelDeleteAccount = () => {
+    if (deleteSubmitting) {
+      return;
+    }
+
     setDeletePassword('');
     setDeletePasswordError('');
     setIsDeleteModalVisible(false);
   };
 
-  const handleConfirmDeleteAccount = () => {
+  const handleConfirmDeleteAccount = async () => {
     if (!deletePassword.trim()) {
       setDeletePasswordError('Enter your current password to continue.');
       return;
     }
 
-    if (deletePassword !== account?.password) {
-      setDeletePasswordError('Current password is incorrect.');
+    if (!onStartDeleteAccountOtp) {
+      setDeletePasswordError('Delete account is unavailable right now. Please try again later.');
       return;
     }
 
-    setIsDeleteModalVisible(false);
-    setDeletePassword('');
+    setDeleteSubmitting(true);
     setDeletePasswordError('');
-    navigation.navigate('OTP', {
-      email: account?.email,
-      otpPurpose: 'deleteAccount',
-    });
+
+    try {
+      const enrollment = await onStartDeleteAccountOtp({
+        currentPassword: deletePassword,
+      });
+
+      setIsDeleteModalVisible(false);
+      setDeletePassword('');
+      setDeletePasswordError('');
+      navigation.navigate('OTP', {
+        email: account?.email,
+        maskedEmail: enrollment?.maskedEmail ?? account?.email,
+        enrollmentId: enrollment?.enrollmentId,
+        otpExpiresAt: enrollment?.otpExpiresAt,
+        otpPurpose: 'deleteAccount',
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : 'We could not start account deletion right now. Please try again.';
+
+      setDeletePasswordError(message);
+      Alert.alert('Delete Account', message);
+    } finally {
+      setDeleteSubmitting(false);
+    }
   };
 
   const handleProfileFieldChange = (key, value) => {
@@ -2280,7 +4215,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
           </View>
 
           <View style={styles.loyaltyBadge}>
-            <Text style={styles.loyaltyBadgeText}>Gold</Text>
+            <Text style={styles.loyaltyBadgeText}>{loyaltyTier.label}</Text>
           </View>
         </View>
       </View>
@@ -2293,24 +4228,35 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
           </View>
 
           <View style={styles.loyaltyPointsWrap}>
-            <Text style={styles.loyaltyPointsValue}>{loyaltyPoints.toLocaleString()}</Text>
+            <Text style={styles.loyaltyPointsValue}>{loyaltyPointsBalance.toLocaleString()}</Text>
             <Text style={styles.loyaltyPointsLabel}>Total Points</Text>
           </View>
         </View>
 
         <View style={styles.loyaltyMetaRow}>
-          <Text style={styles.currentTierText}>Gold</Text>
-          <Text style={styles.nextTierText}>260 pts to Platinum</Text>
+          <Text style={styles.currentTierText}>{loyaltyTier.label}</Text>
+          <Text style={styles.nextTierText}>
+            {loyaltyTier.nextTierLabel
+              ? `${loyaltyTier.pointsToNext.toLocaleString()} pts to ${loyaltyTier.nextTierLabel}`
+              : 'Top loyalty tier reached'}
+          </Text>
         </View>
 
         <View style={styles.loyaltyTrack}>
-          <View style={styles.loyaltyFill} />
+          <View
+            style={[
+              styles.loyaltyFill,
+              {
+                width: `${Math.max(loyaltyTier.progressRatio, 0.08) * 100}%`,
+              },
+            ]}
+          />
         </View>
 
         <View style={styles.loyaltyTierRow}>
-          {tierThresholds.map((tier) => {
-            const isReached = loyaltyPoints >= tier.minPoints;
-            const isCurrent = tier.key === 'gold';
+          {customerLoyaltyTiers.map((tier) => {
+            const isReached = loyaltyPointsBalance >= tier.minPoints;
+            const isCurrent = tier.key === loyaltyTier.key;
 
             return (
               <View key={tier.key} style={styles.loyaltyTierItem}>
@@ -2363,13 +4309,41 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
 
       {profileSection === 'rewards' ? (
         <>
-          {rewardOffers.map((item) => (
-            <RewardOfferCard
-              key={item.key}
-              item={item}
-              onClaim={() => Alert.alert('Reward Claimed', `${item.title} has been added to your account.`)}
-            />
-          ))}
+          {loyaltyState.status === 'loading' && !loyaltyRewards.length ? (
+            <View style={styles.infoPanel}>
+          <Text style={styles.infoPanelTitle}>Loading loyalty rewards</Text>
+          <Text style={styles.infoPanelText}>
+                We are syncing your loyalty balance, service-earned points, and reward catalog from the live backend.
+          </Text>
+        </View>
+          ) : null}
+
+          {loyaltyState.errorMessage ? (
+            <View style={styles.infoPanel}>
+              <Text style={styles.infoPanelTitle}>Loyalty data unavailable</Text>
+              <Text style={styles.infoPanelText}>{loyaltyState.errorMessage}</Text>
+            </View>
+          ) : null}
+
+          {loyaltyRewards.length ? (
+            loyaltyRewards.map((item) => (
+              <RewardOfferCard
+                key={item.key}
+                item={{
+                  ...item,
+                  loading: loyaltyState.redeemingRewardId === item.id,
+                }}
+                onClaim={() => handleRedeemReward(item)}
+              />
+            ))
+          ) : loyaltyState.status !== 'loading' ? (
+            <View style={styles.infoPanel}>
+              <Text style={styles.infoPanelTitle}>Reward catalog is empty</Text>
+              <Text style={styles.infoPanelText}>
+                Live loyalty points are now connected. Rewards will appear here once staff publish active catalog entries for service-earned points.
+              </Text>
+            </View>
+          ) : null}
         </>
       ) : null}
 
@@ -2377,9 +4351,16 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>Insurance inquiry tracking</Text>
           <Text style={styles.infoPanelText}>
-            Monitor quotations, submitted policies, and follow-up requests in one place once the
-            insurance module goes live.
+            Submit a customer insurance inquiry, keep the selected vehicle aligned with backend
+            ownership rules, and check customer-safe claim-status updates from one screen.
           </Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, styles.editProfileButton]}
+            onPress={navigateToInsuranceInquiry}
+            activeOpacity={0.86}
+          >
+            <Text style={styles.primaryButtonText}>Open Insurance Inquiry</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
@@ -2401,7 +4382,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         <MenuRow
           icon="bell-outline"
           label="Notification Preferences"
-          onPress={() => Alert.alert('Notifications', 'Notification preferences are coming soon.')}
+          onPress={() => setMenuScreen('notificationPreferences')}
         />
       </View>
 
@@ -2582,8 +4563,8 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
       <View style={styles.deleteSection}>
         <Text style={styles.deleteTitle}>Delete your data and account</Text>
         <Text style={styles.deleteDescription}>
-          This permanently removes your AutoCare profile, stored details, and saved settings from
-          this prototype flow.
+          This archives your account, signs you out, and frees the same email so it can be used
+          again later. Workshop history stays preserved on the backend.
         </Text>
         <TouchableOpacity
           style={styles.deleteButton}
@@ -2670,12 +4651,73 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         }}
       />
 
+      {loyaltyTransactions.length ? (
+        <View style={styles.loyaltyActivityCard}>
+          <Text style={styles.loyaltyActivityTitle}>Recent Loyalty Activity</Text>
+          <Text style={styles.loyaltyActivitySubtitle}>
+            Derived ledger updates from your customer loyalty account.
+          </Text>
+          {loyaltyTransactions.slice(0, 5).map((item) => (
+            <LoyaltyTransactionRow key={item.id} item={item} />
+          ))}
+        </View>
+      ) : (
+        <View style={styles.infoBlock}>
+          <Text style={styles.infoTitle}>No loyalty activity yet</Text>
+          <Text style={styles.infoText}>
+            Earn points from completed paid service work, then come back here to track your loyalty ledger.
+          </Text>
+        </View>
+      )}
+      </>
+    ));
+
+  const renderNotificationPreferences = () =>
+    renderScrollableContent(styles.scrollContent, (
+      <>
+      <ScreenBackHeader
+        title="Notification Preferences"
+        subtitle="Choose which live customer updates should reach your account."
+        onBack={() => setMenuScreen('root')}
+      />
+
       <View style={styles.infoBlock}>
-        <Text style={styles.infoTitle}>Claim Your Gift</Text>
+        <Text style={styles.infoTitle}>Async reminder sync</Text>
         <Text style={styles.infoText}>
-          Your next loyalty reward is being prepared. Gift Center redemption flow is coming soon.
+          Booking, insurance, back-job, follow-up, and invoice reminders appear here after the notification service processes the latest source-domain fact.
         </Text>
       </View>
+
+      {notificationModuleState.errorMessage ? (
+        <View style={styles.infoBlock}>
+          <Text style={styles.infoTitle}>Notification sync issue</Text>
+          <Text style={styles.infoText}>{notificationModuleState.errorMessage}</Text>
+        </View>
+      ) : null}
+
+      {notificationModuleState.status === 'loading' && !notificationModuleState.preferences ? (
+        <View style={styles.infoBlock}>
+          <Text style={styles.infoTitle}>Loading preferences</Text>
+          <Text style={styles.infoText}>
+            Pulling your current customer notification settings from the backend.
+          </Text>
+        </View>
+      ) : null}
+
+      {notificationModuleState.preferences ? (
+        <View style={styles.preferenceCard}>
+          {notificationPreferenceOptions.map((item) => (
+            <NotificationPreferenceToggleRow
+              key={item.key}
+              label={item.label}
+              description={item.description}
+              value={notificationModuleState.preferences?.[item.key]}
+              disabled={notificationModuleState.savingKey === item.key}
+              onValueChange={(value) => handleUpdateNotificationPreference(item.key, value)}
+            />
+          ))}
+        </View>
+      ) : null}
       </>
     ));
 
@@ -2698,106 +4740,335 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     ));
 
   const renderStoreContent = () => {
-    const searchTerm = shopSearch.trim().toLowerCase();
-    const filteredProducts = shopProducts.filter((product) => {
-      const matchesCategory =
-        activeShopCategory === 'All' || product.category === activeShopCategory;
-      const matchesSearch =
-        !searchTerm ||
-        product.name.toLowerCase().includes(searchTerm) ||
-        product.brand.toLowerCase().includes(searchTerm);
+    const selectedStoreOrder =
+      storeOrderTrackingState.order ||
+      storeOrderHistoryState.orders.find((order) => order.id === selectedStoreOrderId) ||
+      null;
+    const selectedStoreInvoice = storeOrderTrackingState.invoice;
+    const isStoreRefreshBusy =
+      storeOrderHistoryState.status === 'loading' ||
+      storeOrderTrackingState.status === 'loading' ||
+      storeOrderTrackingState.invoiceStatus === 'loading';
 
-      return matchesCategory && matchesSearch;
-    });
-    const cartEntries = Object.values(cartItems);
-    const cartCount = cartEntries.reduce((sum, item) => sum + item.quantity, 0);
-    const cartTotal = cartEntries.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
-    return renderScrollableContent(styles.shopScrollContent, (
+    return renderScrollableContent(styles.scrollContent, (
       <>
-      <View style={styles.shopHeader}>
-        <View style={styles.shopHeaderCopy}>
-          <Text style={styles.shopEyebrow}>CRUISERS CRIB</Text>
-          <Text style={styles.shopTitle}>Auto Shop</Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.shopCartButton}
-          onPress={() => setIsCartVisible(true)}
-          activeOpacity={0.86}
-        >
-          <MaterialCommunityIcons name="cart-outline" size={24} color={colors.labelText} />
-          {cartCount > 0 ? (
-            <View style={styles.shopCartBadge}>
-              <Text style={styles.shopCartBadgeText}>{cartCount}</Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
+      <View style={styles.storeHeroCard}>
+        <Text style={styles.storeHeroEyebrow}>ECOMMERCE</Text>
+        <Text style={styles.storeHeroTitle}>Shop, Track, And Reconcile</Text>
+        <Text style={styles.storeHeroText}>
+          Product browse, cart mutation, invoice preview, order history, invoice aging, and payment
+          entries all stay inside the customer app while staff settlement remains a separate backend
+          truth.
+        </Text>
       </View>
 
-      <View style={styles.shopSearchWrap}>
-        <MaterialCommunityIcons name="magnify" size={20} color={colors.mutedText} />
-        <TextInput
-          value={shopSearch}
-          onChangeText={setShopSearch}
-          placeholder="Search parts, products, brands..."
-          placeholderTextColor={colors.mutedText}
-          style={styles.shopSearchInput}
-          selectionColor={colors.primary}
-        />
-      </View>
-
-      <ScrollView
-        horizontal
-        style={styles.shopCategoryScroller}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.shopCategoryRow}
-      >
-        {shopCategories.map((category) => (
-          <ShopCategoryChip
-            key={category}
-            label={category}
-            isActive={activeShopCategory === category}
-            onPress={() => setActiveShopCategory(category)}
+      <View style={styles.sectionTabsWrap}>
+        {storeSections.map((item) => (
+          <ProfileSectionTab
+            key={item.key}
+            item={item}
+            isActive={storeSection === item.key}
+            onPress={() => setStoreSection(item.key)}
           />
         ))}
-      </ScrollView>
-
-      <View style={styles.shopToolbar}>
-        <Text style={styles.shopProductCount}>
-          {filteredProducts.length} product{filteredProducts.length === 1 ? '' : 's'}
-        </Text>
-
-        <TouchableOpacity
-          style={styles.shopFilterButton}
-          onPress={() => Alert.alert('Filters', 'Advanced filters can be added next.')}
-          activeOpacity={0.86}
-        >
-          <MaterialCommunityIcons name="tune-variant" size={16} color={colors.labelText} />
-          <Text style={styles.shopFilterText}>Filter</Text>
-        </TouchableOpacity>
       </View>
 
-      <View style={styles.shopGrid}>
-        {filteredProducts.length > 0 ? (
-          filteredProducts.map((product) => (
-            <View key={product.key} style={styles.shopGridItem}>
-            <ProductCard
-              item={product}
-              quantity={cartItems[product.key]?.quantity || 0}
-              onAdd={() => handleAddToCart(product)}
-              onOpen={() => handleOpenProduct(product)}
-            />
+      {storeSection === 'catalog' ? (
+        <>
+          <ShopCatalogSection
+            status={catalogState.status}
+            categories={catalogState.categories}
+            products={catalogState.products}
+            errorMessage={catalogState.errorMessage}
+            cartCount={cartState.totalQuantity}
+            onOpenProduct={(product) => {
+              void handleOpenProduct(product);
+            }}
+            onOpenCart={handleOpenCart}
+            onRefresh={() => {
+              void loadCatalogModuleState();
+            }}
+          />
+
+          <View style={styles.infoBlock}>
+            <Text style={styles.infoTitle}>Catalog and checkout boundary</Text>
+            <Text style={styles.infoText}>
+              Product browse, cart mutation, invoice preview, and invoice checkout all use the ecommerce
+              service on the same host as your main API, but on port 3001.
+            </Text>
           </View>
-        ))
-        ) : (
-          <View style={styles.shopEmptyState}>
-            <MaterialCommunityIcons name="package-variant-closed" size={34} color={colors.border} />
-            <Text style={styles.shopEmptyTitle}>No products found</Text>
-            <Text style={styles.shopEmptyText}>Try a different search or switch categories.</Text>
+
+          <View style={styles.infoBlock}>
+            <Text style={styles.infoTitle}>Need post-checkout tracking?</Text>
+            <Text style={styles.infoText}>
+              Open the Orders tab to review direct ecommerce order and invoice truth without mixing that state into your live cart, notifications, or loyalty history.
+            </Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => setStoreSection('orders')}
+              activeOpacity={0.88}
+            >
+              <Text style={styles.secondaryButtonText}>Open Orders</Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
+        </>
+      ) : (
+        <>
+          <View style={styles.storeOrdersToolbar}>
+            <View style={styles.storeOrdersToolbarCopy}>
+              <Text style={styles.bookingSectionLabel}>Order History</Text>
+              <Text style={styles.storeOrdersToolbarText}>
+                Read-only customer order and invoice truth from ecommerce routes. Notifications and loyalty refresh separately.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.bookingDiscoveryRefreshButton}
+              onPress={() => {
+                void handleRefreshStoreOrders();
+              }}
+              activeOpacity={isStoreRefreshBusy ? 1 : 0.86}
+              disabled={isStoreRefreshBusy}
+            >
+              {isStoreRefreshBusy ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <MaterialCommunityIcons name="refresh" size={18} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {storeOrderHistoryState.status === 'loading' && !storeOrderHistoryState.orders.length ? (
+            <View style={styles.checkoutStateCard}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.checkoutStateTitle}>Loading order history</Text>
+              <Text style={styles.checkoutStateText}>
+                Fetching your invoice-backed ecommerce orders and tracking summaries now.
+              </Text>
+            </View>
+          ) : null}
+
+          {storeOrderHistoryState.status === 'error' && !storeOrderHistoryState.orders.length ? (
+            <View style={styles.checkoutStateCard}>
+              <MaterialCommunityIcons name="receipt-text-remove-outline" size={30} color="#FFB86B" />
+              <Text style={styles.checkoutStateTitle}>Order history unavailable</Text>
+              <Text style={styles.checkoutStateText}>
+                {storeOrderHistoryState.errorMessage || 'We could not load your order history right now.'}
+              </Text>
+              <TouchableOpacity
+                style={styles.productDetailRetryButton}
+                onPress={() => {
+                  void handleRefreshStoreOrders();
+                }}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.productDetailRetryButtonText}>Retry orders</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {storeOrderHistoryState.status !== 'loading' &&
+          storeOrderHistoryState.status !== 'error' &&
+          !storeOrderHistoryState.orders.length ? (
+            <View style={styles.checkoutStateCard}>
+              <MaterialCommunityIcons name="receipt-text-clock-outline" size={30} color={colors.primary} />
+              <Text style={styles.checkoutStateTitle}>No ecommerce orders yet</Text>
+              <Text style={styles.checkoutStateText}>
+                Invoice-backed orders will appear here after you complete checkout from the catalog.
+              </Text>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => setStoreSection('catalog')}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.secondaryButtonText}>Back to Catalog</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {storeOrderHistoryState.orders.length ? (
+            <View style={styles.storeOrderList}>
+              {storeOrderHistoryState.orders.map((order) => (
+                <StoreOrderCard
+                  key={order.id}
+                  order={order}
+                  isSelected={selectedStoreOrderId === order.id}
+                  onPress={() => handleSelectStoreOrder(order)}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          {storeOrderTrackingState.status === 'loading' && selectedStoreOrderId ? (
+            <View style={styles.checkoutStateCard}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.checkoutStateTitle}>Refreshing order tracking</Text>
+              <Text style={styles.checkoutStateText}>
+                Pulling the selected order snapshot and invoice tracking detail now.
+              </Text>
+            </View>
+          ) : null}
+
+          {(storeOrderTrackingState.status === 'error' ||
+            storeOrderTrackingState.status === 'unauthorized') &&
+          selectedStoreOrderId ? (
+            <View style={styles.checkoutStateCard}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={28} color="#FF8B8B" />
+              <Text style={styles.checkoutStateTitle}>Tracking unavailable</Text>
+              <Text style={styles.checkoutStateText}>
+                {storeOrderTrackingState.errorMessage || 'We could not load the selected order right now.'}
+              </Text>
+            </View>
+          ) : null}
+
+          {selectedStoreOrder ? (
+            <>
+              <View style={styles.checkoutSummaryCard}>
+                <Text style={styles.checkoutSummaryTitle}>Selected Order</Text>
+                <View style={styles.checkoutSummaryRow}>
+                  <Text style={styles.checkoutSummaryLabel}>Order</Text>
+                  <Text style={styles.checkoutSummaryValue}>{selectedStoreOrder.orderNumber}</Text>
+                </View>
+                <View style={styles.checkoutSummaryRow}>
+                  <Text style={styles.checkoutSummaryLabel}>Created</Text>
+                  <Text style={styles.checkoutSummaryValue}>
+                    {formatStoreDateTimeLabel(selectedStoreOrder.createdAt)}
+                  </Text>
+                </View>
+                <View style={styles.checkoutSummaryRow}>
+                  <Text style={styles.checkoutSummaryLabel}>Status</Text>
+                  <Text style={styles.checkoutSummaryValue}>{selectedStoreOrder.statusLabel}</Text>
+                </View>
+                <View style={styles.checkoutSummaryRow}>
+                  <Text style={styles.checkoutSummaryLabel}>Subtotal</Text>
+                  <Text style={styles.checkoutSummaryValue}>{selectedStoreOrder.subtotalLabel}</Text>
+                </View>
+                <View style={styles.checkoutSummaryRow}>
+                  <Text style={styles.checkoutSummaryLabel}>Notes</Text>
+                    <Text style={styles.checkoutSummaryValue}>
+                      {selectedStoreOrder.notes || 'No checkout notes were attached.'}
+                    </Text>
+                </View>
+
+                <Text style={styles.checkoutSummaryNote}>{selectedStoreOrder.crossServiceHint}</Text>
+              </View>
+
+              <View style={styles.checkoutFormCard}>
+                <Text style={styles.checkoutCardTitle}>Invoice Tracking</Text>
+
+                {selectedStoreInvoice ? (
+                  <>
+                    <View style={styles.checkoutSummaryRow}>
+                      <Text style={styles.checkoutSummaryLabel}>Invoice</Text>
+                      <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.invoiceNumber}</Text>
+                    </View>
+                    <View style={styles.checkoutSummaryRow}>
+                      <Text style={styles.checkoutSummaryLabel}>Status</Text>
+                      <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.statusLabel}</Text>
+                    </View>
+                    <View style={styles.checkoutSummaryRow}>
+                      <Text style={styles.checkoutSummaryLabel}>Aging</Text>
+                      <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.agingBucketLabel}</Text>
+                    </View>
+                    <View style={styles.checkoutSummaryRow}>
+                      <Text style={styles.checkoutSummaryLabel}>Amount Due</Text>
+                      <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.amountDueLabel}</Text>
+                    </View>
+                    <View style={styles.checkoutSummaryRow}>
+                      <Text style={styles.checkoutSummaryLabel}>Amount Paid</Text>
+                      <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.amountPaidLabel}</Text>
+                    </View>
+                    <View style={styles.checkoutSummaryRow}>
+                      <Text style={styles.checkoutSummaryLabel}>Issued</Text>
+                      <Text style={styles.checkoutSummaryValue}>
+                        {formatStoreDateLabel(selectedStoreInvoice.issuedAt)}
+                      </Text>
+                    </View>
+                    <View style={styles.checkoutSummaryRow}>
+                      <Text style={styles.checkoutSummaryLabel}>Due</Text>
+                      <Text style={styles.checkoutSummaryValue}>
+                        {formatStoreDateLabel(selectedStoreInvoice.dueAt)}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.checkoutSummaryNote}>{selectedStoreInvoice.agingSummary}</Text>
+                    <Text style={styles.checkoutSummaryNote}>{selectedStoreInvoice.crossServiceHint}</Text>
+
+                    {selectedStoreInvoice.paymentEntries.length ? (
+                      <View style={styles.storePaymentEntryList}>
+                        {selectedStoreInvoice.paymentEntries.map((paymentEntry) => (
+                          <StorePaymentEntryRow key={paymentEntry.id} item={paymentEntry} />
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.checkoutStateText}>
+                        No payment entries have been recorded yet. This screen only reflects manual backend
+                        records and never assumes gateway settlement.
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.checkoutStateText}>
+                      {storeOrderTrackingState.invoiceErrorMessage ||
+                        'Invoice tracking has not been published for this order yet.'}
+                    </Text>
+                    {selectedStoreOrder.invoice ? (
+                      <Text style={styles.checkoutSummaryNote}>
+                        Summary invoice status: {selectedStoreOrder.invoice.invoiceNumber} -{' '}
+                        {selectedStoreOrder.invoice.statusLabel}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.checkoutSummaryNote}>{selectedStoreOrder.crossServiceHint}</Text>
+                  </>
+                )}
+              </View>
+
+              <View style={styles.checkoutFormCard}>
+                <Text style={styles.checkoutCardTitle}>Billing Address Snapshot</Text>
+                <Text style={styles.checkoutAddressText}>
+                  {buildCheckoutAddressLabel(
+                    selectedStoreOrder.addresses?.find((address) => address.addressType === 'billing'),
+                  ) || 'No billing address was returned in the order snapshot.'}
+                </Text>
+              </View>
+
+              <View style={styles.checkoutFormCard}>
+                <Text style={styles.checkoutCardTitle}>Ordered Items</Text>
+                {selectedStoreOrder.items.map((item) => (
+                  <View key={item.id} style={styles.checkoutPreviewItem}>
+                    <View style={styles.checkoutPreviewItemCopy}>
+                      <Text style={styles.checkoutPreviewItemTitle}>{item.productName}</Text>
+                      <Text style={styles.checkoutPreviewItemMeta}>
+                        Qty {item.quantity}
+                        {item.productSku ? ` | SKU ${item.productSku}` : ''}
+                      </Text>
+                    </View>
+                    <Text style={styles.checkoutPreviewItemValue}>{item.lineTotalLabel}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.checkoutFormCard}>
+                <Text style={styles.checkoutCardTitle}>Order Status Timeline</Text>
+                {selectedStoreOrder.statusHistory.length ? (
+                  selectedStoreOrder.statusHistory.map((historyEntry, index) => (
+                    <StoreOrderHistoryEntry
+                      key={historyEntry.id}
+                      item={historyEntry}
+                      isLast={index === selectedStoreOrder.statusHistory.length - 1}
+                    />
+                  ))
+                ) : (
+                  <Text style={styles.checkoutStateText}>
+                    No order status transitions have been recorded beyond the initial checkout yet.
+                  </Text>
+                )}
+              </View>
+            </>
+          ) : null}
+        </>
+      )}
       </>
     ));
   };
@@ -2813,7 +5084,22 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     const selectedTimeSlot = bookingDiscovery.timeSlots.find(
       (timeSlot) => timeSlot.id === selectedBookingTimeKey,
     );
-    const bookingDateOptions = buildBookingDateOptions();
+    const bookingAvailability = bookingDiscovery.availability;
+    const selectedBookingDay = getBookingAvailabilityDayByDate(
+      bookingAvailability,
+      selectedBookingDateKey,
+    );
+    const selectedBookingSlotAvailability = getBookingAvailabilitySlotForTime(
+      selectedBookingDay,
+      selectedTimeSlot?.id,
+    );
+    const minimumDate = parseDateOnly(bookingAvailability.minBookableDate);
+    const maximumDate = parseDateOnly(bookingAvailability.maxBookableDate);
+    const selectedBookingDateValue =
+      parseDateOnly(selectedBookingDateKey) ||
+      minimumDate ||
+      parseDateOnly(bookingAvailability.startDate) ||
+      new Date();
     const bookingVehicleOptions = bookingDiscovery.vehicles.map((vehicle) => ({
       id: vehicle.id,
       title: buildOwnedVehicleLabel(vehicle),
@@ -2830,6 +5116,14 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
       metaLabel: service.categoryId ? 'Categorized' : null,
       durationLabel: formatBookingServiceDuration(service.durationMinutes),
     }));
+    const totalServicePages = Math.max(
+      1,
+      Math.ceil(bookingServiceOptions.length / BOOKING_SERVICE_PAGE_SIZE),
+    );
+    const paginatedBookingServiceOptions = bookingServiceOptions.slice(
+      bookingServicePage * BOOKING_SERVICE_PAGE_SIZE,
+      (bookingServicePage + 1) * BOOKING_SERVICE_PAGE_SIZE,
+    );
     const bookingTimeSlotOptions = bookingDiscovery.timeSlots.map((timeSlot) => ({
       key: timeSlot.id,
       label: timeSlot.label,
@@ -2838,12 +5132,26 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
       available: timeSlot.isActive,
       reason: timeSlot.isActive ? null : 'Unavailable',
     }));
+    const bookingDateOptions = bookingAvailability.days.map((day) =>
+      buildBookingDateCardItem(day, selectedTimeSlot),
+    );
+    const hasPreviousAvailabilityWindow =
+      bookingAvailability.status === 'ready' &&
+      Boolean(bookingAvailability.startDate) &&
+      Boolean(bookingAvailability.minBookableDate) &&
+      bookingAvailability.startDate > bookingAvailability.minBookableDate;
+    const hasNextAvailabilityWindow =
+      bookingAvailability.status === 'ready' &&
+      Boolean(bookingAvailability.endDate) &&
+      Boolean(bookingAvailability.maxBookableDate) &&
+      bookingAvailability.endDate < bookingAvailability.maxBookableDate;
     const isBookingReady =
       bookingDiscoveryStateKey === 'ready' &&
       Boolean(selectedVehicle) &&
       Boolean(selectedService?.isActive) &&
       Boolean(selectedTimeSlot?.isActive) &&
       Boolean(selectedBookingDateKey) &&
+      Boolean(selectedBookingSlotAvailability ? selectedBookingSlotAvailability.isAvailable : selectedBookingDay?.isBookable) &&
       bookingCreateState.status !== 'submitting';
     const selectedHistoryBooking = bookingHistory.bookings.find(
       (booking) => booking.id === selectedHistoryBookingId,
@@ -2881,7 +5189,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
               <View style={styles.bookingDiscoveryBannerCopy}>
                 <Text style={styles.bookingDiscoveryBannerTitle}>Live booking discovery</Text>
                 <Text style={styles.bookingDiscoveryBannerText}>
-                  Services and slot definitions come from live backend routes. Choosing a slot here does not hold capacity until booking create.
+                  Services, slot definitions, and appointment-date availability come from live backend routes. Choosing a slot here does not hold capacity until booking create.
                 </Text>
               </View>
             </View>
@@ -2904,7 +5212,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
             <BookingDiscoveryStatePanel
               icon="timer-sand"
               title="Loading booking discovery"
-              message="Fetching live services, time-slot definitions, and your eligible vehicles now."
+              message="Fetching live services, time-slot definitions, your eligible vehicles, and the current booking window now."
               isLoading
             />
           ) : bookingDiscoveryStateKey === 'unauthorized' ? (
@@ -2949,6 +5257,39 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
               )}
 
               <Text style={styles.bookingSectionLabel}>Available Services</Text>
+              <View style={styles.bookingPagerRow}>
+                <Text style={styles.bookingPagerText}>
+                  Page {Math.min(bookingServicePage + 1, totalServicePages)} of {totalServicePages}
+                </Text>
+                <View style={styles.bookingPagerActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.bookingPagerButton,
+                      bookingServicePage === 0 && styles.bookingPagerButtonDisabled,
+                    ]}
+                    disabled={bookingServicePage === 0}
+                    onPress={() => setBookingServicePage((currentPage) => Math.max(0, currentPage - 1))}
+                    activeOpacity={bookingServicePage === 0 ? 1 : 0.86}
+                  >
+                    <MaterialCommunityIcons name="chevron-left" size={16} color={colors.text} />
+                    <Text style={styles.bookingPagerButtonText}>Prev</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.bookingPagerButton,
+                      bookingServicePage >= totalServicePages - 1 && styles.bookingPagerButtonDisabled,
+                    ]}
+                    disabled={bookingServicePage >= totalServicePages - 1}
+                    onPress={() =>
+                      setBookingServicePage((currentPage) => Math.min(totalServicePages - 1, currentPage + 1))
+                    }
+                    activeOpacity={bookingServicePage >= totalServicePages - 1 ? 1 : 0.86}
+                  >
+                    <Text style={styles.bookingPagerButtonText}>Next</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={16} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+              </View>
               {!bookingDiscovery.services.some(isBookableService) ? (
                 <BookingDiscoveryStatePanel
                   icon="wrench-clock"
@@ -2956,7 +5297,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
                   message="The live services route returned no active booking services. Keep this state explicit instead of filling the list with placeholders."
                 />
               ) : null}
-              {bookingServiceOptions.map((service) => (
+              {paginatedBookingServiceOptions.map((service) => (
                 <BookingServiceCard
                   key={service.key}
                   item={service}
@@ -3008,32 +5349,139 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
 
               <Text style={styles.bookingSectionLabel}>Appointment Date</Text>
               <Text style={styles.bookingDateHint}>
-                Showing the next month of available appointment dates, starting tomorrow.
+                Page through the live booking window and choose a date that is still available for your selected slot.
               </Text>
-              <ScrollView
-                horizontal
-                style={styles.bookingDateScroller}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.bookingDateRow}
-              >
-                {bookingDateOptions.map((dateOption) => (
-                  <BookingDateCard
-                    key={dateOption.key}
-                    item={{
-                      ...dateOption,
-                      isOpen: true,
-                    }}
-                    isSelected={selectedBookingDateKey === dateOption.key}
-                    isCompact={isCompactPhone}
-                    onPress={() => {
-                      setSelectedBookingDateKey(dateOption.key);
-                      if (bookingCreateState.status !== 'submitting') {
-                        setBookingCreateState(createInitialBookingCreateState());
+              <View style={styles.bookingAvailabilityWindowCard}>
+                <View style={styles.bookingAvailabilityToolbar}>
+                  <View style={styles.bookingAvailabilityCopy}>
+                    <Text style={styles.bookingAvailabilityTitle}>Live Availability Window</Text>
+                    <Text style={styles.bookingAvailabilityText}>
+                      {getBookingAvailabilityWindowLabel(bookingAvailability)}
+                    </Text>
+                  </View>
+                  <View style={styles.bookingAvailabilityActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.bookingPagerButton,
+                        !hasPreviousAvailabilityWindow && styles.bookingPagerButtonDisabled,
+                      ]}
+                      disabled={!hasPreviousAvailabilityWindow || bookingAvailability.status === 'loading'}
+                      onPress={() => void handleShiftBookingAvailabilityWindow('prev')}
+                      activeOpacity={
+                        !hasPreviousAvailabilityWindow || bookingAvailability.status === 'loading'
+                          ? 1
+                          : 0.86
                       }
-                    }}
+                    >
+                      <MaterialCommunityIcons name="chevron-left" size={16} color={colors.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.bookingPagerButton,
+                        !hasNextAvailabilityWindow && styles.bookingPagerButtonDisabled,
+                      ]}
+                      disabled={!hasNextAvailabilityWindow || bookingAvailability.status === 'loading'}
+                      onPress={() => void handleShiftBookingAvailabilityWindow('next')}
+                      activeOpacity={
+                        !hasNextAvailabilityWindow || bookingAvailability.status === 'loading'
+                          ? 1
+                          : 0.86
+                      }
+                    >
+                      <MaterialCommunityIcons name="chevron-right" size={16} color={colors.text} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {bookingAvailability.status === 'loading' && !bookingAvailability.days.length ? (
+                  <BookingDiscoveryStatePanel
+                    icon="calendar-sync"
+                    title="Refreshing live availability"
+                    message="Loading backend-approved appointment dates for this booking window."
+                    isLoading
                   />
-                ))}
-              </ScrollView>
+                ) : null}
+
+                {bookingAvailability.status === 'error' ? (
+                  <BookingDiscoveryStatePanel
+                    icon="calendar-alert"
+                    title="Date availability is unavailable"
+                    message={bookingAvailability.errorMessage || 'We could not refresh the booking availability window right now.'}
+                    actionLabel="Retry"
+                    onAction={() => void loadBookingAvailabilityWindow(getCurrentBookingAvailabilityWindow())}
+                  />
+                ) : null}
+
+                {bookingAvailability.days.length ? (
+                  <View style={styles.bookingAvailabilityGrid}>
+                    {bookingDateOptions.map((dateOption) => (
+                      <BookingDateCard
+                        key={dateOption.key}
+                        item={dateOption}
+                        isSelected={selectedBookingDateKey === dateOption.key}
+                        isCompact={isCompactPhone}
+                        onPress={() => {
+                          setSelectedBookingDateKey(dateOption.key);
+                          if (bookingCreateState.status !== 'submitting') {
+                            setBookingCreateState(createInitialBookingCreateState());
+                          }
+                        }}
+                      />
+                    ))}
+                  </View>
+                ) : null}
+
+                <DatePickerField
+                  label="Jump To A Date"
+                  value={selectedBookingDateValue}
+                  onChange={(nextDate) => void handleChangeBookingDate(nextDate)}
+                  placeholder="Choose an appointment date"
+                  helperText={
+                    minimumDate && maximumDate
+                      ? `Supported booking horizon: ${formatDate(minimumDate)} to ${formatDate(maximumDate)}. The live cards above remain the source of truth.`
+                      : 'Choose a date inside the live booking horizon.'
+                  }
+                  title="Jump To A Booking Date"
+                  subtitle="Pick a farther date inside the backend-supported booking horizon."
+                  trailingLabel="Jump"
+                  minimumDate={minimumDate}
+                  maximumDate={maximumDate}
+                  initialPickerStep="day"
+                />
+
+                {selectedBookingDay ? (
+                  <View style={styles.bookingAvailabilitySelectionCard}>
+                    <View style={styles.bookingAvailabilitySelectionHeader}>
+                      <Text style={styles.bookingAvailabilitySelectionTitle}>
+                        {formatBookingDateLabel(selectedBookingDay.scheduledDate)}
+                      </Text>
+                      <View
+                        style={[
+                          styles.bookingDateStatusBadge,
+                          selectedBookingSlotAvailability?.isAvailable
+                            ? selectedBookingDay.status === 'limited'
+                              ? styles.bookingDateStatusBadgeWarning
+                              : styles.bookingDateStatusBadgeSuccess
+                            : styles.bookingDateStatusBadgeDanger,
+                        ]}
+                      >
+                        <Text style={styles.bookingDateStatusText}>
+                          {formatBookingAvailabilityStatusLabel(
+                            selectedBookingSlotAvailability?.isAvailable
+                              ? selectedBookingDay.status
+                              : 'full',
+                          )}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.bookingAvailabilitySelectionMeta}>
+                      {selectedBookingSlotAvailability
+                        ? `${selectedBookingSlotAvailability.label}: ${selectedBookingSlotAvailability.remainingCapacity} of ${selectedBookingSlotAvailability.capacity} spots left.`
+                        : `${selectedBookingDay.availableSlotCount} of ${selectedBookingDay.activeSlotCount} live slots are still available on this day.`}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
 
               <Text style={styles.bookingSectionLabel}>Special Notes</Text>
               <View style={styles.bookingNotesCard}>
@@ -3117,7 +5565,11 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
                   message={bookingCreateState.message}
                   isLoading={bookingCreateState.status === 'submitting'}
                   actionLabel={bookingCreateState.status === 'conflict' ? 'Refresh Options' : undefined}
-                  onAction={bookingCreateState.status === 'conflict' ? handleRefreshBookingDiscovery : undefined}
+                  onAction={
+                    bookingCreateState.status === 'conflict'
+                      ? () => void loadBookingAvailabilityWindow(getCurrentBookingAvailabilityWindow())
+                      : undefined
+                  }
                 />
               ) : null}
 
@@ -3326,6 +5778,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     const unreadCount = notificationsFeed.filter((item) => item.unread).length;
     const pinnedNotification = notificationsFeed[0] || null;
     const latestCustomerBooking = bookingHistory.bookings[0] ?? bookingCreateState.booking ?? null;
+    const totalBookingCount = bookingHistory.bookings.length;
     const latestBookingProgress =
       latestCustomerBooking?.status === 'completed' ||
       latestCustomerBooking?.status === 'declined' ||
@@ -3367,7 +5820,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         icon: 'shield-outline',
         bgColor: 'rgba(52, 127, 255, 0.14)',
         iconColor: '#347FFF',
-        onPress: () => navigateToProfileSection('insurance'),
+        onPress: navigateToInsuranceInquiry,
       },
       {
         key: 'rewards',
@@ -3385,7 +5838,23 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         iconColor: '#12D764',
         onPress: navigateToTimeline,
       },
+      {
+        key: 'support',
+        label: 'Support',
+        icon: 'message-processing-outline',
+        bgColor: 'rgba(157, 139, 255, 0.16)',
+        iconColor: '#9D8BFF',
+        onPress: navigateToSupport,
+      },
     ];
+    const handleFeaturedRewardPress = () => {
+      if (featuredReward?.available) {
+        handleRedeemReward(featuredReward);
+        return;
+      }
+
+      navigateToProfileSection('rewards');
+    };
 
     return renderScrollableContent(styles.homeScrollContent, (
       <>
@@ -3486,22 +5955,22 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         <View style={styles.homeVehicleShade} />
         <View style={styles.homeVehicleTopCopy}>
           <Text style={styles.homeVehicleTitle}>{primaryVehicleLabel}</Text>
-          <Text style={styles.homeVehicleMeta}>ABC-1234 • 2021 Model</Text>
+          <Text style={styles.homeVehicleMeta}>{primaryVehicleMetaLabel}</Text>
         </View>
 
         <View style={styles.homeVehicleStats}>
           <View style={styles.homeVehicleStatItem}>
-            <Text style={styles.homeVehicleStatValue}>12</Text>
-            <Text style={styles.homeVehicleStatLabel}>Services</Text>
+            <Text style={styles.homeVehicleStatValue}>{totalBookingCount.toLocaleString()}</Text>
+            <Text style={styles.homeVehicleStatLabel}>Bookings</Text>
           </View>
           <View style={styles.homeVehicleStatDivider} />
           <View style={styles.homeVehicleStatItem}>
-            <Text style={styles.homeVehicleStatValue}>{loyaltyPoints.toLocaleString()}</Text>
+            <Text style={styles.homeVehicleStatValue}>{loyaltyPointsBalance.toLocaleString()}</Text>
             <Text style={styles.homeVehicleStatLabel}>Points</Text>
           </View>
           <View style={styles.homeVehicleStatDivider} />
           <View style={styles.homeVehicleStatItem}>
-            <Text style={[styles.homeVehicleStatValue, styles.homeVehicleTierValue]}>Gold</Text>
+            <Text style={[styles.homeVehicleStatValue, styles.homeVehicleTierValue]}>{loyaltyTier.label}</Text>
             <Text style={styles.homeVehicleStatLabel}>Tier</Text>
           </View>
         </View>
@@ -3535,16 +6004,16 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         </TouchableOpacity>
       </View>
 
-      {recentServiceHistory.slice(0, 3).map((item) => (
+      {recentHomeServices.map((item) => (
         <HomeServiceRow key={item.key} item={item} />
       ))}
 
       <View style={styles.homeOfferCard}>
-        <Text style={styles.homeOfferEyebrow}>GOLD MEMBER OFFER</Text>
-        <Text style={styles.homeOfferTitle}>Get 15% off your next PMS!</Text>
-        <Text style={styles.homeOfferSubtitle}>Valid until April 30, 2026. Use code: GOLD15</Text>
-        <TouchableOpacity style={styles.homeOfferButton} onPress={() => navigateToProfileSection('rewards')} activeOpacity={0.86}>
-          <Text style={styles.homeOfferButtonText}>Claim Offer</Text>
+        <Text style={styles.homeOfferEyebrow}>{featuredRewardEyebrow}</Text>
+        <Text style={styles.homeOfferTitle}>{featuredRewardTitle}</Text>
+        <Text style={styles.homeOfferSubtitle}>{featuredRewardSubtitle}</Text>
+        <TouchableOpacity style={styles.homeOfferButton} onPress={handleFeaturedRewardPress} activeOpacity={0.86}>
+          <Text style={styles.homeOfferButtonText}>{featuredRewardButtonLabel}</Text>
         </TouchableOpacity>
         <View style={styles.homeOfferCircle} />
       </View>
@@ -3552,44 +6021,124 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     ));
   };
 
-  const renderTimelineContent = () =>
-    {
-      const visibleTimelineItems = recentServiceHistory.filter((item) =>
-        timelineFilter === 'All' ? true : item.type === timelineFilter
-      );
+  const renderTimelineContent = () => {
+    const visibleTimelineItems = vehicleLifecycleState.events.filter((item) =>
+      timelineFilter === 'All' ? true : item.filter === timelineFilter,
+    );
 
-      return renderScrollableContent(styles.timelineScrollContent, (
-        <>
+    const renderTimelineState = () => {
+      if (vehicleLifecycleState.status === 'timeline_loading') {
+        return (
+          <View style={styles.timelineStateCard}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.timelineStateTitle}>Loading lifecycle history</Text>
+            <Text style={styles.timelineStateText}>
+              We are pulling the latest normalized vehicle history for your account.
+            </Text>
+          </View>
+        );
+      }
+
+      if (vehicleLifecycleState.status === 'timeline_forbidden') {
+        return (
+          <TimelineStateCard
+            icon="lock-outline"
+            title="Lifecycle history unavailable"
+            message={vehicleLifecycleState.errorMessage}
+          />
+        );
+      }
+
+      if (vehicleLifecycleState.status === 'timeline_not_found') {
+        return (
+          <TimelineStateCard
+            icon="car-off"
+            title="Vehicle history not found"
+            message={vehicleLifecycleState.errorMessage}
+          />
+        );
+      }
+
+      if (vehicleLifecycleState.status === 'timeline_load_failed') {
+        return (
+          <TimelineStateCard
+            icon="wifi-strength-alert-outline"
+            title="Lifecycle history failed to load"
+            message={vehicleLifecycleState.errorMessage}
+          />
+        );
+      }
+
+      if (vehicleLifecycleState.status === 'timeline_empty') {
+        return (
+          <TimelineStateCard
+            icon="timeline-clock-outline"
+            title="No lifecycle events yet"
+            message={
+              vehicleLifecycleState.errorMessage ||
+              'This vehicle does not have customer-visible lifecycle history yet.'
+            }
+          />
+        );
+      }
+
+      if (!visibleTimelineItems.length) {
+        return (
+          <TimelineStateCard
+            icon="filter-outline"
+            title="No events in this filter"
+            message="Try a different lifecycle filter to reveal other verified or administrative milestones."
+          />
+        );
+      }
+
+      return visibleTimelineItems.map((item) => (
+        <View key={item.id} style={styles.timelineEventWrap}>
+          <Text style={styles.timelineDateMarker}>{item.dateLabel}</Text>
+          <TimelineEventCard item={item} />
+        </View>
+      ));
+    };
+
+    return renderScrollableContent(styles.timelineScrollContent, (
+      <>
         <View style={styles.timelineHeaderRow}>
           <View>
             <Text style={styles.bookingEyebrow}>VEHICLE LIFECYCLE</Text>
             <Text style={styles.timelineTitle}>Timeline</Text>
+            <Text style={styles.timelineSubtitle}>{primaryVehicleLabel}</Text>
           </View>
 
-          <MotionPressable style={styles.timelineFilterIconButton} onPress={() => null}>
-            <MaterialCommunityIcons name="filter-variant" size={18} color={colors.labelText} />
+          <MotionPressable style={styles.timelineFilterIconButton} onPress={() => setTimelineFilter('All')}>
+            <MaterialCommunityIcons name="refresh" size={18} color={colors.labelText} />
           </MotionPressable>
         </View>
 
+        <LifecycleSummaryCard summaryCard={vehicleLifecycleState.summaryCard} />
+
         <View style={styles.timelineStatsRow}>
           <View style={styles.timelineStatCard}>
-            <Text style={[styles.timelineStatValue, styles.timelineStatValueWarm]}>12</Text>
-            <Text style={styles.timelineStatLabel}>Total Services</Text>
-          </View>
-          <View style={styles.timelineStatCard}>
-            <Text style={styles.timelineStatValue}>{'\u20B1'}24.5k</Text>
-            <Text style={styles.timelineStatLabel}>Spent</Text>
+            <Text style={[styles.timelineStatValue, styles.timelineStatValueWarm]}>
+              {vehicleLifecycleState.stats.totalEvents}
+            </Text>
+            <Text style={styles.timelineStatLabel}>Total Events</Text>
           </View>
           <View style={styles.timelineStatCard}>
             <Text style={[styles.timelineStatValue, styles.timelineStatValueHighlight]}>
-              {loyaltyPoints.toLocaleString()}
+              {vehicleLifecycleState.stats.verifiedEvents}
             </Text>
-            <Text style={styles.timelineStatLabel}>Points Earned</Text>
+            <Text style={styles.timelineStatLabel}>Verified</Text>
+          </View>
+          <View style={styles.timelineStatCard}>
+            <Text style={styles.timelineStatValue}>
+              {vehicleLifecycleState.stats.administrativeEvents}
+            </Text>
+            <Text style={styles.timelineStatLabel}>Administrative</Text>
           </View>
         </View>
 
         <View style={styles.timelineFilterRow}>
-          {['All', 'Service', 'Insurance', 'Booking'].map((filterLabel) => (
+          {vehicleLifecycleState.filters.map((filterLabel) => (
             <MotionPressable
               key={filterLabel}
               style={[
@@ -3610,19 +6159,18 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
           ))}
         </View>
 
-        {visibleTimelineItems.map((item) => (
-          <View key={item.key} style={styles.timelineEventWrap}>
-            <Text style={styles.timelineDateMarker}>{item.dateLabel}</Text>
-            <TimelineEventCard item={item} />
-          </View>
-        ))}
-        </>
-      ));
-    };
+        {renderTimelineState()}
+      </>
+    ));
+  };
 
   const renderMenuContent = () => {
     if (menuScreen === 'settings') {
       return renderSettingsMenu();
+    }
+
+    if (menuScreen === 'notificationPreferences') {
+      return renderNotificationPreferences();
     }
 
     if (menuScreen === 'personal') {
@@ -3664,10 +6212,12 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
     return renderMenuContent();
   };
 
-  const cartEntries = Object.values(cartItems);
-  const cartCount = cartEntries.reduce((sum, item) => sum + item.quantity, 0);
-  const cartTotal = cartEntries.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const selectedProductQuantity = selectedProduct ? cartItems[selectedProduct.key]?.quantity || 0 : 0;
+  const cartEntries = cartState.items;
+  const cartCount = cartState.totalQuantity;
+  const cartTotalLabel = cartState.subtotalLabel;
+  const checkoutPreviewItems = checkoutState.preview?.items ?? [];
+  const isCatalogDetailVisible = catalogDetailState.status !== 'idle';
+  const selectedCatalogProduct = catalogDetailState.product ?? catalogDetailState.previewProduct;
   const unreadNotificationCount = notificationsFeed.filter((item) => item.unread).length;
   const bottomNavSlotWidth = windowWidth / tabs.length;
   const bottomNavItemInset = isCompactPhone ? 3 : 6;
@@ -3759,7 +6309,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
                     <MaterialCommunityIcons name="bell-outline" size={28} color={colors.border} />
                     <Text style={styles.notificationsEmptyTitle}>No notifications</Text>
                     <Text style={styles.notificationsEmptyText}>
-                      Alerts and service updates will appear here.
+                      Alerts and service updates will appear here after the notification sync catches up.
                     </Text>
                   </View>
                 )}
@@ -3767,7 +6317,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
             </Animated.View>
           ) : null}
 
-          {selectedProduct ? (
+          {isCatalogDetailVisible ? (
             <Animated.View
               style={[
                 styles.productOverlay,
@@ -3790,7 +6340,13 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
                 showsVerticalScrollIndicator={false}
               >
                 <View style={styles.productHero}>
-                  <Image source={{ uri: selectedProduct.image }} style={styles.productHeroImage} />
+                  <View style={styles.productHeroImagePlaceholder}>
+                    <MaterialCommunityIcons
+                      name="package-variant-closed"
+                      size={56}
+                      color={colors.primary}
+                    />
+                  </View>
                   <View style={styles.productHeroShade} />
 
                   <TouchableOpacity
@@ -3803,93 +6359,152 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
                 </View>
 
                 <View style={styles.productDetailPanel}>
-                  {selectedProduct.badge ? (
-                    <View
-                      style={[
-                        styles.productDetailBadge,
-                        selectedProduct.badgeTone === 'warning'
-                          ? styles.productBadgeWarning
-                          : selectedProduct.badgeTone === 'featured'
-                            ? styles.productBadgeFeatured
-                            : styles.productBadgeSale,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.productBadgeText,
-                          selectedProduct.badgeTone === 'warning' && styles.productBadgeTextDark,
-                        ]}
-                      >
-                        {selectedProduct.badge}
+                  {catalogDetailState.status === 'loading' ? (
+                    <View style={styles.productDetailStateCard}>
+                      <ActivityIndicator color={colors.primary} />
+                      <Text style={styles.productDetailStateTitle}>Refreshing product details</Text>
+                      <Text style={styles.productDetailStateText}>
+                        Loading the latest customer-visible product data from ecommerce-service.
                       </Text>
                     </View>
                   ) : null}
 
-                  <Text style={styles.productDetailTitle}>{selectedProduct.name}</Text>
-                  <Text style={styles.productDetailBrand}>{selectedProduct.brand}</Text>
-
-                  <View style={styles.productDetailRatingRow}>
-                    <RatingStars rating={selectedProduct.rating} />
-                    <Text style={styles.productDetailRatingValue}>
-                      {selectedProduct.rating.toFixed(1)}
-                    </Text>
-                    <Text style={styles.productDetailReviewCount}>
-                      ({selectedProduct.reviews} reviews)
-                    </Text>
-                  </View>
-
-                  <View style={styles.productInfoCard}>
-                    <View style={styles.productInfoPrimary}>
-                      <Text style={styles.productDetailPrice}>
-                        {formatCurrency(selectedProduct.price)}
-                      </Text>
-                      {selectedProduct.compareAtPrice ? (
-                        <Text style={styles.productDetailComparePrice}>
-                          {formatCurrency(selectedProduct.compareAtPrice)}
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    <View style={styles.productInfoMeta}>
-                      <View style={styles.productInfoStatusRow}>
-                        <MaterialCommunityIcons
-                          name="cube-outline"
-                          size={15}
-                          color={
-                            selectedProduct.availability.toLowerCase() === 'low stock'
-                              ? '#FFD24A'
-                              : colors.success
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.productInfoStatusText,
-                            selectedProduct.availability.toLowerCase() === 'low stock' &&
-                              styles.productAvailabilityWarning,
-                          ]}
-                        >
-                          {selectedProduct.availability}
+                  {catalogDetailState.status === 'ready' && selectedCatalogProduct ? (
+                    <>
+                      <View style={styles.productDetailStatusRow}>
+                        <View style={styles.productDetailStatusBadge}>
+                          <Text style={styles.productDetailStatusBadgeText}>
+                            {selectedCatalogProduct.visibilityLabel}
+                          </Text>
+                        </View>
+                        <Text style={styles.productDetailUpdatedText}>
+                          Updated {selectedCatalogProduct.updatedLabel}
                         </Text>
                       </View>
-                      <Text style={styles.productInfoCategory}>
-                        Category: {selectedProduct.category}
+
+                      <Text style={styles.productDetailTitle}>{selectedCatalogProduct.name}</Text>
+                      <Text style={styles.productDetailBrand}>
+                        {selectedCatalogProduct.categoryName}
                       </Text>
+                      <Text style={styles.productDetailPrice}>
+                        {selectedCatalogProduct.priceLabel}
+                      </Text>
+
+                      <View style={styles.productInfoCard}>
+                        <View style={styles.productDetailInfoRow}>
+                          <Text style={styles.productDetailInfoLabel}>SKU</Text>
+                          <Text style={styles.productDetailInfoValue}>
+                            {selectedCatalogProduct.sku}
+                          </Text>
+                        </View>
+                        <View style={styles.productDetailInfoRow}>
+                          <Text style={styles.productDetailInfoLabel}>Category</Text>
+                          <Text style={styles.productDetailInfoValue}>
+                            {selectedCatalogProduct.categoryName}
+                          </Text>
+                        </View>
+                        <View style={styles.productDetailInfoRow}>
+                          <Text style={styles.productDetailInfoLabel}>Product ID</Text>
+                          <Text numberOfLines={1} style={styles.productDetailInfoValue}>
+                            {selectedCatalogProduct.id}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.productDetailSectionLabel}>Product Details</Text>
+                      <Text style={styles.productDetailDescription}>
+                        {selectedCatalogProduct.description}
+                      </Text>
+
+                      <View style={styles.productDetailStateCard}>
+                        <MaterialCommunityIcons
+                          name="receipt-text-outline"
+                          size={22}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.productDetailStateTitle}>Invoice checkout ready</Text>
+                        <Text style={styles.productDetailStateText}>
+                          Adding this product creates a live ecommerce cart entry. Checkout still
+                          creates an unpaid invoice order, not immediate payment settlement.
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.productDetailCartButton,
+                          cartState.savingItemId === selectedCatalogProduct.id && styles.productDetailCartButtonDisabled,
+                        ]}
+                        onPress={() => {
+                          void handleAddToCart(selectedCatalogProduct);
+                        }}
+                        activeOpacity={cartState.savingItemId === selectedCatalogProduct.id ? 1 : 0.88}
+                        disabled={cartState.savingItemId === selectedCatalogProduct.id}
+                      >
+                        {cartState.savingItemId === selectedCatalogProduct.id ? (
+                          <ActivityIndicator size="small" color={colors.onPrimary} />
+                        ) : (
+                          <MaterialCommunityIcons name="cart-plus" size={18} color={colors.onPrimary} />
+                        )}
+                        <Text style={styles.productDetailCartButtonText}>
+                          {cartState.savingItemId === selectedCatalogProduct.id ? 'Adding to Cart' : 'Add to Cart'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.secondaryButton}
+                        onPress={handleOpenCart}
+                        activeOpacity={0.88}
+                      >
+                        <Text style={styles.secondaryButtonText}>Open Cart</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
+
+                  {catalogDetailState.status === 'hidden' ? (
+                    <View style={styles.productDetailStateCard}>
+                      <MaterialCommunityIcons
+                        name="eye-off-outline"
+                        size={28}
+                        color="#FFB86B"
+                      />
+                      <Text style={styles.productDetailStateTitle}>
+                        {selectedCatalogProduct?.name || 'Product hidden'}
+                      </Text>
+                      <Text style={styles.productDetailStateText}>
+                        {catalogDetailState.errorMessage}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.productDetailRetryButton}
+                        onPress={() => {
+                          void loadCatalogModuleState();
+                        }}
+                        activeOpacity={0.88}
+                      >
+                        <Text style={styles.productDetailRetryButtonText}>Refresh catalog</Text>
+                      </TouchableOpacity>
                     </View>
-                  </View>
+                  ) : null}
 
-                  <Text style={styles.productDetailSectionLabel}>Product Details</Text>
-                  <Text style={styles.productDetailDescription}>{selectedProduct.description}</Text>
-
-                  <TouchableOpacity
-                    style={styles.productDetailCartButton}
-                    onPress={() => handleAddToCart(selectedProduct)}
-                    activeOpacity={0.88}
-                  >
-                    <MaterialCommunityIcons name="cart-outline" size={19} color={colors.onPrimary} />
-                    <Text style={styles.productDetailCartButtonText}>
-                      {selectedProductQuantity > 0 ? `Add Another (${selectedProductQuantity})` : 'Add to Cart'}
-                    </Text>
-                  </TouchableOpacity>
+                  {catalogDetailState.status === 'error' ? (
+                    <View style={styles.productDetailStateCard}>
+                      <MaterialCommunityIcons
+                        name="alert-circle-outline"
+                        size={28}
+                        color="#FF8B8B"
+                      />
+                      <Text style={styles.productDetailStateTitle}>Product unavailable</Text>
+                      <Text style={styles.productDetailStateText}>
+                        {catalogDetailState.errorMessage}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.productDetailRetryButton}
+                        onPress={handleRetrySelectedProduct}
+                        activeOpacity={0.88}
+                      >
+                        <Text style={styles.productDetailRetryButtonText}>Retry detail</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
                 </View>
               </ScrollView>
             </Animated.View>
@@ -3922,60 +6537,415 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
                 </TouchableOpacity>
 
                 <View style={styles.cartHeaderCopy}>
-                  <Text style={styles.cartTitle}>Your Cart</Text>
+                  <Text style={styles.cartTitle}>
+                    {checkoutState.stage === 'complete'
+                      ? 'Checkout Complete'
+                      : checkoutState.stage === 'preview'
+                        ? 'Invoice Checkout'
+                        : 'Your Cart'}
+                  </Text>
                   <Text style={styles.cartSubtitle}>
-                    {cartCount} item{cartCount === 1 ? '' : 's'}
+                    {checkoutState.stage === 'complete'
+                      ? checkoutState.order?.orderNumber || 'Invoice order created'
+                      : checkoutState.stage === 'preview'
+                        ? 'Review the immutable order snapshot before staff payment tracking begins.'
+                        : `${cartCount} item${cartCount === 1 ? '' : 's'}`}
                   </Text>
                 </View>
               </View>
 
-              {cartEntries.length === 0 ? (
-                <View style={styles.cartEmptyState}>
-                  <MaterialCommunityIcons
-                    name="cart-outline"
-                    size={42}
-                    color={colors.border}
-                  />
-                  <Text style={styles.cartEmptyText}>Your cart is empty</Text>
-                </View>
-              ) : (
-                <>
+              <View style={styles.cartBody}>
+                {checkoutState.stage === 'complete' && checkoutState.order ? (
                   <ScrollView
                     style={styles.cartItemsScroll}
                     contentContainerStyle={styles.cartItemsContent}
                     showsVerticalScrollIndicator={false}
                   >
-                    {cartEntries.map((item) => (
-                      <CartLineItem
-                        key={item.key}
-                        item={item}
-                        onDecrease={() =>
-                          handleUpdateCartQuantity(item.key, item.quantity - 1)
-                        }
-                        onIncrease={() =>
-                          handleUpdateCartQuantity(item.key, item.quantity + 1)
-                        }
+                    <View style={[styles.checkoutStateCard, styles.checkoutStateCardSuccess]}>
+                      <MaterialCommunityIcons
+                        name="check-decagram-outline"
+                        size={34}
+                        color="#4FD89A"
                       />
-                    ))}
-                  </ScrollView>
-
-                  <View style={styles.cartFooter}>
-                    <View style={styles.cartTotalRow}>
-                      <Text style={styles.cartTotalLabel}>Total</Text>
-                      <Text style={styles.cartTotalValue}>{formatCurrency(cartTotal)}</Text>
+                      <Text style={styles.checkoutStateTitle}>Invoice order created</Text>
+                      <Text style={styles.checkoutStateText}>
+                        Staff can now track invoice payment and fulfillment separately from your
+                        product cart. The order snapshot below will not change if the catalog later
+                        updates.
+                      </Text>
                     </View>
 
-                    <TouchableOpacity
-                      style={styles.cartCheckoutButton}
-                      onPress={() => Alert.alert('Checkout', 'Checkout flow can be connected next.')}
-                      activeOpacity={0.88}
-                    >
-                      <MaterialCommunityIcons name="check" size={18} color={colors.onPrimary} />
-                      <Text style={styles.cartCheckoutText}>Checkout Now</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
+                    <View style={styles.checkoutSummaryCard}>
+                      <Text style={styles.checkoutSummaryTitle}>Order Summary</Text>
+                      <View style={styles.checkoutSummaryRow}>
+                        <Text style={styles.checkoutSummaryLabel}>Order</Text>
+                        <Text style={styles.checkoutSummaryValue}>
+                          {checkoutState.order.orderNumber}
+                        </Text>
+                      </View>
+                      <View style={styles.checkoutSummaryRow}>
+                        <Text style={styles.checkoutSummaryLabel}>Status</Text>
+                        <Text style={styles.checkoutSummaryValue}>
+                          {checkoutState.order.statusLabel}
+                        </Text>
+                      </View>
+                      <View style={styles.checkoutSummaryRow}>
+                        <Text style={styles.checkoutSummaryLabel}>Invoice</Text>
+                        <Text style={styles.checkoutSummaryValue}>
+                          {checkoutState.order.invoice?.invoiceNumber || 'Pending'}
+                        </Text>
+                      </View>
+                      <View style={styles.checkoutSummaryRow}>
+                        <Text style={styles.checkoutSummaryLabel}>Amount Due</Text>
+                        <Text style={styles.checkoutSummaryValue}>
+                          {checkoutState.order.invoice?.amountDueLabel || checkoutState.order.subtotalLabel}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.checkoutFormCard}>
+                      <Text style={styles.checkoutCardTitle}>Billing Address Snapshot</Text>
+                      <Text style={styles.checkoutAddressText}>
+                        {buildCheckoutAddressLabel(
+                          checkoutState.order.addresses?.find(
+                            (address) => address.addressType === 'billing',
+                          ),
+                        ) || 'No billing address was returned in the order snapshot.'}
+                      </Text>
+                    </View>
+
+                    <View style={styles.checkoutFormCard}>
+                      <Text style={styles.checkoutCardTitle}>Ordered Items</Text>
+                      {checkoutState.order.items.map((item) => (
+                        <View key={item.id} style={styles.checkoutPreviewItem}>
+                          <View style={styles.checkoutPreviewItemCopy}>
+                            <Text style={styles.checkoutPreviewItemTitle}>{item.productName}</Text>
+                            <Text style={styles.checkoutPreviewItemMeta}>
+                              Qty {item.quantity}
+                              {item.productSku ? ` | SKU ${item.productSku}` : ''}
+                            </Text>
+                          </View>
+                          <Text style={styles.checkoutPreviewItemValue}>{item.lineTotalLabel}</Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    <View style={styles.cartFooter}>
+                      <TouchableOpacity
+                        style={styles.secondaryButton}
+                        onPress={() => {
+                          handleOpenStoreOrders(checkoutState.order);
+                          resetCheckoutFlow();
+                          setIsCartVisible(false);
+                        }}
+                        activeOpacity={0.88}
+                      >
+                        <Text style={styles.secondaryButtonText}>View Order History</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.cartCheckoutButton}
+                        onPress={() => {
+                          resetCheckoutFlow();
+                          setIsCartVisible(false);
+                        }}
+                        activeOpacity={0.88}
+                      >
+                        <MaterialCommunityIcons name="shopping-outline" size={18} color={colors.onPrimary} />
+                        <Text style={styles.cartCheckoutText}>Continue Shopping</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </ScrollView>
+                ) : (
+                  <ScrollView
+                    style={styles.cartItemsScroll}
+                    contentContainerStyle={styles.cartItemsContent}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {cartState.errorMessage ? (
+                      <View style={styles.checkoutStateCard}>
+                        <MaterialCommunityIcons
+                          name="alert-circle-outline"
+                          size={28}
+                          color="#FF8B8B"
+                        />
+                        <Text style={styles.checkoutStateTitle}>Cart sync issue</Text>
+                        <Text style={styles.checkoutStateText}>{cartState.errorMessage}</Text>
+                      </View>
+                    ) : null}
+
+                    {checkoutState.errorMessage &&
+                    !(checkoutState.stage === 'preview' && checkoutState.previewStatus === 'error') ? (
+                      <View style={styles.checkoutInlineAlert}>
+                        <MaterialCommunityIcons
+                          name="alert-circle-outline"
+                          size={18}
+                          color="#FFB86B"
+                        />
+                        <Text style={styles.checkoutInlineAlertText}>{checkoutState.errorMessage}</Text>
+                      </View>
+                    ) : null}
+
+                    {checkoutState.stage === 'preview' ? (
+                      <>
+                        {checkoutState.previewStatus === 'loading' ? (
+                          <View style={styles.checkoutStateCard}>
+                            <ActivityIndicator size="small" color={colors.primary} />
+                            <Text style={styles.checkoutStateTitle}>Loading invoice preview</Text>
+                            <Text style={styles.checkoutStateText}>
+                              Confirming your live cart snapshot before the order is created.
+                            </Text>
+                          </View>
+                        ) : null}
+
+                        {checkoutState.previewStatus === 'error' ? (
+                          <View style={styles.checkoutStateCard}>
+                            <MaterialCommunityIcons
+                              name="cart-off"
+                              size={30}
+                              color="#FFB86B"
+                            />
+                            <Text style={styles.checkoutStateTitle}>Preview unavailable</Text>
+                            <Text style={styles.checkoutStateText}>
+                              {checkoutState.errorMessage || 'We could not load the invoice preview right now.'}
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.productDetailRetryButton}
+                              onPress={() => {
+                                void handleStartCheckoutPreview();
+                              }}
+                              activeOpacity={0.88}
+                            >
+                              <Text style={styles.productDetailRetryButtonText}>Retry preview</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+
+                        {checkoutState.previewStatus === 'ready' ? (
+                          <>
+                            <View style={styles.checkoutSummaryCard}>
+                              <Text style={styles.checkoutSummaryTitle}>Invoice Preview</Text>
+                              <View style={styles.checkoutSummaryRow}>
+                                <Text style={styles.checkoutSummaryLabel}>Checkout Mode</Text>
+                                <Text style={styles.checkoutSummaryValue}>Invoice only</Text>
+                              </View>
+                              <View style={styles.checkoutSummaryRow}>
+                                <Text style={styles.checkoutSummaryLabel}>Items</Text>
+                                <Text style={styles.checkoutSummaryValue}>
+                                  {checkoutState.preview.totalQuantity}
+                                </Text>
+                              </View>
+                              <View style={styles.checkoutSummaryRow}>
+                                <Text style={styles.checkoutSummaryLabel}>Subtotal</Text>
+                                <Text style={styles.checkoutSummaryValue}>
+                                  {checkoutState.preview.subtotalLabel}
+                                </Text>
+                              </View>
+                              <Text style={styles.checkoutSummaryNote}>
+                                Creating this checkout issues an unpaid invoice order. Staff payment
+                                recording and fulfillment continue afterward.
+                              </Text>
+                            </View>
+
+                            <View style={styles.checkoutFormCard}>
+                              <Text style={styles.checkoutCardTitle}>Cart Snapshot</Text>
+                              {checkoutPreviewItems.map((item) => (
+                                <View key={item.id} style={styles.checkoutPreviewItem}>
+                                  <View style={styles.checkoutPreviewItemCopy}>
+                                    <Text style={styles.checkoutPreviewItemTitle}>
+                                      {item.productName}
+                                    </Text>
+                                    <Text style={styles.checkoutPreviewItemMeta}>
+                                      Qty {item.quantity}
+                                      {item.productSku ? ` | SKU ${item.productSku}` : ''}
+                                    </Text>
+                                  </View>
+                                  <Text style={styles.checkoutPreviewItemValue}>
+                                    {item.lineTotalLabel}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+
+                            <View style={styles.checkoutFormCard}>
+                              <Text style={styles.checkoutCardTitle}>Billing Details</Text>
+                              <FormField
+                                label="Recipient Name"
+                                value={checkoutState.form.recipientName}
+                                onChangeText={(value) => handleCheckoutFieldChange('recipientName', value)}
+                                placeholder="Billing recipient name"
+                                autoCapitalize="words"
+                                error={checkoutState.fieldErrors.recipientName}
+                              />
+                              <FormField
+                                label="Email"
+                                value={checkoutState.form.email}
+                                onChangeText={(value) => handleCheckoutFieldChange('email', value)}
+                                placeholder="name@example.com"
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                error={checkoutState.fieldErrors.email}
+                              />
+                              <FormField
+                                label="Contact Phone"
+                                value={checkoutState.form.contactPhone}
+                                onChangeText={(value) => handleCheckoutFieldChange('contactPhone', value)}
+                                placeholder="09123456789"
+                                keyboardType="phone-pad"
+                                helperText="Optional, but useful for invoice follow-up."
+                                error={checkoutState.fieldErrors.contactPhone}
+                              />
+                              <FormField
+                                label="Address Line 1"
+                                value={checkoutState.form.addressLine1}
+                                onChangeText={(value) => handleCheckoutFieldChange('addressLine1', value)}
+                                placeholder="Street address"
+                                autoCapitalize="words"
+                                error={checkoutState.fieldErrors.addressLine1}
+                              />
+                              <FormField
+                                label="Address Line 2"
+                                value={checkoutState.form.addressLine2}
+                                onChangeText={(value) => handleCheckoutFieldChange('addressLine2', value)}
+                                placeholder="Unit, building, or landmark"
+                                autoCapitalize="words"
+                              />
+                              <FormField
+                                label="City"
+                                value={checkoutState.form.city}
+                                onChangeText={(value) => handleCheckoutFieldChange('city', value)}
+                                placeholder="City"
+                                autoCapitalize="words"
+                                error={checkoutState.fieldErrors.city}
+                              />
+                              <FormField
+                                label="Province"
+                                value={checkoutState.form.province}
+                                onChangeText={(value) => handleCheckoutFieldChange('province', value)}
+                                placeholder="Province"
+                                autoCapitalize="words"
+                                error={checkoutState.fieldErrors.province}
+                              />
+                              <FormField
+                                label="Postal Code"
+                                value={checkoutState.form.postalCode}
+                                onChangeText={(value) => handleCheckoutFieldChange('postalCode', value)}
+                                placeholder="1200"
+                                keyboardType="number-pad"
+                                error={checkoutState.fieldErrors.postalCode}
+                              />
+                              <FormField
+                                label="Checkout Notes"
+                                value={checkoutState.form.notes}
+                                onChangeText={(value) => handleCheckoutFieldChange('notes', value)}
+                                placeholder="Optional notes for staff invoice handling"
+                                autoCapitalize="sentences"
+                                multiline
+                                numberOfLines={4}
+                              />
+                            </View>
+
+                            <View style={styles.cartFooter}>
+                              <TouchableOpacity
+                                style={styles.secondaryButton}
+                                onPress={resetCheckoutFlow}
+                                activeOpacity={0.88}
+                              >
+                                <Text style={styles.secondaryButtonText}>Back to Cart</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[
+                                  styles.cartCheckoutButton,
+                                  checkoutState.submitting && styles.cartCheckoutButtonDisabled,
+                                ]}
+                                onPress={() => {
+                                  void handleSubmitInvoiceCheckout();
+                                }}
+                                activeOpacity={checkoutState.submitting ? 1 : 0.88}
+                                disabled={checkoutState.submitting}
+                              >
+                                {checkoutState.submitting ? (
+                                  <ActivityIndicator size="small" color={colors.onPrimary} />
+                                ) : (
+                                  <MaterialCommunityIcons name="receipt-text-check-outline" size={18} color={colors.onPrimary} />
+                                )}
+                                <Text style={styles.cartCheckoutText}>
+                                  {checkoutState.submitting ? 'Creating Invoice Order' : 'Create Invoice Checkout'}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          </>
+                        ) : null}
+                      </>
+                    ) : cartState.status === 'loading' && cartEntries.length === 0 ? (
+                      <View style={styles.checkoutStateCard}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={styles.checkoutStateTitle}>Loading cart</Text>
+                        <Text style={styles.checkoutStateText}>
+                          Pulling your live ecommerce cart from the checkout service now.
+                        </Text>
+                      </View>
+                    ) : cartEntries.length === 0 ? (
+                      <View style={styles.cartEmptyState}>
+                        <MaterialCommunityIcons
+                          name="cart-outline"
+                          size={42}
+                          color={colors.border}
+                        />
+                        <Text style={styles.cartEmptyText}>Your cart is empty</Text>
+                        <Text style={styles.checkoutStateText}>
+                          Add items from the catalog first, then come back here to create an invoice
+                          checkout.
+                        </Text>
+                      </View>
+                    ) : (
+                      <>
+                        {cartEntries.map((item) => (
+                          <CartLineItem
+                            key={item.key}
+                            item={item}
+                            disabled={cartState.savingItemId === item.id}
+                            onDecrease={() =>
+                              handleUpdateCartQuantity(item.id, item.quantity - 1)
+                            }
+                            onIncrease={() =>
+                              handleUpdateCartQuantity(item.id, item.quantity + 1)
+                            }
+                          />
+                        ))}
+
+                        <View style={styles.checkoutSummaryCard}>
+                          <Text style={styles.checkoutSummaryTitle}>Cart Totals</Text>
+                          <View style={styles.checkoutSummaryRow}>
+                            <Text style={styles.checkoutSummaryLabel}>Items</Text>
+                            <Text style={styles.checkoutSummaryValue}>{cartCount}</Text>
+                          </View>
+                          <View style={styles.checkoutSummaryRow}>
+                            <Text style={styles.checkoutSummaryLabel}>Subtotal</Text>
+                            <Text style={styles.checkoutSummaryValue}>{cartTotalLabel}</Text>
+                          </View>
+                          <Text style={styles.checkoutSummaryNote}>
+                            Invoice checkout creates the order and invoice record, but it does not
+                            mark the order as paid.
+                          </Text>
+                        </View>
+
+                        <View style={styles.cartFooter}>
+                          <TouchableOpacity
+                            style={styles.cartCheckoutButton}
+                            onPress={() => {
+                              void handleStartCheckoutPreview();
+                            }}
+                            activeOpacity={0.88}
+                          >
+                            <MaterialCommunityIcons name="arrow-right-circle-outline" size={18} color={colors.onPrimary} />
+                            <Text style={styles.cartCheckoutText}>Review Invoice Checkout</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    )}
+                  </ScrollView>
+                )}
+              </View>
             </Animated.View>
           ) : null}
 
@@ -4033,6 +7003,7 @@ export default function Dashboard({ account, navigation, onSignOut, onSaveProfil
         onCancel={handleCancelDeleteAccount}
         onConfirm={handleConfirmDeleteAccount}
         password={deletePassword}
+        submitting={deleteSubmitting}
         onPasswordChange={(value) => {
           setDeletePassword(value);
           if (deletePasswordError) {
@@ -4638,6 +7609,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 4,
   },
+  timelineSubtitle: {
+    color: colors.mutedText,
+    fontSize: 13,
+  },
   timelineFilterIconButton: {
     width: 36,
     height: 36,
@@ -4647,6 +7622,105 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  timelineSummaryCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 18,
+  },
+  timelineSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  timelineSummaryTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  timelineSummaryBody: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 23,
+    marginBottom: 10,
+  },
+  timelineSummaryHelperText: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  timelineSummaryMeta: {
+    color: colors.labelText,
+    fontSize: 12,
+    marginTop: 10,
+  },
+  timelineSummaryPill: {
+    minHeight: 28,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineSummaryPillVisible: {
+    backgroundColor: colors.successSoft,
+  },
+  timelineSummaryPillPending: {
+    backgroundColor: 'rgba(255, 197, 0, 0.12)',
+  },
+  timelineSummaryPillHidden: {
+    backgroundColor: colors.primarySoft,
+  },
+  timelineSummaryPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  timelineSummaryPillTextVisible: {
+    color: colors.success,
+  },
+  timelineSummaryPillTextPending: {
+    color: '#FFC500',
+  },
+  timelineSummaryPillTextHidden: {
+    color: colors.primary,
+  },
+  timelineStateCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  timelineStateIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  timelineStateTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 10,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  timelineStateText: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
   },
   timelineStatsRow: {
     flexDirection: 'row',
@@ -4822,7 +7896,7 @@ const styles = StyleSheet.create({
   },
   timelineEventPrice: {
     color: colors.primary,
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
   },
   timelineTypePill: {
@@ -4834,14 +7908,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 12,
   },
-  timelineTypePillService: {
-    backgroundColor: 'rgba(255, 122, 0, 0.12)',
+  timelineTypePillAdministrative: {
+    backgroundColor: colors.primarySoft,
   },
-  timelineTypePillInsurance: {
-    backgroundColor: 'rgba(52, 127, 255, 0.12)',
+  timelineTypePillVerified: {
+    backgroundColor: colors.successSoft,
   },
-  timelineTypePillBooking: {
-    backgroundColor: 'rgba(155, 92, 246, 0.14)',
+  timelineTypePillSummary: {
+    backgroundColor: 'rgba(99, 165, 255, 0.12)',
   },
   timelineTypeText: {
     color: colors.labelText,
@@ -5152,39 +8226,62 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   bookingDateCard: {
-    width: 68,
-    minHeight: 92,
+    width: '48%',
+    minHeight: 148,
     borderRadius: 20,
     backgroundColor: colors.surfaceStrong,
     borderWidth: 1,
     borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    paddingVertical: 12,
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   bookingDateCardCompact: {
-    width: 60,
-    minHeight: 86,
-    marginRight: 9,
+    width: '48%',
+    minHeight: 138,
   },
   bookingDateCardActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 2,
+  },
+  bookingDateCardSuccess: {
+    backgroundColor: colors.successSoft,
+    borderColor: colors.success,
+  },
+  bookingDateCardLimited: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  bookingDateCardDanger: {
+    backgroundColor: colors.dangerSoft,
+    borderColor: colors.danger,
   },
   bookingDateCardDisabled: {
-    backgroundColor: '#1B2030',
+    backgroundColor: colors.surfaceMuted,
     borderColor: colors.borderSoft,
+  },
+  bookingDateCardHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    gap: 8,
   },
   bookingDateWeekday: {
     color: colors.labelText,
     fontSize: 12,
     fontWeight: '700',
-    marginBottom: 6,
   },
   bookingDateDay: {
     color: colors.text,
-    fontSize: 29,
+    fontSize: 30,
     fontWeight: '800',
     lineHeight: 30,
   },
@@ -5192,6 +8289,45 @@ const styles = StyleSheet.create({
     color: colors.labelText,
     fontSize: 13,
     fontWeight: '700',
+    marginTop: 6,
+  },
+  bookingDateStatusBadge: {
+    minHeight: 24,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
+  },
+  bookingDateStatusBadgeSuccess: {
+    backgroundColor: colors.success,
+  },
+  bookingDateStatusBadgeWarning: {
+    backgroundColor: colors.primary,
+  },
+  bookingDateStatusBadgeDanger: {
+    backgroundColor: colors.danger,
+  },
+  bookingDateStatusBadgeMuted: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  bookingDateStatusText: {
+    color: colors.onPrimary,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  bookingDateCapacityText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 10,
+  },
+  bookingDateDetailText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
     marginTop: 6,
   },
   bookingDateTextActive: {
@@ -5210,6 +8346,107 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: -4,
     marginBottom: 12,
+  },
+  bookingAvailabilityWindowCard: {
+    borderRadius: radius.large,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceStrong,
+    padding: 16,
+    gap: 14,
+    marginBottom: 20,
+  },
+  bookingAvailabilityToolbar: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  bookingAvailabilityCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  bookingAvailabilityTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  bookingAvailabilityText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  bookingAvailabilityActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  bookingAvailabilityGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  bookingAvailabilitySelectionCard: {
+    borderRadius: radius.medium,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surface,
+    padding: 14,
+    gap: 8,
+  },
+  bookingAvailabilitySelectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  bookingAvailabilitySelectionTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  bookingAvailabilitySelectionMeta: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  bookingPagerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: -4,
+    marginBottom: 12,
+    gap: 12,
+  },
+  bookingPagerText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bookingPagerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bookingPagerButton: {
+    minHeight: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surfaceStrong,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookingPagerButtonDisabled: {
+    opacity: 0.45,
+  },
+  bookingPagerButtonText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+    marginHorizontal: 4,
   },
   bookingTimeGrid: {
     flexDirection: 'row',
@@ -6034,6 +9271,12 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  productHeroImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   productHeroShade: {
     position: 'absolute',
     left: 0,
@@ -6079,6 +9322,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 12,
   },
+  productDetailStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 12,
+  },
+  productDetailStatusBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(36, 227, 122, 0.12)',
+    borderColor: 'rgba(36, 227, 122, 0.28)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 28,
+    paddingHorizontal: 12,
+  },
+  productDetailStatusBadgeText: {
+    color: '#24E37A',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  productDetailUpdatedText: {
+    color: colors.mutedText,
+    flex: 1,
+    fontSize: 13,
+    textAlign: 'right',
+  },
   productDetailRatingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -6102,10 +9374,27 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 20,
+  },
+  productDetailInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  productDetailInfoLabel: {
+    color: colors.mutedText,
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  productDetailInfoValue: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'right',
   },
   productInfoPrimary: {
     flex: 1,
@@ -6154,6 +9443,41 @@ const styles = StyleSheet.create({
     lineHeight: 29,
     marginBottom: 26,
   },
+  productDetailStateCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 18,
+    borderColor: colors.border,
+    borderWidth: 1,
+    gap: 10,
+    marginBottom: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+  },
+  productDetailStateTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  productDetailStateText: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  productDetailRetryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    marginTop: 4,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  productDetailRetryButtonText: {
+    color: colors.onPrimary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
   productDetailCartButton: {
     minHeight: 56,
     borderRadius: 18,
@@ -6166,6 +9490,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.24,
     shadowRadius: 22,
     elevation: 5,
+  },
+  productDetailCartButtonDisabled: {
+    opacity: 0.72,
   },
   productDetailCartButtonText: {
     color: colors.onPrimary,
@@ -6439,6 +9766,97 @@ const styles = StyleSheet.create({
     color: '#FFCC33',
     fontWeight: '800',
   },
+  loyaltyActivityCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: radius.large,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18,
+  },
+  loyaltyActivityTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  loyaltyActivitySubtitle: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 16,
+  },
+  loyaltyTransactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+  },
+  loyaltyTransactionCopy: {
+    flex: 1,
+    paddingRight: 14,
+  },
+  loyaltyTransactionTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  loyaltyTransactionMeta: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  loyaltyTransactionAmountWrap: {
+    alignItems: 'flex-end',
+  },
+  loyaltyTransactionAmount: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  loyaltyTransactionAmountPositive: {
+    color: '#24E37A',
+  },
+  loyaltyTransactionAmountNegative: {
+    color: '#FF8B8B',
+  },
+  loyaltyTransactionBalance: {
+    color: colors.mutedText,
+    fontSize: 12,
+  },
+  preferenceCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: radius.large,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  preferenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+  },
+  preferenceCopy: {
+    flex: 1,
+    paddingRight: 14,
+  },
+  preferenceTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  preferenceDescription: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   sectionTabsWrap: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceStrong,
@@ -6470,6 +9888,224 @@ const styles = StyleSheet.create({
   },
   sectionTabTextActive: {
     color: colors.onPrimary,
+  },
+  storeHeroCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: radius.large,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18,
+    marginBottom: 16,
+  },
+  storeHeroEyebrow: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  storeHeroTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  storeHeroText: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  storeOrdersToolbar: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 14,
+  },
+  storeOrdersToolbarCopy: {
+    flex: 1,
+  },
+  storeOrdersToolbarText: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 4,
+  },
+  storeOrderList: {
+    marginBottom: 16,
+  },
+  storeOrderCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: radius.large,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 12,
+  },
+  storeOrderCardActive: {
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 2,
+  },
+  storeOrderCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 10,
+  },
+  storeOrderCardCopy: {
+    flex: 1,
+  },
+  storeOrderCardEyebrow: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  storeOrderCardTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  storeOrderCardMeta: {
+    color: colors.mutedText,
+    fontSize: 12,
+  },
+  storeStatusPill: {
+    minHeight: 28,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storeStatusPillActive: {
+    backgroundColor: colors.primary,
+  },
+  storeStatusPillText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  storeStatusPillTextActive: {
+    color: colors.onPrimary,
+  },
+  storeOrderCardMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 6,
+  },
+  storeOrderCardMetric: {
+    color: colors.labelText,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  storeOrderCardInvoiceMeta: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  storeTimelineRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    paddingVertical: 8,
+  },
+  storeTimelineRail: {
+    width: 20,
+    alignItems: 'center',
+  },
+  storeTimelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+    marginTop: 5,
+  },
+  storeTimelineLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: colors.border,
+    marginTop: 6,
+    borderRadius: radius.pill,
+  },
+  storeTimelineContent: {
+    flex: 1,
+    paddingLeft: 6,
+  },
+  storeTimelineHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 4,
+  },
+  storeTimelineTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+    flex: 1,
+  },
+  storeTimelineTime: {
+    color: colors.mutedText,
+    fontSize: 12,
+  },
+  storeTimelineBadge: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  storeTimelineCopy: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  storePaymentEntryList: {
+    marginTop: 12,
+  },
+  storePaymentEntryRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    paddingTop: 12,
+    marginTop: 12,
+    gap: 12,
+  },
+  storePaymentEntryCopy: {
+    flex: 1,
+  },
+  storePaymentEntryTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  storePaymentEntryMeta: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  storePaymentEntryNotes: {
+    color: colors.labelText,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+  storePaymentEntryIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionHeading: {
     color: colors.labelText,
@@ -6566,6 +10202,13 @@ const styles = StyleSheet.create({
   rewardProgressFill: {
     height: '100%',
     borderRadius: radius.pill,
+  },
+  rewardHelperText: {
+    marginTop: 10,
+    marginLeft: 54,
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
   },
   infoPanel: {
     backgroundColor: colors.surfaceStrong,
@@ -7046,6 +10689,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     zIndex: 2400,
   },
+  cartBody: {
+    flex: 1,
+  },
   cartHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -7087,9 +10733,11 @@ const styles = StyleSheet.create({
     paddingBottom: 84,
   },
   cartEmptyText: {
-    color: colors.mutedText,
+    color: colors.text,
     fontSize: 18,
+    fontWeight: '800',
     marginTop: 14,
+    marginBottom: 10,
   },
   cartItemsScroll: {
     flex: 1,
@@ -7097,7 +10745,7 @@ const styles = StyleSheet.create({
   cartItemsContent: {
     paddingHorizontal: 18,
     paddingTop: 16,
-    paddingBottom: 120,
+    paddingBottom: Platform.OS === 'web' ? 36 : 42,
   },
   cartItemCard: {
     backgroundColor: colors.surfaceStrong,
@@ -7120,6 +10768,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 10,
   },
+  cartItemMeta: {
+    color: colors.mutedText,
+    fontSize: 12,
+    marginBottom: 6,
+  },
   cartItemName: {
     color: colors.text,
     fontSize: 15,
@@ -7127,10 +10780,27 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 4,
   },
+  cartItemPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   cartItemPrice: {
     color: colors.primary,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
+  },
+  cartItemLineTotal: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  cartItemWarning: {
+    color: '#FFB86B',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
   },
   cartQuantityControls: {
     flexDirection: 'row',
@@ -7144,6 +10814,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  cartQuantityButtonDisabled: {
+    opacity: 0.72,
+  },
   cartQuantityValue: {
     color: colors.text,
     fontSize: 15,
@@ -7152,17 +10825,149 @@ const styles = StyleSheet.create({
     minWidth: 10,
     textAlign: 'center',
   },
-  cartFooter: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+  checkoutStateCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingHorizontal: 18,
+    paddingVertical: 20,
+    marginBottom: 16,
+  },
+  checkoutStateCardSuccess: {
+    borderColor: 'rgba(79, 216, 154, 0.3)',
+    backgroundColor: 'rgba(27, 41, 35, 0.96)',
+  },
+  checkoutStateTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  checkoutStateText: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  checkoutInlineAlert: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255, 184, 107, 0.12)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 184, 107, 0.24)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  checkoutInlineAlertText: {
+    color: '#FFD6A6',
+    fontSize: 13,
+    lineHeight: 20,
+    flex: 1,
+    marginLeft: 10,
+  },
+  checkoutSummaryCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 16,
+  },
+  checkoutSummaryTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 14,
+  },
+  checkoutSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    gap: 12,
+  },
+  checkoutSummaryLabel: {
+    color: colors.mutedText,
+    fontSize: 14,
+  },
+  checkoutSummaryValue: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  checkoutSummaryNote: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  checkoutFormCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: Platform.OS === 'web' ? 22 : 26,
+    paddingBottom: 4,
+    marginBottom: 16,
+  },
+  checkoutCardTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 14,
+  },
+  checkoutPreviewItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: colors.borderSoft,
-    backgroundColor: '#141824',
+  },
+  checkoutPreviewItemCopy: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  checkoutPreviewItemTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  checkoutPreviewItemMeta: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  checkoutPreviewItemValue: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  checkoutAddressText: {
+    color: '#B6BDD8',
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  cartFooter: {
+    paddingHorizontal: 2,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'web' ? 6 : 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    backgroundColor: 'transparent',
   },
   cartTotalRow: {
     flexDirection: 'row',
@@ -7191,6 +10996,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 20,
     elevation: 4,
+  },
+  cartCheckoutButtonDisabled: {
+    opacity: 0.72,
   },
   cartCheckoutText: {
     color: colors.onPrimary,

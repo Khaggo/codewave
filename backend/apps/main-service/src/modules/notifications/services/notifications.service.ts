@@ -63,7 +63,7 @@ type EnqueueAuthOtpDeliveryInput = {
   userId: string;
   email: string;
   otp: string;
-  activationContext: 'customer_signup' | 'staff_activation';
+  activationContext: 'customer_signup' | 'staff_activation' | 'account_delete';
   dedupeKey: string;
   sourceId: string;
   scheduledFor?: Date;
@@ -186,10 +186,21 @@ export class NotificationsService {
       throw new ConflictException('Auth OTP email target does not match the account email');
     }
 
-    const message =
+    const { title, message } =
       payload.activationContext === 'staff_activation'
-        ? `Your AUTOCARE staff activation code is ${payload.otp}. It expires soon.`
-        : `Your AUTOCARE verification code is ${payload.otp}. It expires soon.`;
+        ? {
+            title: 'Staff activation code',
+            message: `Your AUTOCARE staff activation code is ${payload.otp}. It expires soon.`,
+          }
+        : payload.activationContext === 'account_delete'
+          ? {
+              title: 'Account deletion code',
+              message: `Your AUTOCARE account deletion code is ${payload.otp}. It expires soon.`,
+            }
+          : {
+              title: 'Account verification code',
+              message: `Your AUTOCARE verification code is ${payload.otp}. It expires soon.`,
+            };
 
     return this.enqueueNotification({
       userId: payload.userId,
@@ -197,7 +208,7 @@ export class NotificationsService {
       channel: 'email',
       sourceType: 'auth',
       sourceId: payload.sourceId,
-      title: 'Account verification code',
+      title,
       message,
       dedupeKey: payload.dedupeKey,
       scheduledFor: payload.scheduledFor,

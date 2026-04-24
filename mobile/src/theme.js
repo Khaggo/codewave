@@ -3,6 +3,7 @@ export const colors = {
   surface: '#141826',
   surfaceStrong: '#1B2131',
   surfaceMuted: '#20263A',
+  surfaceRaised: '#141F31',
   primary: '#FF7A00',
   primarySoft: 'rgba(255, 122, 0, 0.14)',
   primaryGlow: 'rgba(255, 122, 0, 0.28)',

@@ -14,7 +14,7 @@ Make orchestrator-first routing and self-improvement intake explicit.
 
 ## Status
 
-`in_progress`
+`done`
 
 ## Priority
 

@@ -1,9 +1,9 @@
-import SummaryVerificationWorkspace from '@/screens/SummaryVerificationWorkspace.js'
+import AdminAnalyticsWorkspace from '@/screens/AdminAnalyticsWorkspace.js'
 
 export const metadata = {
-  title: 'Summary Verification',
+  title: 'Admin Analytics & Summary Review',
 }
 
 export default function SummaryVerificationPage() {
-  return <SummaryVerificationWorkspace />
+  return <AdminAnalyticsWorkspace />
 }

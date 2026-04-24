@@ -35,7 +35,7 @@ Use the docs in this directory to build and improve the backend quickly while pr
 - For new domain scaffolding or normalization, load [`golden-domain-template.md`](./golden-domain-template.md), [`domains/main-service/users.md`](./domains/main-service/users.md), and [`domains/main-service/auth.md`](./domains/main-service/auth.md) first.
 - Use [`tasks/README.md`](./tasks/README.md) when you want the current execution queue or a ready-made implementation task.
 - Use [`_backlog/agent-improvement-queue.md`](./_backlog/agent-improvement-queue.md) when you want the active evidence log for stagnation, routing gaps, or repeated ambiguity.
-- Use [`tasks/04-quality-and-ops/T409-orchestrator-routing-and-improvement-intake.md`](./tasks/04-quality-and-ops/T409-orchestrator-routing-and-improvement-intake.md) for the current recovery task that makes orchestrator-first routing and improvement intake explicit.
+- Use [`tasks/04-quality-and-ops/T409-orchestrator-routing-and-improvement-intake.md`](./tasks/04-quality-and-ops/T409-orchestrator-routing-and-improvement-intake.md) when revisiting orchestrator-first routing and improvement-intake recovery rules.
 
 - Use [`domains/main-service/auth.md`](./domains/main-service/auth.md) for login, sessions, JWT, refresh flow, and guard behavior.
 - Use [`domains/main-service/users.md`](./domains/main-service/users.md) for identity, profile, addresses, and account-state questions.
@@ -95,6 +95,7 @@ Use the docs in this directory to build and improve the backend quickly while pr
 - Firmware and device protocols remain out of scope, and third-party APIs stay excluded except for approved AI provider adapters plus approved identity providers and Nodemailer-backed SMTP delivery needed for canonical account activation.
 - SMS delivery is not part of the current canonical scope because of cost. Keep operational reminders and auth OTP on the approved email-only path.
 - Repeated clarification, validator failures, doc/code drift, stale control docs, unresolved `ready` queues, conflicting docs, and repeated frontend/backend mismatch should become improvement evidence instead of being silently ignored.
+- The orchestrator should make the triage outcome explicit: `reject as noise`, `log observation`, or `create bounded proposal`.
 
 ## Legacy Material
 

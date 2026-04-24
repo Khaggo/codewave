@@ -18,6 +18,7 @@ Maintain secure authentication, activation gating, staff-account credential owne
 - Google identity verification payloads
 - email OTP verification payloads
 - legacy login, registration, and refresh payloads during migration
+- authenticated delete-account requests with current-password confirmation plus email OTP verification
 - super-admin staff-account provisioning and activation changes
 - bearer-token protected requests for `GET /auth/me`
 
@@ -59,6 +60,7 @@ Key relations:
 - current implementation still supports legacy email-and-password registration and login while the Google+email migration is pending, but password signup now also enters pending activation and requires email OTP before tokens are issued
 - issue access and refresh tokens
 - rotate to one latest active refresh token per user
+- archive the authenticated account only after current-password confirmation and email OTP verification, then revoke active refresh tokens
 - deactivate or reactivate staff credentials without deleting the user record
 - write login audit logs for successful and failed login attempts
 - write staff-admin audit logs for staff provisioning and activation-status changes, preserving actor, timestamp, and reason metadata
@@ -73,15 +75,18 @@ Key relations:
 5. `POST /auth/register/verify-email` verifies the password-registration OTP, activates the account, and only then issues tokens.
 6. `POST /auth/login` resolves the user by email, validates account activity and password, logs the attempt, and returns tokens for currently activated accounts without requiring OTP again.
 7. `POST /auth/refresh` verifies the submitted refresh token, checks it against the latest active stored token, and returns a rotated token pair.
-8. `GET /auth/me` uses JWT guard resolution to expose the authenticated identity already present on the request.
-9. Staff activation begins at `POST /auth/staff-activation/google/start`, then `POST /auth/staff-activation/verify-email` activates the staff identity and issues tokens.
-10. Staff-account deactivation updates both the user active flag and auth-account active flag, then revokes active refresh tokens for that identity.
+8. `POST /auth/account/delete/start` confirms the current password and sends a delete-account OTP without archiving the account yet.
+9. `POST /auth/account/delete/verify` verifies the delete-account OTP, archives the authenticated account, and retires active sign-in access without hard deleting history.
+10. `GET /auth/me` uses JWT guard resolution to expose the authenticated identity already present on the request.
+11. Staff activation begins at `POST /auth/staff-activation/google/start`, then `POST /auth/staff-activation/verify-email` activates the staff identity and issues tokens.
+12. Staff-account deactivation updates both the user active flag and auth-account active flag, then revokes active refresh tokens for that identity.
 
 ## Use Cases
 
 - customer completes Google verification plus email OTP and receives tokens
 - existing activated account signs in and refreshes tokens
 - client refreshes an authenticated session
+- authenticated customer archives their own account after confirming the current password and verifying the delete-account OTP
 - protected endpoints resolve the authenticated user from the bearer token
 - super admin provisions a new technician, service adviser, or super-admin account in pending activation state
 - staff member completes Google verification + email OTP to activate a pending staff account
@@ -93,6 +98,8 @@ Key relations:
 - `POST /auth/register/verify-email`
 - `POST /auth/login`
 - `POST /auth/refresh`
+- `POST /auth/account/delete/start`
+- `POST /auth/account/delete/verify`
 - `GET /auth/me`
 - `POST /auth/google/signup/start`
 - `POST /auth/google/signup/verify-email`
@@ -111,6 +118,7 @@ Key relations:
 - pending accounts must not receive usable tokens before activation completes
 - staff activation requires a matching Google identity and OTP challenge
 - missing or inactive auth account rejects login
+- wrong current password, wrong delete-account OTP, or missing bearer token blocks account archival
 - invalid credentials are logged and rejected
 - invalid, stale, or mismatched refresh token is rejected
 - missing or invalid bearer token blocks `GET /auth/me`

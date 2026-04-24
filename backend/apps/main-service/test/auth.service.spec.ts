@@ -535,4 +535,160 @@ describe('AuthService', () => {
     expect(result.accessToken).toBe('access-token');
     expect(result.refreshToken).toBe('refresh-token');
   });
+
+  it('starts delete-account verification by validating the current password and sending an OTP', async () => {
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+        isActive: true,
+      }),
+      findByEmail: jest.fn(),
+    };
+
+    const authRepository = {
+      findAccountByUserId: jest.fn().mockResolvedValue({
+        id: 'account-1',
+        userId: 'user-1',
+        isActive: true,
+        passwordHash: await bcrypt.hash('password123', 10),
+      }),
+      createOtpChallenge: jest.fn().mockResolvedValue({
+        id: 'challenge-delete-1',
+        userId: 'user-1',
+      }),
+    };
+
+    const notificationsService = {
+      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-delete-1' }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UsersService, useValue: usersService },
+        { provide: AuthRepository, useValue: authRepository },
+        { provide: NotificationsService, useValue: notificationsService },
+        { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: JwtService, useValue: {} },
+        {
+          provide: ConfigService,
+          useValue: {
+            getOrThrow: jest.fn((key: string) => key),
+            get: jest.fn((_key: string, fallback: string) => fallback),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(AuthService);
+
+    const result = await service.startDeleteOwnAccount(
+      {
+        currentPassword: 'password123',
+      },
+      {
+        userId: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+      },
+    );
+
+    expect(authRepository.createOtpChallenge).toHaveBeenCalled();
+    expect(notificationsService.enqueueAuthOtpDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        email: 'customer@example.com',
+        activationContext: 'account_delete',
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        enrollmentId: 'challenge-delete-1',
+        userId: 'user-1',
+        status: 'pending_delete_verification',
+      }),
+    );
+  });
+
+  it('verifies a delete-account OTP before soft deleting the authenticated account', async () => {
+    const usersService = {
+      findById: jest
+        .fn()
+        .mockResolvedValueOnce({
+          id: 'user-1',
+          email: 'customer@example.com',
+          role: 'customer',
+          isActive: true,
+        })
+        .mockResolvedValueOnce({
+          id: 'user-1',
+          email: 'customer@example.com',
+          role: 'customer',
+          isActive: true,
+        }),
+      findByEmail: jest.fn(),
+    };
+
+    const authRepository = {
+      findOtpChallengeById: jest.fn().mockResolvedValue({
+        id: 'challenge-delete-1',
+        userId: 'user-1',
+        purpose: 'account_delete',
+        email: 'customer@example.com',
+        otpHash: await bcrypt.hash('654321', 10),
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        consumedAt: null,
+        attempts: 0,
+      }),
+      consumeOtpChallenge: jest.fn().mockResolvedValue({ id: 'challenge-delete-1' }),
+      softDeleteUserAccount: jest.fn().mockResolvedValue(undefined),
+      incrementOtpAttempts: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UsersService, useValue: usersService },
+        { provide: AuthRepository, useValue: authRepository },
+        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
+        { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: JwtService, useValue: {} },
+        {
+          provide: ConfigService,
+          useValue: {
+            getOrThrow: jest.fn((key: string) => key),
+            get: jest.fn((_key: string, fallback: string) => fallback),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(AuthService);
+
+    const result = await service.verifyDeleteOwnAccountOtp(
+      {
+        enrollmentId: 'challenge-delete-1',
+        otp: '654321',
+      },
+      {
+        userId: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+      },
+    );
+
+    expect(authRepository.consumeOtpChallenge).toHaveBeenCalledWith('challenge-delete-1');
+    expect(authRepository.softDeleteUserAccount).toHaveBeenCalledWith({
+      userId: 'user-1',
+      email: 'customer@example.com',
+    });
+    expect(result).toEqual({
+      status: 'account_soft_deleted',
+      message: 'The account was archived successfully. You can sign up again with the same email later.',
+    });
+  });
 });

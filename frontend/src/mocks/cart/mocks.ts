@@ -51,3 +51,17 @@ export const cartUnavailableConflictErrorMock: ApiErrorResponse = {
   message: 'Cart contains unavailable products',
   source: 'swagger',
 };
+
+export const cartItemMissingErrorMock: ApiErrorResponse = {
+  statusCode: 404,
+  code: 'NOT_FOUND',
+  message: 'Cart item not found',
+  source: 'swagger',
+};
+
+export const checkoutValidationErrorMock: ApiErrorResponse = {
+  statusCode: 400,
+  code: 'VALIDATION_ERROR',
+  message: 'Cart is empty or contains unavailable products and cannot be checked out',
+  source: 'swagger',
+};

@@ -22,6 +22,47 @@ export interface TimeSlotResponse {
   updatedAt: string;
 }
 
+export type BookingAvailabilityDayStatus =
+  | 'bookable'
+  | 'limited'
+  | 'full'
+  | 'outside_window'
+  | 'no_active_slots';
+
+export type BookingAvailabilitySlotStatus = 'available' | 'full';
+
+export interface BookingAvailabilitySlotResponse {
+  timeSlotId: string;
+  label: string;
+  startTime: string;
+  endTime: string;
+  capacity: number;
+  bookingCount: number;
+  remainingCapacity: number;
+  status: BookingAvailabilitySlotStatus;
+  isAvailable: boolean;
+}
+
+export interface BookingAvailabilityDayResponse {
+  scheduledDate: string;
+  status: BookingAvailabilityDayStatus;
+  isBookable: boolean;
+  activeSlotCount: number;
+  availableSlotCount: number;
+  totalCapacity: number;
+  remainingCapacity: number;
+  slots: BookingAvailabilitySlotResponse[];
+}
+
+export interface BookingAvailabilityResponse {
+  generatedAt: string;
+  startDate: string;
+  endDate: string;
+  minBookableDate: string;
+  maxBookableDate: string;
+  days: BookingAvailabilityDayResponse[];
+}
+
 export interface BookingDiscoverySnapshotResponse {
   services: ServiceResponse[];
   timeSlots: TimeSlotResponse[];

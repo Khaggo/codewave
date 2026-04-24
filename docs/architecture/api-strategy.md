@@ -53,7 +53,7 @@ The `main-service` owns REST APIs for:
 - `vehicles`
   - create, read, and update vehicle ownership endpoints
 - `bookings`
-  - services, time slots, booking create, booking status, daily schedule, and optional queue endpoints
+  - service reads, time-slot reads and staff management, booking create, booking status, daily schedule, and optional queue endpoints
 - `inspections`
   - `POST /vehicles/:id/inspections`
   - `GET /vehicles/:id/inspections`

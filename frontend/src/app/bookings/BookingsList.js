@@ -203,6 +203,14 @@ function getServiceNames(booking) {
   return names.length > 0 ? names.join(', ') : 'No requested services attached'
 }
 
+function getCustomerLabel(record) {
+  return record?.customerLabel || record?.customerName || record?.customerEmail || `User ${record?.userId ?? 'Unknown'}`
+}
+
+function getVehicleLabel(record) {
+  return record?.vehicleLabel || record?.vehicleDisplayName || record?.plateNumber || `Vehicle ${record?.vehicleId ?? 'Unknown'}`
+}
+
 function normalizeSlotOption(slot) {
   const timeSlotId = slot?.timeSlotId ?? slot?.id
 
@@ -568,7 +576,12 @@ function ScheduleSlotCard({ slot, onStatusAction, busyBookingId }) {
                   </p>
                   <p className="text-sm font-semibold text-ink-primary mt-1 truncate">{getServiceNames(booking)}</p>
                   <p className="text-xs text-ink-muted mt-1">
-                    User {booking.userId} / Vehicle {booking.vehicleId}
+                    {getCustomerLabel(booking)}
+                    {booking.customerEmail && booking.customerEmail !== getCustomerLabel(booking) ? ` • ${booking.customerEmail}` : ''}
+                  </p>
+                  <p className="text-xs text-ink-muted mt-1">
+                    {getVehicleLabel(booking)}
+                    {booking.plateNumber && booking.plateNumber !== getVehicleLabel(booking) ? ` • Plate ${booking.plateNumber}` : ''}
                   </p>
                 </div>
                 <StatusBadge status={booking.status} />
@@ -644,7 +657,7 @@ function QueueTable({ queue }) {
           <thead>
             <tr className="text-left text-xs text-ink-muted border-b border-surface-border bg-surface-raised">
               <th className="px-5 py-3.5 font-semibold">Position</th>
-              <th className="px-5 py-3.5 font-semibold">Booking</th>
+              <th className="px-5 py-3.5 font-semibold">Customer</th>
               <th className="px-5 py-3.5 font-semibold">Vehicle</th>
               <th className="px-5 py-3.5 font-semibold">Slot</th>
               <th className="px-5 py-3.5 font-semibold">Date</th>
@@ -663,9 +676,17 @@ function QueueTable({ queue }) {
                   <p className="font-mono text-xs font-bold" style={{ color: '#f07c00' }}>
                     {formatBookingReference(item.bookingId)}
                   </p>
-                  <p className="text-[11px] text-ink-muted mt-1">User {item.userId}</p>
+                  <p className="text-[11px] text-ink-secondary mt-1">{getCustomerLabel(item)}</p>
+                  {item.customerEmail && item.customerEmail !== getCustomerLabel(item) ? (
+                    <p className="text-[11px] text-ink-muted mt-1">{item.customerEmail}</p>
+                  ) : null}
                 </td>
-                <td className="px-5 py-4 text-xs text-ink-secondary">{item.vehicleId}</td>
+                <td className="px-5 py-4 text-xs text-ink-secondary">
+                  <p>{getVehicleLabel(item)}</p>
+                  {item.plateNumber && item.plateNumber !== getVehicleLabel(item) ? (
+                    <p className="text-[11px] text-ink-muted mt-1">Plate {item.plateNumber}</p>
+                  ) : null}
+                </td>
                 <td className="px-5 py-4 text-xs text-ink-secondary">{item.timeSlotLabel}</td>
                 <td className="px-5 py-4 text-xs text-ink-secondary">{formatDate(item.scheduledDate)}</td>
                 <td className="px-5 py-4">
@@ -683,6 +704,7 @@ function QueueTable({ queue }) {
 export default function BookingsList() {
   const user = useUser()
   const hasAutoSelectedUpcomingDate = useRef(false)
+  const selectedDateRef = useRef(toDateKey())
   const [tab, setTab] = useState('schedule')
   const [selectedDate, setSelectedDate] = useState(() => toDateKey())
   const [statusFilter, setStatusFilter] = useState('all')
@@ -705,6 +727,10 @@ export default function BookingsList() {
   })
 
   const canReadBookingOperations = STAFF_BOOKING_ROLES.has(user?.role)
+
+  useEffect(() => {
+    selectedDateRef.current = selectedDate
+  }, [selectedDate])
 
   const loadSlotDefinitions = useCallback(async () => {
     setSlotDefinitionsState((previous) => ({ ...previous, status: 'loading', error: '' }))
@@ -808,7 +834,7 @@ export default function BookingsList() {
     void loadStaffBookingReads()
   }, [loadStaffBookingReads])
 
-  const handleSlotFormChange = useCallback((patch) => {
+  function handleSlotFormChange(patch) {
     setSlotForm((previous) => ({
       ...previous,
       ...patch,
@@ -822,116 +848,110 @@ export default function BookingsList() {
           }
         : previous,
     )
-  }, [])
+  }
 
-  const handleCreateSlotDefinition = useCallback(
-    async (event) => {
-      event.preventDefault()
+  async function handleCreateSlotDefinition(event) {
+    event.preventDefault()
 
-      if (!user?.accessToken || !canReadBookingOperations) {
-        setSlotMutationState({
-          status: 'error',
-          target: 'create',
-          message: 'Sign in with a service adviser or super admin account before managing slots.',
-        })
-        return
-      }
-
-      const payload = {
-        label: slotForm.label.trim(),
-        startTime: slotForm.startTime,
-        endTime: slotForm.endTime,
-        capacity: Number(slotForm.capacity),
-        isActive: true,
-      }
-
-      if (
-        !payload.label ||
-        !payload.startTime ||
-        !payload.endTime ||
-        !Number.isInteger(payload.capacity) ||
-        payload.capacity < 1
-      ) {
-        setSlotMutationState({
-          status: 'error',
-          target: 'create',
-          message: 'Add a label, start time, end time, and whole-number capacity before creating a slot.',
-        })
-        return
-      }
-
+    if (!user?.accessToken || !canReadBookingOperations) {
       setSlotMutationState({
-        status: 'submitting',
+        status: 'error',
         target: 'create',
-        message: '',
+        message: 'Sign in with a service adviser or super admin account before managing slots.',
       })
+      return
+    }
 
-      try {
-        await createTimeSlotDefinition(payload, user.accessToken)
-        setSlotForm(initialSlotForm)
-        setSlotMutationState({
-          status: 'success',
-          target: '',
-          message: 'Slot definition added. Mobile booking discovery will see it after refresh.',
-        })
-        await Promise.allSettled([loadSlotDefinitions(), loadStaffBookingReads()])
-      } catch (error) {
-        setSlotMutationState({
-          status: 'error',
-          target: 'create',
-          message: error?.message || 'Slot definition could not be created.',
-        })
-      }
-    },
-    [canReadBookingOperations, loadSlotDefinitions, loadStaffBookingReads, slotForm, user?.accessToken],
-  )
+    const payload = {
+      label: slotForm.label.trim(),
+      startTime: slotForm.startTime,
+      endTime: slotForm.endTime,
+      capacity: Number(slotForm.capacity),
+      isActive: true,
+    }
 
-  const handleToggleSlotActive = useCallback(
-    async (slot) => {
-      if (!slot?.timeSlotId || !user?.accessToken || !canReadBookingOperations) {
-        setSlotMutationState({
-          status: 'error',
-          target: slot?.timeSlotId ?? '',
-          message: 'Sign in with a service adviser or super admin account before managing slots.',
-        })
-        return
-      }
-
+    if (
+      !payload.label ||
+      !payload.startTime ||
+      !payload.endTime ||
+      !Number.isInteger(payload.capacity) ||
+      payload.capacity < 1
+    ) {
       setSlotMutationState({
-        status: 'submitting',
-        target: slot.timeSlotId,
-        message: '',
+        status: 'error',
+        target: 'create',
+        message: 'Add a label, start time, end time, and whole-number capacity before creating a slot.',
       })
+      return
+    }
 
-      try {
-        await updateTimeSlotDefinition(
-          {
-            timeSlotId: slot.timeSlotId,
-            isActive: slot.isActive === false,
-          },
-          user.accessToken,
-        )
-        setSlotMutationState({
-          status: 'success',
-          target: '',
-          message:
-            slot.isActive === false
-              ? 'Slot reactivated. Customers can select it again.'
-              : 'Slot paused. Customers will no longer be able to select it.',
-        })
-        await Promise.allSettled([loadSlotDefinitions(), loadStaffBookingReads()])
-      } catch (error) {
-        setSlotMutationState({
-          status: 'error',
-          target: slot.timeSlotId,
-          message: error?.message || 'Slot definition could not be updated.',
-        })
-      }
-    },
-    [canReadBookingOperations, loadSlotDefinitions, loadStaffBookingReads, user?.accessToken],
-  )
+    setSlotMutationState({
+      status: 'submitting',
+      target: 'create',
+      message: '',
+    })
 
-  const loadUpcomingScheduleWindow = useCallback(async () => {
+    try {
+      await createTimeSlotDefinition(payload, user.accessToken)
+      setSlotForm(initialSlotForm)
+      setSlotMutationState({
+        status: 'success',
+        target: '',
+        message: 'Slot definition added. Mobile booking discovery will see it after refresh.',
+      })
+      await refreshBookingOperations()
+    } catch (error) {
+      setSlotMutationState({
+        status: 'error',
+        target: 'create',
+        message: error?.message || 'Slot definition could not be created.',
+      })
+    }
+  }
+
+  async function handleToggleSlotActive(slot) {
+    if (!slot?.timeSlotId || !user?.accessToken || !canReadBookingOperations) {
+      setSlotMutationState({
+        status: 'error',
+        target: slot?.timeSlotId ?? '',
+        message: 'Sign in with a service adviser or super admin account before managing slots.',
+      })
+      return
+    }
+
+    setSlotMutationState({
+      status: 'submitting',
+      target: slot.timeSlotId,
+      message: '',
+    })
+
+    try {
+      await updateTimeSlotDefinition(
+        {
+          timeSlotId: slot.timeSlotId,
+          isActive: slot.isActive === false,
+        },
+        user.accessToken,
+      )
+      setSlotMutationState({
+        status: 'success',
+        target: '',
+        message:
+          slot.isActive === false
+            ? 'Slot reactivated. Customers can select it again.'
+            : 'Slot paused. Customers will no longer be able to select it.',
+      })
+      await refreshBookingOperations()
+    } catch (error) {
+      setSlotMutationState({
+        status: 'error',
+        target: slot.timeSlotId,
+        message: error?.message || 'Slot definition could not be updated.',
+      })
+    }
+  }
+
+  const loadUpcomingScheduleWindow = useCallback(async (activeSelectedDate = selectedDateRef.current) => {
     if (!user?.accessToken || !canReadBookingOperations) {
       setScheduleWindowState(initialScheduleWindowState)
       return
@@ -979,76 +999,86 @@ export default function BookingsList() {
       error: '',
     })
 
-    const selectedDateSummary = dates.find((date) => date.dateKey === selectedDate)
+    const selectedDateSummary = dates.find((date) => date.dateKey === activeSelectedDate)
     const nearestBookedDate = dates.find((date) => date.totalBookings > 0)
 
     if (
       !hasAutoSelectedUpcomingDate.current &&
-      selectedDate === toDateKey() &&
+      activeSelectedDate === toDateKey() &&
       nearestBookedDate &&
-      nearestBookedDate.dateKey !== selectedDate &&
+      nearestBookedDate.dateKey !== activeSelectedDate &&
       (selectedDateSummary?.totalBookings ?? 0) === 0
     ) {
       hasAutoSelectedUpcomingDate.current = true
       setSelectedDate(nearestBookedDate.dateKey)
     }
-  }, [canReadBookingOperations, selectedDate, user?.accessToken])
+  }, [canReadBookingOperations, user?.accessToken])
 
   useEffect(() => {
     void loadUpcomingScheduleWindow()
   }, [loadUpcomingScheduleWindow])
 
-  const handleBookingStatusAction = useCallback(
-    async (booking, action) => {
-      if (!booking?.id || !action?.status) {
-        return
-      }
+  async function refreshBookingOperations() {
+    setActionState((previous) => ({
+      ...previous,
+      message: '',
+    }))
 
-      if (!user?.accessToken || !canReadBookingOperations) {
-        setActionState({
-          status: 'error',
-          busyBookingId: '',
-          message: 'Sign in with a service adviser or super admin account before handling bookings.',
-        })
-        return
-      }
+    await Promise.allSettled([
+      loadSlotDefinitions(),
+      loadStaffBookingReads(),
+      loadUpcomingScheduleWindow(selectedDateRef.current),
+    ])
+  }
+
+  async function handleBookingStatusAction(booking, action) {
+    if (!booking?.id || !action?.status) {
+      return
+    }
+
+    if (!user?.accessToken || !canReadBookingOperations) {
+      setActionState({
+        status: 'error',
+        busyBookingId: '',
+        message: 'Sign in with a service adviser or super admin account before handling bookings.',
+      })
+      return
+    }
+
+    setActionState({
+      status: 'submitting',
+      busyBookingId: booking.id,
+      message: '',
+    })
+
+    try {
+      await updateBookingStatus(
+        {
+          bookingId: booking.id,
+          status: action.status,
+          reason: action.reason,
+        },
+        user.accessToken,
+      )
 
       setActionState({
-        status: 'submitting',
-        busyBookingId: booking.id,
-        message: '',
+        status: 'success',
+        busyBookingId: '',
+        message:
+          action.status === 'confirmed'
+            ? 'Booking accepted. It should now appear in the current queue for this date.'
+            : `Booking moved to ${getStatusMeta(action.status).label.toLowerCase()}.`,
       })
 
-      try {
-        await updateBookingStatus(
-          {
-            bookingId: booking.id,
-            status: action.status,
-            reason: action.reason,
-          },
-          user.accessToken,
-        )
-
-        setActionState({
-          status: 'success',
-          busyBookingId: '',
-          message:
-            action.status === 'confirmed'
-              ? 'Booking accepted. It should now appear in the current queue for this date.'
-              : `Booking moved to ${getStatusMeta(action.status).label.toLowerCase()}.`,
-        })
-
-        await Promise.allSettled([loadStaffBookingReads(), loadUpcomingScheduleWindow()])
-      } catch (error) {
-        setActionState({
-          status: 'error',
-          busyBookingId: '',
-          message: error?.message || 'Booking status could not be updated.',
-        })
-      }
-    },
-    [canReadBookingOperations, loadStaffBookingReads, loadUpcomingScheduleWindow, user?.accessToken],
-  )
+      await refreshBookingOperations()
+    } catch (error) {
+      setActionState({
+        status: 'error',
+        busyBookingId: '',
+        message: error?.message || 'Booking status could not be updated.',
+      })
+    }
+  }
 
   const scheduleSummary = useMemo(() => summarizeSchedule(scheduleState.data), [scheduleState.data])
   const bookedScheduleDates = useMemo(
@@ -1120,7 +1150,7 @@ export default function BookingsList() {
               </select>
             </label>
             <button
-              onClick={loadStaffBookingReads}
+              onClick={refreshBookingOperations}
               disabled={scheduleState.status === 'loading' || queueState.status === 'loading'}
               className="btn-primary self-end justify-center"
             >
@@ -1196,7 +1226,7 @@ export default function BookingsList() {
       {tab === 'schedule' ? (
         <div className="space-y-4">
           {!hasScheduleData && ['unauthorized', 'forbidden', 'validation-error', 'error'].includes(scheduleState.status) ? (
-            <BlockingState state={scheduleState} onRetry={loadStaffBookingReads} />
+            <BlockingState state={scheduleState} onRetry={refreshBookingOperations} />
           ) : (
             <>
               <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -1283,7 +1313,7 @@ export default function BookingsList() {
       {tab === 'queue' ? (
         <div className="space-y-4">
           {!hasQueueData && ['unauthorized', 'forbidden', 'validation-error', 'error'].includes(queueState.status) ? (
-            <BlockingState state={queueState} onRetry={loadStaffBookingReads} />
+            <BlockingState state={queueState} onRetry={refreshBookingOperations} />
           ) : (
             <>
               <div className="grid sm:grid-cols-3 gap-3">

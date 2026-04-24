@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import {
-  Image,
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,60 +13,89 @@ import { colors, radius } from '../../theme';
 
 const SORT_OPTIONS = ['Newest', 'Price: Low to High', 'Price: High to Low', 'Name A-Z'];
 
-function getProductKey(product) {
-  return product.key ?? product.id;
-}
-
 function sortProducts(products, sortBy) {
   return [...products].sort((left, right) => {
     if (sortBy === 'Price: Low to High') {
-      return left.price - right.price;
+      return left.priceCents - right.priceCents;
     }
 
     if (sortBy === 'Price: High to Low') {
-      return right.price - left.price;
+      return right.priceCents - left.priceCents;
     }
 
     if (sortBy === 'Name A-Z') {
       return left.name.localeCompare(right.name);
     }
 
-    return new Date(right.publishedAt || 0).getTime() - new Date(left.publishedAt || 0).getTime();
+    return new Date(right.updatedAt || 0).getTime() - new Date(left.updatedAt || 0).getTime();
   });
 }
 
-function getAvailabilityLabel(product) {
-  if (product.stock === 0) {
-    return 'Out of Stock';
-  }
+function ProductCard({ product, onOpenProduct }) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => onOpenProduct?.(product)}
+      style={styles.card}
+    >
+      <View style={styles.imageWrap}>
+        <View style={styles.imagePlaceholder}>
+          <MaterialCommunityIcons
+            name="package-variant-closed"
+            size={34}
+            color={colors.primary}
+          />
+        </View>
+      </View>
 
-  if (product.stock < 10) {
-    return 'Low Stock';
-  }
+      <Text style={styles.categoryLabel}>{product.categoryName}</Text>
+      <Text style={styles.name}>{product.name}</Text>
+      <Text style={styles.meta}>SKU {product.sku}</Text>
+      <Text numberOfLines={2} style={styles.description}>
+        {product.descriptionPreview}
+      </Text>
 
-  return `${product.stock} in stock`;
+      <View style={styles.cardFooter}>
+        <View style={styles.priceWrap}>
+          <Text style={styles.price}>{product.priceLabel}</Text>
+          <Text style={styles.updatedLabel}>Updated {product.updatedLabel}</Text>
+        </View>
+
+        <View style={styles.detailBadge}>
+          <MaterialCommunityIcons name="chevron-right" size={18} color={colors.labelText} />
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 }
 
 export default function ShopCatalogSection({
-  products,
-  cartItems = {},
-  onAddToCart,
-  onOpenCart,
+  status = 'idle',
+  categories = [],
+  products = [],
+  errorMessage = '',
+  cartCount = 0,
   onOpenProduct,
+  onOpenCart,
+  onRefresh,
 }) {
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [sortBy, setSortBy] = useState('Newest');
   const [isSortMenuVisible, setIsSortMenuVisible] = useState(false);
 
-  const categories = useMemo(
-    () => ['All', ...new Set(products.map((product) => product.category).filter(Boolean))],
-    [products],
-  );
+  const categoryOptions = useMemo(() => {
+    const labels = categories
+      .map((category) => String(category?.name ?? category?.label ?? '').trim())
+      .filter(Boolean);
+
+    return ['All', ...new Set(labels)];
+  }, [categories]);
+
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     const visibleProducts = products
-      .filter((product) => activeCategory === 'All' || product.category === activeCategory)
+      .filter((product) => activeCategory === 'All' || product.categoryName === activeCategory)
       .filter((product) => {
         if (!normalizedQuery) {
           return true;
@@ -74,17 +103,22 @@ export default function ShopCatalogSection({
 
         return (
           product.name.toLowerCase().includes(normalizedQuery) ||
-          String(product.brand || '').toLowerCase().includes(normalizedQuery)
+          product.sku.toLowerCase().includes(normalizedQuery) ||
+          product.categoryName.toLowerCase().includes(normalizedQuery)
         );
       });
 
     return sortProducts(visibleProducts, sortBy);
   }, [activeCategory, products, query, sortBy]);
 
-  const cartCount = Object.values(cartItems).reduce(
-    (sum, item) => sum + Number(item?.quantity || 0),
-    0,
-  );
+  const showLoadingState = (status === 'loading' || status === 'idle') && products.length === 0;
+  const showServiceErrorState = status === 'error';
+  const showCatalogEmptyState = status === 'empty';
+  const showFilterEmptyState =
+    !showLoadingState &&
+    !showServiceErrorState &&
+    !showCatalogEmptyState &&
+    filteredProducts.length === 0;
 
   return (
     <View style={styles.section}>
@@ -92,29 +126,47 @@ export default function ShopCatalogSection({
         <View>
           <Text style={styles.eyebrow}>CRUISERS CRIB</Text>
           <Text style={styles.title}>Auto Shop</Text>
+          <Text style={styles.subtitle}>
+            Browse the live catalog, then open your cart to review invoice checkout.
+          </Text>
         </View>
 
-        <TouchableOpacity
-          accessibilityRole="button"
-          activeOpacity={0.86}
-          onPress={onOpenCart}
-          style={styles.cartButton}
-        >
-          <MaterialCommunityIcons name="cart-outline" size={22} color={colors.labelText} />
-          {cartCount > 0 ? (
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{cartCount}</Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            activeOpacity={0.86}
+            onPress={onRefresh}
+            style={styles.refreshButton}
+          >
+            <MaterialCommunityIcons
+              name={status === 'loading' ? 'timer-sand' : 'refresh'}
+              size={20}
+              color={colors.labelText}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            activeOpacity={0.86}
+            onPress={onOpenCart}
+            style={styles.cartButton}
+          >
+            <MaterialCommunityIcons name="cart-outline" size={20} color={colors.labelText} />
+            {cartCount > 0 ? (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{cartCount}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.searchWrap}>
         <MaterialCommunityIcons name="magnify" size={18} color={colors.mutedText} />
         <TextInput
-          accessibilityLabel="Search products"
+          accessibilityLabel="Search catalog products"
           onChangeText={setQuery}
-          placeholder="Search products"
+          placeholder="Search products, SKU, or category"
           placeholderTextColor={colors.mutedText}
           selectionColor={colors.primary}
           style={styles.searchInput}
@@ -128,7 +180,7 @@ export default function ShopCatalogSection({
         showsHorizontalScrollIndicator={false}
         style={styles.categoryScroller}
       >
-        {categories.map((category) => (
+        {categoryOptions.map((category) => (
           <TouchableOpacity
             key={category}
             activeOpacity={0.86}
@@ -152,7 +204,7 @@ export default function ShopCatalogSection({
 
       <View style={styles.toolbar}>
         <Text style={styles.productCount}>
-          {filteredProducts.length} product{filteredProducts.length === 1 ? '' : 's'}
+          {products.length} live product{products.length === 1 ? '' : 's'}
         </Text>
 
         <TouchableOpacity
@@ -185,81 +237,60 @@ export default function ShopCatalogSection({
         </View>
       ) : null}
 
-      <View style={styles.grid}>
-        {filteredProducts.length > 0 ? (
-          filteredProducts.map((product) => {
-            const productKey = getProductKey(product);
-            const quantity = cartItems[productKey]?.quantity || 0;
-            const isOutOfStock = product.stock === 0;
-            const availabilityLabel = getAvailabilityLabel(product);
+      {showLoadingState ? (
+        <View style={styles.stateCard}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={styles.stateTitle}>Loading catalog</Text>
+          <Text style={styles.stateText}>
+            Pulling categories and active products from ecommerce-service.
+          </Text>
+        </View>
+      ) : null}
 
-            return (
-              <View key={productKey} style={styles.card}>
-                <TouchableOpacity
-                  activeOpacity={0.92}
-                  onPress={() => onOpenProduct?.(product)}
-                  style={styles.cardPressable}
-                >
-                  <View style={styles.imageWrap}>
-                    {product.image ? (
-                      <Image source={{ uri: product.image }} style={styles.image} />
-                    ) : (
-                      <View style={styles.imagePlaceholder}>
-                        <MaterialCommunityIcons name="package-variant-closed" size={28} color={colors.mutedText} />
-                      </View>
-                    )}
-                  </View>
+      {showServiceErrorState ? (
+        <View style={styles.stateCard}>
+          <MaterialCommunityIcons name="server-network-off" size={34} color="#FFB86B" />
+          <Text style={styles.stateTitle}>Catalog service unavailable</Text>
+          <Text style={styles.stateText}>
+            {errorMessage || 'Start ecommerce-service on port 3001, then refresh the catalog.'}
+          </Text>
+          <TouchableOpacity activeOpacity={0.86} onPress={onRefresh} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Retry catalog</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
-                  <Text style={styles.brand}>{product.brand || product.category}</Text>
-                  <Text style={styles.name} testID="mobile-shop-title">
-                    {product.name}
-                  </Text>
-                  <Text style={styles.meta}>{product.category}</Text>
-                  <Text
-                    style={[
-                      styles.availability,
-                      isOutOfStock && styles.availabilityOutOfStock,
-                    ]}
-                  >
-                    {availabilityLabel}
-                  </Text>
-                  <Text style={styles.price}>PHP {product.price.toLocaleString()}</Text>
-                </TouchableOpacity>
+      {showCatalogEmptyState ? (
+        <View style={styles.stateCard}>
+          <MaterialCommunityIcons name="package-variant-closed" size={34} color={colors.border} />
+          <Text style={styles.stateTitle}>Catalog is empty</Text>
+          <Text style={styles.stateText}>
+            Staff have not published any active ecommerce products yet.
+          </Text>
+        </View>
+      ) : null}
 
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  activeOpacity={0.88}
-                  disabled={isOutOfStock}
-                  onPress={() => onAddToCart?.(product)}
-                  style={[
-                    styles.addButton,
-                    isOutOfStock && styles.addButtonDisabled,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.addButtonText,
-                      isOutOfStock && styles.addButtonTextDisabled,
-                    ]}
-                  >
-                    {isOutOfStock
-                      ? 'Out of Stock'
-                      : quantity > 0
-                        ? `Add Another (${quantity})`
-                        : 'Add to Cart'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            );
-          })
-        ) : (
-          <View style={styles.emptyState}>
-            <MaterialCommunityIcons name="package-variant-closed" size={34} color={colors.border} />
-            <Text style={styles.emptyTitle}>No products found</Text>
-            <Text style={styles.emptyText}>Try a different search or switch categories.</Text>
-          </View>
-        )}
-      </View>
+      {!showLoadingState && !showServiceErrorState && !showCatalogEmptyState ? (
+        <View style={styles.grid}>
+          {showFilterEmptyState ? (
+            <View style={styles.stateCard}>
+              <MaterialCommunityIcons name="magnify-close" size={34} color={colors.border} />
+              <Text style={styles.stateTitle}>No matching products</Text>
+              <Text style={styles.stateText}>
+                Try a different search term or switch to another category.
+              </Text>
+            </View>
+          ) : (
+            filteredProducts.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                onOpenProduct={onOpenProduct}
+              />
+            ))
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -269,9 +300,14 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   header: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 14,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 10,
   },
   eyebrow: {
     color: colors.mutedText,
@@ -284,15 +320,32 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '800',
   },
+  subtitle: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+    maxWidth: 240,
+  },
+  refreshButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    height: 46,
+    justifyContent: 'center',
+    width: 46,
+  },
   cartButton: {
     alignItems: 'center',
     backgroundColor: colors.surfaceStrong,
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    height: 48,
+    height: 46,
     justifyContent: 'center',
-    width: 48,
+    width: 46,
   },
   cartBadge: {
     alignItems: 'center',
@@ -407,27 +460,21 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     borderWidth: 1,
     overflow: 'hidden',
-  },
-  cardPressable: {
     padding: 14,
   },
   imageWrap: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    height: 168,
+    height: 148,
     marginBottom: 14,
     overflow: 'hidden',
-  },
-  image: {
-    height: '100%',
-    width: '100%',
   },
   imagePlaceholder: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
   },
-  brand: {
+  categoryLabel: {
     color: colors.mutedText,
     fontSize: 12,
     fontWeight: '700',
@@ -441,61 +488,78 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   meta: {
-    color: colors.mutedText,
+    color: colors.labelText,
     fontSize: 13,
     marginTop: 6,
   },
-  availability: {
-    color: colors.success,
+  description: {
+    color: colors.mutedText,
     fontSize: 13,
-    fontWeight: '700',
-    marginTop: 10,
+    lineHeight: 19,
+    marginTop: 8,
   },
-  availabilityOutOfStock: {
-    color: '#FF8D8D',
+  cardFooter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+  },
+  priceWrap: {
+    flex: 1,
+    paddingRight: 12,
   },
   price: {
     color: colors.primary,
     fontSize: 18,
     fontWeight: '800',
-    marginTop: 10,
   },
-  addButton: {
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  addButtonDisabled: {
-    backgroundColor: colors.surface,
-  },
-  addButtonText: {
-    color: colors.onPrimary,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  addButtonTextDisabled: {
+  updatedLabel: {
     color: colors.mutedText,
+    fontSize: 12,
+    marginTop: 4,
   },
-  emptyState: {
+  detailBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  stateCard: {
     alignItems: 'center',
     backgroundColor: colors.surfaceStrong,
     borderColor: colors.border,
     borderRadius: radius.xl,
     borderWidth: 1,
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 28,
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 22,
   },
-  emptyTitle: {
+  stateTitle: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
-  },
-  emptyText: {
-    color: colors.mutedText,
-    fontSize: 14,
     textAlign: 'center',
+  },
+  stateText: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    marginTop: 4,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  retryButtonText: {
+    color: colors.onPrimary,
+    fontSize: 13,
+    fontWeight: '800',
   },
 });

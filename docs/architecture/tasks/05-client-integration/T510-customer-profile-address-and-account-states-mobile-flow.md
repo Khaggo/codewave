@@ -14,7 +14,7 @@ Integrate customer-mobile profile, addresses, and account-state handling.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 
@@ -62,4 +62,3 @@ Define the customer-mobile profile and address experience after activation, incl
 
 - vehicle management
 - booking submission
-

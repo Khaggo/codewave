@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
@@ -16,12 +16,19 @@ import ResetPassword from './src/screens/ResetPassword';
 import ManageProfile from './src/screens/ManageProfile';
 import ChangePassword from './src/screens/ChangePassword';
 import FeatureModuleScreen from './src/screens/FeatureModuleScreen';
+import InsuranceInquiryScreen from './src/screens/InsuranceInquiryScreen';
+import ChatbotScreen from './src/screens/ChatbotScreen';
 import {
+  ApiError,
   buildMobileAccountProfile,
+  customerMobileGuardMessages,
   createCustomerVehicle,
+  getCustomerMobileSessionAccessState,
   loginAccount,
   registerAccount,
+  startDeleteAccountOtp,
   updateCustomerProfile,
+  verifyDeleteAccountOtp,
   verifyRegistrationOtp,
 } from './src/lib/authClient';
 import { cloneDate, formatVehicleDisplayName } from './src/utils/validation';
@@ -41,6 +48,44 @@ const useAppSessionContext = () => {
 
   return context;
 };
+
+function CustomerSurfaceStateScreen({
+  navigation,
+  title,
+  message,
+  primaryActionLabel = 'Sign In',
+  onPrimaryAction,
+  secondaryActionLabel = 'Back to Home',
+  onSecondaryAction,
+}) {
+  return (
+    <View style={styles.guardScreen}>
+      <View style={styles.guardCard}>
+        <Text style={styles.guardEyebrow}>Customer Guardrail</Text>
+        <Text style={styles.guardTitle}>{title}</Text>
+        <Text style={styles.guardMessage}>{message}</Text>
+
+        <View style={styles.guardActions}>
+          <TouchableOpacity
+            style={styles.guardPrimaryAction}
+            onPress={onPrimaryAction ?? (() => navigation.replace('Login'))}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.guardPrimaryActionText}>{primaryActionLabel}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.guardSecondaryAction}
+            onPress={onSecondaryAction ?? (() => navigation.replace('Landing'))}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.guardSecondaryActionText}>{secondaryActionLabel}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
 
 function RegisterScreen(props) {
   const { handleRegisterRequest } = useAppSessionContext();
@@ -104,18 +149,39 @@ function ResetPasswordScreen(props) {
 function MenuScreen(props) {
   const {
     activeAccount,
+    clearCustomerSession,
     registeredAccount,
     syncAccount,
-    handleDeleteAccount,
-    setPendingAccount,
-    setActiveAccount,
-    setPendingOnboardingCompletion,
+    handleStartDeleteAccountOtp,
   } = useAppSessionContext();
+  const currentAccount = activeAccount || registeredAccount;
+  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+
+  if (accessState !== 'customer_session_active') {
+    return (
+      <CustomerSurfaceStateScreen
+        navigation={props.navigation}
+        title={
+          accessState === 'unauthorized_session'
+            ? 'Sign in required'
+            : 'Customer-only workspace'
+        }
+        message={
+          customerMobileGuardMessages[accessState] ??
+          customerMobileGuardMessages.unauthorized_session
+        }
+        onPrimaryAction={() => {
+          clearCustomerSession();
+          props.navigation.replace('Login');
+        }}
+      />
+    );
+  }
 
   return (
     <Dashboard
       {...props}
-      account={activeAccount || registeredAccount}
+      account={currentAccount}
       onSaveProfile={(profileUpdates) => {
         syncAccount((currentAccount) => ({
           ...currentAccount,
@@ -123,22 +189,44 @@ function MenuScreen(props) {
         }));
       }}
       onSignOut={() => {
-        setPendingAccount(null);
-        setPendingOnboardingCompletion(null);
-        setActiveAccount(null);
+        clearCustomerSession();
+        props.navigation.reset({
+          index: 0,
+          routes: [{ name: 'Landing' }],
+        });
       }}
-      onDeleteAccount={handleDeleteAccount}
+      onStartDeleteAccountOtp={handleStartDeleteAccountOtp}
     />
   );
 }
 
 function ManageProfileScreen(props) {
-  const { activeAccount, registeredAccount, syncAccount } = useAppSessionContext();
+  const { activeAccount, clearCustomerSession, registeredAccount, syncAccount } =
+    useAppSessionContext();
+  const currentAccount = activeAccount || registeredAccount;
+  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+
+  if (accessState !== 'customer_session_active') {
+    return (
+      <CustomerSurfaceStateScreen
+        navigation={props.navigation}
+        title="Customer session required"
+        message={
+          customerMobileGuardMessages[accessState] ??
+          customerMobileGuardMessages.unauthorized_session
+        }
+        onPrimaryAction={() => {
+          clearCustomerSession();
+          props.navigation.replace('Login');
+        }}
+      />
+    );
+  }
 
   return (
     <ManageProfile
       {...props}
-      account={activeAccount || registeredAccount}
+      account={currentAccount}
       onSaveProfile={(profileUpdates) => {
         syncAccount((currentAccount) => ({
           ...currentAccount,
@@ -150,18 +238,90 @@ function ManageProfileScreen(props) {
 }
 
 function ChangePasswordScreen(props) {
-  const { activeAccount, registeredAccount, syncAccount } = useAppSessionContext();
+  const { activeAccount, clearCustomerSession, registeredAccount, syncAccount } =
+    useAppSessionContext();
+  const currentAccount = activeAccount || registeredAccount;
+  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+
+  if (accessState !== 'customer_session_active') {
+    return (
+      <CustomerSurfaceStateScreen
+        navigation={props.navigation}
+        title="Customer session required"
+        message={
+          customerMobileGuardMessages[accessState] ??
+          customerMobileGuardMessages.unauthorized_session
+        }
+        onPrimaryAction={() => {
+          clearCustomerSession();
+          props.navigation.replace('Login');
+        }}
+      />
+    );
+  }
 
   return (
     <ChangePassword
       {...props}
-      account={activeAccount || registeredAccount}
+      account={currentAccount}
       onChangePassword={(newPassword) => {
         syncAccount((currentAccount) => ({
           ...currentAccount,
           password: newPassword,
         }));
       }}
+    />
+  );
+}
+
+function InsuranceInquiryMobileScreen(props) {
+  const { activeAccount, registeredAccount } = useAppSessionContext();
+  const currentAccount = activeAccount || registeredAccount;
+  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+
+  if (
+    accessState === 'staff_session_blocked' ||
+    accessState === 'deactivated_customer_blocked'
+  ) {
+    return (
+      <CustomerSurfaceStateScreen
+        navigation={props.navigation}
+        title="Customer-only workspace"
+        message={customerMobileGuardMessages[accessState]}
+      />
+    );
+  }
+
+  return (
+    <InsuranceInquiryScreen
+      {...props}
+      account={currentAccount}
+    />
+  );
+}
+
+function ChatbotMobileScreen(props) {
+  const { activeAccount, registeredAccount } = useAppSessionContext();
+  const currentAccount = activeAccount || registeredAccount;
+  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+
+  if (
+    accessState === 'staff_session_blocked' ||
+    accessState === 'deactivated_customer_blocked'
+  ) {
+    return (
+      <CustomerSurfaceStateScreen
+        navigation={props.navigation}
+        title="Customer-only support"
+        message={customerMobileGuardMessages[accessState]}
+      />
+    );
+  }
+
+  return (
+    <ChatbotScreen
+      {...props}
+      account={currentAccount}
     />
   );
 }
@@ -349,11 +509,40 @@ export default function App() {
     });
   };
 
+  const clearCustomerSession = () => {
+    setPendingAccount(null);
+    setPendingOnboardingCompletion(null);
+    setActiveAccount(null);
+    setRegisteredAccount((currentAccount) =>
+      currentAccount
+        ? {
+            ...currentAccount,
+            accessToken: null,
+            refreshToken: null,
+          }
+        : currentAccount,
+    );
+  };
+
   const handleDeleteAccount = () => {
     setPendingAccount(null);
     setPendingOnboardingCompletion(null);
     setActiveAccount(null);
     setRegisteredAccount(null);
+  };
+
+  const handleStartDeleteAccountOtp = async ({ currentPassword }) => {
+    const currentAccount = activeAccount ?? registeredAccount;
+    const accessToken = currentAccount?.accessToken;
+
+    if (!accessToken) {
+      throw new Error('Your session expired before we could start account deletion. Please sign in again and retry.');
+    }
+
+    return startDeleteAccountOtp({
+      currentPassword,
+      accessToken,
+    });
   };
 
   const persistCustomerOnboarding = async ({ session, draftAccount, existingAccount, password }) => {
@@ -387,11 +576,17 @@ export default function App() {
           user: updatedUser,
         },
         password,
-        draftAccount,
+        draftAccount: {
+          ...draftAccount,
+          ownedVehicles: vehicle ? [vehicle] : [],
+          primaryVehicleId: vehicle?.id ?? null,
+        },
         existingAccount,
       }),
       {
         ...draftAccount,
+        ownedVehicles: vehicle ? [vehicle] : [],
+        primaryVehicleId: vehicle?.id ?? null,
         licensePlate: vehicle?.plateNumber ?? draftAccount?.licensePlate,
         vehicleMake: vehicle?.make ?? draftAccount?.vehicleMake,
         vehicleModel: vehicle?.model ?? draftAccount?.vehicleModel,
@@ -432,6 +627,19 @@ export default function App() {
       }),
       onboardingDraft,
     );
+    const verifiedAccessState = getCustomerMobileSessionAccessState(verifiedAccount);
+
+    if (verifiedAccessState !== 'customer_session_active') {
+      throw new ApiError(
+        customerMobileGuardMessages[verifiedAccessState] ??
+          customerMobileGuardMessages.staff_session_blocked,
+        verifiedAccessState === 'unauthorized_session' ? 401 : 403,
+        {
+          reason: verifiedAccessState,
+          surface: 'customer-mobile',
+        },
+      );
+    }
 
     rememberKnownAccount(verifiedAccount);
     setActiveAccount(verifiedAccount);
@@ -488,6 +696,19 @@ export default function App() {
       password,
       existingAccount: registeredAccount,
     });
+    const accessState = getCustomerMobileSessionAccessState(nextAccount);
+
+    if (accessState !== 'customer_session_active') {
+      throw new ApiError(
+        customerMobileGuardMessages[accessState] ??
+          customerMobileGuardMessages.staff_session_blocked,
+        accessState === 'unauthorized_session' ? 401 : 403,
+        {
+          reason: accessState,
+          surface: 'customer-mobile',
+        },
+      );
+    }
 
     rememberKnownAccount(nextAccount);
     setActiveAccount(nextAccount);
@@ -530,7 +751,7 @@ export default function App() {
     return completedAccount;
   };
 
-  const handleOtpVerified = (otpParams) => {
+  const handleOtpVerified = async (otpParams) => {
     if (otpParams?.otpPurpose === 'passwordChange' && otpParams?.pendingPassword) {
       syncAccount((currentAccount) => ({
         ...currentAccount,
@@ -546,14 +767,50 @@ export default function App() {
     }
 
     if (otpParams?.otpPurpose === 'deleteAccount') {
-      handleDeleteAccount();
+      const currentAccount = activeAccount ?? registeredAccount;
+      const accessToken = currentAccount?.accessToken;
 
-      return {
-        status: 'success',
-        purpose: 'deleteAccount',
-        nextRoute: 'Landing',
-        resetStack: true,
-      };
+      if (!accessToken) {
+        return {
+          status: 'error',
+          title: 'Delete Failed',
+          message: 'Your session expired before we could archive the account. Please sign in again and retry.',
+        };
+      }
+
+      if (!otpParams?.enrollmentId || !otpParams?.otp) {
+        return {
+          status: 'error',
+          title: 'Delete Failed',
+          message: 'The delete verification session is incomplete. Start account deletion again and use the new email code.',
+        };
+      }
+
+      try {
+        await verifyDeleteAccountOtp({
+          enrollmentId: otpParams.enrollmentId,
+          otp: otpParams.otp,
+          accessToken,
+        });
+
+        handleDeleteAccount();
+
+        return {
+          status: 'success',
+          purpose: 'deleteAccount',
+          nextRoute: 'Landing',
+          resetStack: true,
+        };
+      } catch (error) {
+        return {
+          status: 'error',
+          title: 'Delete Failed',
+          message:
+            error instanceof Error && error.message
+              ? error.message
+              : 'We could not archive your account right now. Please try again.',
+        };
+      }
     }
 
     return {
@@ -573,7 +830,9 @@ export default function App() {
     setActiveAccount,
     setPendingOnboardingCompletion,
     syncAccount,
+    clearCustomerSession,
     handleDeleteAccount,
+    handleStartDeleteAccountOtp,
     handleRegisterRequest,
     handleVerifyRegistrationOtp,
     handleLoginRequest,
@@ -690,35 +949,17 @@ export default function App() {
             )}
             </Stack.Screen>
 
-            <Stack.Screen name="InsuranceInquiryScreen">
-            {(props) => (
-              <FeatureModuleScreen
-                {...props}
-                title="Insurance Inquiry"
-                subtitle="Request quotations and track your insurance application status."
-                bullets={[
-                  'Submit quote requests from one guided flow.',
-                  'Track policy inquiry updates and approvals.',
-                  'Keep insurance communication tied to the vehicle lifecycle.',
-                ]}
-              />
-            )}
-            </Stack.Screen>
+            <Stack.Screen
+              name="InsuranceInquiryScreen"
+              component={InsuranceInquiryMobileScreen}
+              options={{ headerShown: false }}
+            />
 
-            <Stack.Screen name="ChatbotScreen">
-            {(props) => (
-              <FeatureModuleScreen
-                {...props}
-                title="Ask AutoCare"
-                subtitle="Objective 10 chatbot support for quick service and account assistance."
-                bullets={[
-                  'Ask for help with bookings, services, and account tools.',
-                  'Get guided responses for insurance and loyalty questions.',
-                  'This mock screen represents the chatbot integration point.',
-                ]}
-              />
-            )}
-            </Stack.Screen>
+            <Stack.Screen
+              name="ChatbotScreen"
+              component={ChatbotMobileScreen}
+              options={{ headerShown: false }}
+            />
           </Stack.Navigator>
         </NavigationContainer>
       </AppSessionContext.Provider>
@@ -727,6 +968,71 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  guardScreen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: colors.background,
+  },
+  guardCard: {
+    width: '100%',
+    maxWidth: 440,
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 14,
+  },
+  guardEyebrow: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  guardTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  guardMessage: {
+    color: colors.mutedText,
+    fontSize: 15,
+    lineHeight: 23,
+  },
+  guardActions: {
+    marginTop: 8,
+    gap: 12,
+  },
+  guardPrimaryAction: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guardPrimaryActionText: {
+    color: colors.onPrimary,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  guardSecondaryAction: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+  },
+  guardSecondaryActionText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
   appRoot: {
     flex: 1,
     minHeight: 0,

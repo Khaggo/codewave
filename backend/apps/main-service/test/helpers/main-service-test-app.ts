@@ -33,6 +33,7 @@ import { BackJobsService } from '../../src/modules/back-jobs/services/back-jobs.
 import { BookingsController } from '../../src/modules/bookings/controllers/bookings.controller';
 import { CreateBookingDto } from '../../src/modules/bookings/dto/create-booking.dto';
 import { RescheduleBookingDto } from '../../src/modules/bookings/dto/reschedule-booking.dto';
+import { BOOKINGS_CLOCK } from '../../src/modules/bookings/bookings.constants';
 import { UpdateBookingStatusDto } from '../../src/modules/bookings/dto/update-booking-status.dto';
 import { BookingsRepository } from '../../src/modules/bookings/repositories/bookings.repository';
 import { bookingStatusEnum } from '../../src/modules/bookings/schemas/bookings.schema';
@@ -188,9 +189,11 @@ type AddressRecord = {
 type UserRecord = {
   id: string;
   email: string;
+  deletedEmail?: string | null;
   role: UserRole;
   staffCode: string | null;
   isActive: boolean;
+  deletedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   profile: UserProfileRecord;
@@ -878,6 +881,8 @@ const cloneBooking = (
   timeSlotsById: Map<string, TimeSlotRecord>,
   bookingServicesList: BookingServiceRecord[],
   bookingStatusHistoryList: BookingStatusHistoryRecord[],
+  user?: UserRecord | null,
+  vehicle?: VehicleRecord | null,
 ) => {
   if (!booking) {
     return booking ?? null;
@@ -885,6 +890,8 @@ const cloneBooking = (
 
   return {
     ...booking,
+    user: cloneUser(user),
+    vehicle: vehicle ? { ...vehicle } : null,
     timeSlot: { ...timeSlotsById.get(booking.timeSlotId)! },
     requestedServices: bookingServicesList
       .filter((entry) => entry.bookingId === booking.id)
@@ -1013,6 +1020,10 @@ const cloneNotification = (
 
 class InMemoryUsersRepository {
   private readonly users = new Map<string, UserRecord>();
+
+  peekById(id: string) {
+    return this.users.get(id) ?? null;
+  }
 
   async create(createUserDto: CreateUserDto & { role?: UserRole; staffCode?: string }) {
     const now = new Date();
@@ -1175,6 +1186,8 @@ class InMemoryAuthRepository {
     ipAddress?: string;
     wasSuccessful: boolean;
   }> = [];
+
+  constructor(private readonly usersRepository: InMemoryUsersRepository) {}
 
   async createAccount(userId: string, passwordHash: string) {
     const now = new Date();
@@ -1379,10 +1392,35 @@ class InMemoryAuthRepository {
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((auditLog) => ({ ...auditLog }));
   }
+
+  async softDeleteUserAccount(payload: { userId: string; email: string }) {
+    const user = this.usersRepository.peekById(payload.userId);
+    if (user) {
+      const archivedAt = new Date();
+      user.email = `deleted+${payload.userId}@autocare.local`;
+      user.deletedEmail = payload.email;
+      user.deletedAt = archivedAt;
+      user.isActive = false;
+      user.updatedAt = archivedAt;
+    }
+
+    await this.updateAccountStatus(payload.userId, false);
+    await this.revokeActiveRefreshTokens(payload.userId);
+
+    Array.from(this.googleIdentities.entries()).forEach(([id, identity]) => {
+      if (identity.userId === payload.userId) {
+        this.googleIdentities.delete(id);
+      }
+    });
+  }
 }
 
 class InMemoryVehiclesRepository {
   private readonly vehicles = new Map<string, VehicleRecord>();
+
+  peekById(id: string) {
+    return this.vehicles.get(id) ?? null;
+  }
 
   async create(createVehicleDto: CreateVehicleDto) {
     const now = new Date();
@@ -1446,13 +1484,10 @@ class InMemoryVehiclesRepository {
 }
 
 class InMemoryBookingsRepository {
-  private readonly services = new Map<string, ServiceRecord>();
-  private readonly timeSlots = new Map<string, TimeSlotRecord>();
-  private readonly bookings = new Map<string, BookingRecord>();
-  private readonly bookingServices: BookingServiceRecord[] = [];
-  private readonly bookingStatusHistory: BookingStatusHistoryRecord[] = [];
-
-  constructor() {
+  constructor(
+    private readonly usersRepository: InMemoryUsersRepository,
+    private readonly vehiclesRepository: InMemoryVehiclesRepository,
+  ) {
     const now = new Date();
 
     const serviceOne: ServiceRecord = {
@@ -1505,6 +1540,12 @@ class InMemoryBookingsRepository {
     this.timeSlots.set(slotTwo.id, slotTwo);
   }
 
+  private readonly services = new Map<string, ServiceRecord>();
+  private readonly timeSlots = new Map<string, TimeSlotRecord>();
+  private readonly bookings = new Map<string, BookingRecord>();
+  private readonly bookingServices: BookingServiceRecord[] = [];
+  private readonly bookingStatusHistory: BookingStatusHistoryRecord[] = [];
+
   async listServices() {
     return Array.from(this.services.values())
       .sort((left, right) => left.name.localeCompare(right.name))
@@ -1529,6 +1570,58 @@ class InMemoryBookingsRepository {
     return slot ? { ...slot } : null;
   }
 
+  async createTimeSlot(payload: {
+    label: string;
+    startTime: string;
+    endTime: string;
+    capacity: number;
+    isActive?: boolean;
+  }) {
+    const now = new Date();
+    const timeSlot: TimeSlotRecord = {
+      id: randomUUID(),
+      label: payload.label.trim(),
+      startTime: payload.startTime,
+      endTime: payload.endTime,
+      capacity: payload.capacity,
+      isActive: payload.isActive ?? true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.timeSlots.set(timeSlot.id, timeSlot);
+    return { ...timeSlot };
+  }
+
+  async updateTimeSlot(
+    id: string,
+    payload: {
+      label?: string;
+      startTime?: string;
+      endTime?: string;
+      capacity?: number;
+      isActive?: boolean;
+    },
+  ) {
+    const slot = this.timeSlots.get(id);
+    if (!slot) {
+      throw new NotFoundException('Time slot not found');
+    }
+
+    const updatedTimeSlot: TimeSlotRecord = {
+      ...slot,
+      ...(payload.label !== undefined ? { label: payload.label.trim() } : {}),
+      ...(payload.startTime !== undefined ? { startTime: payload.startTime } : {}),
+      ...(payload.endTime !== undefined ? { endTime: payload.endTime } : {}),
+      ...(payload.capacity !== undefined ? { capacity: payload.capacity } : {}),
+      ...(payload.isActive !== undefined ? { isActive: payload.isActive } : {}),
+      updatedAt: new Date(),
+    };
+
+    this.timeSlots.set(id, updatedTimeSlot);
+    return { ...updatedTimeSlot };
+  }
+
   async countActiveBookingsForSlot(timeSlotId: string, scheduledDate: string, excludeBookingId?: string) {
     return Array.from(this.bookings.values()).filter((booking) => {
       const isActiveStatus = ['pending', 'confirmed', 'rescheduled'].includes(booking.status);
@@ -1541,6 +1634,39 @@ class InMemoryBookingsRepository {
         booking.scheduledDate === scheduledDate
       );
     }).length;
+  }
+
+  async findByScheduledDateRange(
+    startDate: string,
+    endDate: string,
+    options?: {
+      timeSlotId?: string;
+      statuses?: BookingStatus[];
+    },
+  ) {
+    return Array.from(this.bookings.values())
+      .filter((booking) => {
+        const matchesWindow = booking.scheduledDate >= startDate && booking.scheduledDate <= endDate;
+        const matchesSlot = options?.timeSlotId ? booking.timeSlotId === options.timeSlotId : true;
+        const matchesStatus = options?.statuses?.length
+          ? options.statuses.includes(booking.status)
+          : true;
+
+        return matchesWindow && matchesSlot && matchesStatus;
+      })
+      .sort((left, right) => {
+        if (left.scheduledDate !== right.scheduledDate) {
+          return left.scheduledDate.localeCompare(right.scheduledDate);
+        }
+
+        return left.createdAt.getTime() - right.createdAt.getTime();
+      })
+      .map((booking) => ({
+        id: booking.id,
+        timeSlotId: booking.timeSlotId,
+        scheduledDate: booking.scheduledDate,
+        status: booking.status,
+      }));
   }
 
   async create(createBookingDto: CreateBookingDto) {
@@ -1586,12 +1712,28 @@ class InMemoryBookingsRepository {
       throw new NotFoundException('Booking not found');
     }
 
-    return cloneBooking(booking, this.services, this.timeSlots, this.bookingServices, this.bookingStatusHistory);
+    return cloneBooking(
+      booking,
+      this.services,
+      this.timeSlots,
+      this.bookingServices,
+      this.bookingStatusHistory,
+      this.usersRepository.peekById(booking.userId),
+      this.vehiclesRepository.peekById(booking.vehicleId),
+    );
   }
 
   async findOptionalById(id: string) {
     const booking = this.bookings.get(id);
-    return cloneBooking(booking, this.services, this.timeSlots, this.bookingServices, this.bookingStatusHistory);
+    return cloneBooking(
+      booking,
+      this.services,
+      this.timeSlots,
+      this.bookingServices,
+      this.bookingStatusHistory,
+      booking ? this.usersRepository.peekById(booking.userId) : null,
+      booking ? this.vehiclesRepository.peekById(booking.vehicleId) : null,
+    );
   }
 
   async findByUserId(userId: string) {
@@ -1599,7 +1741,15 @@ class InMemoryBookingsRepository {
       .filter((booking) => booking.userId === userId)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((booking) =>
-        cloneBooking(booking, this.services, this.timeSlots, this.bookingServices, this.bookingStatusHistory),
+        cloneBooking(
+          booking,
+          this.services,
+          this.timeSlots,
+          this.bookingServices,
+          this.bookingStatusHistory,
+          this.usersRepository.peekById(booking.userId),
+          this.vehiclesRepository.peekById(booking.vehicleId),
+        ),
       );
   }
 
@@ -1608,7 +1758,15 @@ class InMemoryBookingsRepository {
       .filter((booking) => booking.vehicleId === vehicleId)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((booking) =>
-        cloneBooking(booking, this.services, this.timeSlots, this.bookingServices, this.bookingStatusHistory),
+        cloneBooking(
+          booking,
+          this.services,
+          this.timeSlots,
+          this.bookingServices,
+          this.bookingStatusHistory,
+          this.usersRepository.peekById(booking.userId),
+          this.vehiclesRepository.peekById(booking.vehicleId),
+        ),
       );
   }
 
@@ -1616,7 +1774,15 @@ class InMemoryBookingsRepository {
     return Array.from(this.bookings.values())
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((booking) =>
-        cloneBooking(booking, this.services, this.timeSlots, this.bookingServices, this.bookingStatusHistory),
+        cloneBooking(
+          booking,
+          this.services,
+          this.timeSlots,
+          this.bookingServices,
+          this.bookingStatusHistory,
+          this.usersRepository.peekById(booking.userId),
+          this.vehiclesRepository.peekById(booking.vehicleId),
+        ),
       );
   }
 
@@ -1639,7 +1805,15 @@ class InMemoryBookingsRepository {
       })
       .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
       .map((booking) =>
-        cloneBooking(booking, this.services, this.timeSlots, this.bookingServices, this.bookingStatusHistory),
+        cloneBooking(
+          booking,
+          this.services,
+          this.timeSlots,
+          this.bookingServices,
+          this.bookingStatusHistory,
+          this.usersRepository.peekById(booking.userId),
+          this.vehiclesRepository.peekById(booking.vehicleId),
+        ),
       );
   }
 
@@ -3996,11 +4170,14 @@ export async function createMainServiceTestApp(): Promise<{
     'jwt.accessExpiresIn': '15m',
     'jwt.refreshExpiresIn': '7d',
   };
+  const bookingClock = {
+    now: () => new Date('2026-04-01T00:00:00.000Z'),
+  };
 
   const usersRepository = new InMemoryUsersRepository();
-  const authRepository = new InMemoryAuthRepository();
+  const authRepository = new InMemoryAuthRepository(usersRepository);
   const vehiclesRepository = new InMemoryVehiclesRepository();
-  const bookingsRepository = new InMemoryBookingsRepository();
+  const bookingsRepository = new InMemoryBookingsRepository(usersRepository, vehiclesRepository);
   const jobOrdersRepository = new InMemoryJobOrdersRepository();
   const backJobsRepository = new InMemoryBackJobsRepository();
   const insuranceRepository = new InMemoryInsuranceRepository();
@@ -4079,6 +4256,7 @@ export async function createMainServiceTestApp(): Promise<{
       { provide: AuthRepository, useValue: authRepository },
       { provide: VehiclesRepository, useValue: vehiclesRepository },
       { provide: BookingsRepository, useValue: bookingsRepository },
+      { provide: BOOKINGS_CLOCK, useValue: bookingClock },
       { provide: JobOrdersRepository, useValue: jobOrdersRepository },
       { provide: BackJobsRepository, useValue: backJobsRepository },
       { provide: InsuranceRepository, useValue: insuranceRepository },

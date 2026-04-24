@@ -39,6 +39,12 @@ export interface QueueCurrentQuery {
   timeSlotId?: string;
 }
 
+export interface BookingAvailabilityQuery {
+  startDate: string;
+  endDate: string;
+  timeSlotId?: string;
+}
+
 export const bookingsRoutes: Record<string, RouteContract> = {
   listServices: {
     method: 'GET',
@@ -51,6 +57,14 @@ export const bookingsRoutes: Record<string, RouteContract> = {
     path: '/api/time-slots',
     status: 'live',
     source: 'swagger',
+  },
+  getBookingAvailability: {
+    method: 'GET',
+    path: '/api/bookings/availability',
+    status: 'live',
+    source: 'swagger',
+    notes:
+      'Auth-gated booking window read that returns min/max bookable dates plus day and slot capacity states.',
   },
   createBooking: {
     method: 'POST',

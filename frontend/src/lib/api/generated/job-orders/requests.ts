@@ -48,6 +48,15 @@ export interface FinalizeJobOrderRequest {
   summary?: string;
 }
 
+export type JobOrderInvoicePaymentMethod = 'cash' | 'bank_transfer' | 'check' | 'other';
+
+export interface RecordJobOrderInvoicePaymentRequest {
+  amountPaidCents: number;
+  paymentMethod: JobOrderInvoicePaymentMethod;
+  reference?: string;
+  receivedAt?: string;
+}
+
 export const jobOrdersRoutes: Record<string, RouteContract> = {
   createJobOrder: {
     method: 'POST',
@@ -88,5 +97,12 @@ export const jobOrdersRoutes: Record<string, RouteContract> = {
     status: 'live',
     source: 'swagger',
     notes: 'Live route. Authenticated adviser or super admin owns invoice-ready generation.',
+  },
+  recordInvoicePayment: {
+    method: 'POST',
+    path: '/api/job-orders/:id/invoice/payments',
+    status: 'live',
+    source: 'swagger',
+    notes: 'Live route. Adviser or super admin records settlement against the generated invoice-ready record.',
   },
 };

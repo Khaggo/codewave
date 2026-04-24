@@ -130,7 +130,7 @@ export class AuthRepository extends BaseRepository {
 
   async createOtpChallenge(payload: {
     userId: string;
-    purpose: 'customer_signup' | 'staff_activation';
+    purpose: 'customer_signup' | 'staff_activation' | 'account_delete';
     email: string;
     otpHash: string;
     expiresAt: Date;
@@ -213,6 +213,41 @@ export class AuthRepository extends BaseRepository {
   async listStaffAdminAuditLogsForAnalytics() {
     return this.db.query.staffAdminAuditLogs.findMany({
       orderBy: desc(staffAdminAuditLogs.createdAt),
+    });
+  }
+
+  async softDeleteUserAccount(payload: { userId: string; email: string }) {
+    return this.db.transaction(async (tx) => {
+      const archivedAt = new Date();
+      const archivedEmail = `deleted+${payload.userId}@autocare.local`;
+
+      await tx
+        .update(users)
+        .set({
+          email: archivedEmail,
+          deletedEmail: payload.email,
+          isActive: false,
+          deletedAt: archivedAt,
+          updatedAt: archivedAt,
+        })
+        .where(eq(users.id, payload.userId));
+
+      await tx
+        .update(authAccounts)
+        .set({
+          isActive: false,
+          updatedAt: archivedAt,
+        })
+        .where(eq(authAccounts.userId, payload.userId));
+
+      await tx
+        .update(refreshTokens)
+        .set({
+          revokedAt: archivedAt,
+        })
+        .where(and(eq(refreshTokens.userId, payload.userId), isNull(refreshTokens.revokedAt)));
+
+      await tx.delete(authGoogleIdentities).where(eq(authGoogleIdentities.userId, payload.userId));
     });
   }
 }

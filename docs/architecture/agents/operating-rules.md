@@ -11,6 +11,7 @@ Define the universal operating constraints for all AUTOCARE backend agents in a 
 - follow declared service boundaries and domain ownership
 - improve the SSoT only through bounded, evidence-based changes
 - convert credible confusion, drift, or stagnation signals into orchestrator-triaged observations or proposals
+- keep the triage outcome explicit: `reject as noise`, `log observation`, or `create bounded proposal`
 - hand work off when a task crosses domain or role boundaries
 
 ## Forbidden Actions
@@ -30,6 +31,9 @@ Define the universal operating constraints for all AUTOCARE backend agents in a 
 
 ## Outputs
 
+- rejected noise
+- logged observations
+- bounded proposals
 - bounded changes
 - validated handoffs
 - queued observations or bounded improvement proposals
@@ -40,7 +44,7 @@ Define the universal operating constraints for all AUTOCARE backend agents in a 
 - route freeform prompts to the orchestrator unless a worker role is explicitly named
 - route local business truth to the owning domain worker
 - route cross-domain contracts to the integration worker
-- route credible self-improvement evidence to the orchestrator for triage
+- route credible self-improvement evidence to the orchestrator for explicit triage before follow-up work begins
 - route validation and manifest updates to the validator
 
 ## Stop Conditions

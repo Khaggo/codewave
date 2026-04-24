@@ -18,6 +18,8 @@ import { Roles } from '@main-modules/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 
+import { BookingAvailabilityQueryDto } from '../dto/booking-availability-query.dto';
+import { BookingAvailabilityResponseDto } from '../dto/booking-availability-response.dto';
 import { BookingResponseDto } from '../dto/booking-response.dto';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
@@ -57,6 +59,24 @@ export class BookingsController {
   })
   listTimeSlots() {
     return this.bookingsService.listTimeSlots();
+  }
+
+  @Get('bookings/availability')
+  @ApiOperation({ summary: 'Read bounded booking-date availability derived from active slot definitions and booking capacity.' })
+  @ApiOkResponse({
+    description: 'Availability window derived from booking-owned date and slot-capacity truth.',
+    type: BookingAvailabilityResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The requested availability window is invalid or too large.' })
+  @ApiForbiddenResponse({
+    description: 'Only customers, service advisers, or super admins can read booking availability.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  getAvailability(@Query() query: BookingAvailabilityQueryDto) {
+    return this.bookingsService.getAvailability(query);
   }
 
   @Post('time-slots')

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  BarChart3,
   LayoutDashboard,
   Car,
   CalendarCheck,
@@ -14,6 +15,10 @@ import {
   ChevronRight,
   Cog,
   Wrench,
+  Users,
+  ClipboardCheck,
+  ClipboardList,
+  Boxes,
 } from 'lucide-react'
 
 import { useUser } from '@/lib/userContext'
@@ -46,6 +51,18 @@ const NAV = [
   {
     group: 'Customer',
     items: [{ href: '/loyalty', label: 'Loyalty Management', icon: Award }],
+  },
+  {
+    group: 'Admin',
+    items: [
+      { href: '/admin/users', label: 'User Creation', icon: Users },
+      { href: '/admin/appointments', label: 'Appointments Admin', icon: CalendarCheck },
+      { href: '/admin/job-orders', label: 'Job Orders', icon: ClipboardList },
+      { href: '/admin/catalog', label: 'Catalog Admin', icon: Boxes },
+      { href: '/admin/inventory', label: 'Inventory Admin', icon: ShoppingBag },
+      { href: '/admin/qa-audit', label: 'QA Audit', icon: ClipboardCheck },
+      { href: '/admin/summaries', label: 'Analytics & Summaries', icon: BarChart3 },
+    ],
   },
 ]
 

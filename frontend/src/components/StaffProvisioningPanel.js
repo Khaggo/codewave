@@ -9,17 +9,46 @@ import { useUser } from '@/lib/userContext'
 const emptyForm = {
   email: '',
   password: '',
-  role: 'service_adviser',
+  accountType: 'staff',
   staffCode: '',
   firstName: '',
   lastName: '',
   phone: '',
 }
 
-const roleOptions = [
-  { value: 'service_adviser', label: 'Service Adviser' },
-  { value: 'technician', label: 'Technician' },
-  { value: 'super_admin', label: 'Super Admin' },
+const accountTypeOptions = [
+  {
+    value: 'staff',
+    label: 'Staff',
+    role: 'service_adviser',
+    roleLabel: 'Service Adviser',
+    helper: 'Front-desk and coordination access for bookings, customers, and daily operations.',
+    staffCodeExample: 'STA-0001',
+  },
+  {
+    value: 'mechanic',
+    label: 'Mechanic',
+    role: 'technician',
+    roleLabel: 'Technician Access',
+    helper: 'Mechanics currently use technician permissions in the live system.',
+    staffCodeExample: 'MEC-0001',
+  },
+  {
+    value: 'technician',
+    label: 'Technician',
+    role: 'technician',
+    roleLabel: 'Technician Access',
+    helper: 'Assigned technical work, workshop progress, and execution-focused access.',
+    staffCodeExample: 'TEC-0001',
+  },
+  {
+    value: 'admin',
+    label: 'Admin',
+    role: 'super_admin',
+    roleLabel: 'Super Admin',
+    helper: 'Protected backoffice administration and sensitive override authority.',
+    staffCodeExample: 'ADM-0001',
+  },
 ]
 
 const buildErrors = (form) => {
@@ -56,9 +85,9 @@ export default function StaffProvisioningPanel() {
 
   const canProvision = user?.role === 'super_admin'
 
-  const roleDescription = useMemo(
-    () => roleOptions.find((option) => option.value === form.role)?.label ?? 'Staff Member',
-    [form.role],
+  const selectedAccountType = useMemo(
+    () => accountTypeOptions.find((option) => option.value === form.accountType) ?? accountTypeOptions[0],
+    [form.accountType],
   )
 
   if (!canProvision) {
@@ -93,7 +122,7 @@ export default function StaffProvisioningPanel() {
         {
           email: form.email.trim().toLowerCase(),
           password: form.password,
-          role: form.role,
+          role: selectedAccountType.role,
           staffCode: form.staffCode.trim(),
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
@@ -106,7 +135,7 @@ export default function StaffProvisioningPanel() {
       setErrors({})
       setNotice({
         tone: 'success',
-        text: `${roleDescription} provisioned successfully. The account is now pending activation through the staff Google + email OTP flow.`,
+        text: `${selectedAccountType.label} provisioned successfully. The account is now pending activation through the staff Google + email OTP flow.`,
       })
     } catch (error) {
       setNotice({
@@ -134,10 +163,10 @@ export default function StaffProvisioningPanel() {
           <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: '#f07c00' }}>
             Super Admin
           </p>
-          <h2 className="mt-2 text-2xl font-black text-ink-primary">Provision Staff Account</h2>
+          <h2 className="mt-2 text-2xl font-black text-ink-primary">Provision Operations Account</h2>
           <p className="mt-2 max-w-2xl text-sm text-ink-secondary leading-6">
-            Create a staff identity for technicians, service advisers, or another super admin. New
-            accounts stay in <span className="font-semibold text-ink-primary">pending activation</span> until
+            Create staff, mechanic, technician, and admin identities from one protected workspace.
+            New accounts stay in <span className="font-semibold text-ink-primary">pending activation</span> until
             they complete the existing Google + email OTP activation flow.
           </p>
         </div>
@@ -223,19 +252,19 @@ export default function StaffProvisioningPanel() {
             onChange={(event) => handleChange('staffCode', event.target.value.toUpperCase())}
             className="w-full rounded-xl border bg-[rgba(255,255,255,0.04)] px-4 py-3 text-sm text-white outline-none"
             style={{ borderColor: errors.staffCode ? 'rgba(248,113,113,0.78)' : 'rgba(255,255,255,0.09)' }}
-            placeholder="SA-0001"
+            placeholder={selectedAccountType.staffCodeExample}
           />
         </Field>
 
-        <Field label="Role">
+        <Field label="Account Type">
           <div className="relative">
             <select
-              value={form.role}
-              onChange={(event) => handleChange('role', event.target.value)}
+              value={form.accountType}
+              onChange={(event) => handleChange('accountType', event.target.value)}
               className="w-full appearance-none rounded-xl border bg-[rgba(255,255,255,0.04)] px-4 py-3 text-sm text-white outline-none"
               style={{ borderColor: 'rgba(255,255,255,0.09)' }}
             >
-              {roleOptions.map((option) => (
+              {accountTypeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -246,6 +275,9 @@ export default function StaffProvisioningPanel() {
               className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink-muted"
             />
           </div>
+          <p className="mt-1.5 text-xs text-ink-muted">
+            Backend access: <span className="font-semibold text-ink-primary">{selectedAccountType.roleLabel}</span>. {selectedAccountType.helper}
+          </p>
         </Field>
 
         <Field label="Phone Number" error={errors.phone}>
@@ -261,8 +293,9 @@ export default function StaffProvisioningPanel() {
 
         <div className="xl:col-span-2 flex items-center justify-between gap-4 flex-wrap pt-2">
           <p className="text-xs text-ink-muted max-w-xl leading-5">
-            Staff sign-in uses the same login endpoint as the admin portal, but activation still
-            happens through the existing Google identity verification + email OTP flow.
+            Staff sign-in uses the same login endpoint as the admin portal, and the selected
+            account type maps into the current protected role model without creating a separate
+            customer-facing flow.
           </p>
           <button
             type="submit"
@@ -275,7 +308,7 @@ export default function StaffProvisioningPanel() {
               boxShadow: loading ? 'none' : '0 4px 20px rgba(179,84,30,0.35)',
             }}
           >
-            {loading ? 'Provisioning...' : 'Create Pending Staff Account'}
+            {loading ? 'Provisioning...' : 'Create Pending Account'}
           </button>
         </div>
       </form>

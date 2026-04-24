@@ -3,6 +3,12 @@ import type {
   ChatbotIntentResponse,
   ChatbotMessageResponse,
 } from '../../lib/api/generated/chatbot/responses';
+import {
+  customerChatbotQuickPrompts,
+  getCustomerChatbotAccessState,
+  getCustomerChatbotEscalationState,
+  getCustomerChatbotMessageState,
+} from '../../lib/api/generated/chatbot/customer-mobile-support';
 
 export const chatbotBookingFaqMock: ChatbotMessageResponse = {
   id: 'chatbot-conversation-1',
@@ -102,3 +108,21 @@ export const chatbotIntentCatalogMock: ChatbotIntentResponse[] = [
     responseTemplate: 'Here is the latest insurance inquiry status I found for your account.',
   },
 ];
+
+export const customerChatbotQuickPromptMocks = customerChatbotQuickPrompts;
+
+export const customerChatbotResolvedStateMocks = {
+  sessionRequired: getCustomerChatbotAccessState({
+    role: 'customer',
+    hasSession: false,
+  }),
+  ready: getCustomerChatbotAccessState({
+    role: 'customer',
+    hasSession: true,
+  }),
+  answered: getCustomerChatbotMessageState(chatbotBookingFaqMock),
+  lookupResolved: getCustomerChatbotMessageState(chatbotBookingLookupMock),
+  escalated: getCustomerChatbotMessageState(chatbotUnsupportedPromptMock),
+  manualEscalationReady: getCustomerChatbotEscalationState(null),
+  manualEscalationSaved: getCustomerChatbotEscalationState(chatbotEscalationMock),
+} as const;

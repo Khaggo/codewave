@@ -35,6 +35,11 @@ export const bookingRouteSurfaceMap = {
     truth: 'synchronous-booking-record',
     acceptanceStateFamilies: ['happy', 'empty', 'unavailable', 'error'],
   },
+  getBookingAvailability: {
+    surfaces: ['customer-mobile'],
+    truth: 'synchronous-booking-record',
+    acceptanceStateFamilies: ['happy', 'empty', 'unauthorized', 'error'],
+  },
   createBooking: {
     surfaces: ['customer-mobile'],
     truth: 'synchronous-booking-record',
@@ -78,9 +83,19 @@ export const bookingCrossSurfaceStateGlossary: BookingSurfaceState[] = [
     label: 'Customer booking discovery ready',
     surface: 'customer-mobile',
     truth: 'synchronous-booking-record',
-    routeKeys: ['listServices', 'listTimeSlots'],
+    routeKeys: ['listServices', 'listTimeSlots', 'getBookingAvailability'],
     visibleTo: ['customer'],
     description: 'Customer can choose active services and available time slots before creating a booking.',
+  },
+  {
+    key: 'customer_booking_availability_window',
+    label: 'Customer booking availability window',
+    surface: 'customer-mobile',
+    truth: 'synchronous-booking-record',
+    routeKeys: ['getBookingAvailability'],
+    visibleTo: ['customer'],
+    description:
+      'Customer sees backend-owned bookable, limited, full, and out-of-window day states before choosing an appointment date.',
   },
   {
     key: 'customer_booking_pending',
@@ -160,4 +175,3 @@ export const bookingCrossSurfaceStateGlossary: BookingSurfaceState[] = [
     description: 'Reminder work may be queued from booking state, but notifications do not own booking truth.',
   },
 ];
-

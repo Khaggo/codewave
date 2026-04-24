@@ -1,4 +1,10 @@
 import type { ApiErrorResponse } from '../../lib/api/generated/shared';
+import {
+  buildCustomerCatalogCategoryPresentation,
+  buildCustomerCatalogProductPresentation,
+  getCustomerCatalogDetailState,
+  getCustomerCatalogFeedState,
+} from '../../lib/api/generated/catalog/customer-mobile-catalog';
 import type {
   ProductCategoryResponse,
   ProductResponse,
@@ -64,4 +70,53 @@ export const catalogProductSkuConflictErrorMock: ApiErrorResponse = {
   code: 'CONFLICT',
   message: 'Product SKU already exists',
   source: 'swagger',
+};
+
+export const customerCatalogCategoryPresentationMocks = catalogCategoriesMock.map(
+  buildCustomerCatalogCategoryPresentation,
+);
+
+export const customerCatalogProductPresentationMocks = catalogProductsMock.map(
+  buildCustomerCatalogProductPresentation,
+);
+
+export const customerCatalogEmptyFeedMock = {
+  categories: customerCatalogCategoryPresentationMocks,
+  products: [],
+  feedState: getCustomerCatalogFeedState({
+    products: [],
+  }),
+};
+
+export const customerCatalogReadyFeedMock = {
+  categories: customerCatalogCategoryPresentationMocks,
+  products: customerCatalogProductPresentationMocks,
+  feedState: getCustomerCatalogFeedState({
+    products: customerCatalogProductPresentationMocks,
+  }),
+};
+
+export const customerCatalogServiceUnavailableMock = {
+  categories: [],
+  products: [],
+  feedState: getCustomerCatalogFeedState({
+    products: [],
+    runtimeUnavailable: true,
+  }),
+  errorMessage: 'Ecommerce-service is not reachable on port 3001.',
+};
+
+export const customerCatalogHiddenProductMock = {
+  preview: customerCatalogProductPresentationMocks[0],
+  detailState: getCustomerCatalogDetailState({
+    errorStatus: 404,
+  }),
+  message: 'This product is no longer published for customer browsing.',
+};
+
+export const customerCatalogDetailReadyMock = {
+  product: customerCatalogProductPresentationMocks[1],
+  detailState: getCustomerCatalogDetailState({
+    product: customerCatalogProductPresentationMocks[1],
+  }),
 };

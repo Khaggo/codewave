@@ -1,0 +1,4 @@
+interface:
+  display_name: "AUTOCARE Continuous Task Runner"
+  short_description: "Keep AUTOCARE task work moving with minimal pauses."
+  default_prompt: "Use this skill to continue AUTOCARE implementation with reasonable assumptions, safe commands, batched approvals, and minimal interruptions while respecting sandbox and destructive-action boundaries."

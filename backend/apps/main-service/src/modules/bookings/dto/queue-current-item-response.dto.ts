@@ -26,6 +26,30 @@ export class QueueCurrentItemResponseDto {
   vehicleId!: string;
 
   @ApiProperty({
+    example: 'Jamie Driver',
+    required: false,
+  })
+  customerName?: string | null;
+
+  @ApiProperty({
+    example: 'booking-owner@example.com',
+    required: false,
+  })
+  customerEmail?: string | null;
+
+  @ApiProperty({
+    example: '2022 Toyota Vios',
+    required: false,
+  })
+  vehicleDisplayName?: string | null;
+
+  @ApiProperty({
+    example: 'BKG1234',
+    required: false,
+  })
+  plateNumber?: string | null;
+
+  @ApiProperty({
     example: 'e7318032-2fe0-4f40-b3d4-5ba2a8c94320',
   })
   timeSlotId!: string;

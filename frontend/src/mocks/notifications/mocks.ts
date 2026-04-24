@@ -8,6 +8,15 @@ import type {
   BookingReminderRequestedTrigger,
   NotificationTriggerPlan,
 } from '../../lib/api/generated/notifications/triggers';
+import {
+  customerNotificationDisplayStateRules,
+  customerNotificationFeedStateRules,
+  customerNotificationPreferenceStateRules,
+  customerNotificationReadStateApiGap,
+  getCustomerNotificationDisplayState,
+  getCustomerNotificationFeedState,
+  getCustomerNotificationPreferenceState,
+} from '../../lib/api/generated/notifications/customer-mobile-notifications';
 
 export const notificationPreferencesMock: NotificationPreferencesResponse = {
   id: '34f6f152-04b4-4b9c-8340-0b9cbb1e7bc4',
@@ -21,7 +30,54 @@ export const notificationPreferencesMock: NotificationPreferencesResponse = {
   updatedAt: '2026-04-20T08:10:00.000Z',
 };
 
+export const notificationPreferencesEnabledMock: NotificationPreferencesResponse = {
+  ...notificationPreferencesMock,
+  id: 'd72f9640-4268-442c-a112-e6d3d9d7342e',
+  emailEnabled: true,
+  bookingRemindersEnabled: true,
+  insuranceUpdatesEnabled: true,
+  invoiceRemindersEnabled: true,
+  serviceFollowUpEnabled: true,
+};
+
+export const notificationPreferencesDisabledMock: NotificationPreferencesResponse = {
+  ...notificationPreferencesMock,
+  id: '8c9ccecf-b2c1-466f-a510-094ba0c410b4',
+  emailEnabled: false,
+  bookingRemindersEnabled: false,
+  insuranceUpdatesEnabled: false,
+  invoiceRemindersEnabled: false,
+  serviceFollowUpEnabled: false,
+};
+
 export const notificationsMock: NotificationResponse[] = [
+  {
+    id: '8e09a2a2-df28-4627-9f09-4bfe4431c2bc',
+    userId: notificationPreferencesMock.userId,
+    category: 'booking_reminder',
+    channel: 'email',
+    sourceType: 'booking',
+    sourceId: 'booking-2',
+    title: 'Booking confirmed',
+    message: 'Staff confirmed your appointment. Open booking history for the latest schedule.',
+    status: 'sent',
+    dedupeKey: 'notification:booking.status_changed:booking-2:confirmed',
+    scheduledFor: null,
+    deliveredAt: '2026-04-20T07:58:00.000Z',
+    createdAt: '2026-04-20T07:55:00.000Z',
+    updatedAt: '2026-04-20T07:58:00.000Z',
+    attempts: [
+      {
+        id: '2d1d95a0-d2ea-4f31-bfb6-381a9e1ca8f1',
+        notificationId: '8e09a2a2-df28-4627-9f09-4bfe4431c2bc',
+        attemptNumber: 1,
+        status: 'sent',
+        providerMessageId: 'smtp-booking-confirmed-1',
+        errorMessage: null,
+        attemptedAt: '2026-04-20T07:58:00.000Z',
+      },
+    ],
+  },
   {
     id: 'ac6e087b-e5cf-4cd3-b0ca-df3826e3aef5',
     userId: notificationPreferencesMock.userId,
@@ -57,6 +113,33 @@ export const notificationsMock: NotificationResponse[] = [
     attempts: [],
   },
   {
+    id: '6cc55c1f-f057-4d58-9286-ad45ed04e95a',
+    userId: notificationPreferencesMock.userId,
+    category: 'invoice_aging',
+    channel: 'email',
+    sourceType: 'invoice_payment',
+    sourceId: 'invoice-payment-1',
+    title: 'Invoice reminder retry',
+    message: 'We could not deliver the invoice reminder yet. The notification service may retry.',
+    status: 'failed',
+    dedupeKey: 'notification:order.invoice_issued:invoice-payment-1:aging',
+    scheduledFor: '2026-04-20T08:20:00.000Z',
+    deliveredAt: null,
+    createdAt: '2026-04-20T08:20:00.000Z',
+    updatedAt: '2026-04-20T08:25:00.000Z',
+    attempts: [
+      {
+        id: 'cf3f0a31-af75-41cc-b884-daa0866e9d93',
+        notificationId: '6cc55c1f-f057-4d58-9286-ad45ed04e95a',
+        attemptNumber: 1,
+        status: 'failed',
+        providerMessageId: null,
+        errorMessage: 'SMTP provider temporarily unavailable.',
+        attemptedAt: '2026-04-20T08:25:00.000Z',
+      },
+    ],
+  },
+  {
     id: '0f50ad36-7cba-4760-ad53-542a1b18bd0f',
     userId: notificationPreferencesMock.userId,
     category: 'booking_reminder',
@@ -84,6 +167,26 @@ export const notificationsMock: NotificationResponse[] = [
     ],
   },
 ];
+
+export const customerNotificationStateRuleMocks = {
+  feed: customerNotificationFeedStateRules,
+  preferences: customerNotificationPreferenceStateRules,
+  display: customerNotificationDisplayStateRules,
+};
+
+export const customerNotificationReadStateGapMock = customerNotificationReadStateApiGap;
+
+export const customerNotificationStateSnapshotMock = {
+  feedState: getCustomerNotificationFeedState(notificationsMock),
+  enabledPreferenceState: getCustomerNotificationPreferenceState(notificationPreferencesEnabledMock),
+  disabledPreferenceState: getCustomerNotificationPreferenceState(notificationPreferencesDisabledMock),
+  displayStates: notificationsMock.map((notification) => ({
+    notificationId: notification.id,
+    status: notification.status,
+    displayState: getCustomerNotificationDisplayState({ notification }),
+    readStateSource: 'local-session-only' as const,
+  })),
+};
 
 export const bookingReminderTriggerMock: BookingReminderRequestedTrigger = {
   name: 'booking.reminder_requested',

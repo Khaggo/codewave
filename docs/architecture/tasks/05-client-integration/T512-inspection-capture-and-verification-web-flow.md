@@ -14,7 +14,7 @@ Integrate staff-admin web inspection capture and verification handling.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 
@@ -63,4 +63,3 @@ Define the staff-web inspection workflow for creating inspection records, readin
 
 - vehicle timeline summaries
 - job-order progress logging
-

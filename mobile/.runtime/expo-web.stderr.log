@@ -1,8 +1,9 @@
-=none : The term '=none' is not recognized as the name of a cmdlet, function, script file, or operable program. Check 
-the spelling of the name, or if a path was included, verify that the path is correct and try again.
+=http://127.0.0.1:3000 : The term '=http://127.0.0.1:3000' is not recognized as the name of a cmdlet, function, script 
+file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct 
+and try again.
 At line:1 char:1
-+ ='none'; Set-Location 'D:\mainprojects\codewave\mobile'; npx expo sta ...
-+ ~~~~~~~
-    + CategoryInfo          : ObjectNotFound: (=none:String) [], CommandNotFoundException
++ ='http://127.0.0.1:3000'; cd D:\mainprojects\codewave\mobile; npx exp ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=http://127.0.0.1:3000:String) [], CommandNotFoundException
     + FullyQualifiedErrorId : CommandNotFoundException
  

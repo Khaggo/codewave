@@ -38,24 +38,37 @@ const buildInitials = (name) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('') || 'AC';
 
-const normalizeSession = (sessionResponse) => {
-  const user = sessionResponse?.user ?? {};
-  const name = buildDisplayName(user);
+const normalizeSessionUser = (userResponse = {}, fallbackUser = {}) => {
+  const mergedUser = {
+    ...fallbackUser,
+    ...userResponse,
+  };
+  const name = buildDisplayName(mergedUser);
 
+  return {
+    id: mergedUser.id ?? mergedUser.userId ?? fallbackUser.id ?? null,
+    email: mergedUser.email ?? fallbackUser.email ?? null,
+    role: mergedUser.role ?? fallbackUser.role ?? null,
+    roleLabel: formatRoleLabel(mergedUser.role ?? fallbackUser.role),
+    name,
+    initials: buildInitials(name),
+    staffCode:
+      mergedUser.staffCode !== undefined
+        ? mergedUser.staffCode
+        : fallbackUser.staffCode ?? null,
+    isActive:
+      mergedUser.isActive !== undefined
+        ? mergedUser.isActive
+        : fallbackUser.isActive ?? true,
+    profile: mergedUser.profile ?? fallbackUser.profile ?? null,
+  };
+};
+
+const normalizeSession = (sessionResponse) => {
   return {
     accessToken: sessionResponse.accessToken,
     refreshToken: sessionResponse.refreshToken,
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      roleLabel: formatRoleLabel(user.role),
-      name,
-      initials: buildInitials(name),
-      staffCode: user.staffCode ?? null,
-      isActive: user.isActive,
-      profile: user.profile ?? null,
-    },
+    user: normalizeSessionUser(sessionResponse?.user),
   };
 };
 
@@ -131,6 +144,18 @@ export const fetchAuthenticatedUser = async (accessToken) =>
       Authorization: `Bearer ${accessToken}`,
     },
   });
+
+export const hydrateStoredSessionFromAuthenticatedUser = (storedSession, authenticatedUser) => ({
+  ...storedSession,
+  user: normalizeSessionUser(
+    {
+      id: authenticatedUser?.id ?? authenticatedUser?.userId,
+      email: authenticatedUser?.email,
+      role: authenticatedUser?.role,
+    },
+    storedSession?.user ?? {},
+  ),
+});
 
 export const loadStoredSession = () => {
   if (typeof window === 'undefined') {

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-18T14:30:37.4177697+08:00",
+  "generatedAt": "2026-04-23T02:42:12.3606484+08:00",
   "policy": {
     "orchestratorWriteMode": "proposal-only",
     "validatorMode": "content-strict",
@@ -115,10 +115,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "718a2b12e2cf401fb20bfc9d84007677aac3ac8dd110e28457e41c41585e6c8a"
+        "value": "4890dfcb9160089f3a8d9f2aa31c3fdd4469a08a0ed6f58401f7d805a52d6e96"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-04-23T00:53:58.0011069+08:00"
     },
     {
       "path": "agents/orchestrator.md",
@@ -143,10 +143,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "0462117e13171f5c08c51d31bc1a887ee20fa6ebdf7167f7ff2d74f6bd07769d"
+        "value": "e8828ce5498431f6309afafc71ad1e3eb2e00ea742339e1a1a47e6f07d667a3d"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-04-23T00:53:58.0011069+08:00"
     },
     {
       "path": "agents/refactor-worker.md",
@@ -252,10 +252,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "8c895f23fe923652ee36946ee1c0b07bed92d6c102d8768b01ce2d6b5a351f98"
+        "value": "0e02535781167a71ed40d8f6105055b94434ae56156fed20f9600a74db7632f9"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-23T01:29:10.4328930+08:00"
     },
     {
       "path": "api-strategy.md",
@@ -286,10 +286,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "034ddb8baa0a8e186e7044e0b059a0630992550dcf35baed3e724028c541011e"
+        "value": "881c9eb8637648db30469b9c9d1558a2a10d2e00bce6bbf4422ce882b90ebc0e"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-04-23T02:42:12.3606484+08:00"
     },
     {
       "path": "domain-map.md",
@@ -594,10 +594,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "faeec2a25a0dedb16468c76eb3e36d1546d51f36be69ba108896d1ff42cc577b"
+        "value": "57028ac63d7846daa9d8518b0c8c2744e783d7554bab6b443ca622d6839bb39b"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-17T00:00:00+08:00"
+      "lastVerifiedAt": "2026-04-21T03:21:42+08:00"
     },
     {
       "path": "domains/main-service/back-jobs.md",
@@ -630,10 +630,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "aa3aaf966ce49c227caf6dddbc967db0a8c1046539771ef52ace160f628ae28e"
+        "value": "adc07feff135e2e338af9e224337f497403aac1c648496664a8490776c1d6b96"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-21T04:00:30+08:00"
     },
     {
       "path": "domains/main-service/bookings.md",
@@ -665,10 +665,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "28af5def8f1bc264fdead600dc2fcbe450edb0d863a87fa945deb0787d3fd068"
+        "value": "cc38df202b63d63737eb481cb727dfd662b8ae6748b96951bb204d63fde006af"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-23T02:42:12.3606484+08:00"
     },
     {
       "path": "domains/main-service/chatbot.md",
@@ -808,10 +808,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "5ca39ff6de7673c7fc81845656a68f2a925e3da128c35497b203292c431ffa7a"
+        "value": "a99326172525c42d82070b110c495fc3d56566d5395a585b429b335a818b4161"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-04-21T03:36:41+08:00"
     },
     {
       "path": "domains/main-service/loyalty.md",
@@ -919,10 +919,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "93be58da3e7ee60dbfbdf9ceef6305daeba65a61944744ff21e4ce85c60f2262"
+        "value": "08060b25d194fae53c51c9cc53235baf0e22452982615d05081c031ce2a4985a"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-17T00:00:00+08:00"
+      "lastVerifiedAt": "2026-04-21T03:47:51+08:00"
     },
     {
       "path": "domains/main-service/users.md",
@@ -1084,10 +1084,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "bbe5bb2668e151574c91649bf8c5612aacdbdc8cd818f6eea0b39f35ded8e2f8"
+        "value": "6635ab1193fc16f288c015a883c13c23b04a5ec37a4e80d8592d164240bfb154"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-04-23T00:53:58.0011069+08:00"
     },
     {
       "path": "golden-domain-template.md",
@@ -1208,10 +1208,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "132a8cadb871e9229afcc45f1c19bb4b1d83ac277594d50e802cab575d717f79"
+        "value": "f2d416c972680f1b4ede396353bb13ff09cfc99a982b351097c2f3c84795ff26"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-04-23T00:53:58.0011069+08:00"
     },
     {
       "path": "system-architecture.md",
@@ -1243,10 +1243,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "f80311cd5e99647b9fe4445a3bbb94e945d94f24482ef4cdb1ad153ef5d8a0d0"
+        "value": "394302e2b3ee8ff3e1de15e7db6a1671c2d8ebdfe35e76874a6a81a375d8e8f1"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-04-23T00:53:58.0011069+08:00"
     },
     {
       "path": "auth-security-policy.md",

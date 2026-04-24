@@ -11,9 +11,11 @@ export const userRoleEnum = pgEnum('user_role', [
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
+  deletedEmail: varchar('deleted_email', { length: 255 }),
   role: userRoleEnum('role').notNull().default('customer'),
   staffCode: varchar('staff_code', { length: 40 }).unique(),
   isActive: boolean('is_active').notNull().default(true),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

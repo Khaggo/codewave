@@ -4,6 +4,7 @@ export type RewardType = 'service_voucher' | 'discount_coupon';
 export type RewardStatus = 'active' | 'inactive';
 export type LoyaltyTransactionType = 'accrual' | 'redemption' | 'adjustment' | 'reversal';
 export type LoyaltySourceType =
+  | 'service_payment'
   | 'service_invoice'
   | 'purchase_payment'
   | 'reward_redemption'
@@ -35,6 +36,56 @@ export interface UpdateRewardStatusRequest {
   reason: string;
 }
 
+export type EarningRuleAccrualSource = 'service' | 'ecommerce' | 'both';
+export type EarningRuleFormulaType = 'flat_points' | 'amount_ratio';
+export type EarningRuleStatus = 'active' | 'inactive';
+
+export interface CreateEarningRuleRequest {
+  name: string;
+  description?: string;
+  accrualSource: EarningRuleAccrualSource;
+  formulaType: EarningRuleFormulaType;
+  flatPoints?: number;
+  amountStepCents?: number;
+  pointsPerStep?: number;
+  minimumAmountCents?: number;
+  eligibleServiceTypes?: string[];
+  eligibleServiceCategories?: string[];
+  eligibleProductIds?: string[];
+  eligibleProductCategoryIds?: string[];
+  promoLabel?: string;
+  manualBenefitNote?: string;
+  activeFrom?: string;
+  activeUntil?: string;
+  status?: EarningRuleStatus;
+  reason?: string;
+}
+
+export interface UpdateEarningRuleRequest {
+  name?: string;
+  description?: string;
+  accrualSource?: EarningRuleAccrualSource;
+  formulaType?: EarningRuleFormulaType;
+  flatPoints?: number | null;
+  amountStepCents?: number | null;
+  pointsPerStep?: number | null;
+  minimumAmountCents?: number | null;
+  eligibleServiceTypes?: string[];
+  eligibleServiceCategories?: string[];
+  eligibleProductIds?: string[];
+  eligibleProductCategoryIds?: string[];
+  promoLabel?: string | null;
+  manualBenefitNote?: string | null;
+  activeFrom?: string | null;
+  activeUntil?: string | null;
+  reason?: string;
+}
+
+export interface UpdateEarningRuleStatusRequest {
+  status: EarningRuleStatus;
+  reason?: string;
+}
+
 export interface RedeemRewardRequest {
   userId: string;
   rewardId: string;
@@ -63,6 +114,20 @@ export const loyaltyRoutes: Record<string, RouteContract> = {
     source: 'swagger',
     notes: 'Live route. Non-admin actors only see active rewards; super admins see inactive rewards plus audit history.',
   },
+  listEarningRules: {
+    method: 'GET',
+    path: '/api/admin/loyalty/earning-rules',
+    status: 'live',
+    source: 'swagger',
+    notes: 'Live route. Super admins list loyalty earning rules for admin configuration.',
+  },
+  createEarningRule: {
+    method: 'POST',
+    path: '/api/admin/loyalty/earning-rules',
+    status: 'live',
+    source: 'swagger',
+    notes: 'Live route. Super admins create configurable loyalty earning rules.',
+  },
   createLoyaltyRedemption: {
     method: 'POST',
     path: '/api/loyalty/redemptions',
@@ -90,5 +155,19 @@ export const loyaltyRoutes: Record<string, RouteContract> = {
     status: 'live',
     source: 'swagger',
     notes: 'Live route. Super admins activate or deactivate rewards with a required audit reason.',
+  },
+  updateEarningRule: {
+    method: 'PATCH',
+    path: '/api/admin/loyalty/earning-rules/:id',
+    status: 'live',
+    source: 'swagger',
+    notes: 'Live route. Super admins update earning rules without mutating historical ledger rows.',
+  },
+  updateEarningRuleStatus: {
+    method: 'PATCH',
+    path: '/api/admin/loyalty/earning-rules/:id/status',
+    status: 'live',
+    source: 'swagger',
+    notes: 'Live route. Super admins activate or deactivate earning rules with audit history.',
   },
 };

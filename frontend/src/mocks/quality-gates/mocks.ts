@@ -1,5 +1,17 @@
 import type { ApiErrorResponse } from '../../lib/api/generated/shared';
 import type { JobOrderQualityGateResponse } from '../../lib/api/generated/quality-gates/responses';
+import {
+  canStaffOverrideQualityGate,
+  canStaffReadQualityGate,
+  getBlockingQualityGateFindings,
+  getLatestQualityGateOverride,
+  getQualityGateReleaseState,
+  getReviewNeededQualityGateFindings,
+  isQualityGateReleaseAllowed,
+  isQualityGateReleaseBlocked,
+  staffQualityGateOverrideRules,
+  staffQualityGateReviewRules,
+} from '../../lib/api/generated/quality-gates/staff-web-qa-review';
 
 export const blockedQualityGateMock: JobOrderQualityGateResponse = {
   id: 'b1dc8594-ea6d-4e29-b5d5-0bfd46a08869',
@@ -189,4 +201,26 @@ export const qualityGateUnavailableErrorMock: ApiErrorResponse = {
   code: 'CONFLICT',
   message: 'The job order has not entered QA yet.',
   source: 'swagger',
+};
+
+export const staffQualityGateReviewRuleMocks = staffQualityGateReviewRules;
+
+export const staffQualityGateOverrideRuleMocks = staffQualityGateOverrideRules;
+
+export const staffQualityGateResolvedStateMocks = {
+  pendingReleaseState: getQualityGateReleaseState(pendingQualityGateMock),
+  blockedReleaseState: getQualityGateReleaseState(blockedQualityGateMock),
+  passedReleaseState: getQualityGateReleaseState(passedQualityGateMock),
+  overriddenReleaseState: getQualityGateReleaseState(overriddenQualityGateMock),
+  blockedFindings: getBlockingQualityGateFindings(blockedQualityGateMock).length,
+  reviewNeededFindings: getReviewNeededQualityGateFindings(semanticReviewQualityGateMock).length,
+  latestOverrideActorRole: getLatestQualityGateOverride(overriddenQualityGateMock)?.actorRole ?? null,
+  technicianCanRead: canStaffReadQualityGate('technician'),
+  customerCanRead: canStaffReadQualityGate('customer'),
+  serviceAdviserCanOverride: canStaffOverrideQualityGate('service_adviser'),
+  superAdminCanOverride: canStaffOverrideQualityGate('super_admin'),
+  blockedGateBlocksRelease: isQualityGateReleaseBlocked(blockedQualityGateMock),
+  pendingGateBlocksRelease: isQualityGateReleaseBlocked(pendingQualityGateMock),
+  passedGateAllowsRelease: isQualityGateReleaseAllowed(passedQualityGateMock),
+  overriddenGateAllowsRelease: isQualityGateReleaseAllowed(overriddenQualityGateMock),
 };

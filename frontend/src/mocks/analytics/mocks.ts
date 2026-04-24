@@ -6,6 +6,10 @@ import type {
   LoyaltyAnalyticsResponse,
   OperationsAnalyticsResponse,
 } from '../../lib/api/generated/analytics/responses';
+import {
+  getAdminAnalyticsLoadState,
+  type AdminAnalyticsSnapshot,
+} from '../../lib/api/generated/analytics/staff-web-dashboard';
 
 export const dashboardAnalyticsMock: DashboardAnalyticsResponse = {
   refreshedAt: '2026-07-14T11:30:00.000Z',
@@ -251,3 +255,107 @@ export const auditTrailAnalyticsMock: AuditTrailAnalyticsResponse = {
     },
   ],
 };
+
+export const adminAnalyticsSnapshotMock: AdminAnalyticsSnapshot = {
+  dashboard: dashboardAnalyticsMock,
+  operations: operationsAnalyticsMock,
+  backJobs: backJobsAnalyticsMock,
+  loyalty: loyaltyAnalyticsMock,
+  invoiceAging: invoiceAgingAnalyticsMock,
+  auditTrail: auditTrailAnalyticsMock,
+};
+
+export const adminAnalyticsEmptyStateMock: AdminAnalyticsSnapshot = {
+  dashboard: {
+    refreshedAt: '2026-07-16T09:00:00.000Z',
+    refreshJobId: 'analytics-refresh-job-empty',
+    totals: {
+      totalBookings: 0,
+      activeBookings: 0,
+      finalizedServiceInvoices: 0,
+      insuranceOpenInquiries: 0,
+      openBackJobs: 0,
+    },
+    sales: {
+      finalizedInvoiceCount: 0,
+      bookingInvoiceCount: 0,
+      backJobInvoiceCount: 0,
+      latestInvoiceReference: null,
+    },
+    insurance: {
+      totalInquiries: 0,
+      openInquiries: 0,
+      needsDocuments: 0,
+      approvedForRecord: 0,
+      rejected: 0,
+    },
+    serviceDemandPreview: [],
+    peakHoursPreview: [],
+  },
+  operations: {
+    refreshedAt: '2026-07-16T09:00:00.000Z',
+    refreshJobId: 'analytics-refresh-job-empty',
+    bookingStatuses: [],
+    jobOrderStatuses: [],
+    peakHours: [],
+    serviceDemand: [],
+    serviceAdviserLoad: [],
+  },
+  backJobs: {
+    refreshedAt: '2026-07-16T09:00:00.000Z',
+    refreshJobId: 'analytics-refresh-job-empty',
+    totals: {
+      totalBackJobs: 0,
+      openBackJobs: 0,
+      resolvedBackJobs: 0,
+      validatedFindings: 0,
+    },
+    statuses: [],
+    severities: [],
+    repeatSources: [],
+  },
+  loyalty: {
+    refreshedAt: '2026-07-16T09:00:00.000Z',
+    refreshJobId: 'analytics-refresh-job-empty',
+    totals: {
+      accountCount: 0,
+      totalPointsBalance: 0,
+      totalPointsEarned: 0,
+      totalPointsRedeemed: 0,
+      redemptionCount: 0,
+    },
+    transactionTypes: [],
+    topRewards: [],
+  },
+  invoiceAging: {
+    refreshedAt: '2026-07-16T09:00:00.000Z',
+    refreshJobId: 'analytics-refresh-job-empty',
+    totals: {
+      trackedInvoices: 0,
+      scheduledReminderRules: 0,
+      processedReminderRules: 0,
+      cancelledReminderRules: 0,
+    },
+    agingBuckets: [],
+    trackedInvoicePolicies: [],
+  },
+  auditTrail: {
+    refreshedAt: '2026-07-16T09:00:00.000Z',
+    refreshJobId: 'analytics-refresh-job-empty',
+    totals: {
+      totalSensitiveActions: 0,
+      staffAdminActions: 0,
+      qualityGateOverrides: 0,
+      releaseDecisions: 0,
+    },
+    entries: [],
+  },
+};
+
+export const adminAnalyticsResolvedStateMocks = {
+  loaded: getAdminAnalyticsLoadState(adminAnalyticsSnapshotMock, {}),
+  empty: getAdminAnalyticsLoadState(adminAnalyticsEmptyStateMock, {}),
+  partial: getAdminAnalyticsLoadState(adminAnalyticsSnapshotMock, {
+    auditTrail: 'Audit trail route timed out during the current refresh.',
+  }),
+} as const;

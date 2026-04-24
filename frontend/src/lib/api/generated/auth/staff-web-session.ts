@@ -110,9 +110,17 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
   {
     key: 'summary-review',
     href: '/admin/summaries',
-    label: 'Summary Review',
+    label: 'Analytics & Summaries',
     visibleTo: ['service_adviser', 'super_admin'],
-    notes: 'Lifecycle summary review remains adviser/admin visible.',
+    notes:
+      'Admin analytics plus lifecycle summary review remain adviser/admin visible from the shared summaries hub.',
+  },
+  {
+    key: 'user-admin',
+    href: '/admin/users',
+    label: 'User Creation',
+    visibleTo: ['super_admin'],
+    notes: 'Super admins provision staff, mechanic, technician, and admin identities from this protected page.',
   },
   {
     key: 'catalog-admin',
@@ -134,6 +142,13 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     label: 'Appointments Admin',
     visibleTo: ['service_adviser', 'super_admin'],
     notes: 'Appointment oversight is adviser/admin visible.',
+  },
+  {
+    key: 'job-orders-admin',
+    href: '/admin/job-orders',
+    label: 'Job Orders',
+    visibleTo: ['service_adviser', 'super_admin'],
+    notes: 'Job-order booking handoff and operational workbench remain adviser/admin owned in this slice.',
   },
   {
     key: 'settings',

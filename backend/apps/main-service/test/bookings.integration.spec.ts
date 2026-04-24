@@ -30,6 +30,67 @@ describe('BookingsController integration', () => {
       expect(timeSlotsResponse.status).toBe(200);
       expect(timeSlotsResponse.body.length).toBeGreaterThan(0);
 
+      const createTimeSlotResponse = await request(app.getHttpServer())
+        .post('/api/time-slots')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          label: 'Late Afternoon Slot',
+          startTime: '16:00',
+          endTime: '17:00',
+          capacity: 3,
+        });
+      expect(createTimeSlotResponse.status).toBe(201);
+      expect(createTimeSlotResponse.body).toEqual(
+        expect.objectContaining({
+          label: 'Late Afternoon Slot',
+          capacity: 3,
+          isActive: true,
+        }),
+      );
+
+      const updateTimeSlotResponse = await request(app.getHttpServer())
+        .patch(`/api/time-slots/${createTimeSlotResponse.body.id}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          capacity: 4,
+          isActive: false,
+        });
+      expect(updateTimeSlotResponse.status).toBe(200);
+      expect(updateTimeSlotResponse.body).toEqual(
+        expect.objectContaining({
+          id: createTimeSlotResponse.body.id,
+          capacity: 4,
+          isActive: false,
+        }),
+      );
+
+      const availabilityResponse = await request(app.getHttpServer())
+        .get('/api/bookings/availability')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .query({
+          startDate: '2026-04-01',
+          endDate: '2026-04-03',
+        });
+      expect(availabilityResponse.status).toBe(200);
+      expect(availabilityResponse.body).toEqual(
+        expect.objectContaining({
+          minBookableDate: '2026-04-02',
+          maxBookableDate: '2026-09-28',
+        }),
+      );
+      expect(availabilityResponse.body.days).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            scheduledDate: '2026-04-01',
+            status: 'outside_window',
+          }),
+          expect.objectContaining({
+            scheduledDate: '2026-04-02',
+            isBookable: true,
+          }),
+        ]),
+      );
+
       const userResponse = await request(app.getHttpServer()).post('/api/users').send({
         email: 'booking-owner@example.com',
         firstName: 'Jamie',
@@ -60,6 +121,8 @@ describe('BookingsController integration', () => {
           userId: userResponse.body.id,
           vehicleId: vehicleResponse.body.id,
           status: 'pending',
+          customerName: 'Jamie Driver',
+          vehicleDisplayName: '2022 Toyota Vios',
         }),
       );
 
@@ -108,6 +171,8 @@ describe('BookingsController integration', () => {
               expect.objectContaining({
                 id: createBookingResponse.body.id,
                 status: 'rescheduled',
+                customerName: 'Jamie Driver',
+                vehicleDisplayName: '2022 Toyota Vios',
               }),
             ]),
           }),
@@ -126,6 +191,8 @@ describe('BookingsController integration', () => {
         expect.objectContaining({
           bookingId: createBookingResponse.body.id,
           queuePosition: 1,
+          customerName: 'Jamie Driver',
+          vehicleDisplayName: '2022 Toyota Vios',
         }),
       );
 
@@ -212,6 +279,15 @@ describe('BookingsController integration', () => {
       });
       expect(fullSlotAttempt.status).toBe(409);
 
+      const outsideWindowAttempt = await request(app.getHttpServer()).post('/api/bookings').send({
+        userId: ownerResponse.body.id,
+        vehicleId: vehicleResponse.body.id,
+        timeSlotId: timeSlotsResponse.body[0].id,
+        scheduledDate: '2026-10-15',
+        serviceIds: [servicesResponse.body[0].id],
+      });
+      expect(outsideWindowAttempt.status).toBe(409);
+
       await request(app.getHttpServer())
         .patch(`/api/bookings/${firstBooking.body.id}/status`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
@@ -255,12 +331,31 @@ describe('BookingsController integration', () => {
         });
       expect(forbiddenStatusUpdate.status).toBe(403);
 
+      const forbiddenTimeSlotCreate = await request(app.getHttpServer())
+        .post('/api/time-slots')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          label: 'Customer Slot',
+          startTime: '11:00',
+          endTime: '12:00',
+          capacity: 2,
+        });
+      expect(forbiddenTimeSlotCreate.status).toBe(403);
+
       const missingBearerSchedule = await request(app.getHttpServer())
         .get('/api/bookings/daily-schedule')
         .query({
           scheduledDate: '2026-04-22',
         });
       expect(missingBearerSchedule.status).toBe(401);
+
+      const missingBearerAvailability = await request(app.getHttpServer())
+        .get('/api/bookings/availability')
+        .query({
+          startDate: '2026-04-01',
+          endDate: '2026-04-03',
+        });
+      expect(missingBearerAvailability.status).toBe(401);
     } finally {
       await app.close();
     }

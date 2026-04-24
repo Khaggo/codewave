@@ -1,68 +1,78 @@
 import type { InvoicePaymentRecordedEvent } from '../commerce-events/responses';
 import type {
+  EarningRuleAccrualSource,
+  EarningRuleFormulaType,
+  EarningRuleStatus,
   LoyaltySourceType,
   LoyaltyTransactionType,
   RewardStatus,
   RewardType,
 } from './requests';
 
-export interface ServiceInvoiceFinalizedEventPayload {
-  jobOrderId: string;
+export interface ServicePaymentRecordedEventPayload {
   invoiceRecordId: string;
   invoiceReference: string;
   customerUserId: string;
-  vehicleId: string;
-  serviceAdviserUserId: string;
-  serviceAdviserCode: string;
-  finalizedByUserId: string;
-  sourceType: 'booking' | 'back_job';
-  sourceId: string;
+  amountPaidCents: number;
+  currencyCode: 'PHP';
+  paidAt: string;
+  serviceTypeCode?: string | null;
+  serviceCategoryCode?: string | null;
 }
 
-export interface ServiceInvoiceFinalizedEvent {
+export interface ServicePaymentRecordedEvent {
   eventId: string;
-  name: 'service.invoice_finalized';
+  name: 'service.payment_recorded';
   version: 1;
   producer: 'main-service';
   sourceDomain: 'main-service.job-orders';
   occurredAt: string;
-  payload: ServiceInvoiceFinalizedEventPayload;
+  payload: ServicePaymentRecordedEventPayload;
 }
 
 export type LoyaltyTriggerEvent =
-  | ServiceInvoiceFinalizedEvent
+  | ServicePaymentRecordedEvent
   | InvoicePaymentRecordedEvent;
 
-export interface ServiceInvoiceFactPointsInput {
-  mode: 'service_invoice_fact';
+export interface ServicePaymentPointsInput {
+  mode: 'service_payment';
   invoiceReference: string;
+  amountCents: number;
+  currencyCode: 'PHP';
+  paidAt: string;
+  serviceTypeCode?: string | null;
+  serviceCategoryCode?: string | null;
 }
 
 export interface PurchasePaymentPointsInput {
-  mode: 'payment_amount';
+  mode: 'ecommerce_payment';
+  invoiceReference: string;
   amountCents: number;
   currencyCode: 'PHP';
+  paidAt: string;
+  productIds: string[];
+  productCategoryIds: string[];
 }
 
 export type LoyaltyPointsInput =
-  | ServiceInvoiceFactPointsInput
+  | ServicePaymentPointsInput
   | PurchasePaymentPointsInput;
 
-export type LoyaltyAccrualKind = 'service_invoice' | 'purchase_payment';
+export type LoyaltyAccrualKind = 'service_payment' | 'purchase_payment';
 export type LoyaltyDuplicateStrategy = 'ignore_same_idempotency_key';
 export type LoyaltyReversalStrategy =
-  | 'manual_adjustment_until_service_reversal_event_exists'
-  | 'compensating_debit_when_payment_reversal_or_refund_event_arrives';
+  | 'manual_adjustment_until_service_refund_event_exists'
+  | 'manual_adjustment_until_ecommerce_refund_event_exists';
 
 export interface LoyaltyAccrualPlan {
-  triggerName: 'service.invoice_finalized' | 'invoice.payment_recorded';
+  triggerName: 'service.payment_recorded' | 'invoice.payment_recorded';
   sourceDomain: 'main-service.job-orders' | 'ecommerce.invoice-payments';
   loyaltyUserId: string;
   accrualKind: LoyaltyAccrualKind;
   idempotencyKey: string;
   sourceReference: string;
   policyKey:
-    | 'loyalty.service.invoice_finalized.v1'
+    | 'loyalty.service.payment_recorded.v1'
     | 'loyalty.invoice.payment_recorded.v1';
   pointsInput: LoyaltyPointsInput;
   duplicateStrategy: LoyaltyDuplicateStrategy;
@@ -140,4 +150,60 @@ export interface RewardRedemptionResponse {
   pointsBalanceAfter: number;
   transaction: LoyaltyTransactionResponse;
   createdAt: string;
+}
+
+export interface EarningRuleCatalogSnapshotResponse {
+  name: string;
+  description?: string | null;
+  accrualSource: EarningRuleAccrualSource;
+  formulaType: EarningRuleFormulaType;
+  flatPoints?: number | null;
+  amountStepCents?: number | null;
+  pointsPerStep?: number | null;
+  minimumAmountCents?: number | null;
+  eligibleServiceTypes: string[];
+  eligibleServiceCategories: string[];
+  eligibleProductIds: string[];
+  eligibleProductCategoryIds: string[];
+  promoLabel?: string | null;
+  manualBenefitNote?: string | null;
+  activeFrom?: string | null;
+  activeUntil?: string | null;
+  status: EarningRuleStatus;
+}
+
+export interface EarningRuleAuditResponse {
+  id: string;
+  earningRuleId: string;
+  actorUserId: string;
+  action: 'created' | 'updated' | 'activated' | 'deactivated';
+  reason?: string | null;
+  snapshot: EarningRuleCatalogSnapshotResponse;
+  createdAt: string;
+}
+
+export interface EarningRuleResponse {
+  id: string;
+  name: string;
+  description?: string | null;
+  accrualSource: EarningRuleAccrualSource;
+  formulaType: EarningRuleFormulaType;
+  flatPoints?: number | null;
+  amountStepCents?: number | null;
+  pointsPerStep?: number | null;
+  minimumAmountCents?: number | null;
+  eligibleServiceTypes: string[];
+  eligibleServiceCategories: string[];
+  eligibleProductIds: string[];
+  eligibleProductCategoryIds: string[];
+  promoLabel?: string | null;
+  manualBenefitNote?: string | null;
+  activeFrom?: string | null;
+  activeUntil?: string | null;
+  status: EarningRuleStatus;
+  createdByUserId: string;
+  updatedByUserId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  audits?: EarningRuleAuditResponse[];
 }

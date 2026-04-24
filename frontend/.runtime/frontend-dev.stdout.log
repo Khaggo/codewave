@@ -1,16 +1,88 @@
 
 > autocare-web@1.0.0 dev
-> next dev --port 3002
+> next dev -p 3002
 
    ▲ Next.js 15.5.15
    - Local:        http://localhost:3002
-   - Network:      http://169.254.83.107:3002
+   - Network:      http://26.231.22.23:3002
    - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 5.9s
+ ✓ Ready in 5s
  ○ Compiling / ...
- ✓ Compiled / in 9.6s (1721 modules)
- GET / 200 in 10974ms
- GET / 200 in 97ms
- GET / 200 in 90ms
+ ✓ Compiled / in 12.4s (1729 modules)
+ GET / 200 in 311ms
+ GET / 200 in 298ms
+ GET / 200 in 86ms
+ GET / 200 in 4164ms
+ GET / 200 in 1083ms
+ ○ Compiling /admin/appointments ...
+ ✓ Compiled /admin/appointments in 3.2s (1753 modules)
+ GET /admin/appointments 200 in 4327ms
+ GET / 200 in 1056ms
+ GET / 200 in 1048ms
+ ○ Compiling /admin/qa-audit ...
+ ✓ Compiled /timeline in 8.6s (2657 modules)
+ GET /admin/summaries 200 in 6928ms
+ GET /loyalty 200 in 5374ms
+ GET /shop 200 in 4297ms
+ GET /timeline 200 in 2875ms
+ GET /admin/qa-audit 200 in 9260ms
+ GET /insurance 200 in 3740ms
+ GET / 200 in 660ms
+ ○ Compiling /vehicles ...
+ ✓ Compiled /vehicles in 2.5s (2698 modules)
+ GET /admin/qa-audit 200 in 3224ms
+ GET / 200 in 3258ms
+ GET /backjobs 200 in 3275ms
+ GET /bookings 200 in 3328ms
+ GET /vehicles 200 in 3415ms
+ GET /admin/qa-audit 200 in 190ms
+ GET /bookings 200 in 31ms
+ GET /timeline 200 in 41ms
+ GET /backjobs 200 in 29ms
+ GET /timeline 200 in 28ms
+ GET /backjobs 200 in 28ms
+ GET /insurance 200 in 51ms
+ GET /timeline 200 in 24ms
+ GET /admin/appointments 200 in 56ms
+ GET /admin/qa-audit 200 in 30ms
+ GET /admin/summaries 200 in 41ms
+ GET /admin/qa-audit 200 in 25ms
+ GET /admin/summaries 200 in 29ms
+ GET /admin/qa-audit 200 in 24ms
+ GET /loyalty 200 in 40ms
+ GET /shop 200 in 40ms
+ GET /insurance 200 in 27ms
+ GET / 200 in 25ms
+ GET /bookings 200 in 31ms
+ ✓ Compiled in 5.6s (1271 modules)
+ GET / 200 in 829ms
+ ✓ Compiled in 895ms (1271 modules)
+ GET /bookings 200 in 886ms
+ GET / 200 in 108ms
+ GET /bookings 200 in 111ms
+ ✓ Compiled in 3.2s (1271 modules)
+ GET / 200 in 1022ms
+ ✓ Compiled in 1093ms (1271 modules)
+ GET /bookings 200 in 1079ms
+ GET / 200 in 723ms
+ ✓ Compiled in 796ms (1271 modules)
+ GET /bookings 200 in 792ms
+ GET / 200 in 288ms
+ GET /bookings 200 in 298ms
+ ✓ Compiled in 3.2s (1271 modules)
+ GET / 200 in 319ms
+ GET /bookings 200 in 369ms
+ ✓ Compiled in 1115ms (1271 modules)
+ GET / 200 in 1173ms
+ GET /bookings 200 in 1232ms
+ ✓ Compiled in 1261ms (1271 modules)
+ GET / 200 in 209ms
+ GET /bookings 200 in 212ms
+ ✓ Compiled in 2.4s (1271 modules)
+ GET / 200 in 350ms
+ GET /bookings 200 in 368ms
+ ✓ Compiled in 2.7s (1271 modules)
+ GET /bookings 200 in 610ms
+ GET / 200 in 144ms

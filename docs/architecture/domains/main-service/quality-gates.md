@@ -53,6 +53,7 @@ Key relations:
 - publish audit signals after manual overrides so analytics consumers can trace the exception without owning the write path
 - queue QA audits on the shared `ai-worker-jobs` BullMQ lane and expose `auditJob` metadata on the QA record
 - rerun QA safely when release-ready job-order evidence changes after the first audit request
+- keep service-specific QA templates and required-check definitions backend-owned when that expansion is introduced
 
 ## Process Flow
 
@@ -75,6 +76,7 @@ Key relations:
 - internal `runQualityGateAudit`
 - `GET /job-orders/:id/qa`
 - `PATCH /job-orders/:id/qa/override`
+- planned service-template read contracts for required checks by service type
 
 ## Edge Cases
 
@@ -83,6 +85,7 @@ Key relations:
 - semantic audit provider or worker failure must surface through warning findings and failed `auditJob` metadata instead of silently dropping QA state
 - override happens without a valid actor role or reason
 - repeated retries create duplicate QA findings for one job order
+- client hardcodes service-specific QA templates before backend definitions exist
 
 ## Writable Sections
 
@@ -94,3 +97,4 @@ Key relations:
 - direct technician execution updates
 - payment settlement
 - customer-facing AI chat behavior
+- client-owned service-specific QA template definitions

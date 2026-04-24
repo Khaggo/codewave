@@ -1,4 +1,4 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import PasswordField from './PasswordField';
 import { colors, radius } from '../theme';
 
@@ -7,6 +7,7 @@ export default function DeleteAccountModal({
   onCancel,
   onConfirm,
   password,
+  submitting = false,
   onPasswordChange,
   error,
 }) {
@@ -28,7 +29,9 @@ export default function DeleteAccountModal({
 
           <Text style={styles.title}>Delete Account?</Text>
           <Text style={styles.description}>
-            This action is permanent and will remove all your data. Enter your current password to continue, then verify the request with OTP.
+            This archives your account instead of hard-deleting the record. Enter your current
+            password and we'll email a verification code before the archive is finalized. The
+            same email can be used again later.
           </Text>
 
           <PasswordField
@@ -42,12 +45,20 @@ export default function DeleteAccountModal({
           />
 
           <View style={styles.buttonRow}>
-            <Pressable style={styles.cancelButton} onPress={onCancel}>
+            <Pressable style={[styles.cancelButton, submitting && styles.buttonDisabled]} onPress={onCancel} disabled={submitting}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </Pressable>
 
-            <Pressable style={styles.confirmButton} onPress={onConfirm}>
-              <Text style={styles.confirmButtonText}>Continue</Text>
+            <Pressable
+              style={[styles.confirmButton, submitting && styles.buttonDisabled]}
+              onPress={onConfirm}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color={colors.onPrimary} />
+              ) : (
+                <Text style={styles.confirmButtonText}>Send Verification Code</Text>
+              )}
             </Pressable>
           </View>
         </Pressable>
@@ -143,5 +154,8 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
     fontSize: 15,
     fontWeight: '800',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
 });

@@ -14,7 +14,7 @@ Integrate staff-admin web job-order workbench and operational handoff from booki
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 
@@ -64,4 +64,3 @@ Define the staff-web workbench for creating, reading, and managing job orders fr
 
 - photo evidence upload
 - QA release and override actions
-

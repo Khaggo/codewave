@@ -14,7 +14,7 @@ Define AI governance and provider-adapter policy.
 
 ## Status
 
-`ready`
+`done`
 
 ## Priority
 

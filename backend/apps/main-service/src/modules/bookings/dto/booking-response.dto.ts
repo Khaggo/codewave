@@ -45,6 +45,26 @@ export class BookingResponseDto {
   })
   notes?: string | null;
 
+  @ApiPropertyOptional({
+    example: 'Jamie Driver',
+  })
+  customerName?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'booking-owner@example.com',
+  })
+  customerEmail?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2022 Toyota Vios',
+  })
+  vehicleDisplayName?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'BKG1234',
+  })
+  plateNumber?: string | null;
+
   @ApiProperty({
     example: '2026-03-25T15:00:00.000Z',
     format: 'date-time',

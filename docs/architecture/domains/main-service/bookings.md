@@ -17,6 +17,8 @@ Own service appointment planning and booking state transitions without absorbing
 - selected user and vehicle
 - requested services
 - preferred time slot
+- availability-window query inputs such as date range
+- staff slot-definition updates
 - approval, decline, or reschedule actions
 - authenticated service-adviser or super-admin scheduling decisions
 
@@ -25,6 +27,7 @@ Own service appointment planning and booking state transitions without absorbing
 - booking records
 - booking service selections
 - booking status history
+- booking availability read models
 - daily-schedule and optional queue views
 - reminder and downstream operational triggers
 
@@ -51,8 +54,11 @@ Key relations:
 ## Primary Business Logic
 
 - expose available services and time slots
+- let service advisers and super admins manage slot label, time window, capacity, and active state
+- own booking-date availability rules so customer-facing calendars do not invent open days locally
 - create bookings against customer and vehicle records
 - validate booking capacity and time-slot availability
+- apply the same availability rules to booking create and staff reschedule paths
 - support authenticated service-adviser confirmation, decline, and reschedule actions
 - track status changes in a separate history table
 - keep booking changes structured so reminders, lifecycle updates, and downstream operations can hook in without redefining booking truth
@@ -68,7 +74,9 @@ Key relations:
 ## Use Cases
 
 - customer books service
+- customer checks which dates are still bookable before submitting a booking
 - staff approves or reschedules an appointment
+- staff manages slot definitions and publishes or pauses booking capacity
 - service adviser reviews the daily schedule and queue pressure
 - admin reviews booking history and demand
 
@@ -76,6 +84,8 @@ Key relations:
 
 - `GET /services`
 - `GET /time-slots`
+- `POST /time-slots`
+- `PATCH /time-slots/:id`
 - `POST /bookings`
 - `GET /bookings/:id`
 - `PATCH /bookings/:id/status`
@@ -87,9 +97,11 @@ Key relations:
 ## Edge Cases
 
 - slot becomes unavailable during concurrent booking requests
+- client-generated booking dates drift from booking-owned availability rules
 - booking references a vehicle not owned by the customer
 - repeated status updates create inconsistent history
 - unauthenticated or non-staff actors attempt staff-only schedule operations
+- inactive slot definitions remain visible to staff but must stop appearing as customer-bookable choices
 - queue view drifts from confirmed booking state
 - completed booking without follow-up inspection when one is operationally required
 

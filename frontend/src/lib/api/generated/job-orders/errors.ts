@@ -3,6 +3,12 @@ import type { ApiErrorResponse } from '../shared';
 export const jobOrdersErrorCases: Record<string, ApiErrorResponse[]> = {
   createJobOrder: [
     {
+      statusCode: 404,
+      code: 'NOT_FOUND',
+      message: 'The source booking, customer, vehicle, or staff assignment was not found.',
+      source: 'swagger',
+    },
+    {
       statusCode: 409,
       code: 'CONFLICT',
       message: 'A job order already exists for this booking.',
@@ -25,6 +31,12 @@ export const jobOrdersErrorCases: Record<string, ApiErrorResponse[]> = {
       code: 'FORBIDDEN',
       message: 'Only service advisers or super admins can create job orders.',
       source: 'swagger',
+    },
+    {
+      statusCode: 409,
+      code: 'CONFLICT',
+      message: 'Job orders can only be created from confirmed bookings.',
+      source: 'task',
     },
   ],
   getJobOrderById: [

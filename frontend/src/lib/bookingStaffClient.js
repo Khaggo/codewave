@@ -20,6 +20,48 @@ const parseResponse = async (response) => {
   return rawText ? JSON.parse(rawText) : null;
 };
 
+const buildCustomerLabel = (record) => {
+  if (record?.customerName) {
+    return record.customerName;
+  }
+
+  if (record?.customerEmail) {
+    return record.customerEmail;
+  }
+
+  return record?.userId ? `User ${record.userId}` : 'Unknown customer';
+};
+
+const buildVehicleLabel = (record) => {
+  if (record?.vehicleDisplayName) {
+    return record.vehicleDisplayName;
+  }
+
+  if (record?.plateNumber) {
+    return record.plateNumber;
+  }
+
+  return record?.vehicleId ? `Vehicle ${record.vehicleId}` : 'Unknown vehicle';
+};
+
+const normalizeStaffBooking = (booking) =>
+  booking
+    ? {
+        ...booking,
+        customerLabel: buildCustomerLabel(booking),
+        vehicleLabel: buildVehicleLabel(booking),
+      }
+    : booking;
+
+const normalizeQueueItem = (item) =>
+  item
+    ? {
+        ...item,
+        customerLabel: buildCustomerLabel(item),
+        vehicleLabel: buildVehicleLabel(item),
+      }
+    : item;
+
 const request = async (path, { accessToken, body, method = 'GET', query } = {}) => {
   const response = await fetch(`${API_BASE_URL}${appendQuery(path, query)}`, {
     method,
@@ -44,17 +86,36 @@ const request = async (path, { accessToken, body, method = 'GET', query } = {}) 
   return data;
 };
 
-export const getDailySchedule = (query, accessToken) =>
-  request('/api/bookings/daily-schedule', {
+export const getDailySchedule = async (query, accessToken) => {
+  const schedule = await request('/api/bookings/daily-schedule', {
     accessToken,
     query,
   });
 
-export const getCurrentQueue = (query, accessToken) =>
-  request('/api/queue/current', {
+  return {
+    ...schedule,
+    slots: Array.isArray(schedule?.slots)
+      ? schedule.slots.map((slot) => ({
+          ...slot,
+          bookings: Array.isArray(slot?.bookings)
+            ? slot.bookings.map((booking) => normalizeStaffBooking(booking))
+            : [],
+        }))
+      : [],
+  };
+};
+
+export const getCurrentQueue = async (query, accessToken) => {
+  const queue = await request('/api/queue/current', {
     accessToken,
     query,
   });
+
+  return {
+    ...queue,
+    items: Array.isArray(queue?.items) ? queue.items.map((item) => normalizeQueueItem(item)) : [],
+  };
+};
 
 export const getTimeSlotDefinitions = (accessToken) =>
   request('/api/time-slots', {
@@ -96,7 +157,7 @@ export const updateBookingStatus = ({ bookingId, status, reason }, accessToken) 
       status,
       reason: reason ? String(reason).trim() : undefined,
     },
-  });
+  }).then((booking) => normalizeStaffBooking(booking));
 };
 
 export const confirmBooking = ({ bookingId, reason }, accessToken) =>
@@ -134,5 +195,5 @@ export const rescheduleBooking = ({ bookingId, timeSlotId, scheduledDate, reason
       scheduledDate,
       reason: reason ? String(reason).trim() : undefined,
     },
-  });
+  }).then((booking) => normalizeStaffBooking(booking));
 };

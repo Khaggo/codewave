@@ -3,6 +3,15 @@ import type {
   VehicleLifecycleSummaryResponse,
   VehicleTimelineEventResponse,
 } from '../../lib/api/generated/vehicle-lifecycle/responses';
+import {
+  buildCustomerLifecycleSummaryCard,
+  buildCustomerTimelineEventPresentation,
+  customerLifecycleSummaryStateRules,
+  customerTimelineFilters,
+  customerVehicleTimelineStateRules,
+  getCustomerLifecycleSummaryVisibilityState,
+  getCustomerVehicleTimelineState,
+} from '../../lib/api/generated/vehicle-lifecycle/customer-mobile-lifecycle';
 
 export const vehicleTimelineMock: VehicleTimelineEventResponse[] = [
   {
@@ -102,6 +111,8 @@ export const vehicleTimelineMock: VehicleTimelineEventResponse[] = [
     updatedAt: '2026-05-12T03:45:00.000Z',
   },
 ];
+
+export const emptyVehicleTimelineMock: VehicleTimelineEventResponse[] = [];
 
 export const pendingLifecycleSummaryMock: VehicleLifecycleSummaryResponse = {
   id: 'summary-1',
@@ -233,3 +244,58 @@ export const lifecycleSummaryForbiddenErrorMock: ApiErrorResponse = {
   message: 'Only service advisers or super admins can manage lifecycle summaries.',
   source: 'swagger',
 };
+
+export const customerVehicleTimelineStateRuleMocks =
+  customerVehicleTimelineStateRules;
+
+export const customerLifecycleSummaryStateRuleMocks =
+  customerLifecycleSummaryStateRules;
+
+export const customerTimelineFiltersMock = customerTimelineFilters;
+
+export const customerTimelinePresentationMocks = vehicleTimelineMock.map(
+  buildCustomerTimelineEventPresentation,
+);
+
+export const customerVehicleTimelineResolvedStateMocks = {
+  ready: getCustomerVehicleTimelineState(vehicleTimelineMock),
+  empty: getCustomerVehicleTimelineState(emptyVehicleTimelineMock),
+} as const;
+
+export const customerLifecycleSummaryResolvedStateMocks = {
+  visibleFromSummary: getCustomerLifecycleSummaryVisibilityState({
+    summary: approvedLifecycleSummaryMock,
+    timelineEvents: vehicleTimelineMock,
+  }),
+  visibleFromApprovedEvent: getCustomerLifecycleSummaryVisibilityState({
+    summary: null,
+    timelineEvents: vehicleTimelineMock,
+  }),
+  pending: getCustomerLifecycleSummaryVisibilityState({
+    summary: readyForReviewLifecycleSummaryMock,
+    timelineEvents: emptyVehicleTimelineMock,
+  }),
+  hidden: getCustomerLifecycleSummaryVisibilityState({
+    summary: rejectedLifecycleSummaryMock,
+    timelineEvents: emptyVehicleTimelineMock,
+  }),
+} as const;
+
+export const customerLifecycleSummaryCardMocks = {
+  visibleFromSummary: buildCustomerLifecycleSummaryCard({
+    summary: approvedLifecycleSummaryMock,
+    timelineEvents: vehicleTimelineMock,
+  }),
+  visibleFromApprovedEvent: buildCustomerLifecycleSummaryCard({
+    summary: null,
+    timelineEvents: vehicleTimelineMock,
+  }),
+  pending: buildCustomerLifecycleSummaryCard({
+    summary: readyForReviewLifecycleSummaryMock,
+    timelineEvents: emptyVehicleTimelineMock,
+  }),
+  hidden: buildCustomerLifecycleSummaryCard({
+    summary: null,
+    timelineEvents: emptyVehicleTimelineMock,
+  }),
+} as const;

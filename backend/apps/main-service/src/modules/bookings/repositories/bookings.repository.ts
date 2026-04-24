@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, ne } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -104,6 +104,36 @@ export class BookingsRepository extends BaseRepository {
     return rows.length;
   }
 
+  async findByScheduledDateRange(
+    startDate: string,
+    endDate: string,
+    options?: {
+      timeSlotId?: string;
+      statuses?: BookingStatus[];
+    },
+  ) {
+    const filters = [gte(bookings.scheduledDate, startDate), lte(bookings.scheduledDate, endDate)];
+
+    if (options?.timeSlotId) {
+      filters.push(eq(bookings.timeSlotId, options.timeSlotId));
+    }
+
+    if (options?.statuses?.length) {
+      filters.push(inArray(bookings.status, options.statuses));
+    }
+
+    return this.db
+      .select({
+        id: bookings.id,
+        timeSlotId: bookings.timeSlotId,
+        scheduledDate: bookings.scheduledDate,
+        status: bookings.status,
+      })
+      .from(bookings)
+      .where(and(...filters))
+      .orderBy(asc(bookings.scheduledDate), asc(bookings.createdAt));
+  }
+
   async create(createBookingDto: CreateBookingDto) {
     const [createdBooking] = await this.db
       .insert(bookings)
@@ -139,6 +169,12 @@ export class BookingsRepository extends BaseRepository {
     const booking = await this.db.query.bookings.findFirst({
       where: eq(bookings.id, id),
       with: {
+        user: {
+          with: {
+            profile: true,
+          },
+        },
+        vehicle: true,
         timeSlot: true,
         requestedServices: {
           with: {
@@ -158,6 +194,12 @@ export class BookingsRepository extends BaseRepository {
     return this.db.query.bookings.findFirst({
       where: eq(bookings.id, id),
       with: {
+        user: {
+          with: {
+            profile: true,
+          },
+        },
+        vehicle: true,
         timeSlot: true,
         requestedServices: {
           with: {
@@ -175,6 +217,12 @@ export class BookingsRepository extends BaseRepository {
     return this.db.query.bookings.findMany({
       where: eq(bookings.userId, userId),
       with: {
+        user: {
+          with: {
+            profile: true,
+          },
+        },
+        vehicle: true,
         timeSlot: true,
         requestedServices: {
           with: {
@@ -209,6 +257,12 @@ export class BookingsRepository extends BaseRepository {
     return this.db.query.bookings.findMany({
       where: and(...filters),
       with: {
+        user: {
+          with: {
+            profile: true,
+          },
+        },
+        vehicle: true,
         timeSlot: true,
         requestedServices: {
           with: {

@@ -47,6 +47,12 @@ export interface JobOrderInvoiceRecordResponse {
   serviceAdviserUserId: string;
   serviceAdviserCode: string;
   finalizedByUserId: string;
+  paymentStatus: 'pending_payment' | 'paid';
+  amountPaidCents: number | null;
+  paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'other' | null;
+  paymentReference: string | null;
+  recordedByUserId: string | null;
+  paidAt: string | null;
   summary?: string | null;
   createdAt: string;
   updatedAt: string;

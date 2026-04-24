@@ -1,0 +1,4 @@
+interface:
+  display_name: "Swagger Serena First"
+  short_description: "Anchor API work in Swagger, then narrow code with Serena."
+  default_prompt: "Use Swagger MCP first, then Serena, before opening large files or changing contract-sensitive code."

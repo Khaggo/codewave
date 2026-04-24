@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
@@ -9,6 +11,7 @@ import { UserProvider } from '@/lib/userContext'
 import {
   clearStoredSession,
   fetchAuthenticatedUser,
+  hydrateStoredSessionFromAuthenticatedUser,
   loadStoredSession,
   refreshAuthSession,
   saveStoredSession,
@@ -18,8 +21,63 @@ import {
   isActiveStaffPortalState,
   staffPortalStateMessages,
 } from '@/lib/api/generated/auth/staff-web-session'
+import { getStaffPortalRouteGuardDecision } from '@/lib/api/generated/auth/client-surface-guardrails'
+
+function StaffRouteGuardState({ guard, onLogout }) {
+  const suggestedRoutes = guard.allowedNavigation.slice(0, 4)
+
+  return (
+    <div className="mx-auto max-w-3xl rounded-3xl border border-surface-border bg-surface-card p-8 shadow-card-md">
+      <div className="inline-flex rounded-full bg-[rgba(240,124,0,0.12)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#f07c00]">
+        Role Guardrail
+      </div>
+      <h2 className="mt-4 text-2xl font-black tracking-tight text-ink-primary">
+        This workspace is not available for your role.
+      </h2>
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-muted">{guard.message}</p>
+      <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-dim">
+        Blocked route: {guard.pathname}
+      </p>
+
+      {suggestedRoutes.length ? (
+        <div className="mt-6">
+          <p className="text-sm font-semibold text-ink-primary">Available workspaces</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {suggestedRoutes.map((entry) => (
+              <Link
+                key={entry.href}
+                href={entry.href}
+                className="rounded-xl border border-surface-border bg-surface-raised px-4 py-2 text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
+              >
+                {entry.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        {guard.fallbackHref ? (
+          <Link
+            href={guard.fallbackHref}
+            className="rounded-xl bg-[#f07c00] px-4 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90"
+          >
+            Open allowed workspace
+          </Link>
+        ) : null}
+        <button
+          onClick={onLogout}
+          className="rounded-xl border border-surface-border px-4 py-2 text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
+        >
+          Sign out
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function AppShell({ children }) {
+  const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [session, setSession] = useState(null)
@@ -43,11 +101,16 @@ export default function AppShell({ children }) {
       }
 
       try {
-        await fetchAuthenticatedUser(savedSession.accessToken)
+        const authenticatedUser = await fetchAuthenticatedUser(savedSession.accessToken)
         if (isMounted) {
-          const accessState = getStaffPortalAccessState(savedSession?.user)
+          const restoredSession = hydrateStoredSessionFromAuthenticatedUser(
+            savedSession,
+            authenticatedUser,
+          )
+          const accessState = getStaffPortalAccessState(restoredSession?.user)
           if (isActiveStaffPortalState(accessState)) {
-            setSession(savedSession)
+            saveStoredSession(restoredSession)
+            setSession(restoredSession)
             setAuthError('')
           } else {
             applyBlockedAccess(accessState)
@@ -127,6 +190,10 @@ export default function AppShell({ children }) {
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
   }
+  const routeGuard = getStaffPortalRouteGuardDecision({
+    pathname,
+    sessionUser: providerUser,
+  })
 
   const sidebarW = collapsed ? 'md:pl-[60px]' : 'md:pl-56'
 
@@ -144,7 +211,13 @@ export default function AppShell({ children }) {
         <div className={`flex flex-col flex-1 min-h-0 overflow-hidden transition-all duration-200 ${sidebarW}`}>
           <Topbar user={providerUser} onMenuToggle={() => setMobileOpen((value) => !value)} onLogout={handleLogout} />
           <main className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 cc-scrollbar">
-            <div className="animate-fade-in">{children}</div>
+            <div className="animate-fade-in">
+              {routeGuard.status === 'allowed' ? (
+                children
+              ) : (
+                <StaffRouteGuardState guard={routeGuard} onLogout={handleLogout} />
+              )}
+            </div>
           </main>
         </div>
       </div>

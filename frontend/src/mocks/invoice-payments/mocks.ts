@@ -60,3 +60,24 @@ export const paidInvoiceMock: InvoiceResponse = {
   ],
   updatedAt: '2026-05-16T10:00:00.000Z',
 };
+
+export const overdueInvoiceMock: InvoiceResponse = {
+  ...partiallyPaidInvoiceMock,
+  status: 'overdue',
+  amountPaidCents: 30000,
+  amountDueCents: 69800,
+  agingBucket: 'overdue_8_30',
+  daysPastDue: 12,
+  dueAt: '2026-05-09T05:00:00.000Z',
+  updatedAt: '2026-05-21T08:15:00.000Z',
+};
+
+export const cancelledInvoiceMock: InvoiceResponse = {
+  ...invoiceMock,
+  status: 'cancelled',
+  amountPaidCents: 0,
+  amountDueCents: 0,
+  agingBucket: 'cancelled',
+  paymentEntries: [],
+  updatedAt: '2026-05-18T11:45:00.000Z',
+};

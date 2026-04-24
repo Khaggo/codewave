@@ -1,5 +1,11 @@
 import type { ApiErrorResponse } from '../../lib/api/generated/shared';
 import {
+  clientSurfaceNavigationMatrix,
+  customerMobileBlockedStateErrors,
+  getCustomerMobileScreenGuardDecision,
+  getStaffPortalRouteGuardDecision,
+} from '../../lib/api/generated/auth/client-surface-guardrails';
+import {
   customerGoogleActivationDuplicateIdentityError,
   customerGoogleActivationEmailRegisteredError,
   customerGoogleActivationEnrollmentMissingError,
@@ -156,3 +162,49 @@ export const staffPortalNavigationRulesMock = staffPortalNavigationRules;
 export const staffPortalRoleCapabilitiesMock = staffPortalRoleCapabilities;
 
 export const staffPortalBlockedStateErrorsMock = staffPortalBlockedStateErrors;
+
+export const clientSurfaceNavigationMatrixMock = clientSurfaceNavigationMatrix;
+
+export const staffPortalForbiddenRouteMock = getStaffPortalRouteGuardDecision({
+  pathname: '/admin/users',
+  sessionUser: technicianAuthSessionMock.user,
+});
+
+export const staffPortalDowngradedSessionMock = {
+  storedSession: superAdminAuthSessionMock,
+  restoredIdentity: {
+    userId: superAdminAuthSessionMock.user.id,
+    email: superAdminAuthSessionMock.user.email,
+    role: 'service_adviser',
+  },
+  blockedRoute: getStaffPortalRouteGuardDecision({
+    pathname: '/admin/users',
+    sessionUser: serviceAdviserAuthSessionMock.user,
+  }),
+  retainedRoute: getStaffPortalRouteGuardDecision({
+    pathname: '/bookings',
+    sessionUser: serviceAdviserAuthSessionMock.user,
+  }),
+};
+
+export const customerMobileBlockedStateErrorsMock = customerMobileBlockedStateErrors;
+
+export const customerMobileStaffBlockedScreenMock = getCustomerMobileScreenGuardDecision({
+  screenName: 'Menu',
+  session: {
+    userId: serviceAdviserAuthSessionMock.user.id,
+    accessToken: 'staff-mobile-access-token',
+    role: serviceAdviserAuthSessionMock.user.role,
+    isActive: true,
+  },
+});
+
+export const customerMobileUnauthorizedScreenMock = getCustomerMobileScreenGuardDecision({
+  screenName: 'ManageProfile',
+  session: {
+    userId: null,
+    accessToken: null,
+    role: null,
+    isActive: true,
+  },
+});

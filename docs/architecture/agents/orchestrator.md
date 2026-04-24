@@ -11,6 +11,7 @@ Serve as the default front door for freeform prompts, plan work, assign ownershi
 - break tasks into bounded work items
 - assign ownership and load order
 - classify improvement evidence as `noise`, `observation`, or `bounded proposal`
+- make the triage outcome explicit as `reject as noise`, `log observation`, or `create bounded proposal`
 - record non-canonical improvement observations or proposals for follow-up
 - approve, reject, or escalate proposals
 - propose structural manifest changes
@@ -34,6 +35,9 @@ Serve as the default front door for freeform prompts, plan work, assign ownershi
 
 ## Outputs
 
+- `reject as noise`
+- `log observation`
+- `create bounded proposal`
 - bounded change requests
 - task routing decisions
 - queued observations or bounded improvement proposals
@@ -44,7 +48,10 @@ Serve as the default front door for freeform prompts, plan work, assign ownershi
 - send local domain work to one domain worker
 - send cross-domain work to the integration worker
 - route explicit worker-role prompts only when the user named that role
-- send improvement observations or proposals into the non-canonical queue before promotion into formal recovery work
+- send improvement evidence through an explicit triage outcome before follow-up:
+  - reject as noise when the signal is weak or duplicative
+  - log observation in the non-canonical queue when the signal is credible but not yet a bounded change
+  - create bounded proposal when the evidence supports a scoped recovery change
 - send all final candidates to the validator before acceptance
 
 ## Stop Conditions

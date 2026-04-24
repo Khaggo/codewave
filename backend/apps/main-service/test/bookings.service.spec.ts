@@ -3,10 +3,15 @@ import { ConflictException, ForbiddenException, NotFoundException } from '@nestj
 
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
+import { BOOKINGS_CLOCK } from '@main-modules/bookings/bookings.constants';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { BookingsService } from '@main-modules/bookings/services/bookings.service';
 
 describe('BookingsService', () => {
+  const fixedBookingClock = {
+    now: () => new Date('2026-04-01T00:00:00.000Z'),
+  };
+
   it('creates a booking when user, vehicle, services, and slot are valid', async () => {
     const usersService = {
       findById: jest.fn().mockResolvedValue({ id: 'user-1' }),
@@ -31,6 +36,7 @@ describe('BookingsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         BookingsService,
+        { provide: BOOKINGS_CLOCK, useValue: fixedBookingClock },
         { provide: BookingsRepository, useValue: bookingsRepository },
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: vehiclesRepository },
@@ -58,6 +64,7 @@ describe('BookingsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         BookingsService,
+        { provide: BOOKINGS_CLOCK, useValue: fixedBookingClock },
         {
           provide: BookingsRepository,
           useValue: {},
@@ -94,6 +101,7 @@ describe('BookingsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         BookingsService,
+        { provide: BOOKINGS_CLOCK, useValue: fixedBookingClock },
         {
           provide: BookingsRepository,
           useValue: {
@@ -134,6 +142,7 @@ describe('BookingsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         BookingsService,
+        { provide: BOOKINGS_CLOCK, useValue: fixedBookingClock },
         {
           provide: BookingsRepository,
           useValue: {
@@ -189,6 +198,19 @@ describe('BookingsService', () => {
           scheduledDate: '2026-04-20',
           status: 'confirmed',
           createdAt: new Date('2026-04-20T08:00:00.000Z'),
+          user: {
+            email: 'jamie@example.com',
+            profile: {
+              firstName: 'Jamie',
+              lastName: 'Driver',
+            },
+          },
+          vehicle: {
+            plateNumber: 'BKG1234',
+            make: 'Toyota',
+            model: 'Vios',
+            year: 2022,
+          },
           timeSlot: {
             id: 'slot-1',
             label: 'Morning Slot',
@@ -203,6 +225,19 @@ describe('BookingsService', () => {
           scheduledDate: '2026-04-20',
           status: 'rescheduled',
           createdAt: new Date('2026-04-20T08:15:00.000Z'),
+          user: {
+            email: 'alex@example.com',
+            profile: {
+              firstName: 'Alex',
+              lastName: 'Queue',
+            },
+          },
+          vehicle: {
+            plateNumber: 'QEU5678',
+            make: 'Honda',
+            model: 'City',
+            year: 2021,
+          },
           timeSlot: {
             id: 'slot-1',
             label: 'Morning Slot',
@@ -215,6 +250,7 @@ describe('BookingsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         BookingsService,
+        { provide: BOOKINGS_CLOCK, useValue: fixedBookingClock },
         { provide: BookingsRepository, useValue: bookingsRepository },
         { provide: UsersService, useValue: { findById: jest.fn() } },
         { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
@@ -231,6 +267,12 @@ describe('BookingsService', () => {
         timeSlotId: 'slot-1',
         confirmedCount: 1,
         rescheduledCount: 1,
+        bookings: expect.arrayContaining([
+          expect.objectContaining({
+            customerName: 'Jamie Driver',
+            vehicleDisplayName: '2022 Toyota Vios',
+          }),
+        ]),
       }),
     );
 
@@ -242,6 +284,8 @@ describe('BookingsService', () => {
       expect.objectContaining({
         queuePosition: 1,
         bookingId: 'booking-1',
+        customerName: 'Jamie Driver',
+        vehicleDisplayName: '2022 Toyota Vios',
       }),
     );
   });
@@ -250,6 +294,7 @@ describe('BookingsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         BookingsService,
+        { provide: BOOKINGS_CLOCK, useValue: fixedBookingClock },
         {
           provide: BookingsRepository,
           useValue: {
@@ -286,5 +331,124 @@ describe('BookingsService', () => {
         'user-1',
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects booking creation outside the supported booking window', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        BookingsService,
+        { provide: BOOKINGS_CLOCK, useValue: fixedBookingClock },
+        {
+          provide: BookingsRepository,
+          useValue: {
+            findServiceIds: jest.fn().mockResolvedValue([{ id: 'service-1' }]),
+            findTimeSlotById: jest.fn().mockResolvedValue({ id: 'slot-1', isActive: true, capacity: 2 }),
+            countActiveBookingsForSlot: jest.fn().mockResolvedValue(0),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({ id: 'user-1' }),
+          },
+        },
+        {
+          provide: VehiclesRepository,
+          useValue: {
+            findOwnedByUser: jest.fn().mockResolvedValue({ id: 'vehicle-1', userId: 'user-1' }),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(BookingsService);
+
+    await expect(
+      service.create({
+        userId: 'user-1',
+        vehicleId: 'vehicle-1',
+        timeSlotId: 'slot-1',
+        scheduledDate: '2026-10-15',
+        serviceIds: ['service-1'],
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('builds bounded booking availability from active slot definitions and booking counts', async () => {
+    const bookingsRepository = {
+      listTimeSlots: jest.fn().mockResolvedValue([
+        {
+          id: 'slot-1',
+          label: 'Morning Slot',
+          startTime: '09:00',
+          endTime: '10:00',
+          capacity: 2,
+          isActive: true,
+        },
+        {
+          id: 'slot-2',
+          label: 'Afternoon Slot',
+          startTime: '14:00',
+          endTime: '15:00',
+          capacity: 1,
+          isActive: true,
+        },
+      ]),
+      findByScheduledDateRange: jest.fn().mockResolvedValue([
+        {
+          id: 'booking-1',
+          timeSlotId: 'slot-1',
+          scheduledDate: '2026-04-02',
+          status: 'confirmed',
+        },
+        {
+          id: 'booking-2',
+          timeSlotId: 'slot-1',
+          scheduledDate: '2026-04-02',
+          status: 'pending',
+        },
+      ]),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        BookingsService,
+        { provide: BOOKINGS_CLOCK, useValue: fixedBookingClock },
+        { provide: BookingsRepository, useValue: bookingsRepository },
+        { provide: UsersService, useValue: { findById: jest.fn() } },
+        { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(BookingsService);
+
+    const availability = await service.getAvailability({
+      startDate: '2026-04-01',
+      endDate: '2026-04-03',
+    });
+
+    expect(availability.minBookableDate).toBe('2026-04-02');
+    expect(availability.maxBookableDate).toBe('2026-09-28');
+    expect(availability.days).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scheduledDate: '2026-04-01',
+          status: 'outside_window',
+          isBookable: false,
+        }),
+        expect.objectContaining({
+          scheduledDate: '2026-04-02',
+          status: 'limited',
+          isBookable: true,
+          availableSlotCount: 1,
+        }),
+        expect.objectContaining({
+          scheduledDate: '2026-04-03',
+          status: 'bookable',
+          isBookable: true,
+          availableSlotCount: 2,
+        }),
+      ]),
+    );
   });
 });

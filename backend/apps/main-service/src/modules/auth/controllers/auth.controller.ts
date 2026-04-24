@@ -16,6 +16,9 @@ import {
 
 import { Roles } from '../decorators/roles.decorator';
 import { CreateStaffAccountDto } from '../dto/create-staff-account.dto';
+import { DeleteAccountDto } from '../dto/delete-account.dto';
+import { DeleteAccountStartResponseDto } from '../dto/delete-account-start-response.dto';
+import { DeleteAccountResponseDto } from '../dto/delete-account-response.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { AuthenticatedUserResponseDto } from '../dto/authenticated-user-response.dto';
@@ -138,6 +141,43 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.authService.refresh(refreshTokenDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('auth/account/delete/start')
+  @ApiOperation({ summary: 'Confirm the current password and send a delete-account OTP.' })
+  @ApiBearerAuth('access-token')
+  @ApiCreatedResponse({
+    description: 'A delete-account OTP was sent successfully.',
+    type: DeleteAccountStartResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The delete-account payload is invalid.' })
+  @ApiUnauthorizedResponse({ description: 'Missing bearer token or current password confirmation failed.' })
+  startDeleteOwnAccount(@Body() payload: DeleteAccountDto, @Req() request: Request) {
+    return this.authService.startDeleteOwnAccount(
+      payload,
+      request.user as { userId: string; email: string; role: string },
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('auth/account/delete/verify')
+  @ApiOperation({ summary: 'Verify the delete-account OTP and archive the authenticated account.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'The account was soft deleted successfully.',
+    type: DeleteAccountResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The delete-account OTP payload is invalid.' })
+  @ApiConflictResponse({ description: 'The OTP has already been used.' })
+  @ApiNotFoundResponse({ description: 'OTP enrollment not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing bearer token or the OTP does not belong to the authenticated user.' })
+  @HttpCode(HttpStatus.OK)
+  verifyDeleteOwnAccount(@Body() payload: VerifyEmailOtpDto, @Req() request: Request) {
+    return this.authService.verifyDeleteOwnAccountOtp(
+      payload,
+      request.user as { userId: string; email: string; role: string },
+    );
   }
 
   @UseGuards(JwtAuthGuard)

@@ -53,7 +53,7 @@ const getScreenCopy = (otpPurpose) => {
       buttonIcon: 'delete-outline',
       successToast: 'Account deletion verified.',
       successTitle: 'Account Deleted',
-      successMessage: 'Your account has been verified for deletion and removed.',
+      successMessage: 'Your account has been archived and the same email can be used again later.',
     };
   }
 
@@ -222,50 +222,64 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
       return;
     }
 
-    if (otp !== '123456') {
+    const usesLiveOtpFlow = otpPurpose === 'deleteAccount';
+
+    if (!usesLiveOtpFlow && otp !== '123456') {
       setError('Incorrect OTP. Use 123456 for this prototype.');
       showInlineToast('Invalid code. Please try again.');
       Alert.alert('Invalid Code', 'The OTP you entered is invalid. Please try again.');
       return;
     }
 
-    const verificationResult = onVerified?.(route.params) || { status: 'success' };
+    const submitVerification = async () => {
+      setSubmitting(true);
+      try {
+        const verificationResult = (await onVerified?.({
+          ...route.params,
+          otp,
+        })) || { status: 'success' };
 
-    if (verificationResult.status === 'error') {
-      setError(verificationResult.message || 'OTP verification failed.');
-      showInlineToast(verificationResult.title || 'Verification failed.');
-      Alert.alert(
-        verificationResult.title || 'Verification Failed',
-        verificationResult.message || 'Unable to complete OTP verification.',
-        [
+        if (verificationResult.status === 'error') {
+          setError(verificationResult.message || 'OTP verification failed.');
+          showInlineToast(verificationResult.title || 'Verification failed.');
+          Alert.alert(
+            verificationResult.title || 'Verification Failed',
+            verificationResult.message || 'Unable to complete OTP verification.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  if (verificationResult.nextRoute) {
+                    navigateAfterVerification(verificationResult);
+                  }
+                },
+              },
+            ],
+          );
+          return;
+        }
+
+        showInlineToast(screenCopy.successToast, 'success');
+
+        if (Platform.OS === 'web') {
+          navigationTimeoutRef.current = setTimeout(() => {
+            navigateAfterVerification(verificationResult);
+          }, 1500);
+          return;
+        }
+
+        Alert.alert(screenCopy.successTitle, screenCopy.successMessage, [
           {
-            text: 'OK',
-            onPress: () => {
-              if (verificationResult.nextRoute) {
-                navigateAfterVerification(verificationResult);
-              }
-            },
+            text: 'Continue',
+            onPress: () => navigateAfterVerification(verificationResult),
           },
-        ],
-      );
-      return;
-    }
+        ]);
+      } finally {
+        setSubmitting(false);
+      }
+    };
 
-    showInlineToast(screenCopy.successToast, 'success');
-
-    if (Platform.OS === 'web') {
-      navigationTimeoutRef.current = setTimeout(() => {
-        navigateAfterVerification(verificationResult);
-      }, 1500);
-      return;
-    }
-
-    Alert.alert(screenCopy.successTitle, screenCopy.successMessage, [
-      {
-        text: 'Continue',
-        onPress: () => navigateAfterVerification(verificationResult),
-      },
-    ]);
+    void submitVerification();
   };
 
   const handleResend = () => {
@@ -275,6 +289,11 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
 
     if (otpPurpose === 'register') {
       showInlineToast('Resend is not available yet. Start registration again to request a new code.');
+      return;
+    }
+
+    if (otpPurpose === 'deleteAccount') {
+      showInlineToast('Resend is not available yet. Go back and restart account deletion to request a new code.');
       return;
     }
 
@@ -374,10 +393,10 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
           )}
         </View>
 
-        {otpPurpose === 'register' ? (
+        {otpPurpose === 'register' || otpPurpose === 'deleteAccount' ? (
           <View style={styles.demoCard}>
             <Text style={styles.demoText}>
-              Use the verification code sent to your email. This screen is now backed by the real registration flow.
+              Use the verification code sent to your email. This screen is now backed by the real backend verification flow.
             </Text>
           </View>
         ) : (

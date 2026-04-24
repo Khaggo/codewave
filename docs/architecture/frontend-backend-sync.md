@@ -6,6 +6,7 @@ This file defines the canonical coordination model between frontend and backend 
 
 - Use one task file as the shared coordination unit for every feature slice.
 - Freeform slice requests start with the orchestrator, which selects the worker path before implementation or contract work begins.
+- If shared-slice confusion, route drift, unresolved `ready` queues, or repeated frontend/backend mismatch appear, the orchestrator must explicitly `reject as noise`, `log observation`, or `create bounded proposal` before treating the issue as recovery work.
 - For each slice, load:
   - `README.md`
   - `system-architecture.md`
@@ -20,6 +21,7 @@ This file defines the canonical coordination model between frontend and backend 
 
 - Codex acts as the contract coordinator between backend and frontend work.
 - Codex should begin in orchestrator mode for freeform slice prompts, then choose `integration-worker` for cross-surface work or `domain-worker` only when the change is truly local to one owned domain.
+- Cross-surface recovery signals should be routed through the orchestrator first so the evidence becomes either rejected noise, a logged observation, or a bounded proposal instead of disappearing between frontend and backend passes.
 - Backend work uses domain docs, task docs, DTO policy, and live Swagger to implement the slice.
 - Frontend work uses the same domain doc and task doc plus the generated or curated contract pack and mocks.
 - Codex should prevent frontend assumptions that are not supported by:

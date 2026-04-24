@@ -15,6 +15,7 @@ import { NotificationsService } from '@main-modules/notifications/services/notif
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 
 import { GoogleSignupStartDto } from '../dto/google-signup-start.dto';
+import { DeleteAccountDto } from '../dto/delete-account.dto';
 import { LoginDto } from '../dto/login.dto';
 import { CreateStaffAccountDto } from '../dto/create-staff-account.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
@@ -92,6 +93,7 @@ export class AuthService {
       email: normalizedEmail,
       purpose: 'customer_signup',
       activationContext: 'customer_signup',
+      status: 'pending_activation',
     });
   }
 
@@ -139,6 +141,7 @@ export class AuthService {
       email: normalizedEmail,
       purpose: 'staff_activation',
       activationContext: 'staff_activation',
+      status: 'pending_activation',
     });
   }
 
@@ -269,6 +272,7 @@ export class AuthService {
       email: user.email,
       purpose: 'customer_signup',
       activationContext: 'customer_signup',
+      status: 'pending_activation',
     });
   }
 
@@ -351,6 +355,34 @@ export class AuthService {
     }
 
     return this.issueTokens(user);
+  }
+
+  async startDeleteOwnAccount(
+    payload: DeleteAccountDto,
+    actor: { userId: string; email: string; role: string },
+  ) {
+    const user = await this.usersService.findById(actor.userId);
+    if (!user || !user.isActive) {
+      throw new NotFoundException('User not found');
+    }
+
+    const account = await this.authRepository.findAccountByUserId(user.id);
+    if (!account || !account.isActive) {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    const isPasswordValid = await bcrypt.compare(payload.currentPassword, account.passwordHash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    return this.createOtpEnrollment({
+      userId: user.id,
+      email: user.email,
+      purpose: 'account_delete',
+      activationContext: 'account_delete',
+      status: 'pending_delete_verification',
+    });
   }
 
   async provisionStaffAccount(
@@ -457,6 +489,58 @@ export class AuthService {
     return this.usersService.findById(userId);
   }
 
+  async verifyDeleteOwnAccountOtp(
+    payload: VerifyEmailOtpDto,
+    actor: { userId: string; email: string; role: string },
+  ) {
+    const challenge = await this.authRepository.findOtpChallengeById(payload.enrollmentId);
+    if (!challenge) {
+      throw new NotFoundException('OTP enrollment not found');
+    }
+
+    if (challenge.purpose !== 'account_delete') {
+      throw new BadRequestException('OTP purpose does not match account deletion');
+    }
+
+    if (challenge.userId !== actor.userId) {
+      throw new UnauthorizedException('Delete verification does not belong to the authenticated user');
+    }
+
+    if (challenge.consumedAt) {
+      throw new ConflictException('OTP has already been used');
+    }
+
+    if (challenge.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('OTP has expired');
+    }
+
+    const isOtpValid = await bcrypt.compare(payload.otp, challenge.otpHash);
+    if (!isOtpValid) {
+      await this.authRepository.incrementOtpAttempts(
+        challenge.id,
+        (challenge.attempts ?? 0) + 1,
+      );
+      throw new BadRequestException('Invalid OTP');
+    }
+
+    await this.authRepository.consumeOtpChallenge(challenge.id);
+
+    const user = await this.usersService.findById(actor.userId);
+    if (!user || !user.isActive) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.authRepository.softDeleteUserAccount({
+      userId: user.id,
+      email: user.email,
+    });
+
+    return {
+      status: 'account_soft_deleted',
+      message: 'The account was archived successfully. You can sign up again with the same email later.',
+    };
+  }
+
   private async issueTokens(user: { id: string; email: string; role: string; profile?: unknown }) {
     const accessPayload: TokenPayload = {
       sub: user.id,
@@ -497,8 +581,9 @@ export class AuthService {
   private async createOtpEnrollment(payload: {
     userId: string;
     email: string;
-    purpose: 'customer_signup' | 'staff_activation';
-    activationContext: 'customer_signup' | 'staff_activation';
+    purpose: 'customer_signup' | 'staff_activation' | 'account_delete';
+    activationContext: 'customer_signup' | 'staff_activation' | 'account_delete';
+    status: 'pending_activation' | 'pending_delete_verification';
   }) {
     const otp = this.generateOtp();
     const otpHash = await bcrypt.hash(otp, 10);
@@ -526,7 +611,7 @@ export class AuthService {
       userId: payload.userId,
       maskedEmail: this.maskEmail(payload.email),
       otpExpiresAt: expiresAt.toISOString(),
-      status: 'pending_activation',
+      status: payload.status,
     };
   }
 

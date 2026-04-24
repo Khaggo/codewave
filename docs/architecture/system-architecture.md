@@ -108,12 +108,13 @@ Build and maintain a correct, modular, self-improving, and implementation-ready 
 
 1. Orchestrator receives either a freeform user prompt or improvement evidence.
 2. Orchestrator loads the minimum routing context, identifies ownership, and classifies the evidence as `noise`, `observation`, or `bounded proposal`.
-3. Observations and proposals are recorded in the non-canonical improvement queue so stagnation, drift, and repeated confusion are visible.
-4. When change is warranted, the orchestrator issues a bounded change request with target file, allowed sections, and acceptance checks.
-5. A worker edits only the permitted file scope.
-6. Validator checks heading schema, links, dependencies, and manifest integrity.
-7. Validator refreshes machine-owned metadata.
-8. Canonical Markdown is replaced only after validation passes and the proposal remains human-approved.
+3. If the evidence is weak, duplicated, or not actionable, the orchestrator rejects it as noise and stops.
+4. If the evidence is credible but not yet a bounded change, the orchestrator logs an observation in the non-canonical improvement queue so stagnation, drift, and repeated confusion stay visible.
+5. If change is warranted, the orchestrator creates a bounded proposal with target file, allowed sections, and acceptance checks.
+6. A worker edits only the permitted file scope.
+7. Validator checks heading schema, links, dependencies, and manifest integrity.
+8. Validator refreshes machine-owned metadata.
+9. Canonical Markdown is replaced only after validation passes and the proposal remains human-approved.
 
 Use this loop when there is evidence from implementation, tests, runtime behavior, repeated ambiguity, validator failure, doc or code drift, stale control docs, unresolved `ready` queues, conflicting docs, or repeated frontend/backend mismatch. Do not rewrite docs speculatively, but do not ignore credible evidence either.
 

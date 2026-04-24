@@ -31,6 +31,7 @@ export const authProviderEnum = pgEnum('auth_provider', ['google']);
 export const authOtpPurposeEnum = pgEnum('auth_otp_purpose', [
   'customer_signup',
   'staff_activation',
+  'account_delete',
 ]);
 
 export const authGoogleIdentities = pgTable('auth_google_identities', {
