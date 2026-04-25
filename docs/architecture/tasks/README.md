@@ -99,7 +99,7 @@ This folder is the execution layer derived from the canonical SSoT in `docs/arch
   - `T515-insurance-review-and-status-web-flow`
   - `T516-job-order-workbench-web-flow`
 - current priority queue:
-  - no `ready` tasks are currently queued
+  - no ready implementation tasks are currently queued after `T539`; open the next follow-up task from new personal QA findings or progress-report gaps.
 
 ## Build Order For Agents
 
@@ -125,7 +125,18 @@ Use this order when the user asks to continue implementation, activate the agent
 18. `T123-booking-availability-window-and-slot-definition-governance` - done; bookings now own bounded availability-window reads, staff slot-definition governance, and shared create/reschedule date validation.
 19. `T531-customer-booking-availability-calendar-mobile-flow` - done; customer mobile now pages backend-owned availability windows, surfaces day and selected-slot capacity states, and refreshes live availability after booking conflicts instead of inventing local date windows.
 
-Active implementation should prioritize pending tasks only, and there are currently no `ready` queued tasks after `T531`. The client-integration queue is now complete through `T531`. Completed prerequisites stay `done`; any discovered gaps should be captured as follow-up verification notes unless a new implementation task is truly required.
+Active implementation should prioritize pending tasks only. The client-integration queue is complete through `T539`; the `T532`-`T539` follow-up tasks were opened from progress-report verification and module-discoverability gaps and are now completed. Completed prerequisites stay `done`; any discovered gaps should be captured as follow-up verification notes unless a new implementation task is truly required.
+
+## Progress Report Verification Follow-Ups
+
+- `T532-job-order-qa-release-runtime-regression` - done; covers Technician Workflow, Quality Assurance & Release Control, and the service-invoice side of Invoice & Order Management with a repeatable live smoke script.
+- `T533-web-admin-inventory-analytics-route-crash-verification` - done; Inventory & Stock Visibility and Operational Analytics now have build evidence plus headless Chrome route/reload/unauthorized smoke verification after the ToastProvider crash fix.
+- `T534-customer-insurance-document-upload-mobile-flow` - done; mobile customers can attach JSON document metadata and file references to live insurance inquiries, document counts update immediately, closed/rejected uploads are blocked, and staff web detail shows attached document metadata.
+- `T535-notifications-reminders-live-delivery-feed-verification` - done; booking confirmation/reschedule, insurance review, and back-job status workflows now invoke live notification triggers, customer feed integration proves queued and skipped states, and `npm run smoke:notifications` provides a repeatable live backend smoke path.
+- `T536-mobile-cross-device-responsive-regression-pass` - done; dashboard, booking availability, date picker, shop catalog, cart/order cards, and bottom navigation now have compact/baseline/large phone layout hardening with Expo export evidence.
+- `T537-digital-intake-inspection-web-navigation-surface` - done; `/admin/intake-inspections` is now a first-class staff web surface with role-aware navigation, live vehicle-scoped inspection create/history controls, and explicit QA/job-order boundary copy.
+- `T538-web-invoice-order-management-navigation-surface` - done; `/admin/invoices` is now a first-class adviser/admin surface for service invoice lookup, known ecommerce order/invoice lookup, invoice-aging analytics, and explicit staff ecommerce queue API gaps.
+- `T539-customer-digital-garage-mobile-surface` - done; the customer mobile Garage tab, dashboard quick action, profile entry, owned-vehicle cards, and booking/lifecycle/insurance handoffs now make the Digital Garage Module discoverable without opening booking first.
 
 ## Operating Rules
 

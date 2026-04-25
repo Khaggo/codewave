@@ -42,7 +42,7 @@ export class CreateProductDto {
   sku!: string;
 
   @ApiPropertyOptional({
-    example: 'Bootstrap catalog placeholder for follow-up catalog implementation tasks.',
+    example: 'Fully synthetic 5W-30 engine oil for smoother starts and regular PMS top-ups.',
     maxLength: 1000,
   })
   @IsOptional()

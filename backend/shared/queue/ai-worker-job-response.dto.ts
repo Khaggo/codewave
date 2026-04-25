@@ -12,7 +12,7 @@ export class AiWorkerJobResponseDto {
   jobName!: string;
 
   @ApiProperty({
-    example: 'vehicle-lifecycle-summary:vehicle-1:2026-06-18T02:15:00.000Z',
+    example: 'vehicle-lifecycle-summary__vehicle-1__2026-06-18T02__15__00.000Z',
   })
   jobId!: string;
 

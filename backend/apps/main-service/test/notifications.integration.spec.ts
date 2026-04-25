@@ -93,6 +93,177 @@ describe('NotificationsController integration', () => {
     }
   });
 
+  it('creates customer feed entries from live booking and insurance workflow events', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    type FeedNotification = {
+      category: string;
+      sourceId: string;
+      status: string;
+      attempts?: Array<{ status: string; errorMessage?: string | null }>;
+      dedupeKey?: string;
+    };
+
+    try {
+      const adviser = await seedAuthUser({
+        email: 'workflow.notify.adviser@example.com',
+        password: 'password123',
+        firstName: 'Ava',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-NOTIFY-1',
+      });
+      const customer = await seedAuthUser({
+        email: 'workflow.notify.customer@example.com',
+        password: 'password123',
+        firstName: 'Nico',
+        lastName: 'Workflow',
+        phone: '+639185555555',
+      });
+
+      const [adviserLogin, customerLogin] = await Promise.all([
+        request(app.getHttpServer()).post('/api/auth/login').send({
+          email: adviser.email,
+          password: 'password123',
+        }),
+        request(app.getHttpServer()).post('/api/auth/login').send({
+          email: customer.email,
+          password: 'password123',
+        }),
+      ]);
+      expect(adviserLogin.status).toBe(200);
+      expect(customerLogin.status).toBe(200);
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'NTF535',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const [servicesResponse, timeSlotsResponse] = await Promise.all([
+        request(app.getHttpServer()).get('/api/services'),
+        request(app.getHttpServer()).get('/api/time-slots'),
+      ]);
+      expect(servicesResponse.status).toBe(200);
+      expect(timeSlotsResponse.status).toBe(200);
+
+      const disabledPreferencesResponse = await request(app.getHttpServer())
+        .patch(`/api/users/${customer.id}/notification-preferences`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          bookingRemindersEnabled: false,
+        });
+      expect(disabledPreferencesResponse.status).toBe(200);
+      expect(disabledPreferencesResponse.body.bookingRemindersEnabled).toBe(false);
+
+      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
+        userId: customer.id,
+        vehicleId: vehicleResponse.body.id,
+        timeSlotId: timeSlotsResponse.body[0].id,
+        scheduledDate: '2026-04-20',
+        serviceIds: [servicesResponse.body[0].id],
+      });
+      expect(bookingResponse.status).toBe(201);
+
+      const confirmBookingResponse = await request(app.getHttpServer())
+        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'confirmed',
+          reason: 'Confirmed for notification workflow smoke.',
+        });
+      expect(confirmBookingResponse.status).toBe(200);
+
+      const skippedFeedResponse = await request(app.getHttpServer())
+        .get(`/api/users/${customer.id}/notifications`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+      expect(skippedFeedResponse.status).toBe(200);
+      const skippedBookingNotification = skippedFeedResponse.body.find(
+        (notification: FeedNotification) =>
+          notification.category === 'booking_reminder' &&
+          notification.sourceId === bookingResponse.body.id &&
+          notification.status === 'skipped',
+      );
+      expect(skippedBookingNotification).toEqual(
+        expect.objectContaining({
+          dedupeKey: expect.stringContaining('notification:booking.reminder_requested:'),
+        }),
+      );
+      expect(skippedBookingNotification?.attempts ?? []).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            status: 'skipped',
+            errorMessage: expect.stringContaining('booking_reminder'),
+          }),
+        ]),
+      );
+
+      const enabledPreferencesResponse = await request(app.getHttpServer())
+        .patch(`/api/users/${customer.id}/notification-preferences`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          bookingRemindersEnabled: true,
+        });
+      expect(enabledPreferencesResponse.status).toBe(200);
+      expect(enabledPreferencesResponse.body.bookingRemindersEnabled).toBe(true);
+
+      const rescheduleResponse = await request(app.getHttpServer())
+        .post(`/api/bookings/${bookingResponse.body.id}/reschedule`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          timeSlotId: timeSlotsResponse.body[1].id,
+          scheduledDate: '2026-04-21',
+          reason: 'Rescheduled after preferences were restored.',
+        });
+      expect(rescheduleResponse.status).toBe(200);
+
+      const createInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Notification insurance workflow',
+          description: 'Customer checks whether insurance review updates appear in the feed.',
+        });
+      expect(createInquiryResponse.status).toBe(201);
+
+      const insuranceStatusResponse = await request(app.getHttpServer())
+        .patch(`/api/insurance/inquiries/${createInquiryResponse.body.id}/status`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'under_review',
+          reviewNotes: 'Review started for notification workflow smoke.',
+        });
+      expect(insuranceStatusResponse.status).toBe(200);
+
+      const liveFeedResponse = await request(app.getHttpServer())
+        .get(`/api/users/${customer.id}/notifications`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+      expect(liveFeedResponse.status).toBe(200);
+      expect(liveFeedResponse.body).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            category: 'booking_reminder',
+            sourceId: bookingResponse.body.id,
+            status: 'queued',
+          }),
+          expect.objectContaining({
+            category: 'insurance_update',
+            sourceId: createInquiryResponse.body.id,
+            status: 'queued',
+          }),
+        ]),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
   it('rejects foreign customer access but allows service advisers to read customer notification state', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 

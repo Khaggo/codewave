@@ -12,6 +12,16 @@ const customerInsuranceStatusHints = {
   closed: 'The inquiry is closed and no longer accepting changes.',
 };
 
+const customerInsuranceDocumentTypeLabels = {
+  or_cr: 'OR/CR',
+  policy: 'Policy copy',
+  photo: 'Damage photo',
+  estimate: 'Repair estimate',
+  other: 'Other document',
+};
+
+const closedDocumentUploadStatuses = ['closed', 'rejected'];
+
 const buildAuthHeaders = (accessToken) =>
   accessToken
     ? {
@@ -137,6 +147,21 @@ const humanizeInquiryType = (value) =>
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(' ');
 
+const humanizeDocumentType = (value) =>
+  customerInsuranceDocumentTypeLabels[value] ??
+  String(value ?? '')
+    .split('_')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+
+export const customerInsuranceDocumentTypeOptions = Object.entries(
+  customerInsuranceDocumentTypeLabels,
+).map(([value, label]) => ({
+  value,
+  label,
+}));
+
 export const buildOwnedVehicleInsuranceLabel = (vehicle) => {
   const displayName = String(vehicle?.displayName ?? '').trim();
   const plateNumber = String(vehicle?.plateNumber ?? '').trim().toUpperCase();
@@ -157,10 +182,43 @@ export const createInitialCustomerInsuranceDraft = () => ({
   notes: '',
 });
 
+export const createInitialCustomerInsuranceDocumentDraft = () => ({
+  documentType: 'photo',
+  fileName: '',
+  fileUrl: '',
+  notes: '',
+});
+
+export const canAttachCustomerInsuranceDocument = (inquiry) =>
+  Boolean(inquiry?.id) && !closedDocumentUploadStatuses.includes(inquiry?.status);
+
+export const normalizeCustomerInsuranceDocument = (document) => {
+  if (!document || typeof document !== 'object') {
+    return null;
+  }
+
+  return {
+    id: document.id ?? null,
+    inquiryId: document.inquiryId ?? null,
+    fileName: String(document.fileName ?? '').trim(),
+    fileUrl: String(document.fileUrl ?? '').trim(),
+    documentType: document.documentType ?? 'other',
+    documentTypeLabel: humanizeDocumentType(document.documentType),
+    notes: trimOrNull(document.notes),
+    uploadedByUserId: document.uploadedByUserId ?? null,
+    createdAt: document.createdAt ?? null,
+    updatedAt: document.updatedAt ?? null,
+  };
+};
+
 export const normalizeCustomerInsuranceInquiry = (inquiry) => {
   if (!inquiry || typeof inquiry !== 'object') {
     return null;
   }
+
+  const documents = asArray(inquiry.documents)
+    .map(normalizeCustomerInsuranceDocument)
+    .filter(Boolean);
 
   return {
     id: inquiry.id ?? null,
@@ -175,7 +233,9 @@ export const normalizeCustomerInsuranceInquiry = (inquiry) => {
     providerName: trimOrNull(inquiry.providerName),
     policyNumber: trimOrNull(inquiry.policyNumber),
     notes: trimOrNull(inquiry.notes),
-    documentCount: Array.isArray(inquiry.documents) ? inquiry.documents.length : 0,
+    documentCount: documents.length,
+    documents,
+    canAttachDocuments: !closedDocumentUploadStatuses.includes(inquiry.status),
     createdAt: inquiry.createdAt ?? null,
     updatedAt: inquiry.updatedAt ?? null,
   };
@@ -287,6 +347,56 @@ export const getInsuranceInquiryById = async ({ inquiryId, accessToken }) => {
     await request(`/api/insurance/inquiries/${inquiryId}`, {
       method: 'GET',
       headers: buildAuthHeaders(accessToken),
+    }),
+  );
+};
+
+export const addInsuranceInquiryDocument = async ({
+  inquiryId,
+  documentType,
+  fileName,
+  fileUrl,
+  notes,
+  accessToken,
+}) => {
+  const normalizedInquiryId = String(inquiryId ?? '').trim();
+  const normalizedDocumentType = String(documentType ?? '').trim();
+  const normalizedFileName = String(fileName ?? '').trim();
+  const normalizedFileUrl = String(fileUrl ?? '').trim();
+
+  if (!normalizedInquiryId) {
+    throw new ApiError('Submit or select an insurance inquiry before attaching a document.', 400, {
+      path: '/api/insurance/inquiries/:id/documents',
+    });
+  }
+
+  if (!customerInsuranceDocumentTypeLabels[normalizedDocumentType]) {
+    throw new ApiError(
+      'Choose a valid document type: OR/CR, policy, photo, estimate, or other.',
+      400,
+      {
+        path: '/api/insurance/inquiries/:id/documents',
+        documentType,
+      },
+    );
+  }
+
+  if (!normalizedFileName || !normalizedFileUrl) {
+    throw new ApiError('Document name and file URL/reference are required before upload.', 400, {
+      path: '/api/insurance/inquiries/:id/documents',
+    });
+  }
+
+  return normalizeCustomerInsuranceInquiry(
+    await request(`/api/insurance/inquiries/${normalizedInquiryId}/documents`, {
+      method: 'POST',
+      headers: buildAuthHeaders(accessToken),
+      body: {
+        fileName: normalizedFileName,
+        fileUrl: normalizedFileUrl,
+        documentType: normalizedDocumentType,
+        notes: trimOrNull(notes) ?? undefined,
+      },
     }),
   );
 };

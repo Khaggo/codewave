@@ -52,6 +52,10 @@ export class UsersService {
     return this.usersRepository.findByEmail(email);
   }
 
+  async findByStaffCode(staffCode: string) {
+    return this.usersRepository.findByStaffCode(staffCode);
+  }
+
   async update(id: string, updateUserDto: UpdateUserDto) {
     return this.usersRepository.update(id, updateUserDto);
   }

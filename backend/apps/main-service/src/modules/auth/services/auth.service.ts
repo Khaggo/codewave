@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
 
 import { CreateUserDto } from '@main-modules/users/dto/create-user.dto';
@@ -30,6 +31,28 @@ type TokenPayload = {
   email: string;
   role: string;
   type: 'access' | 'refresh';
+};
+
+type StaffAccountType = 'staff' | 'mechanic' | 'technician' | 'admin';
+
+const staffAccountTypeEmailSegments: Record<StaffAccountType, string> = {
+  staff: 'staff',
+  mechanic: 'mechanic',
+  technician: 'technician',
+  admin: 'admin',
+};
+
+const staffAccountTypeCodePrefixes: Record<StaffAccountType, string> = {
+  staff: 'STA',
+  mechanic: 'MEC',
+  technician: 'TEC',
+  admin: 'ADM',
+};
+
+const roleFallbackAccountTypes: Record<string, StaffAccountType> = {
+  service_adviser: 'staff',
+  technician: 'technician',
+  super_admin: 'admin',
 };
 
 @Injectable()
@@ -389,13 +412,21 @@ export class AuthService {
     payload: CreateStaffAccountDto,
     actor: { userId: string; role: string },
   ) {
+    const accountType = this.resolveStaffAccountType(payload);
+    const staffCode = payload.staffCode?.trim()
+      ? payload.staffCode.trim().toUpperCase()
+      : await this.generateUniqueStaffCode(accountType);
+    const email = payload.email?.trim()
+      ? payload.email.trim().toLowerCase()
+      : await this.generateUniqueStaffEmail(payload.firstName, accountType);
+
     const user = await this.usersService.createManagedUser({
-      email: payload.email,
+      email,
       firstName: payload.firstName,
       lastName: payload.lastName,
       phone: payload.phone,
       role: payload.role,
-      staffCode: payload.staffCode,
+      staffCode,
     });
 
     const passwordHash = await bcrypt.hash(payload.password, 10);
@@ -428,6 +459,67 @@ export class AuthService {
     });
 
     return this.usersService.findById(user.id);
+  }
+
+  private resolveStaffAccountType(payload: CreateStaffAccountDto): StaffAccountType {
+    if (payload.accountType) {
+      return payload.accountType;
+    }
+
+    return roleFallbackAccountTypes[payload.role] ?? 'staff';
+  }
+
+  private normalizeEmailNameSegment(value: string) {
+    return (
+      String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '')
+        .slice(0, 32) || 'staff'
+    );
+  }
+
+  private async generateUniqueStaffEmail(firstName: string, accountType: StaffAccountType) {
+    const baseName = this.normalizeEmailNameSegment(firstName);
+    const roleSegment = staffAccountTypeEmailSegments[accountType];
+    const triedNumbers = new Set<number>();
+
+    while (triedNumbers.size < 900) {
+      const randomNumber = randomInt(100, 1000);
+      if (triedNumbers.has(randomNumber)) {
+        continue;
+      }
+
+      triedNumbers.add(randomNumber);
+      const candidate = `${baseName}${randomNumber}.${roleSegment}@autocare.com`;
+      const existingUser = await this.usersService.findByEmail(candidate);
+      if (!existingUser) {
+        return candidate;
+      }
+    }
+
+    throw new ConflictException('Unable to generate a unique staff email');
+  }
+
+  private async generateUniqueStaffCode(accountType: StaffAccountType) {
+    const prefix = staffAccountTypeCodePrefixes[accountType];
+    const triedNumbers = new Set<number>();
+
+    while (triedNumbers.size < 9000) {
+      const randomNumber = randomInt(1000, 10000);
+      if (triedNumbers.has(randomNumber)) {
+        continue;
+      }
+
+      triedNumbers.add(randomNumber);
+      const candidate = `${prefix}-${randomNumber}`;
+      const existingUser = await this.usersService.findByStaffCode(candidate);
+      if (!existingUser) {
+        return candidate;
+      }
+    }
+
+    throw new ConflictException('Unable to generate a unique staff ID');
   }
 
   async updateStaffAccountStatus(

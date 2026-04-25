@@ -4,15 +4,11 @@ import { useState, useRef, useEffect } from 'react'
 import { X, CheckCircle2, Car, ChevronDown } from 'lucide-react'
 import { addVehicle } from '@/lib/vehicleStore'
 import { getVehicles } from '@/lib/vehicleStore'
-import { loyaltyAccounts } from '@/lib/mockData'
 
 const VEHICLE_TYPES = ['SUV', 'Sedan', 'Pickup', 'Van', 'Hatchback', 'Crossover', 'Truck']
 
-// Derive unique owner names from vehicles + loyalty accounts
 function getKnownOwners() {
-  const fromVehicles  = getVehicles().map(v => v.owner)
-  const fromLoyalty   = loyaltyAccounts.map(l => l.owner)
-  return [...new Set([...fromVehicles, ...fromLoyalty])].sort()
+  return [...new Set(getVehicles().map(v => v.owner).filter(Boolean))].sort()
 }
 
 function generateId() {

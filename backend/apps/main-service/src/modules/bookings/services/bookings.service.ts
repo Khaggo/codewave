@@ -8,8 +8,10 @@ import {
   Optional,
 } from '@nestjs/common';
 
+import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
+import { createNotificationTrigger } from '@shared/events/contracts/notification-triggers';
 
 import {
   BOOKING_ACTIVE_CAPACITY_STATUSES,
@@ -105,6 +107,7 @@ export class BookingsService {
     private readonly usersService: UsersService,
     private readonly vehiclesRepository: VehiclesRepository,
     @Optional() @Inject(BOOKINGS_CLOCK) private readonly bookingsClock?: BookingsClock,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   async listServices() {
@@ -274,6 +277,7 @@ export class BookingsService {
     };
 
     const updatedBooking = await this.bookingsRepository.updateStatus(id, command);
+    await this.scheduleBookingReminderFromWorkflow(updatedBooking);
     return this.toBookingView(updatedBooking);
   }
 
@@ -292,6 +296,7 @@ export class BookingsService {
     };
 
     const updatedBooking = await this.bookingsRepository.reschedule(id, command);
+    await this.scheduleBookingReminderFromWorkflow(updatedBooking);
     return this.toBookingView(updatedBooking);
   }
 
@@ -491,6 +496,42 @@ export class BookingsService {
 
   private getCurrentDate() {
     return this.bookingsClock?.now() ?? new Date();
+  }
+
+  private async scheduleBookingReminderFromWorkflow(booking: any) {
+    if (!this.notificationsService || !['confirmed', 'rescheduled'].includes(booking?.status)) {
+      return;
+    }
+
+    const timeSlot = Array.isArray(booking.timeSlot) ? booking.timeSlot[0] : booking.timeSlot;
+    const appointmentStartsAt = this.buildAppointmentStartsAt(booking.scheduledDate, timeSlot?.startTime);
+    if (!appointmentStartsAt) {
+      return;
+    }
+
+    const scheduledFor = new Date(appointmentStartsAt.getTime() - MILLISECONDS_PER_DAY);
+    await this.notificationsService.applyTrigger(
+      createNotificationTrigger('booking.reminder_requested', 'main-service.bookings', {
+        bookingId: booking.id,
+        userId: booking.userId,
+        scheduledFor: scheduledFor.toISOString(),
+        appointmentStartsAt: appointmentStartsAt.toISOString(),
+      }),
+    );
+  }
+
+  private buildAppointmentStartsAt(scheduledDate: string, startTime?: string | null) {
+    const dateOnly = parseDateOnly(scheduledDate);
+    const normalizedTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(startTime ?? ''))
+      ? `${startTime}:00`
+      : null;
+
+    if (!dateOnly || !normalizedTime) {
+      return null;
+    }
+
+    const appointmentStartsAt = new Date(`${scheduledDate}T${normalizedTime}.000Z`);
+    return Number.isNaN(appointmentStartsAt.getTime()) ? null : appointmentStartsAt;
   }
 
   private toBookingView(booking: any) {

@@ -1,5 +1,7 @@
 import { Job } from 'bullmq';
 
+import { toBullSafeJobId } from './queue-job-id.util';
+
 export type AiWorkerJobStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
 export type AiWorkerJobMetadata = {
@@ -38,7 +40,7 @@ export function createQueuedAiJobMetadata(
   return {
     queueName: input.queueName,
     jobName: input.jobName,
-    jobId: input.jobId,
+    jobId: toBullSafeJobId(input.jobId),
     status: 'queued',
     requestedAt: input.requestedAt,
     attemptsAllowed: input.attemptsAllowed,
@@ -58,7 +60,7 @@ export function createRuntimeAiJobMetadata(
   return {
     queueName: job.queueName,
     jobName: job.name,
-    jobId: job.id?.toString() ?? `${job.queueName}:${job.name}`,
+    jobId: toBullSafeJobId(job.id?.toString() ?? `${job.queueName}:${job.name}`),
     status,
     requestedAt: options.requestedAt,
     attemptsAllowed: typeof job.opts.attempts === 'number' ? job.opts.attempts : 1,

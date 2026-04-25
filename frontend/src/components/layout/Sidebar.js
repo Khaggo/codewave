@@ -5,12 +5,10 @@ import { usePathname } from 'next/navigation'
 import {
   BarChart3,
   LayoutDashboard,
-  Car,
   CalendarCheck,
   ShieldCheck,
   ShoppingBag,
   Award,
-  History,
   ChevronLeft,
   ChevronRight,
   Cog,
@@ -19,6 +17,8 @@ import {
   ClipboardCheck,
   ClipboardList,
   Boxes,
+  FileSearch,
+  ReceiptText,
 } from 'lucide-react'
 
 import { useUser } from '@/lib/userContext'
@@ -33,34 +33,35 @@ const NAV = [
     items: [{ href: '/', label: 'Dashboard', icon: LayoutDashboard }],
   },
   {
-    group: 'Operations',
+    group: 'Front Desk Flow',
     items: [
-      { href: '/vehicles', label: 'Vehicle Records', icon: Car },
-      { href: '/bookings', label: 'Bookings', icon: CalendarCheck },
+      { href: '/bookings', label: '1. Booking Schedule', icon: CalendarCheck },
+      { href: '/admin/intake-inspections', label: '2. Intake Inspection', icon: FileSearch },
+      { href: '/admin/job-orders', label: '3. Job Orders', icon: ClipboardList },
+      { href: '/admin/qa-audit', label: '4. QA Audit', icon: ClipboardCheck },
+      { href: '/admin/invoices', label: '5. Invoices & Orders', icon: ReceiptText },
+    ],
+  },
+  {
+    group: 'Customer Records',
+    items: [
       { href: '/backjobs', label: 'Back-Jobs', icon: Wrench },
-      { href: '/timeline', label: 'Service Timeline', icon: History },
-    ],
-  },
-  {
-    group: 'Services',
-    items: [
       { href: '/insurance', label: 'Insurance', icon: ShieldCheck },
-      { href: '/shop', label: 'Inventory', icon: ShoppingBag },
+      { href: '/loyalty', label: 'Loyalty Management', icon: Award },
     ],
   },
   {
-    group: 'Customer',
-    items: [{ href: '/loyalty', label: 'Loyalty Management', icon: Award }],
+    group: 'Catalog & Stock',
+    items: [
+      { href: '/admin/catalog', label: 'Catalog Admin', icon: Boxes },
+      { href: '/admin/inventory', label: 'Inventory Admin', icon: ShoppingBag },
+    ],
   },
   {
     group: 'Admin',
     items: [
-      { href: '/admin/users', label: 'User Creation', icon: Users },
+      { href: '/admin/users', label: 'Staff Accounts', icon: Users },
       { href: '/admin/appointments', label: 'Appointments Admin', icon: CalendarCheck },
-      { href: '/admin/job-orders', label: 'Job Orders', icon: ClipboardList },
-      { href: '/admin/catalog', label: 'Catalog Admin', icon: Boxes },
-      { href: '/admin/inventory', label: 'Inventory Admin', icon: ShoppingBag },
-      { href: '/admin/qa-audit', label: 'QA Audit', icon: ClipboardCheck },
       { href: '/admin/summaries', label: 'Analytics & Summaries', icon: BarChart3 },
     ],
   },
@@ -134,8 +135,8 @@ export default function Sidebar({ collapsed, onToggle }) {
                     style={
                       active
                         ? {
-                            backgroundColor: 'rgba(240,124,0,0.08)',
-                            color: '#f07c00',
+                            backgroundColor: 'rgb(var(--brand-orange) / 0.08)',
+                            color: 'rgb(var(--brand-orange))',
                           }
                         : {}
                     }
@@ -143,7 +144,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                     <Icon size={17} className="flex-shrink-0" />
                     {!collapsed ? <span className="truncate">{label}</span> : null}
                     {!collapsed && active ? (
-                      <span className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#f07c00' }} />
+                      <span className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0 bg-brand-orange" />
                     ) : null}
                   </Link>
                 )

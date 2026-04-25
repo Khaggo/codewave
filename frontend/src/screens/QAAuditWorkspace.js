@@ -1,33 +1,18 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import Link from 'next/link'
 import {
   AlertTriangle,
-  ArrowRight,
   BadgeCheck,
-  BrainCircuit,
-  Camera,
-  CheckCircle2,
   ClipboardCheck,
-  FileImage,
+  ExternalLink,
   Lock,
   RefreshCw,
   Search,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
-  X,
 } from 'lucide-react'
-import {
-  AUDIT_STATUS,
-  isRiskGatePassed,
-  isSemanticGatePassed,
-  qaAuditCases,
-  serviceSummaries,
-  vehicles,
-} from '@autocare/shared'
-import Link from 'next/link'
 
 import { useToast } from '@/components/Toast.jsx'
 import { ApiError } from '@/lib/authClient'
@@ -45,29 +30,6 @@ import {
   isQualityGateReleaseBlocked,
   qualityGateReviewContractSources,
 } from '@/lib/api/generated/quality-gates/staff-web-qa-review'
-import {
-  blockedQualityGateMock,
-  overriddenQualityGateMock,
-  passedQualityGateMock,
-  pendingQualityGateMock,
-  staffQualityGateResolvedStateMocks,
-} from '@/mocks/quality-gates/mocks'
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.06,
-      delayChildren: 0.04,
-    },
-  },
-}
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 18 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.28, ease: 'easeOut' } },
-}
 
 const initialQaState = {
   status: 'qa_ready',
@@ -78,13 +40,6 @@ const initialOverrideState = {
   status: 'override_ready',
   message: '',
 }
-
-const contractQualityGateExamples = [
-  pendingQualityGateMock,
-  blockedQualityGateMock,
-  passedQualityGateMock,
-  overriddenQualityGateMock,
-]
 
 function formatLabel(value) {
   return String(value ?? '')
@@ -102,14 +57,13 @@ function formatDateTime(value) {
     return String(value)
   }
 
-  return date.toLocaleString()
-}
-
-function getAuditStatusTone(status) {
-  if (status === AUDIT_STATUS.APPROVED) return 'badge-green'
-  if (status === AUDIT_STATUS.FLAGGED) return 'badge-red'
-  if (status === AUDIT_STATUS.RESOLVED) return 'badge-blue'
-  return 'badge-orange'
+  return date.toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function getQualityStatusTone(status) {
@@ -127,35 +81,11 @@ function getReleaseTone(state) {
 }
 
 function getReleaseCopy(state) {
-  if (state === 'release_allowed_by_override') {
-    return 'Release allowed by super-admin override'
-  }
-
-  if (state === 'release_allowed') {
-    return 'Release allowed after QA pass'
-  }
-
-  if (state === 'release_blocked') {
-    return 'Release blocked by QA findings'
-  }
-
-  if (state === 'release_pending_audit') {
-    return 'Release pending QA audit'
-  }
-
+  if (state === 'release_allowed_by_override') return 'Release allowed by super-admin override'
+  if (state === 'release_allowed') return 'Release allowed after QA pass'
+  if (state === 'release_blocked') return 'Release blocked by QA findings'
+  if (state === 'release_pending_audit') return 'Release pending QA audit'
   return 'QA unavailable for release'
-}
-
-function GatePill({ label, passed, value }) {
-  return (
-    <div className={`rounded-2xl border px-4 py-3 ${passed ? 'border-emerald-500/20 bg-emerald-500/10' : 'border-red-500/20 bg-red-500/10'}`}>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink-muted">{label}</p>
-        <span className={`badge ${passed ? 'badge-green' : 'badge-red'}`}>{passed ? 'Pass' : 'Flag'}</span>
-      </div>
-      <p className={`mt-3 text-2xl font-bold ${passed ? 'text-emerald-400' : 'text-red-400'}`}>{value}</p>
-    </div>
-  )
 }
 
 function StatCard({ icon: Icon, label, value, toneClass }) {
@@ -168,6 +98,22 @@ function StatCard({ icon: Icon, label, value, toneClass }) {
         </div>
         <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${toneClass}`}>
           <Icon size={20} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WorkflowStep({ number, title, copy }) {
+  return (
+    <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+      <div className="flex items-start gap-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-orange/10 text-sm font-black text-brand-orange">
+          {number}
+        </div>
+        <div>
+          <p className="text-sm font-bold text-ink-primary">{title}</p>
+          <p className="mt-2 text-sm leading-6 text-ink-secondary">{copy}</p>
         </div>
       </div>
     </div>
@@ -212,10 +158,19 @@ function QualityFindingCard({ finding }) {
 
 function LiveQualityGateDetail({ qualityGate }) {
   if (!qualityGate) {
-    return null
+    return (
+      <div className="mt-5 rounded-2xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
+        <ShieldCheck size={28} className="mx-auto text-ink-muted" />
+        <p className="mt-3 text-sm font-bold text-ink-primary">No QA gate loaded</p>
+        <p className="mt-2 text-sm leading-6 text-ink-muted">
+          Load a known ready-for-QA job order from the Job Order Workbench. This page will stay empty until live QA data is available.
+        </p>
+      </div>
+    )
   }
 
   const releaseState = getQualityGateReleaseState(qualityGate)
+  const findings = Array.isArray(qualityGate.findings) ? qualityGate.findings : []
   const blockingFindings = getBlockingQualityGateFindings(qualityGate)
   const reviewFindings = getReviewNeededQualityGateFindings(qualityGate)
   const latestOverride = getLatestQualityGateOverride(qualityGate)
@@ -256,7 +211,7 @@ function LiveQualityGateDetail({ qualityGate }) {
           <div>
             <p className="text-sm font-semibold text-ink-primary">Release Decision</p>
             <p className="mt-1 text-sm text-ink-secondary">
-              Completion and invoice release should follow this QA state, not generic job-order status alone.
+              Completion and customer release should follow this QA state, not generic job-order status alone.
             </p>
           </div>
           <span className={`badge ${getReleaseTone(releaseState)}`}>{getReleaseCopy(releaseState)}</span>
@@ -314,8 +269,8 @@ function LiveQualityGateDetail({ qualityGate }) {
           <span className={`badge ${getQualityStatusTone(qualityGate.status)}`}>{formatLabel(qualityGate.status)}</span>
         </div>
         <div className="mt-3 grid gap-3 xl:grid-cols-2">
-          {qualityGate.findings.length > 0 ? (
-            qualityGate.findings.map((finding) => (
+          {findings.length ? (
+            findings.map((finding) => (
               <QualityFindingCard key={finding.id} finding={finding} />
             ))
           ) : (
@@ -326,129 +281,6 @@ function LiveQualityGateDetail({ qualityGate }) {
         </div>
       </section>
     </div>
-  )
-}
-
-function AuditDrawer({ auditCase, onClose, onApprove, onOverride, canOverride }) {
-  if (!auditCase) return null
-
-  const semanticPassed = isSemanticGatePassed(auditCase.semanticResolutionScore)
-  const riskPassed = isRiskGatePassed(auditCase.inspectionRiskPoints)
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        className="fixed inset-0 z-40 flex justify-end bg-black/70 backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-      >
-        <motion.aside
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Audit case ${auditCase.jobOrderId}`}
-          className="flex h-full w-full max-w-2xl flex-col border-l border-surface-border bg-surface-card shadow-2xl"
-          initial={{ x: 48, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 48, opacity: 0 }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="border-b border-surface-border px-6 py-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-orange">Contract Example Detail</p>
-                <h2 className="mt-3 text-2xl font-bold text-ink-primary">{auditCase.jobOrderId}</h2>
-                <p className="mt-2 text-sm text-ink-secondary">
-                  Example cases stay mock-only. Use the live loader above for backend-backed QA review and override.
-                </p>
-              </div>
-              <button type="button" onClick={onClose} className="btn-ghost px-3 py-2">
-                <X size={15} />
-              </button>
-            </div>
-          </div>
-
-          <div className="cc-scrollbar flex-1 space-y-6 overflow-y-auto px-6 py-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <GatePill label="Gate 1" passed={semanticPassed} value={auditCase.semanticResolutionScore.toFixed(2)} />
-              <GatePill label="Gate 2" passed={riskPassed} value={`${auditCase.inspectionRiskPoints} pts`} />
-            </div>
-
-            <section className="card-raised p-5">
-              <div className="flex items-center gap-2">
-                <ClipboardCheck size={16} className="text-brand-orange" />
-                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-ink-secondary">Technician Notes</h3>
-              </div>
-              <p className="mt-4 text-sm leading-7 text-ink-secondary">{auditCase.technicianNotes}</p>
-            </section>
-
-            <section className="card-raised p-5">
-              <div className="flex items-center gap-2">
-                <Camera size={16} className="text-brand-orange" />
-                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-ink-secondary">Photo Evidence</h3>
-              </div>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                {auditCase.uploadedEvidence.map((url) => {
-                  const filename = url.split('/').pop()
-                  return (
-                    <div key={url} className="rounded-3xl border border-surface-border bg-surface-raised p-4">
-                      <div className="flex aspect-[4/3] items-center justify-center rounded-2xl border border-dashed border-brand-orange/20 bg-gradient-to-br from-brand-orange/10 via-surface-card to-surface-raised">
-                        <div className="text-center">
-                          <FileImage size={26} className="mx-auto text-brand-orange" />
-                          <p className="mt-3 text-sm font-semibold text-ink-primary">Mock Photo Evidence</p>
-                        </div>
-                      </div>
-                      <p className="mt-4 text-sm font-medium text-ink-primary">{filename}</p>
-                      <a href={url} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-brand-orange">
-                        Open mock URL <ArrowRight size={12} />
-                      </a>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-
-            {auditCase.relatedSummary ? (
-              <section className="card-raised p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-ink-primary">Linked Customer Summary</p>
-                    <p className="mt-1 text-sm text-ink-secondary">{auditCase.relatedSummary.generatedLaymanSummary}</p>
-                  </div>
-                  <Link href="/admin/summaries" className="btn-ghost">
-                    <Sparkles size={15} />
-                    Review Summary
-                  </Link>
-                </div>
-              </section>
-            ) : null}
-          </div>
-
-          <div className="border-t border-surface-border px-6 py-5">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <span className={`badge ${getAuditStatusTone(auditCase.auditStatus)}`}>{auditCase.auditStatus}</span>
-                {!canOverride ? (
-                  <p className="mt-2 text-xs text-amber-300">Live overrides require Super Admin access.</p>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <button type="button" onClick={onApprove} className="btn-primary">
-                  <CheckCircle2 size={15} />
-                  Mark Example Reviewed
-                </button>
-                <button type="button" onClick={onOverride} className="btn-danger disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canOverride}>
-                  <ShieldAlert size={15} />
-                  Mark Example Override
-                </button>
-              </div>
-            </div>
-          </div>
-        </motion.aside>
-      </motion.div>
-    </AnimatePresence>
   )
 }
 
@@ -463,14 +295,6 @@ export default function QAAuditWorkspace() {
   const [overrideReason, setOverrideReason] = useState('')
   const [qaState, setQaState] = useState(initialQaState)
   const [overrideState, setOverrideState] = useState(initialOverrideState)
-  const [auditItems, setAuditItems] = useState(() =>
-    qaAuditCases.map((auditCase) => ({
-      ...auditCase,
-      relatedVehicle: vehicles.find((vehicle) => vehicle.id === auditCase.vehicleId),
-      relatedSummary: serviceSummaries.find((summary) => summary.jobOrderId === auditCase.jobOrderId),
-    }))
-  )
-  const [selectedAuditId, setSelectedAuditId] = useState(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -483,18 +307,18 @@ export default function QAAuditWorkspace() {
     }
   }, [])
 
-  const selectedAudit = auditItems.find((auditCase) => auditCase.id === selectedAuditId) ?? null
   const selectedReleaseState = getQualityGateReleaseState(qualityGate)
-
-  const stats = useMemo(() => {
-    const approved = auditItems.filter((auditCase) => auditCase.auditStatus === AUDIT_STATUS.APPROVED).length
-    const flagged = auditItems.filter((auditCase) => auditCase.auditStatus === AUDIT_STATUS.FLAGGED).length
-    const averageSemantic = auditItems.reduce((sum, auditCase) => sum + auditCase.semanticResolutionScore, 0) / auditItems.length
-
-    return { approved, flagged, averageSemantic }
-  }, [auditItems])
+  const sourceCount = useMemo(() => qualityGateReviewContractSources.length, [])
 
   async function loadQualityGate() {
+    if (!jobOrderId.trim()) {
+      setQaState({
+        status: 'qa_not_found',
+        message: 'Paste a job-order id before loading QA.',
+      })
+      return
+    }
+
     if (!canReadLiveQa) {
       setQaState({
         status: 'qa_forbidden_role',
@@ -518,7 +342,7 @@ export default function QAAuditWorkspace() {
 
     try {
       const loadedQualityGate = await getJobOrderQualityGate({
-        jobOrderId,
+        jobOrderId: jobOrderId.trim(),
         accessToken: user.accessToken,
       })
 
@@ -572,6 +396,14 @@ export default function QAAuditWorkspace() {
       return
     }
 
+    if (!overrideReason.trim()) {
+      setOverrideState({
+        status: 'override_failed',
+        message: 'Enter a clear reason before recording a QA override.',
+      })
+      return
+    }
+
     if (!user?.accessToken) {
       setOverrideState({
         status: 'override_failed',
@@ -588,7 +420,7 @@ export default function QAAuditWorkspace() {
     try {
       const updatedQualityGate = await overrideJobOrderQualityGate({
         jobOrderId: qualityGate.jobOrderId,
-        reason: overrideReason,
+        reason: overrideReason.trim(),
         accessToken: user.accessToken,
       })
 
@@ -621,32 +453,9 @@ export default function QAAuditWorkspace() {
     }
   }
 
-  function updateAuditStatus(nextStatus) {
-    if (!selectedAudit) return
-
-    setAuditItems((current) =>
-      current.map((auditCase) =>
-        auditCase.id === selectedAudit.id
-          ? { ...auditCase, auditStatus: nextStatus }
-          : auditCase
-      )
-    )
-
-    toast({
-      type: nextStatus === AUDIT_STATUS.APPROVED ? 'success' : 'info',
-      title: nextStatus === AUDIT_STATUS.APPROVED ? 'Example Reviewed' : 'Example Override Marked',
-      message: `${selectedAudit.jobOrderId} is now marked as ${nextStatus} in local examples only.`,
-    })
-  }
-
   return (
     <div className="space-y-6">
-      <motion.section
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
-        className="card relative overflow-hidden p-6 md:p-7"
-      >
+      <section className="card relative overflow-hidden p-6 md:p-7">
         <div className="pointer-events-none absolute inset-y-0 right-0 w-72 bg-gradient-to-l from-brand-orange/10 to-transparent" />
         <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -661,7 +470,14 @@ export default function QAAuditWorkspace() {
             Open Job Orders
           </Link>
         </div>
-      </motion.section>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-4">
+        <WorkflowStep number="1" title="Open Job Order" copy="Find or create the job order from a confirmed booking in the Job Order Workbench." />
+        <WorkflowStep number="2" title="Move To QA" copy="Use status and evidence actions until the job order reaches the QA-ready backend state." />
+        <WorkflowStep number="3" title="Load Gate Here" copy="Paste the job-order id below to review live QA findings, risk, and release state." />
+        <WorkflowStep number="4" title="Override Only If Needed" copy="Super admins can override blocked gates with a reason; original findings stay visible." />
+      </section>
 
       <section className="card p-5 md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -669,7 +485,7 @@ export default function QAAuditWorkspace() {
             <p className="card-title">Live QA Gate Lookup</p>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
               This page uses `GET /api/job-orders/:jobOrderId/qa` and `PATCH /api/job-orders/:jobOrderId/qa/override`.
-              There is no broad QA list endpoint yet, so staff should load a known job-order id from the workbench.
+              There is no broad QA list endpoint yet, so this page intentionally shows an empty state until a known job-order id is loaded.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -695,14 +511,10 @@ export default function QAAuditWorkspace() {
               value={jobOrderId}
               onChange={(event) => setJobOrderId(event.target.value)}
               className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              placeholder="Paste a ready-for-QA job order UUID"
+              placeholder="Paste a ready-for-QA job-order UUID"
             />
           </label>
-          <button
-            type="submit"
-            disabled={qaState.status === 'qa_loading'}
-            className="btn-primary self-end"
-          >
+          <button type="submit" disabled={qaState.status === 'qa_loading'} className="btn-primary self-end">
             {qaState.status === 'qa_loading' ? (
               <RefreshCw size={15} className="animate-spin" />
             ) : (
@@ -717,7 +529,9 @@ export default function QAAuditWorkspace() {
             className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
               qaState.status === 'qa_loaded'
                 ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                : 'border-red-500/25 bg-red-500/10 text-red-200'
+                : qaState.status === 'qa_unavailable'
+                  ? 'border-amber-500/25 bg-amber-500/10 text-amber-100'
+                  : 'border-red-500/25 bg-red-500/10 text-red-200'
             }`}
           >
             {qaState.message}
@@ -732,7 +546,7 @@ export default function QAAuditWorkspace() {
               <div>
                 <p className="text-sm font-semibold text-ink-primary">Super-Admin Override</p>
                 <p className="mt-1 text-sm text-ink-secondary">
-                  Overrides are only enabled for blocked gates and never delete the original QA findings.
+                  Overrides are only enabled for blocked gates and never delete original QA findings.
                 </p>
               </div>
               <span className={`badge ${getReleaseTone(selectedReleaseState)}`}>{getReleaseCopy(selectedReleaseState)}</span>
@@ -762,11 +576,7 @@ export default function QAAuditWorkspace() {
             <button
               type="button"
               onClick={handleOverrideQualityGate}
-              disabled={
-                overrideState.status === 'override_submitting' ||
-                !canOverrideLiveQa ||
-                qualityGate.status !== 'blocked'
-              }
+              disabled={overrideState.status === 'override_submitting' || !canOverrideLiveQa || qualityGate.status !== 'blocked'}
               className="btn-danger mt-3 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {overrideState.status === 'override_submitting' ? (
@@ -782,103 +592,37 @@ export default function QAAuditWorkspace() {
         ) : null}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <StatCard icon={BadgeCheck} label="Example Approved Cases" value={stats.approved} toneClass="border-emerald-500/15 bg-emerald-500/10 text-emerald-400" />
-        <StatCard icon={AlertTriangle} label="Example Flagged Cases" value={stats.flagged} toneClass="border-red-500/15 bg-red-500/10 text-red-400" />
-        <StatCard icon={BrainCircuit} label="Avg. Example Gate 1" value={stats.averageSemantic.toFixed(2)} toneClass="border-brand-orange/15 bg-brand-orange/10 text-brand-orange" />
-      </section>
-
       <section className="card p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="card-title">Contract Example States</p>
+            <p className="card-title">What This Page Does</p>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
-              These examples prove pending, blocked, passed, and overridden state handling without inventing a QA list endpoint.
+              QA Audit is a live review and override surface. It does not create inspections, job orders, or fake audit queues.
             </p>
           </div>
-          <span className="badge badge-gray">
-            Sources: {qualityGateReviewContractSources.length} contracts
-          </span>
+          <span className="badge badge-gray">{sourceCount} source references</span>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          {contractQualityGateExamples.map((example) => {
-            const releaseState = getQualityGateReleaseState(example)
-            return (
-              <div key={`${example.id}-${example.status}`} className="rounded-2xl border border-surface-border bg-surface-raised p-4">
-                <span className={`badge ${getQualityStatusTone(example.status)}`}>{formatLabel(example.status)}</span>
-                <p className="mt-3 text-2xl font-bold text-ink-primary">{example.riskScore}</p>
-                <p className="mt-1 text-xs text-ink-muted">Risk score</p>
-                <p className="mt-3 text-xs text-ink-secondary">{getReleaseCopy(releaseState)}</p>
-              </div>
-            )
-          })}
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2 text-xs text-ink-muted">
-          <span className="badge badge-gray">Technician read: {String(staffQualityGateResolvedStateMocks.technicianCanRead)}</span>
-          <span className="badge badge-gray">Customer read: {String(staffQualityGateResolvedStateMocks.customerCanRead)}</span>
-          <span className="badge badge-gray">Super-admin override: {String(staffQualityGateResolvedStateMocks.superAdminCanOverride)}</span>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+            <p className="text-sm font-bold text-ink-primary">Staff Action</p>
+            <p className="mt-2 text-sm leading-6 text-ink-secondary">
+              Load one known job-order id, inspect its findings, then return to Job Orders for execution work.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+            <p className="text-sm font-bold text-ink-primary">Super Admin Action</p>
+            <p className="mt-2 text-sm leading-6 text-ink-secondary">
+              Override only blocked gates, with a clear reason that stays in the audit trail.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+            <p className="text-sm font-bold text-ink-primary">Next Route</p>
+            <Link href="/admin/job-orders" className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-brand-orange">
+              Continue in Job Orders <ExternalLink size={14} />
+            </Link>
+          </div>
         </div>
       </section>
-
-      <motion.section
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="grid gap-4 xl:grid-cols-2"
-      >
-        {auditItems.map((auditCase) => {
-          const semanticPassed = isSemanticGatePassed(auditCase.semanticResolutionScore)
-          const riskPassed = isRiskGatePassed(auditCase.inspectionRiskPoints)
-
-          return (
-            <motion.article key={auditCase.id} variants={itemVariants} className="card overflow-hidden p-5">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-orange">Reference Audit Case</p>
-                  <h2 className="mt-2 text-xl font-bold text-ink-primary">{auditCase.jobOrderId}</h2>
-                  <p className="mt-2 text-sm text-ink-secondary">
-                    {auditCase.relatedVehicle?.owner} - {auditCase.relatedVehicle?.model}
-                  </p>
-                </div>
-                <span className={`badge ${getAuditStatusTone(auditCase.auditStatus)}`}>{auditCase.auditStatus}</span>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <GatePill label="Gate 1" passed={semanticPassed} value={auditCase.semanticResolutionScore.toFixed(2)} />
-                <GatePill label="Gate 2" passed={riskPassed} value={`${auditCase.inspectionRiskPoints} pts`} />
-              </div>
-
-              <p className="mt-5 text-sm leading-6 text-ink-secondary">
-                {auditCase.technicianNotes}
-              </p>
-
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-surface-border bg-surface-raised px-3 py-1.5 text-xs text-ink-muted">
-                  <ClipboardCheck size={13} className="text-brand-orange" />
-                  {auditCase.uploadedEvidence.length} evidence file{auditCase.uploadedEvidence.length > 1 ? 's' : ''}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedAuditId(auditCase.id)}
-                  className="btn-ghost"
-                  aria-label={`View audit ${auditCase.jobOrderId}`}
-                >
-                  View Example
-                  <ArrowRight size={14} />
-                </button>
-              </div>
-            </motion.article>
-          )
-        })}
-      </motion.section>
-
-      <AuditDrawer
-        auditCase={selectedAudit}
-        onClose={() => setSelectedAuditId(null)}
-        onApprove={() => updateAuditStatus(AUDIT_STATUS.APPROVED)}
-        onOverride={() => updateAuditStatus(AUDIT_STATUS.RESOLVED)}
-        canOverride={canOverrideLiveQa}
-      />
     </div>
   )
 }

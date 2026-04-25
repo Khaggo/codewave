@@ -21,6 +21,7 @@ import {
   GENERATE_VEHICLE_LIFECYCLE_SUMMARY_JOB_NAME,
 } from '@shared/queue/ai-worker.constants';
 import { AiWorkerJobMetadata, createQueuedAiJobMetadata } from '@shared/queue/ai-worker.types';
+import { toBullSafeJobId } from '@shared/queue/queue-job-id.util';
 
 import { AppendVehicleTimelineEventDto } from '../dto/append-vehicle-timeline-event.dto';
 import { ReviewVehicleLifecycleSummaryDto } from '../dto/review-vehicle-lifecycle-summary.dto';
@@ -85,7 +86,7 @@ export class VehicleLifecycleService {
     }
 
     const requestedAt = new Date().toISOString();
-    const jobId = `vehicle-lifecycle-summary:${vehicleId}:${requestedAt}`;
+    const jobId = toBullSafeJobId(`vehicle-lifecycle-summary:${vehicleId}:${requestedAt}`);
     const queuedGenerationJob = createQueuedAiJobMetadata({
       queueName: AI_WORKER_QUEUE_NAME,
       jobName: GENERATE_VEHICLE_LIFECYCLE_SUMMARY_JOB_NAME,

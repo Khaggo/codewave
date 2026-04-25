@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { colors, radius } from '../theme';
@@ -56,6 +57,7 @@ export default function DatePickerField({
   maximumDate = null,
   initialPickerStep = 'year',
 }) {
+  const { width: windowWidth } = useWindowDimensions();
   const today = new Date();
   const normalizedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const normalizedMinimumDate = minimumDate ? cloneDate(minimumDate) : null;
@@ -67,6 +69,10 @@ export default function DatePickerField({
   const [pickerStep, setPickerStep] = useState('year');
 
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
+  const isCompactLayout = windowWidth < 360;
+  const optionButtonStyle = isCompactLayout
+    ? styles.optionButtonCompact
+    : styles.optionButtonRegular;
   const yearOptions = useMemo(
     () =>
       buildYearOptions(
@@ -131,12 +137,12 @@ export default function DatePickerField({
         visible={isVisible}
         onRequestClose={() => setIsVisible(false)}
       >
-        <Pressable style={styles.overlay} onPress={() => setIsVisible(false)}>
-          <Pressable style={styles.modalCard} onPress={() => null}>
+        <Pressable style={[styles.overlay, isCompactLayout && styles.overlayCompact]} onPress={() => setIsVisible(false)}>
+          <Pressable style={[styles.modalCard, isCompactLayout && styles.modalCardCompact]} onPress={() => null}>
             <Text style={styles.modalTitle}>{title}</Text>
             <Text style={styles.modalSubtitle}>{subtitle}</Text>
 
-            <View style={styles.stepRow}>
+            <View style={[styles.stepRow, isCompactLayout && styles.stepRowCompact]}>
               <TouchableOpacity
                 style={[styles.stepChip, pickerStep === 'year' && styles.stepChipActive]}
                 onPress={() => setPickerStep('year')}
@@ -174,7 +180,11 @@ export default function DatePickerField({
                     return (
                       <TouchableOpacity
                         key={year}
-                        style={[styles.optionButton, isSelected && styles.optionButtonActive]}
+                        style={[
+                          styles.optionButton,
+                          optionButtonStyle,
+                          isSelected && styles.optionButtonActive,
+                        ]}
                         onPress={() => handleSelectYear(year)}
                       >
                         <Text style={[styles.optionText, isSelected && styles.optionTextActive]}>{year}</Text>
@@ -194,7 +204,11 @@ export default function DatePickerField({
                     return (
                       <TouchableOpacity
                         key={monthLabel}
-                        style={[styles.optionButton, isSelected && styles.optionButtonActive]}
+                        style={[
+                          styles.optionButton,
+                          optionButtonStyle,
+                          isSelected && styles.optionButtonActive,
+                        ]}
                         onPress={() => handleSelectMonth(index)}
                       >
                         <Text style={[styles.optionText, isSelected && styles.optionTextActive]}>
@@ -306,6 +320,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     flex: 1,
+    minWidth: 0,
   },
   placeholderText: {
     color: colors.mutedText,
@@ -314,6 +329,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 13,
     fontWeight: '700',
+    flexShrink: 0,
   },
   trailingTextReadonly: {
     color: colors.mutedText,
@@ -336,11 +352,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 20,
   },
+  overlayCompact: {
+    paddingHorizontal: 14,
+  },
   modalCard: {
+    alignSelf: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.large,
+    width: '100%',
+    maxWidth: 430,
     padding: 20,
     maxHeight: '82%',
+  },
+  modalCardCompact: {
+    padding: 16,
   },
   modalTitle: {
     color: colors.text,
@@ -359,8 +384,12 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
+  stepRowCompact: {
+    flexWrap: 'wrap',
+  },
   stepChip: {
     flex: 1,
+    minWidth: 82,
     minHeight: 44,
     borderRadius: radius.medium,
     borderWidth: 1,
@@ -384,6 +413,7 @@ const styles = StyleSheet.create({
   },
   selectionPanel: {
     minHeight: 280,
+    maxHeight: 360,
     marginBottom: 16,
   },
   optionGrid: {
@@ -392,7 +422,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   optionButton: {
-    width: '31%',
+    flexGrow: 1,
+    flexShrink: 1,
     minHeight: 46,
     borderRadius: radius.medium,
     borderWidth: 1,
@@ -401,6 +432,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 10,
     backgroundColor: colors.background,
+  },
+  optionButtonRegular: {
+    flexBasis: '30%',
+    minWidth: 82,
+  },
+  optionButtonCompact: {
+    flexBasis: '46%',
+    minWidth: 0,
   },
   optionButtonActive: {
     borderColor: colors.primary,

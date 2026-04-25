@@ -19,7 +19,7 @@ import { convertAppointmentToJobOrder, updateAppointmentStage } from '@autocare/
 import { vehicles } from '@autocare/shared'
 import { useAppointmentsStore } from '@/hooks/useOperationsStore.js'
 import BookingCalendar from '@/app/bookings/BookingCalendar'
-import { ServiceStatusBar } from '@/screens/BookingForm'
+import ServiceStatusBar from '@/components/ServiceStatusBar'
 
 const STATUS_META = {
   pending:     { label: 'Pending',     cls: 'badge-orange' },

@@ -1,10 +1,14 @@
 import type { ApiErrorResponse } from '../../lib/api/generated/shared';
 import type { InsuranceInquiryResponse, InsuranceRecordResponse } from '../../lib/api/generated/insurance/responses';
 import {
+  buildCustomerInsuranceDocumentPresentation,
   buildCustomerInsuranceInquiryPresentation,
   buildCustomerInsuranceRecordPresentation,
   type CustomerInsuranceIntakeState,
+  type CustomerInsuranceDocumentUploadState,
   type CustomerInsuranceTrackingState,
+  customerInsuranceDocumentDraftTemplate,
+  customerInsuranceDocumentUploadStateRules,
 } from '../../lib/api/generated/insurance/customer-mobile-insurance';
 import {
   buildStaffInsuranceQueueItem,
@@ -104,6 +108,26 @@ export const customerInsuranceDraftIntakeStateMock: {
   },
 };
 
+export const customerInsuranceDocumentUploadDraftMock: {
+  state: CustomerInsuranceDocumentUploadState;
+  inquiryId: string;
+  request: typeof customerInsuranceDocumentDraftTemplate;
+} = {
+  state: 'document_ready',
+  inquiryId: insuranceInquiryMock.id,
+  request: {
+    ...customerInsuranceDocumentDraftTemplate,
+    documentType: 'or_cr',
+    fileName: 'or-cr-scan.pdf',
+    fileUrl: 'https://files.autocare.local/insurance/or-cr-scan.pdf',
+    notes: 'OR/CR scan requested while the inquiry is in needs_documents.',
+  },
+};
+
+export const customerInsuranceUploadedDocumentMock = buildCustomerInsuranceDocumentPresentation(
+  insuranceInquiryMock.documents[0],
+);
+
 export const customerInsuranceSubmittedInquiryMock = buildCustomerInsuranceInquiryPresentation({
   ...insuranceInquiryMock,
   status: 'submitted',
@@ -111,6 +135,11 @@ export const customerInsuranceSubmittedInquiryMock = buildCustomerInsuranceInqui
   reviewedByUserId: null,
   reviewedAt: null,
   documents: [],
+});
+
+export const customerInsuranceDocumentUploadedInquiryMock = buildCustomerInsuranceInquiryPresentation({
+  ...insuranceInquiryMock,
+  status: 'needs_documents',
 });
 
 export const customerInsuranceClaimStatusUpdatesMock = [
@@ -197,6 +226,9 @@ export const staffInsuranceResolvedStateMocks = {
 export const staffInsuranceQueueStateRuleMocks = staffInsuranceQueueStateRules;
 
 export const staffInsuranceStatusUpdateStateRuleMocks = staffInsuranceStatusUpdateStateRules;
+
+export const customerInsuranceDocumentUploadStateRuleMocks =
+  customerInsuranceDocumentUploadStateRules;
 
 export const staffInsuranceForbiddenRoleErrorMock: ApiErrorResponse = {
   statusCode: 403,

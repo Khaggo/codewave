@@ -43,7 +43,7 @@ describe('NotificationsService', () => {
         title: 'Insurance review update',
         message: 'Your insurance inquiry is now under review.',
         status: 'queued',
-        dedupeKey: 'insurance-1-review-email',
+        dedupeKey: 'notification:insurance.inquiry_status_changed:insurance-1:under_review',
         scheduledFor: null,
         deliveredAt: null,
         attempts: [],
@@ -75,7 +75,7 @@ describe('NotificationsService', () => {
       sourceId: 'insurance-1',
       title: 'Insurance review update',
       message: 'Your insurance inquiry is now under review.',
-      dedupeKey: 'insurance-1-review-email',
+      dedupeKey: 'notification:insurance.inquiry_status_changed:insurance-1:under_review',
     });
 
     expect(notificationsRepository.createNotification).toHaveBeenCalled();
@@ -86,7 +86,7 @@ describe('NotificationsService', () => {
         userId: 'user-1',
       }),
       expect.objectContaining({
-        jobId: 'insurance-1-review-email',
+        jobId: 'notification__insurance.inquiry_status_changed__insurance-1__under_review',
       }),
     );
     expect(result.status).toBe('queued');

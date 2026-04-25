@@ -66,6 +66,14 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     notes: 'Booking schedule and queue visibility stays adviser/admin only.',
   },
   {
+    key: 'digital-intake-inspections',
+    href: '/admin/intake-inspections',
+    label: 'Intake & Inspection',
+    visibleTo: ['technician', 'service_adviser', 'super_admin'],
+    notes:
+      'Vehicle-scoped inspection capture and history are visible to all active staff roles; booking and QA ownership remain separate.',
+  },
+  {
     key: 'back-jobs',
     href: '/backjobs',
     label: 'Back-Jobs',
@@ -85,6 +93,14 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     label: 'Insurance',
     visibleTo: ['service_adviser', 'super_admin'],
     notes: 'Insurance review remains adviser/admin only.',
+  },
+  {
+    key: 'invoice-order-management',
+    href: '/admin/invoices',
+    label: 'Invoices & Orders',
+    visibleTo: ['service_adviser', 'super_admin'],
+    notes:
+      'Service invoice lookup, ecommerce known-order lookup, and invoice-aging visibility remain adviser/admin finance surfaces.',
   },
   {
     key: 'inventory',
@@ -118,7 +134,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
   {
     key: 'user-admin',
     href: '/admin/users',
-    label: 'User Creation',
+    label: 'User Administration',
     visibleTo: ['super_admin'],
     notes: 'Super admins provision staff, mechanic, technician, and admin identities from this protected page.',
   },
@@ -147,8 +163,9 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     key: 'job-orders-admin',
     href: '/admin/job-orders',
     label: 'Job Orders',
-    visibleTo: ['service_adviser', 'super_admin'],
-    notes: 'Job-order booking handoff and operational workbench remain adviser/admin owned in this slice.',
+    visibleTo: ['technician', 'service_adviser', 'super_admin'],
+    notes:
+      'Technicians may load assigned execution work while booking handoff creation remains adviser/admin owned inside the workbench.',
   },
   {
     key: 'settings',
@@ -168,12 +185,16 @@ export const staffPortalRoleCapabilities: Record<StaffPortalRole, string[]> = {
     'sign in to the staff portal',
     'restore an existing staff session',
     'view operational vehicle context',
+    'capture and read vehicle-scoped inspection evidence',
+    'load assigned job-order execution work',
     'access assigned-work dashboard states',
   ],
   service_adviser: [
     'all technician capabilities',
     'review booking schedule and queue states',
+    'coordinate intake inspection evidence before job-order handoff',
     'coordinate insurance, back-job, and lifecycle review flows',
+    'review service invoice, known ecommerce order, and invoice-aging visibility',
     'prepare operational release readiness',
   ],
   super_admin: [

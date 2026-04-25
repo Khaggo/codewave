@@ -4,10 +4,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 
+import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
+import { createNotificationTrigger } from '@shared/events/contracts/notification-triggers';
 
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
@@ -37,6 +40,7 @@ export class InsuranceService {
     private readonly insuranceRepository: InsuranceRepository,
     private readonly usersService: UsersService,
     private readonly vehiclesService: VehiclesService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   async create(payload: CreateInsuranceInquiryDto, actor: InsuranceActor) {
@@ -86,6 +90,15 @@ export class InsuranceService {
         status: payload.status,
       });
     }
+
+    await this.notificationsService?.applyTrigger(
+      createNotificationTrigger('insurance.inquiry_status_changed', 'main-service.insurance', {
+        inquiryId: updatedInquiry.id,
+        userId: updatedInquiry.userId,
+        status: updatedInquiry.status,
+        subject: updatedInquiry.subject,
+      }),
+    );
 
     return updatedInquiry;
   }

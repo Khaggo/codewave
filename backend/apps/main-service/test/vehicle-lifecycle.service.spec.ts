@@ -401,7 +401,7 @@ describe('VehicleLifecycleService', () => {
         generationJob: {
           queueName: 'ai-worker-jobs',
           jobName: 'generate-vehicle-lifecycle-summary',
-          jobId: 'vehicle-lifecycle-summary:vehicle-1:2026-05-10T08:30:00.000Z',
+          jobId: 'vehicle-lifecycle-summary__vehicle-1__2026-05-10T08__30__00.000Z',
           status: 'queued',
           requestedAt: '2026-05-10T08:30:00.000Z',
           attemptsAllowed: 3,
@@ -516,7 +516,7 @@ describe('VehicleLifecycleService', () => {
       }),
       expect.objectContaining({
         attempts: 3,
-        jobId: expect.stringContaining('vehicle-lifecycle-summary:vehicle-1:'),
+        jobId: expect.stringContaining('vehicle-lifecycle-summary__vehicle-1__'),
       }),
     );
     expect(result.status).toBe('queued');

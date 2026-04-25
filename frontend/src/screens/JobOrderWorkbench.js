@@ -41,11 +41,6 @@ import {
   recordJobOrderInvoicePayment,
   updateJobOrderStatus,
 } from '@/lib/jobOrderWorkbenchClient'
-import {
-  jobOrderWorkbenchBlockedBookingMock,
-  jobOrderWorkbenchSelectedHandoffMock,
-  staffJobOrderResolvedStateMocks,
-} from '@/mocks/job-orders/mocks'
 
 const STATUS_META = {
   draft: { label: 'Draft', cls: 'badge-gray' },
@@ -190,17 +185,15 @@ export default function JobOrderWorkbench() {
   const canManageHandoffs = staffJobOrderWorkbenchRoles.includes(role)
 
   const [selectedDate, setSelectedDate] = useState(toDateKey())
-  const [handoffCandidates, setHandoffCandidates] = useState(
-    jobOrderWorkbenchSelectedHandoffMock ? [jobOrderWorkbenchSelectedHandoffMock] : [],
-  )
+  const [handoffCandidates, setHandoffCandidates] = useState([])
   const [handoffState, setHandoffState] = useState({
-    status: jobOrderWorkbenchSelectedHandoffMock ? 'handoff_loaded' : 'handoff_empty',
-    message: '',
+    status: 'handoff_empty',
+    message: 'Choose a schedule date and refresh to load confirmed bookings from the live backend.',
   })
-  const [selectedBookingId, setSelectedBookingId] = useState(jobOrderWorkbenchSelectedHandoffMock?.bookingId ?? '')
+  const [selectedBookingId, setSelectedBookingId] = useState('')
   const [createDraft, setCreateDraft] = useState({
     notes: '',
-    items: jobOrderWorkbenchSelectedHandoffMock?.defaultItems ?? [],
+    items: [],
     assignedTechnicianIdsText: '',
   })
   const [createState, setCreateState] = useState(initialCreateState)
@@ -981,12 +974,13 @@ export default function JobOrderWorkbench() {
           </div>
 
           <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3 mt-4">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Blocked handoff example</p>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Workflow rule</p>
             <p className="text-sm text-ink-primary mt-1">
-              Booking {jobOrderWorkbenchBlockedBookingMock.id.slice(0, 8).toUpperCase()} is{' '}
-              {jobOrderWorkbenchBlockedBookingMock.status} and cannot create a job order yet.
+              Pending, cancelled, and completed bookings are hidden from handoff creation.
             </p>
-            <p className="text-xs text-ink-muted mt-2">{jobOrderWorkbenchBlockedBookingMock.reason}</p>
+            <p className="text-xs text-ink-muted mt-2">
+              Confirm the booking on the schedule page first, then refresh this workbench for the live handoff candidate.
+            </p>
           </div>
         </div>
 
@@ -1323,9 +1317,7 @@ export default function JobOrderWorkbench() {
                 )}
                 Save Status Update
               </button>
-              <span className="badge badge-gray">
-                Handoff baseline: {staffJobOrderResolvedStateMocks.handoffLoaded}
-              </span>
+              <span className="badge badge-gray">Live transition rules only</span>
             </div>
           </div>
 

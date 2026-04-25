@@ -24,7 +24,7 @@ export class ProductResponseDto {
   sku!: string;
 
   @ApiPropertyOptional({
-    example: 'Bootstrap-ready catalog placeholder for follow-up catalog work.',
+    example: 'Fully synthetic 5W-30 engine oil for smoother starts and regular PMS top-ups.',
   })
   description?: string | null;
 

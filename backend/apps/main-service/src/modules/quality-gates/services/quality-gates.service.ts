@@ -15,6 +15,7 @@ import {
   RUN_QUALITY_GATE_AUDIT_JOB_NAME,
 } from '@shared/queue/ai-worker.constants';
 import { AiWorkerJobMetadata, createQueuedAiJobMetadata } from '@shared/queue/ai-worker.types';
+import { toBullSafeJobId } from '@shared/queue/queue-job-id.util';
 
 import { QualityGatesRepository } from '../repositories/quality-gates.repository';
 import { QualityGateFindingProvenance, qualityGateStatusEnum } from '../schemas/quality-gates.schema';
@@ -63,7 +64,7 @@ export class QualityGatesService {
     }
 
     const requestedAt = new Date().toISOString();
-    const jobId = `quality-gate:${jobOrderId}`;
+    const jobId = toBullSafeJobId(`quality-gate:${jobOrderId}`);
     const queuedAuditJob = createQueuedAiJobMetadata({
       queueName: AI_WORKER_QUEUE_NAME,
       jobName: RUN_QUALITY_GATE_AUDIT_JOB_NAME,
@@ -73,23 +74,42 @@ export class QualityGatesService {
     });
 
     const gate = await this.qualityGatesRepository.upsertPending(jobOrderId, queuedAuditJob);
-    await this.aiWorkerQueue.add(
-      RUN_QUALITY_GATE_AUDIT_JOB_NAME,
-      {
-        jobOrderId,
-        requestedAt,
-      },
-      {
-        jobId,
-        attempts: DEFAULT_AI_WORKER_JOB_ATTEMPTS,
-        backoff: {
-          type: 'fixed',
-          delay: DEFAULT_AI_WORKER_JOB_BACKOFF_MS,
+
+    try {
+      await this.aiWorkerQueue.add(
+        RUN_QUALITY_GATE_AUDIT_JOB_NAME,
+        {
+          jobOrderId,
+          requestedAt,
         },
-        removeOnComplete: 50,
-        removeOnFail: 50,
-      },
-    );
+        {
+          jobId,
+          attempts: DEFAULT_AI_WORKER_JOB_ATTEMPTS,
+          backoff: {
+            type: 'fixed',
+            delay: DEFAULT_AI_WORKER_JOB_BACKOFF_MS,
+          },
+          removeOnComplete: 50,
+          removeOnFail: 50,
+        },
+      );
+    } catch (error) {
+      const message = this.getErrorMessage(error);
+      const failureMessage = `Quality gate audit could not be queued: ${message}`;
+
+      return this.qualityGatesRepository.completeAudit(jobOrderId, {
+        status: 'blocked',
+        riskScore: 70,
+        blockingReason: failureMessage,
+        auditJob: this.buildFailedAuditJob(queuedAuditJob, message),
+        findings: [
+          this.buildAuditInfrastructureFailureFinding(
+            'qa_audit_queue_unavailable',
+            'Quality-gate audit could not be queued, so release is blocked until staff retries QA or a super admin records an override.',
+          ),
+        ],
+      });
+    }
 
     return gate;
   }
@@ -234,9 +254,22 @@ export class QualityGatesService {
     errorMessage: string,
   ) {
     const failureMessage = `AI audit worker failed before finishing the QA run: ${errorMessage}`;
-    return this.qualityGatesRepository.updateAuditJob(jobOrderId, auditJob, {
+
+    if (!(await this.qualityGatesRepository.findOptionalByJobOrderId(jobOrderId))) {
+      await this.qualityGatesRepository.upsertPending(jobOrderId, auditJob);
+    }
+
+    return this.qualityGatesRepository.completeAudit(jobOrderId, {
+      status: 'blocked',
+      riskScore: 70,
       blockingReason: failureMessage,
-      lastAuditCompletedAt: new Date(),
+      auditJob,
+      findings: [
+        this.buildAuditInfrastructureFailureFinding(
+          'qa_audit_worker_failed',
+          'Quality-gate audit worker failed before completion, so release is blocked until staff retries QA or a super admin records an override.',
+        ),
+      ],
     });
   }
 
@@ -397,6 +430,8 @@ export class QualityGatesService {
       inspection_requires_followup: 70,
       verified_high_severity_unresolved: 75,
       verified_medium_severity_unresolved: 45,
+      qa_audit_queue_unavailable: 70,
+      qa_audit_worker_failed: 70,
     };
 
     return riskByCode[finding.code]
@@ -442,9 +477,32 @@ export class QualityGatesService {
     return createQueuedAiJobMetadata({
       queueName: AI_WORKER_QUEUE_NAME,
       jobName: RUN_QUALITY_GATE_AUDIT_JOB_NAME,
-      jobId: `quality-gate:${jobOrderId}`,
+      jobId: toBullSafeJobId(`quality-gate:${jobOrderId}`),
       requestedAt: new Date().toISOString(),
       attemptsAllowed: DEFAULT_AI_WORKER_JOB_ATTEMPTS,
     });
+  }
+
+  private buildFailedAuditJob(auditJob: AiWorkerJobMetadata, message: string): AiWorkerJobMetadata {
+    return {
+      ...auditJob,
+      status: 'failed',
+      completedAt: null,
+      failedAt: new Date().toISOString(),
+      lastError: message,
+    };
+  }
+
+  private buildAuditInfrastructureFailureFinding(code: string, message: string): QualityGateFinding {
+    return {
+      gate: 'foundation',
+      severity: 'critical',
+      code,
+      message,
+    };
+  }
+
+  private getErrorMessage(error: unknown) {
+    return error instanceof Error && error.message ? error.message : 'Unknown queue failure';
   }
 }

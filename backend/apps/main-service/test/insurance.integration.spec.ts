@@ -196,6 +196,35 @@ describe('InsuranceController integration', () => {
         });
       expect(createInquiryResponse.status).toBe(201);
 
+      const invalidDocumentTypeResponse = await request(app.getHttpServer())
+        .post(`/api/insurance/inquiries/${createInquiryResponse.body.id}/documents`)
+        .set('Authorization', `Bearer ${customerOneLogin.body.accessToken}`)
+        .send({
+          fileName: 'unsupported-document.txt',
+          fileUrl: 'https://files.autocare.local/insurance/unsupported-document.txt',
+          documentType: 'unsupported',
+        });
+      expect(invalidDocumentTypeResponse.status).toBe(400);
+
+      const rejectedResponse = await request(app.getHttpServer())
+        .patch(`/api/insurance/inquiries/${createInquiryResponse.body.id}/status`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'rejected',
+          reviewNotes: 'Rejecting this guard-case inquiry so document upload locks can be verified.',
+        });
+      expect(rejectedResponse.status).toBe(200);
+
+      const rejectedDocumentResponse = await request(app.getHttpServer())
+        .post(`/api/insurance/inquiries/${createInquiryResponse.body.id}/documents`)
+        .set('Authorization', `Bearer ${customerOneLogin.body.accessToken}`)
+        .send({
+          fileName: 'or-cr-scan.pdf',
+          fileUrl: 'https://files.autocare.local/insurance/or-cr-scan.pdf',
+          documentType: 'or_cr',
+        });
+      expect(rejectedDocumentResponse.status).toBe(409);
+
       const foreignReadResponse = await request(app.getHttpServer())
         .get(`/api/insurance/inquiries/${createInquiryResponse.body.id}`)
         .set('Authorization', `Bearer ${customerTwoLogin.body.accessToken}`);

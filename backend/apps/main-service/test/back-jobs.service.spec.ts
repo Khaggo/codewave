@@ -5,6 +5,7 @@ import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jo
 import { BackJobsService } from '@main-modules/back-jobs/services/back-jobs.service';
 import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
 import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
+import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
 
@@ -208,6 +209,92 @@ describe('BackJobsService', () => {
         },
       ),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('emits a customer-visible notification trigger after staff changes back-job status', async () => {
+    const notificationsService = {
+      applyTrigger: jest.fn().mockResolvedValue({ triggerName: 'back_job.status_changed' }),
+    };
+
+    const backJobsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'back-job-1',
+        status: 'reported',
+        vehicleId: 'vehicle-1',
+        customerUserId: 'customer-1',
+        returnInspectionId: 'inspection-1',
+        reworkJobOrderId: null,
+        findings: [{ id: 'finding-1' }],
+      }),
+      updateStatus: jest.fn().mockResolvedValue({
+        id: 'back-job-1',
+        status: 'inspected',
+        vehicleId: 'vehicle-1',
+        customerUserId: 'customer-1',
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        BackJobsService,
+        { provide: BackJobsRepository, useValue: backJobsRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        {
+          provide: InspectionsRepository,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'inspection-1',
+              vehicleId: 'vehicle-1',
+              inspectionType: 'return',
+              findings: [{ id: 'inspection-finding-1' }],
+            }),
+          },
+        },
+        { provide: JobOrdersRepository, useValue: { findById: jest.fn() } },
+        { provide: NotificationsService, useValue: notificationsService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(BackJobsService);
+
+    await service.updateStatus(
+      'back-job-1',
+      {
+        status: 'inspected',
+        reviewNotes: 'Return inspection confirms the concern.',
+      },
+      {
+        userId: 'adviser-1',
+        role: 'service_adviser',
+      },
+    );
+
+    expect(notificationsService.applyTrigger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'back_job.status_changed',
+        sourceDomain: 'main-service.back-jobs',
+        payload: expect.objectContaining({
+          backJobId: 'back-job-1',
+          customerUserId: 'customer-1',
+          status: 'inspected',
+        }),
+      }),
+    );
   });
 
   it('prevents non-reviewers from opening back-job cases', async () => {

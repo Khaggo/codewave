@@ -129,6 +129,15 @@ export const createStaffAccount = async (payload, accessToken) =>
     body: payload,
   });
 
+export const updateStaffAccountStatus = async (userId, payload, accessToken) =>
+  request(`/api/admin/staff-accounts/${userId}/status`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: payload,
+  });
+
 export const refreshAuthSession = async (refreshToken) =>
   normalizeSession(
     await request('/api/auth/refresh', {

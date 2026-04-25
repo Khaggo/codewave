@@ -2,13 +2,17 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 const staffRoles = ['technician', 'service_adviser', 'super_admin'] as const;
+const staffAccountTypes = ['staff', 'mechanic', 'technician', 'admin'] as const;
 
 export class CreateStaffAccountDto {
-  @ApiProperty({
-    example: 'service.adviser@example.com',
+  @ApiPropertyOptional({
+    example: 'maria482.staff@autocare.com',
+    description:
+      'Optional compatibility override. When omitted, the backend generates a unique employee email.',
   })
+  @IsOptional()
   @IsEmail()
-  email!: string;
+  email?: string;
 
   @ApiProperty({
     example: 'SecurePass123',
@@ -26,14 +30,26 @@ export class CreateStaffAccountDto {
   @IsIn(staffRoles)
   role!: (typeof staffRoles)[number];
 
-  @ApiProperty({
-    example: 'SA-0012',
-    maxLength: 40,
-    description: 'Stable staff identifier used for audit snapshots and operational ownership.',
+  @ApiPropertyOptional({
+    enum: staffAccountTypes,
+    example: 'mechanic',
+    description:
+      'Presentation account type used for generated staff code and email labels. Mechanics map to technician permissions.',
   })
+  @IsOptional()
+  @IsIn(staffAccountTypes)
+  accountType?: (typeof staffAccountTypes)[number];
+
+  @ApiPropertyOptional({
+    example: 'STA-4821',
+    maxLength: 40,
+    description:
+      'Optional compatibility override. When omitted, the backend generates a unique stable staff identifier.',
+  })
+  @IsOptional()
   @IsString()
   @MaxLength(40)
-  staffCode!: string;
+  staffCode?: string;
 
   @ApiProperty({
     example: 'Maria',

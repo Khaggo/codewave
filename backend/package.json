@@ -21,6 +21,8 @@
     "swagger:check": "node -r ts-node/register -r tsconfig-paths/register scripts/swagger-check.ts",
     "swagger:stop": "node -r ts-node/register -r tsconfig-paths/register scripts/swagger-stop.ts",
     "swagger:ready": "npm run swagger:up && npm run swagger:check",
+    "smoke:job-order-qa": "node -r ts-node/register scripts/smoke-job-order-qa-release.ts",
+    "smoke:notifications": "node -r ts-node/register scripts/smoke-notifications-feed.ts",
     "seed:booking-catalog": "node -r ts-node/register scripts/seed-booking-catalog.ts"
   },
   "keywords": [],

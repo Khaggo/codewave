@@ -37,7 +37,7 @@ export const catalogProductsMock: ProductResponse[] = [
     name: 'Premium Engine Oil 5W-30',
     slug: 'premium-engine-oil-5w30',
     sku: 'ENG-OIL-5W30',
-    description: 'Bootstrap catalog placeholder for follow-up catalog implementation tasks.',
+    description: 'Fully synthetic 5W-30 engine oil for smoother starts, cleaner engine operation, and regular PMS top-ups.',
     priceCents: 189900,
     isActive: true,
     category: catalogCategoriesMock[0],

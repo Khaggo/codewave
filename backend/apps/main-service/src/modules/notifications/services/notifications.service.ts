@@ -10,6 +10,7 @@ import { Queue } from 'bullmq';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { AnyCommerceEventEnvelope } from '@shared/events/contracts/commerce-events';
 import { AnyNotificationTriggerEnvelope } from '@shared/events/contracts/notification-triggers';
+import { toBullSafeJobId } from '@shared/queue/queue-job-id.util';
 
 import { UpdateNotificationPreferencesDto } from '../dto/update-notification-preferences.dto';
 import { NOTIFICATIONS_QUEUE_NAME } from '../notifications.constants';
@@ -132,7 +133,7 @@ export class NotificationsService {
         category: payload.category,
       },
       {
-        jobId: payload.dedupeKey,
+        jobId: toBullSafeJobId(payload.dedupeKey),
         delay: payload.scheduledFor
           ? Math.max(payload.scheduledFor.getTime() - Date.now(), 0)
           : 0,

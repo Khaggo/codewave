@@ -1,11 +1,8 @@
 /**
- * Module-level reactive store for vehicles.
- * Any component that calls addVehicle() will trigger re-renders
- * in all components using useVehicles().
+ * Module-level reactive store for legacy web-only vehicle entry.
+ * It intentionally starts empty so demo pages never show fake customer records.
  */
-import { vehicles as initialVehicles } from './mockData'
-
-let _vehicles   = [...initialVehicles]
+let _vehicles = []
 const _listeners = new Set()
 
 export function getVehicles() { return _vehicles }

@@ -1,7 +1,7 @@
 import type { StaffPortalRole } from '../auth/staff-web-session';
 import type { RouteContract } from '../shared';
 import { insuranceRoutes, type InsuranceInquiryStatus, type UpdateInsuranceInquiryStatusRequest } from './requests';
-import type { InsuranceInquiryResponse } from './responses';
+import type { InsuranceDocumentResponse, InsuranceInquiryResponse } from './responses';
 
 export type StaffInsuranceQueueState =
   | 'queue_loaded'
@@ -51,6 +51,8 @@ export interface StaffInsuranceQueueItemPresentation {
   createdAt: string;
   updatedAt: string;
   notes: string | null;
+  documentCount: number;
+  documents: InsuranceDocumentResponse[];
 }
 
 export interface StaffInsuranceStatusUpdateDraft {
@@ -209,6 +211,8 @@ export const buildStaffInsuranceQueueItem = (
   createdAt: inquiry.createdAt,
   updatedAt: inquiry.updatedAt,
   notes: inquiry.notes ?? null,
+  documentCount: Array.isArray(inquiry.documents) ? inquiry.documents.length : 0,
+  documents: Array.isArray(inquiry.documents) ? inquiry.documents : [],
 });
 
 export const getStaffInsuranceQueueState = (

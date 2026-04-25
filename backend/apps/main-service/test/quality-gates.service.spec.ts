@@ -68,10 +68,96 @@ describe('QualityGatesService', () => {
       'run-quality-gate-audit',
       expect.objectContaining({ jobOrderId: 'job-order-1', requestedAt: expect.any(String) }),
       expect.objectContaining({
-        jobId: 'quality-gate:job-order-1',
+        jobId: 'quality-gate__job-order-1',
       }),
     );
     expect(result.status).toBe('pending');
+  });
+
+  it('blocks the quality gate instead of throwing when the audit queue cannot accept the job', async () => {
+    const qualityGatesRepository = {
+      upsertPending: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'pending',
+      }),
+      completeAudit: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'blocked',
+        auditJob: {
+          status: 'failed',
+          lastError: 'Custom Id cannot contain :',
+        },
+        findings: [
+          {
+            code: 'qa_audit_queue_unavailable',
+          },
+        ],
+      }),
+    };
+
+    const qualityGatesQueue = {
+      add: jest.fn().mockRejectedValue(new Error('Custom Id cannot contain :')),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        QualityGatesService,
+        QualityGateDiscrepancyEngineService,
+        QualityGateSemanticAuditorService,
+        { provide: QualityGatesRepository, useValue: qualityGatesRepository },
+        {
+          provide: JobOrdersRepository,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'job-order-1',
+              status: 'ready_for_qa',
+            }),
+          },
+        },
+        { provide: BookingsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn().mockResolvedValue([]) } },
+        { provide: UsersService, useValue: { findById: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: qualityGatesQueue },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(QualityGatesService);
+
+    const result = await service.beginQualityGate('job-order-1');
+
+    expect(qualityGatesQueue.add).toHaveBeenCalledWith(
+      'run-quality-gate-audit',
+      expect.objectContaining({ jobOrderId: 'job-order-1' }),
+      expect.objectContaining({
+        jobId: 'quality-gate__job-order-1',
+      }),
+    );
+    expect(qualityGatesQueue.add.mock.calls[0][2].jobId).not.toContain(':');
+    expect(qualityGatesRepository.completeAudit).toHaveBeenCalledWith(
+      'job-order-1',
+      expect.objectContaining({
+        status: 'blocked',
+        riskScore: 70,
+        blockingReason: expect.stringContaining('Quality gate audit could not be queued'),
+        auditJob: expect.objectContaining({
+          status: 'failed',
+          jobId: 'quality-gate__job-order-1',
+          lastError: 'Custom Id cannot contain :',
+        }),
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            gate: 'foundation',
+            severity: 'critical',
+            code: 'qa_audit_queue_unavailable',
+          }),
+        ]),
+      }),
+    );
+    expect(result.status).toBe('blocked');
   });
 
   it('marks the quality gate as blocked when the job order still has incomplete work items', async () => {
@@ -464,6 +550,84 @@ describe('QualityGatesService', () => {
     const service = moduleRef.get(QualityGatesService);
 
     await expect(service.assertReleaseAllowed('job-order-1')).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('records worker failures as blocked QA gates with failed audit metadata', async () => {
+    const failedAuditJob = {
+      queueName: 'ai-worker-jobs',
+      jobName: 'run-quality-gate-audit',
+      jobId: 'quality-gate__job-order-1',
+      status: 'failed' as const,
+      requestedAt: new Date('2026-06-10T08:00:00.000Z').toISOString(),
+      attemptsAllowed: 3,
+      attemptNumber: 1,
+      startedAt: new Date('2026-06-10T08:00:01.000Z').toISOString(),
+      completedAt: null,
+      failedAt: new Date('2026-06-10T08:00:02.000Z').toISOString(),
+      lastError: 'semantic worker crashed',
+    };
+    const qualityGatesRepository = {
+      findOptionalByJobOrderId: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'pending',
+      }),
+      upsertPending: jest.fn(),
+      completeAudit: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'blocked',
+        auditJob: failedAuditJob,
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        QualityGatesService,
+        QualityGateDiscrepancyEngineService,
+        QualityGateSemanticAuditorService,
+        { provide: QualityGatesRepository, useValue: qualityGatesRepository },
+        {
+          provide: JobOrdersRepository,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        { provide: BookingsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn().mockResolvedValue([]) } },
+        { provide: UsersService, useValue: { findById: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(QualityGatesService);
+
+    const result = await service.handleQualityGateAuditWorkerFailure(
+      'job-order-1',
+      failedAuditJob,
+      'semantic worker crashed',
+    );
+
+    expect(qualityGatesRepository.upsertPending).not.toHaveBeenCalled();
+    expect(qualityGatesRepository.completeAudit).toHaveBeenCalledWith(
+      'job-order-1',
+      expect.objectContaining({
+        status: 'blocked',
+        riskScore: 70,
+        blockingReason: 'AI audit worker failed before finishing the QA run: semantic worker crashed',
+        auditJob: failedAuditJob,
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            gate: 'foundation',
+            severity: 'critical',
+            code: 'qa_audit_worker_failed',
+          }),
+        ]),
+      }),
+    );
+    expect(result.status).toBe('blocked');
   });
 
   it('allows a super admin to override a blocked quality gate with an audit reason', async () => {

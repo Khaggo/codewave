@@ -4,12 +4,15 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 
 import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
 import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
+import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
+import { createNotificationTrigger } from '@shared/events/contracts/notification-triggers';
 
 import { CreateBackJobDto } from '../dto/create-back-job.dto';
 import { UpdateBackJobStatusDto } from '../dto/update-back-job-status.dto';
@@ -41,6 +44,7 @@ export class BackJobsService {
     private readonly vehiclesService: VehiclesService,
     private readonly inspectionsRepository: InspectionsRepository,
     private readonly jobOrdersRepository: JobOrdersRepository,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   async create(payload: CreateBackJobDto, actor: BackJobActor) {
@@ -107,7 +111,16 @@ export class BackJobsService {
       throw new ConflictException('Resolved back jobs must link to a rework job order');
     }
 
-    return this.backJobsRepository.updateStatus(id, payload);
+    const updatedBackJob = await this.backJobsRepository.updateStatus(id, payload);
+    await this.notificationsService?.applyTrigger(
+      createNotificationTrigger('back_job.status_changed', 'main-service.back-jobs', {
+        backJobId: updatedBackJob.id,
+        customerUserId: updatedBackJob.customerUserId,
+        status: updatedBackJob.status,
+      }),
+    );
+
+    return updatedBackJob;
   }
 
   private async assertCustomerAndVehicle(customerUserId: string, vehicleId: string) {

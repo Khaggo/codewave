@@ -155,26 +155,26 @@ describe('AuthController integration', () => {
         .post('/api/admin/staff-accounts')
         .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
         .send({
-          email: 'staff@example.com',
           password: 'SecurePass123',
           firstName: 'Maria',
           lastName: 'Santos',
-          role: 'service_adviser',
-          staffCode: 'SA-0001',
+          role: 'technician',
+          accountType: 'mechanic',
         });
 
       expect(createStaffResponse.status).toBe(201);
       expect(createStaffResponse.body).toEqual(
         expect.objectContaining({
-          email: 'staff@example.com',
-          role: 'service_adviser',
-          staffCode: 'SA-0001',
+          email: expect.stringMatching(/^maria\d{3}\.mechanic@autocare\.com$/),
+          role: 'technician',
+          staffCode: expect.stringMatching(/^MEC-\d{4}$/),
           isActive: false,
         }),
       );
+      const generatedStaffEmail = createStaffResponse.body.email;
 
       const staffLoginWhileInactive = await request(app.getHttpServer()).post('/api/auth/login').send({
-        email: 'staff@example.com',
+        email: generatedStaffEmail,
         password: 'SecurePass123',
       });
       expect(staffLoginWhileInactive.status).toBe(401);
@@ -182,7 +182,7 @@ describe('AuthController integration', () => {
       const staffActivationStart = await request(app.getHttpServer())
         .post('/api/auth/staff-activation/google/start')
         .send({
-          googleIdToken: 'google-id-token:staff@example.com:google-staff-1:Maria:Santos',
+          googleIdToken: `google-id-token:${generatedStaffEmail}:google-staff-1:Maria:Santos`,
         });
 
       expect(staffActivationStart.status).toBe(201);
@@ -210,7 +210,7 @@ describe('AuthController integration', () => {
       expect(staffActivationVerify.status).toBe(200);
 
       const staffLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
-        email: 'staff@example.com',
+        email: generatedStaffEmail,
         password: 'SecurePass123',
       });
       expect(staffLogin.status).toBe(200);
@@ -233,7 +233,8 @@ describe('AuthController integration', () => {
             payload: expect.objectContaining({
               actorUserId: expect.any(String),
               targetUserId: createStaffResponse.body.id,
-              targetEmail: 'staff@example.com',
+              targetEmail: generatedStaffEmail,
+              targetStaffCode: createStaffResponse.body.staffCode,
             }),
           }),
           expect.objectContaining({

@@ -37,6 +37,13 @@ import {
   loadCustomerVehicleLifecycleSnapshot,
 } from '../lib/vehicleLifecycleClient';
 import {
+  buildDigitalGarageSnapshot,
+  createEmptyCustomerDigitalGarageSnapshot,
+  digitalGarageRoutes,
+  digitalGarageUnsupportedActions,
+  loadCustomerDigitalGarageSnapshot,
+} from '../lib/digitalGarageClient';
+import {
   createEmptyCustomerLoyaltySnapshot,
   customerLoyaltyTiers,
   loadCustomerLoyaltySnapshot,
@@ -83,13 +90,15 @@ import {
   validatePhoneNumber,
 } from '../utils/validation';
 
-const BOTTOM_NAV_HEIGHT = 74;
+const BOTTOM_NAV_HEIGHT = 82;
 const DASHBOARD_WEB_SCROLL_HEIGHT = `calc(100vh - ${BOTTOM_NAV_HEIGHT}px)`;
 
 const tabs = [
   { key: 'explore', label: 'Home', icon: 'home-outline' },
-  { key: 'messages', label: 'Timeline', icon: 'clock-outline' },
+  { key: 'messages', label: 'Garage', icon: 'garage-variant' },
   { key: 'notifications', label: 'Book', icon: 'calendar-check-outline' },
+  { key: 'insurance', label: 'Insurance', icon: 'shield-outline' },
+  { key: 'rewards', label: 'Rewards', icon: 'star-four-points-outline' },
   { key: 'store', label: 'Shop', icon: 'shopping-outline' },
   { key: 'menu', label: 'Profile', icon: 'account-outline' },
 ];
@@ -97,6 +106,7 @@ const tabs = [
 const genderOptions = ['Male', 'Female', 'Prefer not to say'];
 const profileSections = [
   { key: 'rewards', label: 'Rewards', icon: 'star-four-points-outline' },
+  { key: 'garage', label: 'Garage', icon: 'garage-variant' },
   { key: 'insurance', label: 'Insurance', icon: 'shield-outline' },
   { key: 'backJobs', label: 'Back-Jobs', icon: 'information-outline' },
 ];
@@ -197,6 +207,12 @@ const createInitialVehicleLifecycleState = () => ({
   status: 'idle',
   errorMessage: '',
   ...createEmptyCustomerVehicleLifecycleSnapshot(),
+});
+
+const createInitialDigitalGarageState = () => ({
+  ...createEmptyCustomerDigitalGarageSnapshot(),
+  status: 'idle',
+  errorMessage: '',
 });
 
 const createInitialLoyaltyState = () => ({
@@ -346,6 +362,11 @@ const buildCheckoutAddressLabel = (address) =>
     .map((value) => trimCheckoutValue(value))
     .filter(Boolean)
     .join(', ');
+
+const normalizeNavigationId = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim() : '';
+  return normalizedValue.length ? normalizedValue : null;
+};
 
 const formatStoreDateLabel = (value) => {
   if (!value) {
@@ -1343,11 +1364,11 @@ function ProductCard({ item, quantity, onAdd, onOpen }) {
   );
 }
 
-function CartLineItem({ item, onDecrease, onIncrease, disabled = false }) {
+function CartLineItem({ item, onDecrease, onIncrease, disabled = false, isCompact = false }) {
   const isUnavailable = item.availabilityStatus !== 'available';
 
   return (
-    <View style={styles.cartItemCard}>
+    <View style={[styles.cartItemCard, isCompact && styles.cartItemCardCompact]}>
       <View style={styles.cartItemImage}>
         <MaterialCommunityIcons
           name={isUnavailable ? 'package-variant-remove' : 'package-variant-closed'}
@@ -1356,8 +1377,8 @@ function CartLineItem({ item, onDecrease, onIncrease, disabled = false }) {
         />
       </View>
 
-      <View style={styles.cartItemCopy}>
-        <Text style={styles.cartItemName} numberOfLines={2}>
+      <View style={[styles.cartItemCopy, isCompact && styles.cartItemCopyCompact]}>
+        <Text style={styles.cartItemName} numberOfLines={isCompact ? 3 : 2}>
           {item.productName}
         </Text>
         <Text style={styles.cartItemMeta}>
@@ -1374,7 +1395,7 @@ function CartLineItem({ item, onDecrease, onIncrease, disabled = false }) {
         ) : null}
       </View>
 
-      <View style={styles.cartQuantityControls}>
+      <View style={[styles.cartQuantityControls, isCompact && styles.cartQuantityControlsCompact]}>
         <TouchableOpacity
           style={[styles.cartQuantityButton, disabled && styles.cartQuantityButtonDisabled]}
           onPress={onDecrease}
@@ -1405,7 +1426,7 @@ function CartLineItem({ item, onDecrease, onIncrease, disabled = false }) {
   );
 }
 
-function StoreOrderCard({ order, isSelected, onPress }) {
+function StoreOrderCard({ order, isSelected, onPress, isCompact = false }) {
   const invoiceSummary = order.invoice
     ? `${order.invoice.invoiceNumber} - ${order.invoice.statusLabel}`
     : 'Invoice tracking is still being prepared.';
@@ -1416,7 +1437,7 @@ function StoreOrderCard({ order, isSelected, onPress }) {
       onPress={onPress}
       scaleTo={0.986}
     >
-      <View style={styles.storeOrderCardHeader}>
+      <View style={[styles.storeOrderCardHeader, isCompact && styles.storeOrderCardHeaderCompact]}>
         <View style={styles.storeOrderCardCopy}>
           <Text style={styles.storeOrderCardEyebrow}>{order.orderNumber}</Text>
           <Text style={styles.storeOrderCardTitle}>{buildStoreOrderTitle(order)}</Text>
@@ -1425,14 +1446,20 @@ function StoreOrderCard({ order, isSelected, onPress }) {
           </Text>
         </View>
 
-        <View style={[styles.storeStatusPill, isSelected && styles.storeStatusPillActive]}>
+        <View
+          style={[
+            styles.storeStatusPill,
+            isCompact && styles.storeStatusPillCompact,
+            isSelected && styles.storeStatusPillActive,
+          ]}
+        >
           <Text style={[styles.storeStatusPillText, isSelected && styles.storeStatusPillTextActive]}>
             {order.statusLabel}
           </Text>
         </View>
       </View>
 
-      <View style={styles.storeOrderCardMetrics}>
+      <View style={[styles.storeOrderCardMetrics, isCompact && styles.storeOrderCardMetricsCompact]}>
         <Text style={styles.storeOrderCardMetric}>
           {order.items.length} item{order.items.length === 1 ? '' : 's'}
         </Text>
@@ -1541,12 +1568,13 @@ function BookingDiscoveryStatePanel({
   );
 }
 
-function BookingVehicleCard({ item, isSelected, onPress }) {
+function BookingVehicleCard({ item, isSelected, onPress, isCompact = false }) {
   return (
     <MotionPressable
       style={[
         styles.bookingServiceCard,
         isSelected && styles.bookingServiceCardSelected,
+        isCompact && styles.bookingServiceCardCompact,
       ]}
       onPress={onPress}
       scaleTo={0.988}
@@ -1559,31 +1587,34 @@ function BookingVehicleCard({ item, isSelected, onPress }) {
         />
       </View>
 
-      <View style={styles.bookingServiceCopy}>
-        <View style={styles.bookingServiceTitleRow}>
-          <Text style={styles.bookingServiceTitle}>{item.title}</Text>
-          <View style={styles.bookingVehicleBadge}>
-            <Text style={styles.bookingVehicleBadgeText}>OWNED</Text>
+      <View style={[styles.bookingServiceBody, isCompact && styles.bookingServiceBodyCompact]}>
+        <View style={[styles.bookingServiceCopy, isCompact && styles.bookingServiceCopyCompact]}>
+          <View style={styles.bookingServiceTitleRow}>
+            <Text style={styles.bookingServiceTitle}>{item.title}</Text>
+            <View style={styles.bookingVehicleBadge}>
+              <Text style={styles.bookingVehicleBadgeText}>OWNED</Text>
+            </View>
           </View>
+          <Text style={styles.bookingServiceSubtitle}>{item.subtitle}</Text>
         </View>
-        <Text style={styles.bookingServiceSubtitle}>{item.subtitle}</Text>
-      </View>
 
-      <View style={styles.bookingVehicleMeta}>
-        <Text style={styles.bookingVehicleMetaLabel}>PLATE</Text>
-        <Text style={styles.bookingVehicleMetaValue}>{item.plateNumber}</Text>
+        <View style={[styles.bookingVehicleMeta, isCompact && styles.bookingVehicleMetaCompact]}>
+          <Text style={styles.bookingVehicleMetaLabel}>PLATE</Text>
+          <Text style={styles.bookingVehicleMetaValue}>{item.plateNumber}</Text>
+        </View>
       </View>
     </MotionPressable>
   );
 }
 
-function BookingServiceCard({ item, isSelected, onPress }) {
+function BookingServiceCard({ item, isSelected, onPress, isCompact = false }) {
   return (
     <MotionPressable
       style={[
         styles.bookingServiceCard,
         isSelected && styles.bookingServiceCardSelected,
         !item.enabled && styles.bookingServiceCardDisabled,
+        isCompact && styles.bookingServiceCardCompact,
       ]}
       onPress={item.enabled ? onPress : undefined}
       disabled={!item.enabled}
@@ -1597,43 +1628,46 @@ function BookingServiceCard({ item, isSelected, onPress }) {
         />
       </View>
 
-      <View style={styles.bookingServiceCopy}>
-        <View style={styles.bookingServiceTitleRow}>
-          <Text style={[styles.bookingServiceTitle, !item.enabled && styles.bookingDisabledText]}>
-            {item.title}
+      <View style={[styles.bookingServiceBody, isCompact && styles.bookingServiceBodyCompact]}>
+        <View style={[styles.bookingServiceCopy, isCompact && styles.bookingServiceCopyCompact]}>
+          <View style={styles.bookingServiceTitleRow}>
+            <Text style={[styles.bookingServiceTitle, !item.enabled && styles.bookingDisabledText]}>
+              {item.title}
+            </Text>
+            {item.badgeLabel ? (
+              <View style={styles.bookingUnavailableBadge}>
+                <Text style={styles.bookingUnavailableBadgeText}>{item.badgeLabel}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <Text style={[styles.bookingServiceSubtitle, !item.enabled && styles.bookingDisabledSubtext]}>
+            {item.subtitle}
           </Text>
-          {item.badgeLabel ? (
-            <View style={styles.bookingUnavailableBadge}>
-              <Text style={styles.bookingUnavailableBadgeText}>{item.badgeLabel}</Text>
-            </View>
-          ) : null}
         </View>
 
-        <Text style={[styles.bookingServiceSubtitle, !item.enabled && styles.bookingDisabledSubtext]}>
-          {item.subtitle}
-        </Text>
-      </View>
-
-      <View style={styles.bookingServiceMeta}>
-        {item.metaLabel ? (
-          <Text style={[styles.bookingServicePrice, !item.enabled && styles.bookingDisabledText]}>
-            {item.metaLabel}
-          </Text>
-        ) : null}
-        <View style={styles.bookingServiceDurationRow}>
-          <MaterialCommunityIcons name="clock-outline" size={12} color={colors.mutedText} />
-          <Text style={styles.bookingServiceDuration}>{item.durationLabel}</Text>
+        <View style={[styles.bookingServiceMeta, isCompact && styles.bookingServiceMetaCompact]}>
+          {item.metaLabel ? (
+            <Text style={[styles.bookingServicePrice, !item.enabled && styles.bookingDisabledText]}>
+              {item.metaLabel}
+            </Text>
+          ) : null}
+          <View style={styles.bookingServiceDurationRow}>
+            <MaterialCommunityIcons name="clock-outline" size={12} color={colors.mutedText} />
+            <Text style={styles.bookingServiceDuration}>{item.durationLabel}</Text>
+          </View>
         </View>
       </View>
     </MotionPressable>
   );
 }
 
-function BookingDateCard({ item, isSelected, onPress, isCompact }) {
+function BookingDateCard({ item, isSelected, onPress, isCompact, cardStyle }) {
   return (
     <MotionPressable
       style={[
         styles.bookingDateCard,
+        cardStyle,
         isCompact && styles.bookingDateCardCompact,
         isSelected && styles.bookingDateCardActive,
         item.statusTone === 'success' && styles.bookingDateCardSuccess,
@@ -1823,10 +1857,23 @@ function TrackingStep({ item, isLast }) {
   );
 }
 
-function QuickActionCard({ item, onPress }) {
+function QuickActionCard({ item, onPress, isCompact = false }) {
   return (
-    <MotionPressable containerStyle={styles.quickActionCardContainer} style={styles.quickActionCard} onPress={onPress}>
-      <View style={[styles.quickActionIconWrap, { backgroundColor: item.bgColor }]}>
+    <MotionPressable
+      containerStyle={[
+        styles.quickActionCardContainer,
+        isCompact && styles.quickActionCardContainerCompact,
+      ]}
+      style={styles.quickActionCard}
+      onPress={onPress}
+    >
+      <View
+        style={[
+          styles.quickActionIconWrap,
+          isCompact && styles.quickActionIconWrapCompact,
+          { backgroundColor: item.bgColor },
+        ]}
+      >
         <View style={[styles.quickActionIconInner, { backgroundColor: item.iconColor }]}>
           <MaterialCommunityIcons name={item.icon} size={20} color={colors.text} />
         </View>
@@ -1836,14 +1883,14 @@ function QuickActionCard({ item, onPress }) {
   );
 }
 
-function HomeServiceRow({ item }) {
+function HomeServiceRow({ item, isCompact = false }) {
   return (
-    <View style={styles.homeServiceRow}>
-      <View style={styles.homeServiceRowLeft}>
+    <View style={[styles.homeServiceRow, isCompact && styles.homeServiceRowCompact]}>
+      <View style={[styles.homeServiceRowLeft, isCompact && styles.homeServiceRowLeftCompact]}>
         <View style={styles.homeServiceIconWrap}>
           <MaterialCommunityIcons name={item.icon} size={18} color={colors.primary} />
         </View>
-        <View>
+        <View style={styles.homeServiceCopy}>
           <Text style={styles.homeServiceTitle}>{item.title}</Text>
           <Text style={styles.homeServiceDate}>{item.dateLabel}</Text>
         </View>
@@ -1974,7 +2021,14 @@ export default function Dashboard({
 }) {
   const isWeb = Platform.OS === 'web';
   const { width: windowWidth } = useWindowDimensions();
+  const isTinyPhone = !isWeb && windowWidth < 340;
+  const isVeryCompactPhone = !isWeb && windowWidth < 360;
   const isCompactPhone = !isWeb && windowWidth < 390;
+  const bookingDateCardStyle = isVeryCompactPhone
+    ? { flexBasis: '100%', maxWidth: '100%' }
+    : isCompactPhone
+      ? { flexBasis: '47%', maxWidth: '47%' }
+      : { flexBasis: '31%', maxWidth: '31%' };
   const [activeTab, setActiveTab] = useState('explore');
   const [menuScreen, setMenuScreen] = useState('root');
   const [bookingMode, setBookingMode] = useState('book');
@@ -2008,6 +2062,13 @@ export default function Dashboard({
   const [isNotificationsVisible, setIsNotificationsVisible] = useState(false);
   const [isProfileTooltipVisible, setIsProfileTooltipVisible] = useState(false);
   const [timelineFilter, setTimelineFilter] = useState('All');
+  const [digitalGarageState, setDigitalGarageState] = useState(
+    createInitialDigitalGarageState,
+  );
+  const [selectedGarageVehicleId, setSelectedGarageVehicleId] = useState(
+    account?.primaryVehicleId ?? null,
+  );
+  const [garageReloadKey, setGarageReloadKey] = useState(0);
   const [vehicleLifecycleState, setVehicleLifecycleState] = useState(
     createInitialVehicleLifecycleState,
   );
@@ -2110,6 +2171,9 @@ export default function Dashboard({
     setNotificationsFeed([]);
     setNotificationModuleState(createInitialNotificationModuleState());
     setTimelineFilter('All');
+    setDigitalGarageState(createInitialDigitalGarageState());
+    setSelectedGarageVehicleId(account?.primaryVehicleId ?? null);
+    setGarageReloadKey(0);
     setVehicleLifecycleState(createInitialVehicleLifecycleState());
     setLoyaltyState(createInitialLoyaltyState());
     setCatalogState(createInitialCatalogState());
@@ -2559,6 +2623,90 @@ export default function Dashboard({
       return undefined;
     }
 
+    const fallbackGarageSnapshot = buildDigitalGarageSnapshot({
+      vehicles: account?.ownedVehicles ?? [],
+      preferredVehicleId: selectedGarageVehicleId ?? account?.primaryVehicleId,
+    });
+
+    if (!account?.accessToken || !account?.userId) {
+      setDigitalGarageState({
+        ...createEmptyCustomerDigitalGarageSnapshot(),
+        status: 'garage_unauthorized',
+        errorMessage: 'Sign in again to load your Digital Garage.',
+      });
+      setSelectedGarageVehicleId(null);
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const loadGarage = async () => {
+      setDigitalGarageState({
+        ...fallbackGarageSnapshot,
+        status: 'garage_loading',
+        errorMessage: '',
+      });
+
+      try {
+        const garageSnapshot = await loadCustomerDigitalGarageSnapshot({
+          userId: account.userId,
+          accessToken: account.accessToken,
+          preferredVehicleId: selectedGarageVehicleId ?? account.primaryVehicleId,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setDigitalGarageState({
+          ...garageSnapshot,
+          status: garageSnapshot.status,
+          errorMessage: '',
+        });
+        setSelectedGarageVehicleId((currentVehicleId) =>
+          garageSnapshot.vehicles.some((vehicle) => vehicle.id === currentVehicleId)
+            ? currentVehicleId
+            : garageSnapshot.primaryVehicleId,
+        );
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'We could not load your owned vehicles right now.';
+        const statusCode = error instanceof ApiError ? error.status : null;
+
+        setDigitalGarageState({
+          ...fallbackGarageSnapshot,
+          status:
+            statusCode === 401 || statusCode === 403
+              ? 'garage_forbidden'
+              : 'garage_failed',
+          errorMessage: message,
+        });
+        setSelectedGarageVehicleId((currentVehicleId) =>
+          fallbackGarageSnapshot.vehicles.some((vehicle) => vehicle.id === currentVehicleId)
+            ? currentVehicleId
+            : fallbackGarageSnapshot.primaryVehicleId,
+        );
+      }
+    };
+
+    loadGarage();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTab, account?.accessToken, account?.userId, account?.primaryVehicleId, garageReloadKey]);
+
+  useEffect(() => {
+    if (activeTab !== 'messages') {
+      return undefined;
+    }
+
     if (!account?.accessToken) {
       const emptyLifecycleSnapshot = createEmptyCustomerVehicleLifecycleSnapshot();
       setVehicleLifecycleState({
@@ -2569,7 +2717,7 @@ export default function Dashboard({
       return undefined;
     }
 
-    if (!account?.primaryVehicleId) {
+    if (!selectedGarageVehicleId) {
       const emptyLifecycleSnapshot = createEmptyCustomerVehicleLifecycleSnapshot();
       setVehicleLifecycleState({
         status: 'timeline_empty',
@@ -2590,7 +2738,7 @@ export default function Dashboard({
 
       try {
         const lifecycleSnapshot = await loadCustomerVehicleLifecycleSnapshot({
-          vehicleId: account.primaryVehicleId,
+          vehicleId: selectedGarageVehicleId,
           accessToken: account.accessToken,
         });
 
@@ -2638,7 +2786,7 @@ export default function Dashboard({
     return () => {
       isCancelled = true;
     };
-  }, [activeTab, account?.accessToken, account?.primaryVehicleId]);
+  }, [activeTab, account?.accessToken, selectedGarageVehicleId]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -3044,7 +3192,7 @@ export default function Dashboard({
       0
     );
     const slotWidth = windowWidth / tabs.length;
-    const itemInset = isCompactPhone ? 3 : 6;
+    const itemInset = isTinyPhone ? 0 : isVeryCompactPhone ? 1 : isCompactPhone ? 3 : 6;
 
     bottomNavIndicatorAnim.stopAnimation();
     Animated.spring(bottomNavIndicatorAnim, {
@@ -3054,13 +3202,19 @@ export default function Dashboard({
       mass: 0.8,
       useNativeDriver: true,
     }).start();
-  }, [activeTab, isCompactPhone, windowWidth, bottomNavIndicatorAnim]);
+  }, [activeTab, isCompactPhone, isTinyPhone, isVeryCompactPhone, windowWidth, bottomNavIndicatorAnim]);
 
   const handleTabPress = (tabKey) => {
     setActiveTab(tabKey);
 
     if (tabKey === 'menu') {
       setMenuScreen('root');
+    } else if (tabKey === 'insurance') {
+      setMenuScreen('root');
+      setProfileSection('insurance');
+    } else if (tabKey === 'rewards') {
+      setMenuScreen('root');
+      setProfileSection('rewards');
     }
   };
 
@@ -3726,21 +3880,42 @@ export default function Dashboard({
     setActiveTab('messages');
   };
 
+  const navigateToGarage = (vehicleId = null) => {
+    if (vehicleId) {
+      setSelectedGarageVehicleId(vehicleId);
+    }
+
+    setActiveTab('messages');
+  };
+
   const navigateToBooking = (mode = 'book') => {
     setActiveTab('notifications');
     setBookingMode(mode);
   };
 
+  const navigateToBookingForVehicle = (vehicleId) => {
+    if (vehicleId) {
+      setSelectedBookingVehicleId(vehicleId);
+    }
+
+    navigateToBooking('book');
+  };
+
   const navigateToProfileSection = (sectionKey) => {
-    setActiveTab('menu');
+    setActiveTab(sectionKey === 'rewards' || sectionKey === 'insurance' ? sectionKey : 'menu');
     setMenuScreen('root');
     setProfileSection(sectionKey);
     setIsProfileTooltipVisible(false);
   };
 
-  const navigateToInsuranceInquiry = () => {
+  const navigateToInsuranceInquiry = (vehicleId = null) => {
+    const selectedVehicleId =
+      normalizeNavigationId(vehicleId) ??
+      normalizeNavigationId(selectedGarageVehicleId) ??
+      normalizeNavigationId(account?.primaryVehicleId);
+
     navigation.navigate('InsuranceInquiryScreen', {
-      vehicleId: account?.primaryVehicleId ?? null,
+      vehicleId: selectedVehicleId,
     });
   };
 
@@ -4158,10 +4333,15 @@ export default function Dashboard({
   };
 
   const renderScrollableContent = (contentStyle, children) => {
+    const responsiveContentStyle = [
+      contentStyle,
+      isVeryCompactPhone && styles.scrollContentCompact,
+    ];
+
     if (isWeb) {
       return (
         <View style={styles.scrollRegion}>
-          <View style={[styles.webScrollContent, contentStyle]}>{children}</View>
+          <View style={[styles.webScrollContent, ...responsiveContentStyle]}>{children}</View>
         </View>
       );
     }
@@ -4169,7 +4349,7 @@ export default function Dashboard({
     return (
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={contentStyle}
+        contentContainerStyle={responsiveContentStyle}
         showsVerticalScrollIndicator={false}
       >
         {children}
@@ -4302,6 +4482,8 @@ export default function Dashboard({
       <Text style={styles.sectionHeading}>
         {profileSection === 'rewards'
           ? 'Available Rewards'
+          : profileSection === 'garage'
+            ? 'Digital Garage'
           : profileSection === 'insurance'
             ? 'Insurance Tools'
             : 'Back-Jobs'}
@@ -4347,6 +4529,23 @@ export default function Dashboard({
         </>
       ) : null}
 
+      {profileSection === 'garage' ? (
+        <View style={styles.infoPanel}>
+          <Text style={styles.infoPanelTitle}>Digital Garage</Text>
+          <Text style={styles.infoPanelText}>
+            Open your owned vehicle list, choose the vehicle context for bookings and insurance,
+            and review lifecycle history from one customer-only surface.
+          </Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, styles.editProfileButton]}
+            onPress={() => navigateToGarage()}
+            activeOpacity={0.86}
+          >
+            <Text style={styles.primaryButtonText}>Open Digital Garage</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {profileSection === 'insurance' ? (
         <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>Insurance inquiry tracking</Text>
@@ -4356,7 +4555,7 @@ export default function Dashboard({
           </Text>
           <TouchableOpacity
             style={[styles.primaryButton, styles.editProfileButton]}
-            onPress={navigateToInsuranceInquiry}
+            onPress={() => navigateToInsuranceInquiry()}
             activeOpacity={0.86}
           >
             <Text style={styles.primaryButtonText}>Open Insurance Inquiry</Text>
@@ -4762,7 +4961,7 @@ export default function Dashboard({
         </Text>
       </View>
 
-      <View style={styles.sectionTabsWrap}>
+      <View style={[styles.sectionTabsWrap, isCompactPhone && styles.sectionTabsWrapCompact]}>
         {storeSections.map((item) => (
           <ProfileSectionTab
             key={item.key}
@@ -4814,7 +5013,7 @@ export default function Dashboard({
         </>
       ) : (
         <>
-          <View style={styles.storeOrdersToolbar}>
+          <View style={[styles.storeOrdersToolbar, isCompactPhone && styles.storeOrdersToolbarCompact]}>
             <View style={styles.storeOrdersToolbarCopy}>
               <Text style={styles.bookingSectionLabel}>Order History</Text>
               <Text style={styles.storeOrdersToolbarText}>
@@ -4893,6 +5092,7 @@ export default function Dashboard({
                   key={order.id}
                   order={order}
                   isSelected={selectedStoreOrderId === order.id}
+                  isCompact={isCompactPhone}
                   onPress={() => handleSelectStoreOrder(order)}
                 />
               ))}
@@ -5181,8 +5381,13 @@ export default function Dashboard({
 
       {bookingMode === 'book' ? (
         <>
-          <View style={styles.bookingDiscoveryBanner}>
-            <View style={styles.bookingDiscoveryBannerCopyWrap}>
+          <View style={[styles.bookingDiscoveryBanner, isCompactPhone && styles.bookingDiscoveryBannerCompact]}>
+            <View
+              style={[
+                styles.bookingDiscoveryBannerCopyWrap,
+                isCompactPhone && styles.bookingDiscoveryBannerCopyWrapCompact,
+              ]}
+            >
               <View style={styles.bookingDiscoveryBannerIconWrap}>
                 <MaterialCommunityIcons name="source-branch-sync" size={18} color={colors.primary} />
               </View>
@@ -5240,6 +5445,7 @@ export default function Dashboard({
                     key={vehicle.id}
                     item={vehicle}
                     isSelected={selectedBookingVehicleId === vehicle.id}
+                    isCompact={isCompactPhone}
                     onPress={() => {
                       setSelectedBookingVehicleId(vehicle.id);
                       if (bookingCreateState.status !== 'submitting') {
@@ -5257,11 +5463,11 @@ export default function Dashboard({
               )}
 
               <Text style={styles.bookingSectionLabel}>Available Services</Text>
-              <View style={styles.bookingPagerRow}>
+              <View style={[styles.bookingPagerRow, isCompactPhone && styles.bookingPagerRowCompact]}>
                 <Text style={styles.bookingPagerText}>
                   Page {Math.min(bookingServicePage + 1, totalServicePages)} of {totalServicePages}
                 </Text>
-                <View style={styles.bookingPagerActions}>
+                <View style={[styles.bookingPagerActions, isCompactPhone && styles.bookingPagerActionsCompact]}>
                   <TouchableOpacity
                     style={[
                       styles.bookingPagerButton,
@@ -5302,6 +5508,7 @@ export default function Dashboard({
                   key={service.key}
                   item={service}
                   isSelected={selectedBookingServiceKey === service.key}
+                  isCompact={isCompactPhone}
                   onPress={() => {
                     setSelectedBookingServiceKey(service.key);
                     if (bookingCreateState.status !== 'submitting') {
@@ -5352,14 +5559,19 @@ export default function Dashboard({
                 Page through the live booking window and choose a date that is still available for your selected slot.
               </Text>
               <View style={styles.bookingAvailabilityWindowCard}>
-                <View style={styles.bookingAvailabilityToolbar}>
+                <View style={[styles.bookingAvailabilityToolbar, isCompactPhone && styles.bookingAvailabilityToolbarCompact]}>
                   <View style={styles.bookingAvailabilityCopy}>
                     <Text style={styles.bookingAvailabilityTitle}>Live Availability Window</Text>
                     <Text style={styles.bookingAvailabilityText}>
                       {getBookingAvailabilityWindowLabel(bookingAvailability)}
                     </Text>
                   </View>
-                  <View style={styles.bookingAvailabilityActions}>
+                  <View
+                    style={[
+                      styles.bookingAvailabilityActions,
+                      isCompactPhone && styles.bookingAvailabilityActionsCompact,
+                    ]}
+                  >
                     <TouchableOpacity
                       style={[
                         styles.bookingPagerButton,
@@ -5413,13 +5625,19 @@ export default function Dashboard({
                 ) : null}
 
                 {bookingAvailability.days.length ? (
-                  <View style={styles.bookingAvailabilityGrid}>
+                  <View
+                    style={[
+                      styles.bookingAvailabilityGrid,
+                      isVeryCompactPhone && styles.bookingAvailabilityGridCompact,
+                    ]}
+                  >
                     {bookingDateOptions.map((dateOption) => (
                       <BookingDateCard
                         key={dateOption.key}
                         item={dateOption}
                         isSelected={selectedBookingDateKey === dateOption.key}
                         isCompact={isCompactPhone}
+                        cardStyle={bookingDateCardStyle}
                         onPress={() => {
                           setSelectedBookingDateKey(dateOption.key);
                           if (bookingCreateState.status !== 'submitting') {
@@ -5451,7 +5669,12 @@ export default function Dashboard({
 
                 {selectedBookingDay ? (
                   <View style={styles.bookingAvailabilitySelectionCard}>
-                    <View style={styles.bookingAvailabilitySelectionHeader}>
+                    <View
+                      style={[
+                        styles.bookingAvailabilitySelectionHeader,
+                        isCompactPhone && styles.bookingAvailabilitySelectionHeaderCompact,
+                      ]}
+                    >
                       <Text style={styles.bookingAvailabilitySelectionTitle}>
                         {formatBookingDateLabel(selectedBookingDay.scheduledDate)}
                       </Text>
@@ -5702,25 +5925,25 @@ export default function Dashboard({
                 </Text>
 
                 <View style={styles.trackingMetaGrid}>
-                  <View style={styles.trackingMetaItem}>
+                  <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
                     <Text style={styles.trackingMetaLabel}>Vehicle</Text>
                     <Text style={styles.trackingMetaValue}>
                       {getBookingVehicleLabel(selectedBookingDetail, bookingDiscovery.vehicles)}
                     </Text>
                   </View>
-                  <View style={styles.trackingMetaItem}>
+                  <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
                     <Text style={styles.trackingMetaLabel}>Date</Text>
                     <Text style={styles.trackingMetaValue}>
                       {formatBookingDateLabel(selectedBookingDetail.scheduledDate)}
                     </Text>
                   </View>
-                  <View style={styles.trackingMetaItem}>
+                  <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
                     <Text style={styles.trackingMetaLabel}>Time</Text>
                     <Text style={styles.trackingMetaValue}>
                       {getBookingTimeLabel(selectedBookingDetail)}
                     </Text>
                   </View>
-                  <View style={styles.trackingMetaItem}>
+                  <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
                     <Text style={styles.trackingMetaLabel}>Status</Text>
                     <Text style={styles.trackingMetaValue}>
                       {getBookingStatusLabel(selectedBookingDetail.status)}
@@ -5820,7 +6043,7 @@ export default function Dashboard({
         icon: 'shield-outline',
         bgColor: 'rgba(52, 127, 255, 0.14)',
         iconColor: '#347FFF',
-        onPress: navigateToInsuranceInquiry,
+        onPress: () => navigateToInsuranceInquiry(),
       },
       {
         key: 'rewards',
@@ -5831,12 +6054,12 @@ export default function Dashboard({
         onPress: () => navigateToProfileSection('rewards'),
       },
       {
-        key: 'history',
-        label: 'History',
-        icon: 'arrow-top-right',
+        key: 'garage',
+        label: 'Garage',
+        icon: 'garage-variant',
         bgColor: 'rgba(18, 215, 100, 0.14)',
         iconColor: '#12D764',
-        onPress: navigateToTimeline,
+        onPress: () => navigateToGarage(),
       },
       {
         key: 'support',
@@ -5914,7 +6137,7 @@ export default function Dashboard({
 
       <View style={[styles.homeStatusCard, !latestCustomerBooking && styles.homeStatusCardIdle]}>
         <View style={styles.homeStatusHeader}>
-          <View>
+          <View style={styles.homeStatusCopy}>
             <Text style={[styles.homeStatusBadge, !latestCustomerBooking && styles.homeStatusBadgeIdle]}>
               {topStatus.badge}
             </Text>
@@ -5945,7 +6168,7 @@ export default function Dashboard({
         </View>
       </View>
 
-      <View style={styles.homeVehicleCard}>
+      <MotionPressable style={styles.homeVehicleCard} onPress={() => navigateToGarage(account?.primaryVehicleId)}>
         <Image
           source={{
             uri: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1200&q=80',
@@ -5974,12 +6197,17 @@ export default function Dashboard({
             <Text style={styles.homeVehicleStatLabel}>Tier</Text>
           </View>
         </View>
-      </View>
+      </MotionPressable>
 
       <Text style={styles.homeSectionLabel}>Quick Actions</Text>
-      <View style={styles.quickActionsRow}>
+      <View style={[styles.quickActionsRow, isVeryCompactPhone && styles.quickActionsRowCompact]}>
         {quickActions.map((action) => (
-          <QuickActionCard key={action.key} item={action} onPress={action.onPress} />
+          <QuickActionCard
+            key={action.key}
+            item={action}
+            isCompact={isVeryCompactPhone}
+            onPress={action.onPress}
+          />
         ))}
       </View>
 
@@ -6005,13 +6233,15 @@ export default function Dashboard({
       </View>
 
       {recentHomeServices.map((item) => (
-        <HomeServiceRow key={item.key} item={item} />
+        <HomeServiceRow key={item.key} item={item} isCompact={isCompactPhone} />
       ))}
 
       <View style={styles.homeOfferCard}>
         <Text style={styles.homeOfferEyebrow}>{featuredRewardEyebrow}</Text>
         <Text style={styles.homeOfferTitle}>{featuredRewardTitle}</Text>
-        <Text style={styles.homeOfferSubtitle}>{featuredRewardSubtitle}</Text>
+        <Text style={[styles.homeOfferSubtitle, isVeryCompactPhone && styles.homeOfferSubtitleCompact]}>
+          {featuredRewardSubtitle}
+        </Text>
         <TouchableOpacity style={styles.homeOfferButton} onPress={handleFeaturedRewardPress} activeOpacity={0.86}>
           <Text style={styles.homeOfferButtonText}>{featuredRewardButtonLabel}</Text>
         </TouchableOpacity>
@@ -6025,6 +6255,120 @@ export default function Dashboard({
     const visibleTimelineItems = vehicleLifecycleState.events.filter((item) =>
       timelineFilter === 'All' ? true : item.filter === timelineFilter,
     );
+    const garageVehicleSummaries = digitalGarageState.vehicleSummaries ?? [];
+    const selectedGarageVehicle =
+      digitalGarageState.vehicles.find((vehicle) => vehicle.id === selectedGarageVehicleId) ??
+      digitalGarageState.vehicles[0] ??
+      null;
+    const selectedGarageVehicleSummary =
+      garageVehicleSummaries.find((vehicle) => vehicle.id === selectedGarageVehicle?.id) ??
+      null;
+
+    const renderGarageVehicleState = () => {
+      if (digitalGarageState.status === 'garage_loading' && !garageVehicleSummaries.length) {
+        return (
+          <View style={styles.timelineStateCard}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.timelineStateTitle}>Loading your Digital Garage</Text>
+            <Text style={styles.timelineStateText}>
+              We are reading your customer-owned vehicles from the live backend route.
+            </Text>
+          </View>
+        );
+      }
+
+      if (digitalGarageState.status === 'garage_unauthorized' || digitalGarageState.status === 'garage_forbidden') {
+        return (
+          <TimelineStateCard
+            icon="lock-outline"
+            title="Digital Garage unavailable"
+            message={digitalGarageState.errorMessage || 'Sign in again before opening your vehicle garage.'}
+          />
+        );
+      }
+
+      if (digitalGarageState.status === 'garage_failed' && !garageVehicleSummaries.length) {
+        return (
+          <TimelineStateCard
+            icon="wifi-strength-alert-outline"
+            title="Garage vehicles failed to load"
+            message={digitalGarageState.errorMessage || 'We could not load your owned vehicles right now.'}
+          />
+        );
+      }
+
+      if (!garageVehicleSummaries.length) {
+        return (
+          <TimelineStateCard
+            icon="car-off"
+            title="No owned vehicles yet"
+            message="Add your first vehicle during onboarding or profile updates before booking, insurance, and lifecycle history can share one garage context."
+          />
+        );
+      }
+
+      return (
+        <View style={styles.garageVehicleList}>
+          {garageVehicleSummaries.map((vehicle) => {
+            const isSelected = vehicle.id === selectedGarageVehicle?.id;
+
+            return (
+              <MotionPressable
+                key={vehicle.id ?? vehicle.plateNumber}
+                style={[styles.garageVehicleCard, isSelected && styles.garageVehicleCardSelected]}
+                onPress={() => setSelectedGarageVehicleId(vehicle.id)}
+                scaleTo={0.99}
+              >
+                <View style={styles.garageVehicleHeader}>
+                  <View style={styles.garageVehicleIconWrap}>
+                    <MaterialCommunityIcons name="car-side" size={20} color={colors.primary} />
+                  </View>
+                  <View style={styles.garageVehicleCopy}>
+                    <View style={styles.garageVehicleTitleRow}>
+                      <Text style={styles.garageVehicleTitle}>{vehicle.title}</Text>
+                      {vehicle.isPrimary ? (
+                        <View style={styles.garagePrimaryPill}>
+                          <Text style={styles.garagePrimaryPillText}>Primary</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={styles.garageVehicleMeta}>{vehicle.subtitle}</Text>
+                    <Text style={styles.garageVehicleRoute}>{vehicle.routeTruth}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.garageActionGrid}>
+                  <TouchableOpacity
+                    style={styles.garageActionButton}
+                    onPress={() => navigateToBookingForVehicle(vehicle.id)}
+                    activeOpacity={0.86}
+                  >
+                    <Text style={styles.garageActionText}>Book</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.garageActionButton}
+                    onPress={() => {
+                      setSelectedGarageVehicleId(vehicle.id);
+                      navigation.navigate('VehicleLifecycleScreen', { vehicleId: vehicle.id });
+                    }}
+                    activeOpacity={0.86}
+                  >
+                    <Text style={styles.garageActionText}>Lifecycle</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.garageActionButton}
+                    onPress={() => navigateToInsuranceInquiry(vehicle.id)}
+                    activeOpacity={0.86}
+                  >
+                    <Text style={styles.garageActionText}>Insurance</Text>
+                  </TouchableOpacity>
+                </View>
+              </MotionPressable>
+            );
+          })}
+        </View>
+      );
+    };
 
     const renderTimelineState = () => {
       if (vehicleLifecycleState.status === 'timeline_loading') {
@@ -6104,14 +6448,91 @@ export default function Dashboard({
       <>
         <View style={styles.timelineHeaderRow}>
           <View>
-            <Text style={styles.bookingEyebrow}>VEHICLE LIFECYCLE</Text>
-            <Text style={styles.timelineTitle}>Timeline</Text>
-            <Text style={styles.timelineSubtitle}>{primaryVehicleLabel}</Text>
+            <Text style={styles.bookingEyebrow}>CUSTOMER DIGITAL GARAGE</Text>
+            <Text style={styles.timelineTitle}>Garage</Text>
+            <Text style={styles.timelineSubtitle}>
+              {digitalGarageState.vehicleCount
+                ? `${digitalGarageState.vehicleCount} owned vehicle${digitalGarageState.vehicleCount === 1 ? '' : 's'} connected`
+                : 'Owned vehicles, bookings, insurance, and lifecycle history in one place'}
+            </Text>
           </View>
 
-          <MotionPressable style={styles.timelineFilterIconButton} onPress={() => setTimelineFilter('All')}>
+          <MotionPressable
+            style={styles.timelineFilterIconButton}
+            onPress={() => {
+              setTimelineFilter('All');
+              setGarageReloadKey((value) => value + 1);
+            }}
+          >
             <MaterialCommunityIcons name="refresh" size={18} color={colors.labelText} />
           </MotionPressable>
+        </View>
+
+        <View style={styles.garageHeroCard}>
+          <View style={styles.garageHeroCopy}>
+            <Text style={styles.garageHeroEyebrow}>Live vehicle owner route</Text>
+            <Text style={styles.garageHeroTitle}>
+              {selectedGarageVehicleSummary?.title ?? primaryVehicleLabel}
+            </Text>
+            <Text style={styles.garageHeroText}>
+              {selectedGarageVehicleSummary?.subtitle ??
+                'Select an owned vehicle to connect booking, insurance, and timeline actions.'}
+            </Text>
+          </View>
+          <View style={styles.garageHeroBadge}>
+            <Text style={styles.garageHeroBadgeText}>
+              {selectedGarageVehicleSummary?.ordinalLabel ?? 'Garage'}
+            </Text>
+          </View>
+        </View>
+
+        {renderGarageVehicleState()}
+
+        <View style={styles.garagePlannedActionsCard}>
+          <Text style={styles.garagePlannedTitle}>Planned garage actions</Text>
+          <Text style={styles.garagePlannedText}>
+            These actions are intentionally labeled as future API work so the app does not invent vehicle ownership truth locally.
+          </Text>
+          {digitalGarageUnsupportedActions.map((action) => (
+            <View key={action.key} style={styles.garagePlannedRow}>
+              <View style={styles.garagePlannedRowCopy}>
+                <Text style={styles.garagePlannedActionLabel}>{action.label}</Text>
+                <Text style={styles.garagePlannedRoute}>{action.route}</Text>
+              </View>
+              <View style={styles.garagePlannedPill}>
+                <Text style={styles.garagePlannedPillText}>Planned</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.garageRouteCard}>
+          <Text style={styles.garagePlannedTitle}>Connected live routes</Text>
+          <Text style={styles.garagePlannedText}>
+            Garage cards reuse existing vehicle, booking, insurance, and lifecycle contracts.
+          </Text>
+          <Text style={styles.garageRouteText}>
+            {digitalGarageRoutes.listOwnedVehicles.method} {digitalGarageRoutes.listOwnedVehicles.path}
+          </Text>
+          <Text style={styles.garageRouteText}>
+            {digitalGarageRoutes.vehicleTimeline.method} {digitalGarageRoutes.vehicleTimeline.path}
+          </Text>
+          <Text style={styles.garageRouteText}>
+            {digitalGarageRoutes.createBooking.method} {digitalGarageRoutes.createBooking.path}
+          </Text>
+          <Text style={styles.garageRouteText}>
+            {digitalGarageRoutes.createInsuranceInquiry.method} {digitalGarageRoutes.createInsuranceInquiry.path}
+          </Text>
+        </View>
+
+        <View style={styles.garageSectionHeader}>
+          <View>
+            <Text style={styles.bookingEyebrow}>SELECTED VEHICLE LIFECYCLE</Text>
+            <Text style={styles.timelineTitle}>Timeline</Text>
+            <Text style={styles.timelineSubtitle}>
+              {selectedGarageVehicleSummary?.title ?? 'Select a vehicle above'}
+            </Text>
+          </View>
         </View>
 
         <LifecycleSummaryCard summaryCard={vehicleLifecycleState.summaryCard} />
@@ -6209,6 +6630,10 @@ export default function Dashboard({
       return renderStoreContent();
     }
 
+    if (activeTab === 'insurance' || activeTab === 'rewards') {
+      return renderMenuRoot();
+    }
+
     return renderMenuContent();
   };
 
@@ -6220,10 +6645,10 @@ export default function Dashboard({
   const selectedCatalogProduct = catalogDetailState.product ?? catalogDetailState.previewProduct;
   const unreadNotificationCount = notificationsFeed.filter((item) => item.unread).length;
   const bottomNavSlotWidth = windowWidth / tabs.length;
-  const bottomNavItemInset = isCompactPhone ? 3 : 6;
+  const bottomNavItemInset = isTinyPhone ? 0 : isVeryCompactPhone ? 1 : isCompactPhone ? 3 : 6;
   const bottomNavIndicatorWidth = Math.max(
     bottomNavSlotWidth - bottomNavItemInset * 2,
-    isCompactPhone ? 44 : 58,
+    isTinyPhone ? 38 : isVeryCompactPhone ? 40 : isCompactPhone ? 42 : 46,
   );
 
   return (
@@ -6903,6 +7328,7 @@ export default function Dashboard({
                           <CartLineItem
                             key={item.key}
                             item={item}
+                            isCompact={isCompactPhone}
                             disabled={cartState.savingItemId === item.id}
                             onDecrease={() =>
                               handleUpdateCartQuantity(item.id, item.quantity - 1)
@@ -6949,7 +7375,7 @@ export default function Dashboard({
             </Animated.View>
           ) : null}
 
-          <View style={styles.bottomNav}>
+          <View style={[styles.bottomNav, isVeryCompactPhone && styles.bottomNavCompact]}>
             <Animated.View
               pointerEvents="none"
               style={[
@@ -6969,6 +7395,7 @@ export default function Dashboard({
                   containerStyle={styles.tabButtonContainer}
                   style={[
                     styles.tabButton,
+                    isVeryCompactPhone && styles.tabButtonCompact,
                     { marginHorizontal: bottomNavItemInset },
                     isActive && styles.tabButtonActive,
                   ]}
@@ -6977,7 +7404,7 @@ export default function Dashboard({
                 >
                   <MaterialCommunityIcons
                     name={tab.icon}
-                    size={isCompactPhone ? 20 : 22}
+                    size={isCompactPhone ? 18 : 21}
                     color={isActive ? colors.primary : colors.mutedText}
                   />
                   <Text
@@ -7091,6 +7518,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: Platform.OS === 'web' ? 88 : BOTTOM_NAV_HEIGHT + 88,
+  },
+  scrollContentCompact: {
+    paddingHorizontal: 14,
   },
   menuRootContent: {
     flexGrow: 1,
@@ -7245,7 +7675,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    gap: 12,
     marginBottom: 16,
+  },
+  homeStatusCopy: {
+    flex: 1,
+    minWidth: 0,
   },
   homeStatusBadge: {
     color: '#7FB4FF',
@@ -7268,9 +7703,10 @@ const styles = StyleSheet.create({
     color: '#A2B4D7',
     fontSize: 14,
     lineHeight: 20,
-    maxWidth: 230,
+    maxWidth: '100%',
   },
   homeTrackButton: {
+    flexShrink: 0,
     minHeight: 36,
     paddingHorizontal: 14,
     borderRadius: 14,
@@ -7401,9 +7837,16 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingHorizontal: 2,
   },
+  quickActionsRowCompact: {
+    flexWrap: 'wrap',
+    rowGap: 14,
+  },
   quickActionCardContainer: {
     width: '22.8%',
     alignItems: 'center',
+  },
+  quickActionCardContainerCompact: {
+    width: '48%',
   },
   quickActionCard: {
     alignItems: 'center',
@@ -7416,6 +7859,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
+  },
+  quickActionIconWrapCompact: {
+    width: '100%',
+    minHeight: 50,
   },
   quickActionIconInner: {
     width: 42,
@@ -7502,11 +7949,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
+  homeServiceRowCompact: {
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
   homeServiceRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    minWidth: 0,
     paddingRight: 10,
+  },
+  homeServiceRowLeftCompact: {
+    paddingRight: 0,
   },
   homeServiceIconWrap: {
     width: 42,
@@ -7516,6 +7972,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+  },
+  homeServiceCopy: {
+    flex: 1,
+    minWidth: 0,
   },
   homeServiceTitle: {
     color: colors.text,
@@ -7528,6 +7988,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   homeServiceStatusPill: {
+    flexShrink: 0,
     minHeight: 28,
     paddingHorizontal: 12,
     borderRadius: radius.pill,
@@ -7567,6 +8028,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     maxWidth: '78%',
     marginBottom: 16,
+  },
+  homeOfferSubtitleCompact: {
+    maxWidth: '100%',
   },
   homeOfferButton: {
     alignSelf: 'flex-start',
@@ -7622,6 +8086,223 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  garageHeroCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 14,
+    backgroundColor: '#17233F',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(84, 147, 255, 0.28)',
+    padding: 18,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  garageHeroCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  garageHeroEyebrow: {
+    color: '#7FB4FF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  garageHeroTitle: {
+    color: colors.text,
+    fontSize: 21,
+    fontWeight: '900',
+    lineHeight: 26,
+    marginBottom: 8,
+  },
+  garageHeroText: {
+    color: '#A9B8DA',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  garageHeroBadge: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(84, 147, 255, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(132, 179, 255, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  garageHeroBadgeText: {
+    color: '#BBD3FF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  garageVehicleList: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  garageVehicleCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 15,
+  },
+  garageVehicleCardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: '#211F2F',
+  },
+  garageVehicleHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  garageVehicleIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  garageVehicleCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  garageVehicleTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  garageVehicleTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  garageVehicleMeta: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 5,
+  },
+  garageVehicleRoute: {
+    color: colors.labelText,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  garagePrimaryPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primaryGlow,
+  },
+  garagePrimaryPillText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  garageActionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 14,
+  },
+  garageActionButton: {
+    flexGrow: 1,
+    minWidth: 86,
+    minHeight: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  garageActionText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  garagePlannedActionsCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 16,
+  },
+  garageRouteCard: {
+    backgroundColor: '#1B2133',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 20,
+  },
+  garagePlannedTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
+  garagePlannedText: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  garagePlannedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+  },
+  garagePlannedRowCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  garagePlannedActionLabel: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  garagePlannedRoute: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 3,
+  },
+  garagePlannedPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255, 197, 0, 0.12)',
+  },
+  garagePlannedPillText: {
+    color: '#FFC500',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  garageRouteText: {
+    color: colors.labelText,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 12,
+    lineHeight: 20,
+  },
+  garageSectionHeader: {
+    marginTop: 4,
+    marginBottom: 14,
   },
   timelineSummaryCard: {
     backgroundColor: colors.surfaceStrong,
@@ -7997,11 +8678,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  bookingDiscoveryBannerCompact: {
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
   bookingDiscoveryBannerCopyWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingRight: 12,
+  },
+  bookingDiscoveryBannerCopyWrapCompact: {
+    minWidth: '100%',
+    paddingRight: 0,
   },
   bookingDiscoveryBannerIconWrap: {
     width: 38,
@@ -8099,6 +8789,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  bookingServiceCardCompact: {
+    alignItems: 'flex-start',
+  },
   bookingServiceCardSelected: {
     borderColor: '#5A4608',
     backgroundColor: '#1E2232',
@@ -8109,6 +8802,7 @@ const styles = StyleSheet.create({
   bookingServiceIconWrap: {
     width: 48,
     height: 48,
+    flexShrink: 0,
     borderRadius: 16,
     backgroundColor: '#252B42',
     alignItems: 'center',
@@ -8120,7 +8814,22 @@ const styles = StyleSheet.create({
   },
   bookingServiceCopy: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 10,
+  },
+  bookingServiceCopyCompact: {
+    paddingRight: 0,
+  },
+  bookingServiceBody: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bookingServiceBodyCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 10,
   },
   bookingServiceTitleRow: {
     flexDirection: 'row',
@@ -8130,9 +8839,11 @@ const styles = StyleSheet.create({
   },
   bookingServiceTitle: {
     color: colors.text,
+    flexShrink: 1,
     fontSize: 15,
     fontWeight: '800',
     marginRight: 8,
+    minWidth: 0,
   },
   bookingPopularBadge: {
     minHeight: 20,
@@ -8162,6 +8873,7 @@ const styles = StyleSheet.create({
   },
   bookingServiceSubtitle: {
     color: colors.mutedText,
+    flexShrink: 1,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -8173,6 +8885,14 @@ const styles = StyleSheet.create({
   },
   bookingServiceMeta: {
     alignItems: 'flex-end',
+  },
+  bookingServiceMetaCompact: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 10,
   },
   bookingServicePrice: {
     color: colors.labelText,
@@ -8206,6 +8926,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
+  bookingVehicleMetaCompact: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   bookingVehicleMetaLabel: {
     color: colors.mutedText,
     fontSize: 10,
@@ -8226,7 +8954,8 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   bookingDateCard: {
-    width: '48%',
+    flexGrow: 1,
+    flexShrink: 1,
     minHeight: 148,
     borderRadius: 20,
     backgroundColor: colors.surfaceStrong,
@@ -8238,7 +8967,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   bookingDateCardCompact: {
-    width: '48%',
     minHeight: 138,
   },
   bookingDateCardActive: {
@@ -8292,6 +9020,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   bookingDateStatusBadge: {
+    flexShrink: 1,
     minHeight: 24,
     borderRadius: radius.pill,
     paddingHorizontal: 10,
@@ -8315,6 +9044,7 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
     fontSize: 10,
     fontWeight: '800',
+    textAlign: 'center',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -8362,6 +9092,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  bookingAvailabilityToolbarCompact: {
+    flexWrap: 'wrap',
+  },
   bookingAvailabilityCopy: {
     flex: 1,
     gap: 4,
@@ -8380,11 +9113,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  bookingAvailabilityActionsCompact: {
+    width: '100%',
+    justifyContent: 'flex-end',
+  },
   bookingAvailabilityGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 12,
+    justifyContent: 'flex-start',
+    gap: 10,
+  },
+  bookingAvailabilityGridCompact: {
+    gap: 8,
   },
   bookingAvailabilitySelectionCard: {
     borderRadius: radius.medium,
@@ -8399,6 +9139,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+  },
+  bookingAvailabilitySelectionHeaderCompact: {
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
   },
   bookingAvailabilitySelectionTitle: {
     color: colors.text,
@@ -8418,6 +9162,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 12,
   },
+  bookingPagerRowCompact: {
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+  },
   bookingPagerText: {
     color: colors.mutedText,
     fontSize: 12,
@@ -8427,6 +9175,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  bookingPagerActionsCompact: {
+    width: '100%',
+    justifyContent: 'flex-end',
   },
   bookingPagerButton: {
     minHeight: 34,
@@ -9866,6 +10618,10 @@ const styles = StyleSheet.create({
     padding: 4,
     marginBottom: 16,
   },
+  sectionTabsWrapCompact: {
+    flexWrap: 'wrap',
+    gap: 6,
+  },
   sectionTabContainer: {
     flex: 1,
   },
@@ -9923,8 +10679,12 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 14,
   },
+  storeOrdersToolbarCompact: {
+    flexWrap: 'wrap',
+  },
   storeOrdersToolbarCopy: {
     flex: 1,
+    minWidth: 0,
   },
   storeOrdersToolbarText: {
     color: colors.mutedText,
@@ -9958,8 +10718,12 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 10,
   },
+  storeOrderCardHeaderCompact: {
+    flexWrap: 'wrap',
+  },
   storeOrderCardCopy: {
     flex: 1,
+    minWidth: 0,
   },
   storeOrderCardEyebrow: {
     color: colors.primary,
@@ -9978,12 +10742,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   storeStatusPill: {
+    flexShrink: 0,
     minHeight: 28,
     paddingHorizontal: 10,
     borderRadius: radius.pill,
     backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  storeStatusPillCompact: {
+    alignSelf: 'flex-start',
   },
   storeStatusPillActive: {
     backgroundColor: colors.primary,
@@ -9999,8 +10767,12 @@ const styles = StyleSheet.create({
   storeOrderCardMetrics: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 10,
     marginBottom: 6,
+  },
+  storeOrderCardMetricsCompact: {
+    justifyContent: 'flex-start',
   },
   storeOrderCardMetric: {
     color: colors.labelText,
@@ -10042,6 +10814,7 @@ const styles = StyleSheet.create({
   storeTimelineHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 10,
     marginBottom: 4,
   },
@@ -10053,6 +10826,7 @@ const styles = StyleSheet.create({
   },
   storeTimelineTime: {
     color: colors.mutedText,
+    flexShrink: 1,
     fontSize: 12,
   },
   storeTimelineBadge: {
@@ -10757,6 +11531,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  cartItemCardCompact: {
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+  },
   cartItemImage: {
     width: 56,
     height: 56,
@@ -10766,7 +11544,11 @@ const styles = StyleSheet.create({
   },
   cartItemCopy: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 10,
+  },
+  cartItemCopyCompact: {
+    paddingRight: 0,
   },
   cartItemMeta: {
     color: colors.mutedText,
@@ -10805,6 +11587,11 @@ const styles = StyleSheet.create({
   cartQuantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  cartQuantityControlsCompact: {
+    justifyContent: 'flex-end',
+    marginTop: 12,
+    width: '100%',
   },
   cartQuantityButton: {
     width: 30,
@@ -10890,16 +11677,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     marginBottom: 10,
     gap: 12,
   },
   checkoutSummaryLabel: {
     color: colors.mutedText,
     fontSize: 14,
+    flexShrink: 0,
   },
   checkoutSummaryValue: {
     color: colors.text,
     flex: 1,
+    minWidth: 0,
     fontSize: 14,
     fontWeight: '800',
     textAlign: 'right',
@@ -10930,6 +11720,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 12,
     paddingVertical: 12,
     borderTopWidth: 1,
@@ -10937,6 +11728,7 @@ const styles = StyleSheet.create({
   },
   checkoutPreviewItemCopy: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 8,
   },
   checkoutPreviewItemTitle: {
@@ -10954,6 +11746,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     fontWeight: '800',
+    flexShrink: 0,
   },
   checkoutAddressText: {
     color: '#B6BDD8',
@@ -11008,10 +11801,11 @@ const styles = StyleSheet.create({
   },
   bottomNav: {
     flexDirection: 'row',
+    alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: colors.borderSoft,
     backgroundColor: colors.background,
-    paddingTop: 10,
+    paddingTop: 9,
     paddingBottom: 12,
     minHeight: BOTTOM_NAV_HEIGHT,
     zIndex: 1000,
@@ -11031,27 +11825,37 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  bottomNavCompact: {
+    paddingBottom: 10,
+    paddingTop: 8,
+  },
   bottomNavIndicator: {
     position: 'absolute',
-    top: 8,
-    bottom: 10,
+    top: 7,
+    bottom: 9,
     left: 0,
-    borderRadius: 20,
+    borderRadius: 18,
     backgroundColor: colors.surfaceStrong,
     borderWidth: 1,
     borderColor: colors.borderSoft,
   },
   tabButtonContainer: {
     flex: 1,
+    minWidth: 0,
   },
   tabButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48,
-    marginHorizontal: 6,
+    minHeight: 54,
+    marginHorizontal: 3,
+    minWidth: 0,
     borderRadius: 18,
     zIndex: 1,
+  },
+  tabButtonCompact: {
+    minHeight: 50,
+    borderRadius: 15,
   },
   tabButtonActive: {
     backgroundColor: 'transparent',
@@ -11059,13 +11863,14 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     color: colors.mutedText,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     marginTop: 4,
+    textAlign: 'center',
   },
   tabLabelCompact: {
-    fontSize: 9,
-    maxWidth: 58,
+    fontSize: 8,
+    maxWidth: 50,
   },
   tabLabelActive: {
     color: colors.primary,

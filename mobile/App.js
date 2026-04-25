@@ -18,6 +18,7 @@ import ChangePassword from './src/screens/ChangePassword';
 import FeatureModuleScreen from './src/screens/FeatureModuleScreen';
 import InsuranceInquiryScreen from './src/screens/InsuranceInquiryScreen';
 import ChatbotScreen from './src/screens/ChatbotScreen';
+import VehicleLifecycleScreen from './src/screens/VehicleLifecycleScreen';
 import {
   ApiError,
   buildMobileAccountProfile,
@@ -324,6 +325,28 @@ function ChatbotMobileScreen(props) {
       account={currentAccount}
     />
   );
+}
+
+function VehicleLifecycleMobileScreen(props) {
+  const { activeAccount, registeredAccount } = useAppSessionContext();
+  const currentAccount = activeAccount || registeredAccount;
+  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+
+  if (accessState !== 'customer_session_active') {
+    return (
+      <CustomerSurfaceStateScreen
+        navigation={props.navigation}
+        title="Customer session required"
+        message={
+          customerMobileGuardMessages[accessState] ??
+          customerMobileGuardMessages.unauthorized_session
+        }
+        onPrimaryAction={() => props.navigation.replace('Login')}
+      />
+    );
+  }
+
+  return <VehicleLifecycleScreen {...props} account={currentAccount} />;
 }
 
 const navigationTheme = {
@@ -919,21 +942,16 @@ export default function App() {
             )}
             </Stack.Screen>
 
-            <Stack.Screen name="VehicleLifecycleScreen">
-            {(props) => (
-              <FeatureModuleScreen
-                {...props}
-                title="Vehicle Lifecycle"
-                subtitle="View your vehicle’s complete service and insurance timeline."
-                bullets={[
-                  'Check service milestones and repair history.',
-                  'Review insurance touchpoints across the ownership journey.',
-                  'Follow a complete status timeline for your vehicle.',
-                ]}
-              />
-            )}
-            </Stack.Screen>
+            <Stack.Screen
+              name="VehicleLifecycleScreen"
+              component={VehicleLifecycleMobileScreen}
+              options={{ headerShown: false }}
+            />
+            {/*
 
+                subtitle="View your vehicle’s complete service and insurance timeline."
+
+            */}
             <Stack.Screen name="StoreScreen">
             {(props) => (
               <FeatureModuleScreen

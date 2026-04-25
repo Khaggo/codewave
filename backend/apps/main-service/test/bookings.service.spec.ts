@@ -6,6 +6,7 @@ import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles
 import { BOOKINGS_CLOCK } from '@main-modules/bookings/bookings.constants';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { BookingsService } from '@main-modules/bookings/services/bookings.service';
+import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 
 describe('BookingsService', () => {
   const fixedBookingClock = {
@@ -178,6 +179,72 @@ describe('BookingsService', () => {
         status: 'confirmed',
       }, 'staff-1'),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('schedules a customer booking reminder when staff confirms a booking', async () => {
+    const notificationsService = {
+      applyTrigger: jest.fn().mockResolvedValue({ triggerName: 'booking.reminder_requested' }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        BookingsService,
+        { provide: BOOKINGS_CLOCK, useValue: fixedBookingClock },
+        {
+          provide: BookingsRepository,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'booking-1',
+              status: 'pending',
+            }),
+            updateStatus: jest.fn().mockResolvedValue({
+              id: 'booking-1',
+              userId: 'user-1',
+              status: 'confirmed',
+              scheduledDate: '2026-04-20',
+              timeSlot: {
+                startTime: '09:00',
+              },
+            }),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'staff-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
+        { provide: NotificationsService, useValue: notificationsService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(BookingsService);
+
+    await service.updateStatus(
+      'booking-1',
+      {
+        status: 'confirmed',
+      },
+      'staff-1',
+    );
+
+    expect(notificationsService.applyTrigger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'booking.reminder_requested',
+        sourceDomain: 'main-service.bookings',
+        payload: expect.objectContaining({
+          bookingId: 'booking-1',
+          userId: 'user-1',
+          scheduledFor: '2026-04-19T09:00:00.000Z',
+          appointmentStartsAt: '2026-04-20T09:00:00.000Z',
+        }),
+      }),
+    );
   });
 
   it('builds a daily schedule and queue snapshot for adviser-led operations', async () => {

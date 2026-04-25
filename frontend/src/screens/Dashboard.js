@@ -2,276 +2,196 @@
 
 import Link from 'next/link'
 import {
-  Car, CalendarCheck, Wrench, AlertTriangle, ArrowUpRight,
-  Clock, CheckCircle2, AlertCircle, Star, Plus, TrendingUp,
+  BarChart3,
+  CalendarCheck,
+  ClipboardCheck,
+  FileSearch,
+  PackageSearch,
+  ReceiptText,
+  ShieldCheck,
+  Users,
+  Wrench,
 } from 'lucide-react'
-import {
-  ResponsiveContainer, LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, AreaChart, Area,
-} from 'recharts'
-import { useVehicles }     from '@/hooks/useVehicles'
-import { useAppointments } from '@/hooks/useAppointments'
-import StaffProvisioningPanel from '@/components/StaffProvisioningPanel'
-import { useUser }         from '@/lib/userContext'
-import { shopProducts, monthlyRevenue, bookingVolume, peakHourData } from '@/lib/mockData'
 
-// ── Recharts theme helpers ────────────────────────────────────────────────────
-const CHART_STYLE = {
-  tickStyle:    { fill: '#71717a', fontSize: 11 },
-  gridColor:    '#27272a',
-  tooltipStyle: { backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: 10, fontSize: 12 },
-  tooltipLabel: { color: '#f4f4f5', fontWeight: 700 },
-}
+import { useUser } from '@/lib/userContext'
 
-function ChartTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null
-  return (
-    <div style={CHART_STYLE.tooltipStyle} className="px-3 py-2 shadow-lg">
-      <p className="text-xs font-bold text-ink-primary mb-1">{label}</p>
-      {payload.map(p => (
-        <p key={p.dataKey} className="text-xs" style={{ color: p.color }}>
-          {p.name}: {typeof p.value === 'number' && p.name?.toLowerCase().includes('₱')
-            ? `₱${p.value.toLocaleString()}` : p.value}
-        </p>
-      ))}
-    </div>
-  )
-}
+const workflowSteps = [
+  {
+    href: '/bookings',
+    label: '1. Booking Schedule',
+    description: 'Review customer booking requests, daily slots, queue state, and staff booking actions.',
+    icon: CalendarCheck,
+    status: 'Live backend',
+  },
+  {
+    href: '/admin/intake-inspections',
+    label: '2. Intake Inspection',
+    description: 'Capture vehicle condition and load vehicle-scoped inspection history before service work.',
+    icon: FileSearch,
+    status: 'Known vehicle required',
+  },
+  {
+    href: '/admin/job-orders',
+    label: '3. Job Orders',
+    description: 'Create job orders from confirmed bookings, add progress, photos, finalization, and payment records.',
+    icon: Wrench,
+    status: 'Live backend',
+  },
+  {
+    href: '/admin/qa-audit',
+    label: '4. QA Audit',
+    description: 'Load quality gates, review findings, and record super-admin overrides when needed.',
+    icon: ShieldCheck,
+    status: 'Known job order required',
+  },
+  {
+    href: '/admin/invoices',
+    label: '5. Invoices & Orders',
+    description: 'Lookup service invoice-ready job orders and known ecommerce order or invoice records.',
+    icon: ReceiptText,
+    status: 'Known record required',
+  },
+]
 
-function RevenueTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null
-  return (
-    <div style={CHART_STYLE.tooltipStyle} className="px-3 py-2 shadow-lg">
-      <p className="text-xs font-bold text-ink-primary mb-1">{label}</p>
-      {payload.map(p => (
-        <p key={p.dataKey} className="text-xs" style={{ color: p.color }}>
-          {p.name}: ₱{Number(p.value).toLocaleString()}
-        </p>
-      ))}
-    </div>
-  )
-}
+const adminShortcuts = [
+  {
+    href: '/admin/users',
+    label: 'Staff Accounts',
+    description: 'Create staff, mechanic, technician, and admin accounts with generated IDs and emails.',
+    icon: Users,
+    superAdminOnly: true,
+  },
+  {
+    href: '/admin/catalog',
+    label: 'Catalog Admin',
+    description: 'Publish services and ecommerce catalog items for customer discovery.',
+    icon: PackageSearch,
+  },
+  {
+    href: '/admin/inventory',
+    label: 'Inventory Admin',
+    description: 'Review stock visibility and inventory records without demo-only placeholder alerts.',
+    icon: PackageSearch,
+  },
+  {
+    href: '/admin/summaries',
+    label: 'Analytics',
+    description: 'Open the analytics workspace for backend-backed operational summaries.',
+    icon: BarChart3,
+  },
+]
 
-// ── Stat card ─────────────────────────────────────────────────────────────────
-function Stat({ icon: Icon, label, value, sub, iconBg }) {
-  return (
-    <div className="card p-5 flex items-start gap-4">
-      <div className="p-2.5 rounded-xl flex-shrink-0" style={{ backgroundColor: iconBg }}>
-        <Icon size={19} className="text-white" />
-      </div>
-      <div>
-        <p className="text-2xl font-extrabold text-ink-primary">{value}</p>
-        <p className="text-xs font-semibold text-ink-secondary mt-0.5">{label}</p>
-        {sub && <p className="text-xs text-ink-muted mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  )
-}
-
-function Skeleton({ w = 'w-3/4' }) {
-  return <div className={`h-3.5 bg-surface-raised rounded animate-pulse ${w}`} />
-}
-
-// ── Component ─────────────────────────────────────────────────────────────────
 function getGreeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 17) return 'Good afternoon'
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
   return 'Good evening'
+}
+
+function RouteCard({ item }) {
+  const Icon = item.icon
+
+  return (
+    <Link href={item.href} className="card group p-5 transition-colors hover:border-brand-orange/50">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
+          <Icon size={19} />
+        </div>
+        {item.status ? <span className="badge badge-gray">{item.status}</span> : null}
+      </div>
+      <h2 className="mt-5 text-lg font-black text-ink-primary">{item.label}</h2>
+      <p className="mt-2 text-sm leading-6 text-ink-secondary">{item.description}</p>
+      <p className="mt-4 text-xs font-bold uppercase tracking-[0.18em] text-brand-orange">
+        Open workspace
+      </p>
+    </Link>
+  )
+}
+
+function EmptyStateCard({ title, body }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-surface-border bg-surface-raised p-5">
+      <p className="text-sm font-bold text-ink-primary">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-ink-muted">{body}</p>
+    </div>
+  )
 }
 
 export default function Dashboard() {
   const user = useUser()
-  const { vehicles,     loading: vLoad } = useVehicles()
-  const { appointments, loading: aLoad } = useAppointments()
-
-  const vehicleMap   = Object.fromEntries(vehicles.map(v => [v.id, v]))
-  const activeAppt   = appointments.filter(a => ['confirmed','pending','in_progress'].includes(a.status)).length
-  const pendingCount = appointments.filter(a => a.status === 'pending').length
-  const lowStock     = shopProducts.filter(p => p.stock < 10).length
-  const totalRevenue = monthlyRevenue.reduce((s, m) => s + m.revenue, 0)
-  const firstName    = user?.name?.split(' ')[0] ?? 'Admin'
+  const firstName = user?.name?.split(' ')[0] ?? 'Admin'
+  const visibleAdminShortcuts = adminShortcuts.filter((item) => !item.superAdminOnly || user?.role === 'super_admin')
 
   return (
     <div className="space-y-6">
-
-      {/* ── Welcome banner ──────────────────────────── */}
-      <section className="relative overflow-hidden rounded-2xl p-6"
-               style={{ background: 'linear-gradient(135deg, #111113 0%, #1a1000 100%)', border: '1px solid rgba(240,124,0,0.15)' }}>
-        <div className="absolute top-0 right-0 w-72 h-72 rounded-full opacity-[0.07] blur-3xl pointer-events-none"
-             style={{ background: 'radial-gradient(circle, #f07c00, transparent)' }} />
-        <div className="relative">
-          <p className="text-2xl font-extrabold text-ink-primary">
-            {getGreeting()}, <span style={{ color: '#f07c00' }}>{firstName}</span>
+      <section className="card relative overflow-hidden p-6 md:p-7">
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-80 bg-gradient-to-l from-brand-orange/10 to-transparent" />
+        <div className="relative max-w-4xl">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-brand-orange">
+            Staff Portal
           </p>
-          <p className="text-sm text-ink-secondary mt-1.5">
-            Here&apos;s your operational snapshot for today. {pendingCount > 0
-              ? `You have ${pendingCount} pending request${pendingCount > 1 ? 's' : ''} awaiting confirmation.`
-              : 'All bookings are confirmed — looking good!'}
+          <h1 className="mt-3 text-3xl font-black text-ink-primary">
+            {getGreeting()}, {firstName}
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-ink-secondary">
+            This dashboard is now a live workflow launchpad. Demo-only revenue charts, stock warnings, and fake queues were removed so each card opens a real staff/admin surface.
           </p>
         </div>
       </section>
 
-      {/* ── Stat cards ──────────────────────────────── */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat icon={CalendarCheck} label="Active Bookings"  value={activeAppt}          sub="today"                         iconBg="#f07c00" />
-        <Stat icon={Clock}         label="Pending Requests" value={pendingCount}         sub="awaiting confirmation"         iconBg="#b45309" />
-        <Stat icon={AlertTriangle} label="Low Stock Alerts" value={lowStock}             sub={`of ${shopProducts.length} products`} iconBg="#dc2626" />
-        <Stat icon={TrendingUp}    label="6-Mo Revenue"    value={`₱${(totalRevenue/1000).toFixed(0)}k`} sub="service + parts"  iconBg="#16a34a" />
-      </section>
-
-      {/* ── Quick actions ───────────────────────────── */}
-      <section className="flex flex-wrap gap-3">
-        <Link href="/bookings" className="btn-primary"><Plus size={15} /> New Booking</Link>
-        <Link href="/vehicles" className="btn-ghost"><Car size={15} /> Register Vehicle</Link>
-        <Link href="/bookings?tab=backjob" className="btn-ghost"><Wrench size={15} /> Back-Job Intake</Link>
-      </section>
-
-      {/* ── Charts row 1: Revenue + Booking Volume ───── */}
-      {user?.role === 'super_admin' ? <StaffProvisioningPanel /> : null}
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-        {/* Revenue Trend */}
-        <section className="card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <p className="card-title">Revenue / Sales Trend</p>
-            <span className="text-xs text-ink-muted">Last 6 months</span>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={monthlyRevenue} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#f07c00" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#f07c00" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="partsGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#c9951a" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#c9951a" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_STYLE.gridColor} />
-              <XAxis dataKey="month" tick={CHART_STYLE.tickStyle} axisLine={false} tickLine={false} />
-              <YAxis tick={CHART_STYLE.tickStyle} axisLine={false} tickLine={false}
-                     tickFormatter={v => `₱${(v/1000).toFixed(0)}k`} width={48} />
-              <Tooltip content={<RevenueTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11, color: '#71717a' }} />
-              <Area type="monotone" dataKey="revenue" name="Total Revenue" stroke="#f07c00" strokeWidth={2}
-                    fill="url(#revGrad)" dot={{ r: 3, fill: '#f07c00' }} activeDot={{ r: 5 }} />
-              <Area type="monotone" dataKey="parts" name="Parts Sales" stroke="#c9951a" strokeWidth={2}
-                    fill="url(#partsGrad)" dot={{ r: 3, fill: '#c9951a' }} activeDot={{ r: 5 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </section>
-
-        {/* Booking Volume by Service Type */}
-        <section className="card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <p className="card-title">Booking Volume by Service</p>
-            <span className="text-xs text-ink-muted">Current period</span>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={bookingVolume} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_STYLE.gridColor} vertical={false} />
-              <XAxis dataKey="type" tick={CHART_STYLE.tickStyle} axisLine={false} tickLine={false}
-                     angle={-30} textAnchor="end" height={44} interval={0} />
-              <YAxis tick={CHART_STYLE.tickStyle} axisLine={false} tickLine={false} width={28} />
-              <Tooltip content={<ChartTooltip />} />
-              <Bar dataKey="count" name="Bookings" fill="#f07c00" radius={[4, 4, 0, 0]} maxBarSize={40} />
-            </BarChart>
-          </ResponsiveContainer>
-        </section>
-      </div>
-
-      {/* ── Chart row 2: Peak Hour ────────────────────── */}
-      <section className="card p-5">
-        <div className="flex items-center justify-between mb-4">
-          <p className="card-title">Peak Hour Analysis</p>
-          <span className="text-xs text-ink-muted">Average walk-ins / appointments per hour</span>
-        </div>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={peakHourData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={CHART_STYLE.gridColor} vertical={false} />
-            <XAxis dataKey="hour" tick={CHART_STYLE.tickStyle} axisLine={false} tickLine={false} />
-            <YAxis tick={CHART_STYLE.tickStyle} axisLine={false} tickLine={false} width={28} />
-            <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="bookings" name="Bookings" fill="#c9951a" radius={[4, 4, 0, 0]} maxBarSize={36} />
-          </BarChart>
-        </ResponsiveContainer>
-      </section>
-
-      {/* ── Priority alert row ───────────────────────── */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-        {/* Low Stock Alerts */}
-        <section className="card">
-          <div className="px-5 py-4 border-b border-surface-border flex items-center justify-between">
-            <p className="card-title flex items-center gap-2">
-              <AlertTriangle size={15} className="text-red-400" /> Low Stock Alerts
+      <section>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xl font-black text-ink-primary">Recommended Demo Flow</p>
+            <p className="mt-1 text-sm text-ink-muted">
+              Follow this order when presenting booking to release.
             </p>
-            <Link href="/shop" className="text-xs font-semibold flex items-center gap-1 hover:underline"
-                  style={{ color: '#f07c00' }}>
-              Manage Inventory <ArrowUpRight size={11} />
-            </Link>
           </div>
-          <div className="divide-y divide-surface-border">
-            {shopProducts.filter(p => p.stock < 10).map(p => (
-              <div key={p.id} className="px-5 py-3.5 flex items-center justify-between gap-3 hover:bg-surface-hover">
-                <div>
-                  <p className="text-sm font-medium text-ink-primary">{p.name}</p>
-                  <p className="text-xs text-ink-muted">{p.category} · {p.sku}</p>
-                </div>
-                <span className={`badge flex-shrink-0 ${p.stock <= 5 ? 'badge-red' : 'badge-orange'}`}>
-                  {p.stock} left
-                </span>
-              </div>
+          <Link href="/bookings" className="btn-primary">
+            <CalendarCheck size={15} />
+            Start With Bookings
+          </Link>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-5">
+          {workflowSteps.map((item) => (
+            <RouteCard key={item.href} item={item} />
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="card-title">Admin Shortcuts</p>
+              <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                These pages are available according to your staff role guardrails.
+              </p>
+            </div>
+            <span className="badge badge-gray">{user?.roleLabel ?? user?.role ?? 'Staff'}</span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {visibleAdminShortcuts.map((item) => (
+              <RouteCard key={item.href} item={item} />
             ))}
           </div>
-        </section>
+        </div>
 
-        {/* Pending bookings */}
-        <section className="card overflow-hidden">
-          <div className="px-5 py-4 border-b border-surface-border flex items-center justify-between">
-            <p className="card-title flex items-center gap-2">
-              <Clock size={15} style={{ color: '#f07c00' }} /> Pending Requests
-            </p>
-            <Link href="/bookings" className="text-xs font-semibold flex items-center gap-1 hover:underline"
-                  style={{ color: '#f07c00' }}>
-              View all <ArrowUpRight size={11} />
-            </Link>
-          </div>
-          <ul className="divide-y divide-surface-border">
-            {aLoad
-              ? Array.from({length:3}).map((_,i)=>(
-                  <li key={i} className="px-5 py-4 space-y-2"><Skeleton /><Skeleton w="w-1/2"/></li>
-                ))
-              : appointments.filter(a => a.status === 'pending').map(a => {
-                  const v = vehicleMap[a.vehicleId]
-                  const d = new Date(a.slot).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
-                  return (
-                    <li key={a.id} className="px-5 py-3.5 hover:bg-surface-hover transition-colors">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-ink-primary">
-                            {v ? `${v.owner} — ` : ''}<span className="font-mono text-xs" style={{color:'#f07c00'}}>{v?.plate}</span>
-                          </p>
-                          <p className="text-xs text-ink-muted mt-0.5">
-                            {a.chosenServices.join(', ')}
-                          </p>
-                          <p className="text-xs text-ink-dim mt-0.5"><Clock size={10} className="inline mr-1" />{d}</p>
-                        </div>
-                        <span className="badge badge-orange flex-shrink-0">Pending</span>
-                      </div>
-                    </li>
-                  )
-                })
-            }
-            {!aLoad && appointments.filter(a => a.status === 'pending').length === 0 && (
-              <li className="px-5 py-8 text-center text-ink-muted text-sm">No pending requests</li>
-            )}
-          </ul>
-        </section>
-      </div>
+        <div className="space-y-4">
+          <EmptyStateCard
+            title="No fake notification feed"
+            body="Header notifications intentionally show an empty state until the staff notification feed is connected."
+          />
+          <EmptyStateCard
+            title="No demo-only finance cards"
+            body="Invoice and order queues now require known live records instead of placeholder staff queues or export controls."
+          />
+          <EmptyStateCard
+            title="No placeholder analytics on this landing page"
+            body="Use Analytics for backend-backed summaries; this page focuses on clear navigation and demo flow."
+          />
+        </div>
+      </section>
     </div>
   )
 }

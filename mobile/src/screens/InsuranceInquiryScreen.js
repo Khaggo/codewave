@@ -13,12 +13,16 @@ import {
   View,
 } from 'react-native';
 
-import { ApiError } from '../lib/authClient';
+import { ApiError, listCustomerVehicles } from '../lib/authClient';
 import {
+  addInsuranceInquiryDocument,
   buildOwnedVehicleInsuranceLabel,
+  canAttachCustomerInsuranceDocument,
   createInitialCustomerInsuranceDraft,
+  createInitialCustomerInsuranceDocumentDraft,
   createInsuranceInquiry,
   createEmptyCustomerInsuranceSnapshot,
+  customerInsuranceDocumentTypeOptions,
   getInsuranceInquiryById,
   getCustomerInsuranceTrackingState,
   listVehicleInsuranceRecords,
@@ -52,6 +56,11 @@ const formatTimestampLabel = (value) => {
 
 const buildCustomerErrorMessage = (error, fallbackMessage) =>
   error instanceof ApiError && error.message ? error.message : fallbackMessage;
+
+const normalizeRouteId = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim() : '';
+  return normalizedValue.length ? normalizedValue : null;
+};
 
 function InsuranceStatePanel({
   icon,
@@ -135,11 +144,19 @@ function InsuranceRecordCard({ title, subtitle, status, metadata = [] }) {
 export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const accessToken = account?.accessToken ?? null;
   const userId = account?.userId ?? null;
-  const ownedVehicles = useMemo(
+  const accountOwnedVehicles = useMemo(
     () => (Array.isArray(account?.ownedVehicles) ? account.ownedVehicles.filter(Boolean) : []),
     [account?.ownedVehicles],
   );
   const hasSession = Boolean(accessToken && userId);
+  const [liveOwnedVehicles, setLiveOwnedVehicles] = useState(accountOwnedVehicles);
+  const [vehicleLoadState, setVehicleLoadState] = useState(hasSession ? 'loading' : 'idle');
+  const [vehicleLoadMessage, setVehicleLoadMessage] = useState('');
+  const [vehicleReloadKey, setVehicleReloadKey] = useState(0);
+  const ownedVehicles = useMemo(
+    () => (liveOwnedVehicles.length ? liveOwnedVehicles : accountOwnedVehicles),
+    [accountOwnedVehicles, liveOwnedVehicles],
+  );
   const initialSnapshot = useMemo(
     () =>
       createEmptyCustomerInsuranceSnapshot({
@@ -148,22 +165,108 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }),
     [hasSession, ownedVehicles],
   );
+  const routeVehicleId = normalizeRouteId(route?.params?.vehicleId);
+  const routeInquiryId = normalizeRouteId(route?.params?.inquiryId);
+  const fallbackVehicleId =
+    normalizeRouteId(account?.primaryVehicleId) ?? normalizeRouteId(ownedVehicles[0]?.id);
   const [selectedVehicleId, setSelectedVehicleId] = useState(
-    route?.params?.vehicleId ?? account?.primaryVehicleId ?? ownedVehicles[0]?.id ?? null,
+    routeVehicleId ?? fallbackVehicleId,
   );
   const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
+  const [documentDraft, setDocumentDraft] = useState(createInitialCustomerInsuranceDocumentDraft());
   const [intakeState, setIntakeState] = useState(initialSnapshot.intakeState);
   const [intakeMessage, setIntakeMessage] = useState('');
+  const [documentUploadState, setDocumentUploadState] = useState('document_idle');
+  const [documentUploadMessage, setDocumentUploadMessage] = useState('');
   const [trackingState, setTrackingState] = useState(initialSnapshot.trackingState);
   const [trackingMessage, setTrackingMessage] = useState('');
   const [latestInquiry, setLatestInquiry] = useState(null);
-  const [latestInquiryId, setLatestInquiryId] = useState(route?.params?.inquiryId ?? null);
+  const [latestInquiryId, setLatestInquiryId] = useState(routeInquiryId);
   const [claimStatusUpdates, setClaimStatusUpdates] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const selectedVehicle =
     ownedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const latestInquiryCanAcceptDocuments = canAttachCustomerInsuranceDocument(latestInquiry);
+
+  useEffect(() => {
+    const hasInvalidVehicleParam = route?.params?.vehicleId && !routeVehicleId;
+    const hasInvalidInquiryParam = route?.params?.inquiryId && !routeInquiryId;
+
+    if (hasInvalidVehicleParam || hasInvalidInquiryParam) {
+      navigation.setParams({
+        ...(hasInvalidVehicleParam ? { vehicleId: undefined } : {}),
+        ...(hasInvalidInquiryParam ? { inquiryId: undefined } : {}),
+      });
+    }
+  }, [
+    navigation,
+    route?.params?.inquiryId,
+    route?.params?.vehicleId,
+    routeInquiryId,
+    routeVehicleId,
+  ]);
+
+  useEffect(() => {
+    if (accountOwnedVehicles.length) {
+      setLiveOwnedVehicles(accountOwnedVehicles);
+    }
+  }, [accountOwnedVehicles]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!hasSession) {
+      setVehicleLoadState('idle');
+      setVehicleLoadMessage('');
+      return undefined;
+    }
+
+    setVehicleLoadState(accountOwnedVehicles.length ? 'refreshing' : 'loading');
+    setVehicleLoadMessage('');
+
+    listCustomerVehicles({ userId, accessToken })
+      .then((vehicles) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const preferredVehicleId =
+          routeVehicleId ??
+          normalizeRouteId(account?.primaryVehicleId) ??
+          normalizeRouteId(vehicles[0]?.id);
+        const nextSelectedVehicle =
+          vehicles.find((vehicle) => vehicle.id === preferredVehicleId) ?? vehicles[0] ?? null;
+
+        setLiveOwnedVehicles(vehicles);
+        setSelectedVehicleId(nextSelectedVehicle?.id ?? null);
+        setVehicleLoadState('ready');
+      })
+      .catch((error) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setVehicleLoadState('failed');
+        setVehicleLoadMessage(
+          buildCustomerErrorMessage(error, 'We could not load your owned vehicles right now.'),
+        );
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    accessToken,
+    account?.primaryVehicleId,
+    accountOwnedVehicles.length,
+    hasSession,
+    routeVehicleId,
+    userId,
+    vehicleReloadKey,
+  ]);
 
   useEffect(() => {
     if (!hasSession) {
@@ -173,6 +276,10 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
 
     if (!ownedVehicles.length) {
+      if (vehicleLoadState === 'loading' || vehicleLoadState === 'refreshing') {
+        return;
+      }
+
       setSelectedVehicleId(null);
       setLatestInquiry(null);
       setClaimStatusUpdates([]);
@@ -182,24 +289,30 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
 
     if (!selectedVehicleId || !ownedVehicles.some((vehicle) => vehicle.id === selectedVehicleId)) {
-      setSelectedVehicleId(route?.params?.vehicleId ?? account?.primaryVehicleId ?? ownedVehicles[0]?.id ?? null);
+      setSelectedVehicleId(routeVehicleId ?? fallbackVehicleId);
     }
 
-    if (!isSubmitting && intakeState === 'unauthorized_session') {
+    if (!isSubmitting && (intakeState === 'unauthorized_session' || intakeState === 'no_vehicle')) {
       setIntakeState('draft_ready');
     }
   }, [
     account?.primaryVehicleId,
+    fallbackVehicleId,
     hasSession,
     intakeState,
     isSubmitting,
     ownedVehicles,
-    route?.params?.vehicleId,
+    routeVehicleId,
     selectedVehicleId,
+    vehicleLoadState,
   ]);
 
   const resetDraftState = () => {
     setDraft(createInitialCustomerInsuranceDraft());
+  };
+
+  const resetDocumentDraftState = () => {
+    setDocumentDraft(createInitialCustomerInsuranceDocumentDraft());
   };
 
   const refreshTracking = async ({ inquiryIdOverride } = {}) => {
@@ -295,6 +408,15 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
   };
 
+  const handleDocumentDraftChange = (field, value) => {
+    setDocumentDraft((currentDraft) => ({
+      ...currentDraft,
+      [field]: value,
+    }));
+    setDocumentUploadState('document_ready');
+    setDocumentUploadMessage('');
+  };
+
   const handleSelectVehicle = (vehicleId) => {
     setSelectedVehicleId(vehicleId);
     setTrackingMessage('');
@@ -302,6 +424,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setLatestInquiryId(null);
     setClaimStatusUpdates([]);
     setIntakeMessage('');
+    setDocumentUploadState('document_idle');
+    setDocumentUploadMessage('');
+    resetDocumentDraftState();
     if (hasSession && ownedVehicles.length) {
       setIntakeState('draft_ready');
     }
@@ -378,6 +503,83 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
   };
 
+  const handleUploadDocument = async () => {
+    if (!hasSession) {
+      setDocumentUploadState('document_unauthorized');
+      setDocumentUploadMessage('Sign in first so the app can attach insurance documents.');
+      return;
+    }
+
+    if (!latestInquiry?.id) {
+      setDocumentUploadState('document_missing_inquiry');
+      setDocumentUploadMessage('Submit or refresh a known inquiry before attaching documents.');
+      return;
+    }
+
+    if (!latestInquiryCanAcceptDocuments) {
+      setDocumentUploadState('document_closed');
+      setDocumentUploadMessage(
+        'This inquiry is already closed or rejected, so the backend will not accept more documents.',
+      );
+      return;
+    }
+
+    if (!String(documentDraft.fileName ?? '').trim() || !String(documentDraft.fileUrl ?? '').trim()) {
+      setDocumentUploadState('document_validation_error');
+      setDocumentUploadMessage('Document name and file URL/reference are required before upload.');
+      return;
+    }
+
+    setIsUploadingDocument(true);
+    setDocumentUploadState('document_uploading');
+    setDocumentUploadMessage('');
+
+    try {
+      const updatedInquiry = await addInsuranceInquiryDocument({
+        inquiryId: latestInquiry.id,
+        documentType: documentDraft.documentType,
+        fileName: documentDraft.fileName,
+        fileUrl: documentDraft.fileUrl,
+        notes: documentDraft.notes,
+        accessToken,
+      });
+
+      setLatestInquiry(updatedInquiry);
+      setLatestInquiryId(updatedInquiry?.id ?? null);
+      setTrackingState(
+        getCustomerInsuranceTrackingState({
+          latestInquiry: updatedInquiry,
+          claimStatusUpdates,
+        }),
+      );
+      setDocumentUploadState('document_uploaded');
+      setDocumentUploadMessage(
+        `Document attached. This inquiry now has ${updatedInquiry?.documentCount ?? 0} supporting document${updatedInquiry?.documentCount === 1 ? '' : 's'}.`,
+      );
+      resetDocumentDraftState();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 400) {
+        setDocumentUploadState('document_validation_error');
+      } else if (error instanceof ApiError && error.status === 401) {
+        setDocumentUploadState('document_unauthorized');
+      } else if (error instanceof ApiError && error.status === 403) {
+        setDocumentUploadState('document_forbidden');
+      } else if (error instanceof ApiError && error.status === 404) {
+        setDocumentUploadState('document_missing_inquiry');
+      } else if (error instanceof ApiError && error.status === 409) {
+        setDocumentUploadState('document_closed');
+      } else {
+        setDocumentUploadState('document_failed');
+      }
+
+      setDocumentUploadMessage(
+        buildCustomerErrorMessage(error, 'We could not attach the insurance document right now.'),
+      );
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  };
+
   const heroSubtitle = hasSession
     ? 'Create an insurance inquiry using your owned vehicle, then track current inquiry status and vehicle-level claim updates without exposing staff-only review details.'
     : 'Sign in as a customer to create an insurance inquiry and see customer-safe claim-status updates.';
@@ -400,7 +602,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             <Text style={styles.title}>Insurance inquiry intake</Text>
             <Text style={styles.subtitle}>{heroSubtitle}</Text>
             <View style={styles.routePill}>
-              <Text style={styles.routePillText}>Live routes: create inquiry, get inquiry by id, vehicle insurance records</Text>
+              <Text style={styles.routePillText}>Live routes: create inquiry, upload document metadata, get inquiry by id, vehicle insurance records</Text>
             </View>
           </View>
 
@@ -415,7 +617,30 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             />
           ) : null}
 
-          {hasSession && !ownedVehicles.length ? (
+          {hasSession && vehicleLoadState === 'loading' && !ownedVehicles.length ? (
+            <InsuranceStatePanel
+              icon="car-clock"
+              title="Loading owned vehicles"
+              message="Checking your live garage before insurance intake starts."
+              loading
+            />
+          ) : null}
+
+          {hasSession && vehicleLoadState === 'failed' && !ownedVehicles.length ? (
+            <InsuranceStatePanel
+              icon="alert-circle-outline"
+              title="Vehicle lookup failed"
+              message={vehicleLoadMessage || 'We could not load your owned vehicles right now.'}
+              actionLabel="Retry"
+              onAction={() => setVehicleReloadKey((currentKey) => currentKey + 1)}
+              tone="danger"
+            />
+          ) : null}
+
+          {hasSession &&
+          !ownedVehicles.length &&
+          vehicleLoadState !== 'loading' &&
+          vehicleLoadState !== 'failed' ? (
             <InsuranceStatePanel
               icon="car-off"
               title="No owned vehicle on file"
@@ -633,18 +858,171 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             ) : null}
 
             {latestInquiry ? (
-              <InsuranceRecordCard
-                title={latestInquiry.subject}
-                subtitle={latestInquiry.statusHint}
-                status={latestInquiry.status}
-                metadata={[
-                  { label: 'Inquiry type', value: latestInquiry.inquiryTypeLabel },
-                  { label: 'Created', value: formatTimestampLabel(latestInquiry.createdAt) },
-                  { label: 'Provider', value: latestInquiry.providerName },
-                  { label: 'Policy no.', value: latestInquiry.policyNumber },
-                  { label: 'Documents', value: String(latestInquiry.documentCount) },
-                ]}
-              />
+              <>
+                <InsuranceRecordCard
+                  title={latestInquiry.subject}
+                  subtitle={latestInquiry.statusHint}
+                  status={latestInquiry.status}
+                  metadata={[
+                    { label: 'Inquiry type', value: latestInquiry.inquiryTypeLabel },
+                    { label: 'Created', value: formatTimestampLabel(latestInquiry.createdAt) },
+                    { label: 'Provider', value: latestInquiry.providerName },
+                    { label: 'Policy no.', value: latestInquiry.policyNumber },
+                    { label: 'Documents', value: String(latestInquiry.documentCount) },
+                  ]}
+                />
+
+                <View style={styles.documentSection}>
+                  <View style={styles.documentSectionHeader}>
+                    <View style={styles.documentSectionCopy}>
+                      <Text style={styles.documentSectionTitle}>Supporting documents</Text>
+                      <Text style={styles.documentSectionText}>
+                        Attach document metadata and a file URL/reference. Binary camera or gallery upload stays out of scope until a storage service exists.
+                      </Text>
+                    </View>
+                    <View style={styles.documentCountBadge}>
+                      <Text style={styles.documentCountText}>{latestInquiry.documentCount}</Text>
+                    </View>
+                  </View>
+
+                  {latestInquiry.status === 'needs_documents' ? (
+                    <InsuranceStatePanel
+                      icon="file-alert-outline"
+                      title="Staff requested more documents"
+                      message="This inquiry is in needs_documents, so attach the requested supporting files and then refresh tracking."
+                    />
+                  ) : null}
+
+                  {!latestInquiryCanAcceptDocuments ? (
+                    <InsuranceStatePanel
+                      icon="lock-alert-outline"
+                      title="Document upload is locked"
+                      message="Closed or rejected inquiries cannot accept more supporting documents."
+                      tone="danger"
+                    />
+                  ) : null}
+
+                  {latestInquiry.documents?.length ? (
+                    <View style={styles.documentList}>
+                      {latestInquiry.documents.map((document) => (
+                        <View key={document.id ?? `${document.fileName}-${document.fileUrl}`} style={styles.documentCard}>
+                          <View style={styles.documentCardHeader}>
+                            <View style={styles.documentCardCopy}>
+                              <Text style={styles.documentCardTitle}>{document.fileName}</Text>
+                              <Text style={styles.documentCardText}>{document.fileUrl}</Text>
+                            </View>
+                            <InquiryStatusBadge value={document.documentTypeLabel} />
+                          </View>
+                          <DetailRow label="Notes" value={document.notes} />
+                          <DetailRow label="Uploaded" value={formatTimestampLabel(document.createdAt)} />
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <View style={styles.emptyDocumentCard}>
+                      <Text style={styles.emptyDocumentTitle}>No supporting documents yet</Text>
+                      <Text style={styles.emptyDocumentText}>
+                        Add an OR/CR, policy copy, photo, estimate, or other reference to help staff review the inquiry.
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={styles.documentUploadForm}>
+                    <Text style={styles.fieldLabel}>Document type</Text>
+                    <View style={styles.documentTypeRow}>
+                      {customerInsuranceDocumentTypeOptions.map((option) => {
+                        const isSelected = documentDraft.documentType === option.value;
+
+                        return (
+                          <TouchableOpacity
+                            key={option.value}
+                            style={[styles.documentTypeChip, isSelected && styles.documentTypeChipSelected]}
+                            onPress={() => handleDocumentDraftChange('documentType', option.value)}
+                            activeOpacity={0.88}
+                            disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
+                          >
+                            <Text
+                              style={[
+                                styles.documentTypeChipText,
+                                isSelected && styles.documentTypeChipTextSelected,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={styles.fieldLabel}>Document name</Text>
+                    <TextInput
+                      value={documentDraft.fileName}
+                      onChangeText={(value) => handleDocumentDraftChange('fileName', value)}
+                      placeholder="or-cr-scan.pdf"
+                      placeholderTextColor={colors.mutedText}
+                      style={styles.input}
+                      editable={latestInquiryCanAcceptDocuments && !isUploadingDocument}
+                    />
+
+                    <Text style={styles.fieldLabel}>File URL or reference</Text>
+                    <TextInput
+                      value={documentDraft.fileUrl}
+                      onChangeText={(value) => handleDocumentDraftChange('fileUrl', value)}
+                      placeholder="https://files.example/insurance/or-cr-scan.pdf"
+                      placeholderTextColor={colors.mutedText}
+                      style={styles.input}
+                      autoCapitalize="none"
+                      editable={latestInquiryCanAcceptDocuments && !isUploadingDocument}
+                    />
+
+                    <Text style={styles.fieldLabel}>Document notes</Text>
+                    <TextInput
+                      value={documentDraft.notes}
+                      onChangeText={(value) => handleDocumentDraftChange('notes', value)}
+                      placeholder="Optional note for staff review"
+                      placeholderTextColor={colors.mutedText}
+                      style={[styles.input, styles.multilineInput]}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                      editable={latestInquiryCanAcceptDocuments && !isUploadingDocument}
+                    />
+
+                    {documentUploadMessage ? (
+                      <InsuranceStatePanel
+                        icon={documentUploadState === 'document_uploaded' ? 'file-check-outline' : 'alert-circle-outline'}
+                        title={documentUploadState === 'document_uploaded' ? 'Document uploaded' : 'Document upload update'}
+                        message={documentUploadMessage}
+                        tone={documentUploadState === 'document_uploaded' ? 'success' : 'default'}
+                        loading={documentUploadState === 'document_uploading' || isUploadingDocument}
+                      />
+                    ) : null}
+
+                    <TouchableOpacity
+                      style={[
+                        styles.primaryButton,
+                        (!latestInquiryCanAcceptDocuments || isUploadingDocument) && styles.primaryButtonDisabled,
+                      ]}
+                      onPress={handleUploadDocument}
+                      disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
+                      activeOpacity={0.9}
+                    >
+                      {isUploadingDocument ? (
+                        <ActivityIndicator color={colors.onPrimary} size="small" />
+                      ) : (
+                        <>
+                          <MaterialCommunityIcons
+                            name="file-upload-outline"
+                            size={18}
+                            color={colors.onPrimary}
+                          />
+                          <Text style={styles.primaryButtonText}>Attach supporting document</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </>
             ) : null}
 
             {claimStatusUpdates.length ? (
@@ -885,6 +1263,132 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 13,
     fontWeight: '700',
+  },
+  documentSection: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: radius.large,
+    padding: 16,
+    marginBottom: 14,
+  },
+  documentSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 14,
+  },
+  documentSectionCopy: {
+    flex: 1,
+  },
+  documentSectionTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  documentSectionText: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  documentCountBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: colors.primaryGlow,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  documentCountText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  documentList: {
+    gap: 10,
+    marginBottom: 14,
+  },
+  documentCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.medium,
+    padding: 14,
+  },
+  documentCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  documentCardCopy: {
+    flex: 1,
+  },
+  documentCardTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  documentCardText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  emptyDocumentCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    backgroundColor: colors.surface,
+    borderRadius: radius.medium,
+    padding: 16,
+    marginBottom: 14,
+  },
+  emptyDocumentTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  emptyDocumentText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 19,
+  },
+  documentUploadForm: {
+    marginTop: 2,
+  },
+  documentTypeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  documentTypeChip: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  documentTypeChipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  documentTypeChipText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  documentTypeChipTextSelected: {
+    color: colors.primary,
   },
   statePanel: {
     borderWidth: 1,

@@ -2,6 +2,103 @@
 @tailwind components;
 @tailwind utilities;
 
+:root,
+[data-theme='dark'] {
+  --brand-orange: 240 124 0;
+  --brand-gold: 201 149 26;
+  --surface-bg: 9 9 11;
+  --surface-card: 17 17 19;
+  --surface-raised: 24 24 27;
+  --surface-input: 20 20 22;
+  --surface-hover: 28 28 31;
+  --surface-border: 39 39 42;
+  --ink-primary: 244 244 245;
+  --ink-secondary: 161 161 170;
+  --ink-muted: 113 113 122;
+  --ink-dim: 63 63 70;
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --brand-orange: 226 96 0;
+  --brand-gold: 180 120 18;
+  --surface-bg: 247 248 251;
+  --surface-card: 255 255 255;
+  --surface-raised: 241 244 248;
+  --surface-input: 255 255 255;
+  --surface-hover: 235 239 245;
+  --surface-border: 208 216 226;
+  --ink-primary: 20 24 33;
+  --ink-secondary: 72 84 100;
+  --ink-muted: 107 119 135;
+  --ink-dim: 148 158 171;
+  color-scheme: light;
+}
+
+[data-theme='professional-blue'] {
+  --brand-orange: 37 99 235;
+  --brand-gold: 14 165 233;
+  --surface-bg: 8 18 38;
+  --surface-card: 13 28 54;
+  --surface-raised: 18 38 70;
+  --surface-input: 14 31 59;
+  --surface-hover: 23 49 89;
+  --surface-border: 42 72 112;
+  --ink-primary: 239 246 255;
+  --ink-secondary: 186 206 234;
+  --ink-muted: 122 151 190;
+  --ink-dim: 78 105 145;
+  color-scheme: dark;
+}
+
+[data-theme='automotive-red'] {
+  --brand-orange: 220 38 38;
+  --brand-gold: 248 113 113;
+  --surface-bg: 18 10 10;
+  --surface-card: 30 16 16;
+  --surface-raised: 42 21 21;
+  --surface-input: 35 18 18;
+  --surface-hover: 54 25 25;
+  --surface-border: 82 35 35;
+  --ink-primary: 255 245 245;
+  --ink-secondary: 233 180 180;
+  --ink-muted: 170 105 105;
+  --ink-dim: 116 66 66;
+  color-scheme: dark;
+}
+
+[data-theme='minimal-gray'] {
+  --brand-orange: 75 85 99;
+  --brand-gold: 107 114 128;
+  --surface-bg: 243 244 246;
+  --surface-card: 255 255 255;
+  --surface-raised: 249 250 251;
+  --surface-input: 255 255 255;
+  --surface-hover: 229 231 235;
+  --surface-border: 209 213 219;
+  --ink-primary: 17 24 39;
+  --ink-secondary: 75 85 99;
+  --ink-muted: 107 114 128;
+  --ink-dim: 156 163 175;
+  color-scheme: light;
+}
+
+[data-theme='premium-black'] {
+  --brand-orange: 245 158 11;
+  --brand-gold: 234 179 8;
+  --surface-bg: 0 0 0;
+  --surface-card: 9 9 11;
+  --surface-raised: 18 18 20;
+  --surface-input: 12 12 14;
+  --surface-hover: 27 27 31;
+  --surface-border: 52 52 58;
+  --ink-primary: 250 250 250;
+  --ink-secondary: 212 212 216;
+  --ink-muted: 139 139 148;
+  --ink-dim: 82 82 91;
+  color-scheme: dark;
+}
+
 @layer base {
   body {
     @apply bg-surface-bg text-ink-primary font-sans antialiased;
@@ -10,17 +107,27 @@
 
   /* Visible focus ring for keyboard navigation */
   :focus-visible {
-    outline: 2px solid rgba(240,124,0,0.5);
+    outline: 2px solid rgb(var(--brand-orange) / 0.5);
     outline-offset: 2px;
     border-radius: 4px;
+  }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
   }
 
   /* Global scrollbar — ultra-subtle dark theme */
   ::-webkit-scrollbar       { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background-color: #27272a; border-radius: 99px; }
-  ::-webkit-scrollbar-thumb:hover { background-color: rgba(240,124,0,0.30); }
-  * { scrollbar-width: thin; scrollbar-color: #27272a transparent; }
+  ::-webkit-scrollbar-thumb { background-color: rgb(var(--surface-border)); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--brand-orange) / 0.30); }
+  * { scrollbar-width: thin; scrollbar-color: rgb(var(--surface-border)) transparent; }
 }
 
 @layer components {
@@ -36,11 +143,11 @@
   /* ── Badges ─────────────────────────────────────────────── */
   .badge        { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold; }
   .badge-green  { @apply bg-emerald-500/10 text-emerald-400; }
-  .badge-orange { background-color: rgba(240,124,0,0.12); color: #f07c00; }
-  .badge-gray   { @apply bg-zinc-700/60 text-zinc-400; }
+  .badge-orange { background-color: rgb(var(--brand-orange) / 0.12); color: rgb(var(--brand-orange)); }
+  .badge-gray   { background-color: rgb(var(--surface-hover) / 0.72); color: rgb(var(--ink-muted)); }
   .badge-red    { @apply bg-red-500/10 text-red-400; }
   .badge-blue   { @apply bg-blue-500/10 text-blue-400; }
-  .badge-gold   { background-color: rgba(201,149,26,0.12); color: #c9951a; }
+  .badge-gold   { background-color: rgb(var(--brand-gold) / 0.12); color: rgb(var(--brand-gold)); }
   .badge-purple { @apply bg-purple-500/10 text-purple-400; }
 
   /* ── Buttons ─────────────────────────────────────────────── */
@@ -48,9 +155,9 @@
     @apply inline-flex items-center justify-center gap-2
            text-sm font-semibold text-white px-4 py-2.5 rounded-lg
            transition-all duration-150;
-    background-color: #f07c00;
+    background-color: rgb(var(--brand-orange));
   }
-  .btn-primary:hover { background-color: #ff9530; }
+  .btn-primary:hover { filter: brightness(1.08); }
   .btn-primary:disabled { @apply opacity-50 cursor-not-allowed; }
 
   .btn-ghost {
@@ -71,28 +178,36 @@
            px-3.5 py-2.5 text-sm text-ink-primary placeholder-ink-muted
            outline-none transition-all duration-150;
   }
-  .input:focus { border-color: #f07c00; box-shadow: 0 0 0 3px rgba(240,124,0,0.1); }
+  .input:focus { border-color: rgb(var(--brand-orange)); box-shadow: 0 0 0 3px rgb(var(--brand-orange) / 0.1); }
 
   .label { @apply block text-xs font-semibold text-ink-secondary mb-1.5; }
 
   .select {
     @apply w-full bg-surface-input border border-surface-border rounded-lg
-           px-3.5 py-2.5 text-sm text-ink-primary outline-none transition-all duration-150
+           px-3.5 py-2.5 pr-10 text-sm text-ink-primary outline-none transition-all duration-150
            appearance-none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, rgb(var(--ink-muted)) 50%),
+      linear-gradient(135deg, rgb(var(--ink-muted)) 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) 50%,
+      calc(100% - 13px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
   }
-  .select:focus { border-color: #f07c00; box-shadow: 0 0 0 3px rgba(240,124,0,0.1); }
+  .select:focus { border-color: rgb(var(--brand-orange)); box-shadow: 0 0 0 3px rgb(var(--brand-orange) / 0.1); }
 
   /* ── Scrollable area (main content) ─────────────────────── */
   .cc-scrollbar::-webkit-scrollbar       { width: 4px; }
   .cc-scrollbar::-webkit-scrollbar-track { background: transparent; }
-  .cc-scrollbar::-webkit-scrollbar-thumb { background-color: #3f3f46; border-radius: 99px; }
-  .cc-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(240,124,0,0.35); }
+  .cc-scrollbar::-webkit-scrollbar-thumb { background-color: rgb(var(--ink-dim)); border-radius: 99px; }
+  .cc-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--brand-orange) / 0.35); }
 
   /* ── Divider ─────────────────────────────────────────────── */
   .divider { @apply border-t border-surface-border; }
 
   /* ── Step / Progress ─────────────────────────────────────── */
-  .step-active   { color: #f07c00; border-color: #f07c00; background-color: rgba(240,124,0,0.1); }
-  .step-done     { background-color: #f07c00; border-color: #f07c00; @apply text-white; }
+  .step-active   { color: rgb(var(--brand-orange)); border-color: rgb(var(--brand-orange)); background-color: rgb(var(--brand-orange) / 0.1); }
+  .step-done     { background-color: rgb(var(--brand-orange)); border-color: rgb(var(--brand-orange)); @apply text-white; }
   .step-inactive { @apply bg-surface-raised border-surface-border text-ink-muted; }
 }

@@ -23,11 +23,6 @@ import {
   insuranceReviewStaffRoles,
   staffInsuranceContractSources,
 } from '@/lib/api/generated/insurance/staff-web-insurance'
-import {
-  staffInsuranceReviewQueueMock,
-  staffInsuranceResolvedStateMocks,
-  staffInsuranceStatusUpdateDraftMock,
-} from '@/mocks/insurance/mocks'
 
 const STATUS_META = {
   submitted: { label: 'Submitted', cls: 'badge-orange' },
@@ -107,15 +102,18 @@ export default function InsuranceContent() {
   const user = useUser()
   const role = user?.role ?? null
   const canReviewInsurance = insuranceReviewStaffRoles.includes(role)
-  const [queueItems, setQueueItems] = useState(staffInsuranceReviewQueueMock)
-  const [selectedInquiryId, setSelectedInquiryId] = useState(staffInsuranceReviewQueueMock[0]?.id ?? '')
-  const [manualInquiryId, setManualInquiryId] = useState(staffInsuranceReviewQueueMock[0]?.id ?? '')
+  const [queueItems, setQueueItems] = useState([])
+  const [selectedInquiryId, setSelectedInquiryId] = useState('')
+  const [manualInquiryId, setManualInquiryId] = useState('')
   const [liveInquiry, setLiveInquiry] = useState(null)
-  const [detailState, setDetailState] = useState('detail_loaded')
+  const [detailState, setDetailState] = useState('idle')
   const [detailMessage, setDetailMessage] = useState('')
   const [updateState, setUpdateState] = useState('status_update_ready')
   const [updateMessage, setUpdateMessage] = useState('')
-  const [updateDraft, setUpdateDraft] = useState(staffInsuranceStatusUpdateDraftMock.request)
+  const [updateDraft, setUpdateDraft] = useState({
+    status: 'under_review',
+    reviewNotes: '',
+  })
 
   const queueState = useMemo(() => getStaffInsuranceQueueState(queueItems), [queueItems])
   const selectedQueueItem = useMemo(
@@ -145,10 +143,7 @@ export default function InsuranceContent() {
 
     setUpdateDraft({
       status: nextStatuses[0] ?? activeInquiry.status,
-      reviewNotes:
-        activeInquiry.reviewNotes ??
-        staffInsuranceStatusUpdateDraftMock.request.reviewNotes ??
-        '',
+      reviewNotes: activeInquiry.reviewNotes ?? '',
     })
     setUpdateState('status_update_ready')
     setUpdateMessage('')
@@ -278,8 +273,8 @@ export default function InsuranceContent() {
             <p className="text-xs font-bold uppercase tracking-widest text-ink-muted">Insurance Review Workspace</p>
             <h1 className="text-xl md:text-2xl font-black text-ink-primary mt-1">Queue, Detail, and Claim Status Updates</h1>
             <p className="text-sm text-ink-muted mt-2 max-w-3xl">
-              This web surface keeps staff review distinct from customer intake. Queue visibility is still a planned read model,
-              but inquiry detail and status updates are anchored to live Swagger routes today.
+              This web surface keeps staff review distinct from customer intake. Enter a known inquiry id from mobile intake,
+              then use live detail and status routes without placeholder queue data.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -301,7 +296,7 @@ export default function InsuranceContent() {
           icon={ClipboardList}
           label="Review Queue"
           value={queueItems.length}
-          sub={queueState === 'queue_loaded' ? 'Planned read model backed by current mocks' : 'No queue items available'}
+          sub={queueState === 'queue_loaded' ? 'Live queue items loaded' : 'No live queue endpoint yet'}
         />
         <SummaryTile
           icon={ShieldCheck}
@@ -324,8 +319,8 @@ export default function InsuranceContent() {
       </div>
 
       <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3 text-xs text-ink-muted">
-        The current backend does not expose a live insurance queue list route yet. This page therefore keeps queue cards mock-backed
-        while `GET /api/insurance/inquiries/:id` and `PATCH /api/insurance/inquiries/:id/status` are used as the live contract anchors.
+        The current backend does not expose a live insurance queue list route yet. Use a known inquiry id from mobile intake
+        to load detail with `GET /api/insurance/inquiries/:id`, then update status through the live staff route.
       </div>
 
       <div className="grid xl:grid-cols-[360px_minmax(0,1fr)] gap-5">
@@ -334,7 +329,7 @@ export default function InsuranceContent() {
             <div>
               <p className="card-title">Insurance Review Queue</p>
               <p className="text-xs text-ink-muted mt-1">
-                Queue cards mirror the planned staff read model and keep customer-facing summaries out of the edit surface.
+                No placeholder queue is shown. Staff review starts from a known live inquiry id.
               </p>
             </div>
             <span className={`badge ${queueState === 'queue_loaded' ? 'badge-orange' : 'badge-gray'}`}>
@@ -347,7 +342,7 @@ export default function InsuranceContent() {
               <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-8 text-center">
                 <p className="text-sm font-bold text-ink-primary">No queue items yet</p>
                 <p className="text-xs text-ink-muted mt-2">
-                  Once a backend queue route exists, this list can move from planned mocks to live data.
+                  A live queue list is not available yet. Paste a known inquiry id in the detail panel to continue.
                 </p>
               </div>
             ) : (
@@ -433,6 +428,37 @@ export default function InsuranceContent() {
                 <DetailRow label="Document Count" value={String(activeInquiry.documentCount ?? 0)} />
                 <div className="md:col-span-2">
                   <DetailRow label="Description" value={activeInquiry.description} />
+                </div>
+                <div className="md:col-span-2 rounded-xl border border-surface-border bg-surface-raised px-4 py-4">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Supporting Documents</p>
+                  {activeInquiry.documents?.length ? (
+                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                      {activeInquiry.documents.map((document) => (
+                        <div
+                          key={document.id ?? `${document.fileName}-${document.fileUrl}`}
+                          className="rounded-xl border border-surface-border bg-surface-card px-4 py-3"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-bold text-ink-primary">{document.fileName}</p>
+                              <p className="mt-1 break-all text-xs text-ink-muted">{document.fileUrl}</p>
+                            </div>
+                            <span className="badge badge-blue">{document.documentTypeLabel ?? document.documentType}</span>
+                          </div>
+                          {document.notes ? (
+                            <p className="mt-3 text-xs leading-5 text-ink-secondary">{document.notes}</p>
+                          ) : null}
+                          <p className="mt-3 text-[11px] text-ink-muted">
+                            Uploaded {formatDateTime(document.createdAt)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs leading-5 text-ink-muted">
+                      No supporting document metadata is attached to this inquiry yet.
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
@@ -529,9 +555,7 @@ export default function InsuranceContent() {
                 )}
                 Save Status Update
               </button>
-              <span className="badge badge-gray">
-                Queue state: {staffInsuranceResolvedStateMocks.loaded}
-              </span>
+              <span className="badge badge-gray">Live detail/status routes only</span>
             </div>
           </div>
         </div>

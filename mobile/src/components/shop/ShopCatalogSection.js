@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { colors, radius } from '../../theme';
@@ -31,12 +32,12 @@ function sortProducts(products, sortBy) {
   });
 }
 
-function ProductCard({ product, onOpenProduct }) {
+function ProductCard({ product, onOpenProduct, isWideLayout = false }) {
   return (
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={() => onOpenProduct?.(product)}
-      style={styles.card}
+      style={[styles.card, isWideLayout && styles.cardWide]}
     >
       <View style={styles.imageWrap}>
         <View style={styles.imagePlaceholder}>
@@ -79,6 +80,9 @@ export default function ShopCatalogSection({
   onOpenCart,
   onRefresh,
 }) {
+  const { width: windowWidth } = useWindowDimensions();
+  const isCompactLayout = windowWidth < 390;
+  const isWideLayout = windowWidth >= 430;
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [sortBy, setSortBy] = useState('Newest');
@@ -122,16 +126,16 @@ export default function ShopCatalogSection({
 
   return (
     <View style={styles.section}>
-      <View style={styles.header}>
-        <View>
+      <View style={[styles.header, isCompactLayout && styles.headerCompact]}>
+        <View style={styles.headerCopy}>
           <Text style={styles.eyebrow}>CRUISERS CRIB</Text>
           <Text style={styles.title}>Auto Shop</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.subtitle, isCompactLayout && styles.subtitleCompact]}>
             Browse the live catalog, then open your cart to review invoice checkout.
           </Text>
         </View>
 
-        <View style={styles.headerActions}>
+        <View style={[styles.headerActions, isCompactLayout && styles.headerActionsCompact]}>
           <TouchableOpacity
             accessibilityRole="button"
             activeOpacity={0.86}
@@ -202,7 +206,7 @@ export default function ShopCatalogSection({
         ))}
       </ScrollView>
 
-      <View style={styles.toolbar}>
+      <View style={[styles.toolbar, isCompactLayout && styles.toolbarCompact]}>
         <Text style={styles.productCount}>
           {products.length} live product{products.length === 1 ? '' : 's'}
         </Text>
@@ -210,7 +214,7 @@ export default function ShopCatalogSection({
         <TouchableOpacity
           activeOpacity={0.86}
           onPress={() => setIsSortMenuVisible((current) => !current)}
-          style={styles.sortButton}
+          style={[styles.sortButton, isCompactLayout && styles.sortButtonCompact]}
         >
           <MaterialCommunityIcons name="swap-vertical" size={16} color={colors.labelText} />
           <Text style={styles.sortButtonText}>Sort</Text>
@@ -271,7 +275,7 @@ export default function ShopCatalogSection({
       ) : null}
 
       {!showLoadingState && !showServiceErrorState && !showCatalogEmptyState ? (
-        <View style={styles.grid}>
+        <View style={[styles.grid, isWideLayout && styles.gridWide]}>
           {showFilterEmptyState ? (
             <View style={styles.stateCard}>
               <MaterialCommunityIcons name="magnify-close" size={34} color={colors.border} />
@@ -285,6 +289,7 @@ export default function ShopCatalogSection({
               <ProductCard
                 key={product.id}
                 product={product}
+                isWideLayout={isWideLayout}
                 onOpenProduct={onOpenProduct}
               />
             ))
@@ -305,9 +310,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 14,
   },
+  headerCompact: {
+    flexWrap: 'wrap',
+  },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
   headerActions: {
     flexDirection: 'row',
     gap: 10,
+  },
+  headerActionsCompact: {
+    width: '100%',
+    justifyContent: 'flex-end',
   },
   eyebrow: {
     color: colors.mutedText,
@@ -326,6 +342,9 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 6,
     maxWidth: 240,
+  },
+  subtitleCompact: {
+    maxWidth: '100%',
   },
   refreshButton: {
     alignItems: 'center',
@@ -411,6 +430,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  toolbarCompact: {
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   productCount: {
     color: colors.mutedText,
     fontSize: 13,
@@ -426,6 +450,9 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  sortButtonCompact: {
+    alignSelf: 'flex-start',
   },
   sortButtonText: {
     color: colors.labelText,
@@ -454,13 +481,23 @@ const styles = StyleSheet.create({
   grid: {
     gap: 14,
   },
+  gridWide: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
   card: {
     backgroundColor: colors.surfaceStrong,
     borderColor: colors.border,
     borderRadius: radius.xl,
     borderWidth: 1,
+    flexShrink: 1,
     overflow: 'hidden',
     padding: 14,
+  },
+  cardWide: {
+    flexBasis: '48%',
+    flexGrow: 1,
   },
   imageWrap: {
     backgroundColor: colors.surface,
@@ -501,11 +538,14 @@ const styles = StyleSheet.create({
   cardFooter: {
     alignItems: 'center',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    gap: 12,
     marginTop: 14,
   },
   priceWrap: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 12,
   },
   price: {

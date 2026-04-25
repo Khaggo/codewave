@@ -3,6 +3,7 @@ import { ConflictException, ForbiddenException } from '@nestjs/common';
 
 import { InsuranceRepository } from '@main-modules/insurance/repositories/insurance.repository';
 import { InsuranceService } from '@main-modules/insurance/services/insurance.service';
+import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
 
@@ -135,6 +136,10 @@ describe('InsuranceService', () => {
   });
 
   it('creates or updates an insurance record when inquiry review is approved for record', async () => {
+    const notificationsService = {
+      applyTrigger: jest.fn().mockResolvedValue({ triggerName: 'insurance.inquiry_status_changed' }),
+    };
+
     const insuranceRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'insurance-inquiry-1',
@@ -142,6 +147,7 @@ describe('InsuranceService', () => {
         vehicleId: 'vehicle-1',
         inquiryType: 'comprehensive',
         status: 'under_review',
+        subject: 'Accident repair inquiry',
         providerName: 'Safe Road Insurance',
         policyNumber: 'POL-2026-0042',
       }),
@@ -151,6 +157,7 @@ describe('InsuranceService', () => {
         vehicleId: 'vehicle-1',
         inquiryType: 'comprehensive',
         status: 'approved_for_record',
+        subject: 'Accident repair inquiry',
         providerName: 'Safe Road Insurance',
         policyNumber: 'POL-2026-0042',
       }),
@@ -177,6 +184,7 @@ describe('InsuranceService', () => {
             findById: jest.fn(),
           },
         },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -202,5 +210,66 @@ describe('InsuranceService', () => {
         status: 'approved_for_record',
       }),
     );
+    expect(notificationsService.applyTrigger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'insurance.inquiry_status_changed',
+        sourceDomain: 'main-service.insurance',
+        payload: expect.objectContaining({
+          inquiryId: 'insurance-inquiry-1',
+          userId: 'customer-1',
+          status: 'approved_for_record',
+          subject: 'Accident repair inquiry',
+        }),
+      }),
+    );
+  });
+
+  it('blocks document uploads once an inquiry is rejected or closed', async () => {
+    const insuranceRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        userId: 'customer-1',
+        status: 'rejected',
+      }),
+      addDocument: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    await expect(
+      service.addDocument(
+        'insurance-inquiry-1',
+        {
+          fileName: 'or-cr-scan.pdf',
+          fileUrl: 'https://files.autocare.local/insurance/or-cr-scan.pdf',
+          documentType: 'or_cr',
+        },
+        {
+          userId: 'customer-1',
+          role: 'customer',
+        },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(insuranceRepository.addDocument).not.toHaveBeenCalled();
   });
 });

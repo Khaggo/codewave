@@ -33,7 +33,7 @@ export default function AdminUsersPage() {
         <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: '#f07c00' }}>
           Restricted
         </p>
-        <h1 className="mt-3 text-2xl font-black text-ink-primary">User Provisioning</h1>
+        <h1 className="mt-3 text-2xl font-black text-ink-primary">User Administration</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-secondary">
           Only super admins can create new staff, mechanic, technician, and admin accounts from this workspace.
         </p>
@@ -58,9 +58,9 @@ export default function AdminUsersPage() {
           <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: '#f07c00' }}>
             Super Admin
           </p>
-          <h1 className="mt-3 text-3xl font-black text-ink-primary">User Creation Workspace</h1>
+          <h1 className="mt-3 text-3xl font-black text-ink-primary">User Administration Workspace</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
-            Provision new operations accounts from one page. This keeps the web portal staff/admin-only while letting you create staff, mechanic, technician, and admin identities on demand.
+            Provision protected operations accounts, capture the exact role mapping, and manage activation status updates from one super-admin-only page. This keeps the web portal staff/admin-only while still letting you create staff, mechanic, technician, and admin identities on demand.
           </p>
         </div>
       </section>

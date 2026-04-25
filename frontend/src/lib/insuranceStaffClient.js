@@ -11,9 +11,44 @@ const insuranceStatusHints = {
   closed: 'The inquiry is closed and no longer accepts workflow updates.',
 };
 
+const insuranceDocumentTypeLabels = {
+  or_cr: 'OR/CR',
+  policy: 'Policy copy',
+  photo: 'Damage photo',
+  estimate: 'Repair estimate',
+  other: 'Other document',
+};
+
 const trimOrNull = (value) => {
   const normalizedValue = String(value ?? '').trim();
   return normalizedValue ? normalizedValue : null;
+};
+
+const formatDocumentTypeLabel = (value) =>
+  insuranceDocumentTypeLabels[value] ??
+  String(value ?? '')
+    .split('_')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+
+const normalizeInsuranceDocumentForStaff = (document) => {
+  if (!document || typeof document !== 'object') {
+    return null;
+  }
+
+  return {
+    id: document.id ?? null,
+    inquiryId: document.inquiryId ?? null,
+    fileName: String(document.fileName ?? '').trim(),
+    fileUrl: String(document.fileUrl ?? '').trim(),
+    documentType: document.documentType ?? 'other',
+    documentTypeLabel: formatDocumentTypeLabel(document.documentType),
+    notes: trimOrNull(document.notes),
+    uploadedByUserId: document.uploadedByUserId ?? null,
+    createdAt: document.createdAt ?? null,
+    updatedAt: document.updatedAt ?? null,
+  };
 };
 
 const request = async (path, options = {}) => {
@@ -54,6 +89,10 @@ export const normalizeInsuranceInquiryForStaff = (inquiry) => {
     return null;
   }
 
+  const documents = Array.isArray(inquiry.documents)
+    ? inquiry.documents.map(normalizeInsuranceDocumentForStaff).filter(Boolean)
+    : [];
+
   return {
     id: inquiry.id ?? null,
     userId: inquiry.userId ?? null,
@@ -67,8 +106,8 @@ export const normalizeInsuranceInquiryForStaff = (inquiry) => {
     policyNumber: trimOrNull(inquiry.policyNumber),
     notes: trimOrNull(inquiry.notes),
     reviewNotes: trimOrNull(inquiry.reviewNotes),
-    documentCount: Array.isArray(inquiry.documents) ? inquiry.documents.length : 0,
-    documents: Array.isArray(inquiry.documents) ? inquiry.documents : [],
+    documentCount: documents.length,
+    documents,
     createdAt: inquiry.createdAt ?? null,
     updatedAt: inquiry.updatedAt ?? null,
     reviewedAt: inquiry.reviewedAt ?? null,

@@ -32,14 +32,6 @@ import {
   getBackJobValidationState,
   isBackJobCustomerSafe,
 } from '@/lib/api/generated/back-jobs/staff-web-back-jobs'
-import {
-  approvedBackJobMock,
-  backJobDetailMock,
-  rejectedBackJobMock,
-  reportedBackJobMock,
-  resolvedBackJobMock,
-  staffBackJobResolvedStateMocks,
-} from '@/mocks/back-jobs/mocks'
 
 const STATUS_META = {
   reported: { label: 'Reported', cls: 'badge-red' },
@@ -83,14 +75,6 @@ const initialReworkState = {
   status: 'rework_ready',
   message: '',
 }
-
-const contractExamples = [
-  reportedBackJobMock,
-  approvedBackJobMock,
-  backJobDetailMock,
-  resolvedBackJobMock,
-  rejectedBackJobMock,
-]
 
 const splitCommaSeparatedIds = (value) =>
   String(value ?? '')
@@ -865,31 +849,12 @@ export default function BackJobsContent() {
       <section className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="card-title">Contract Example States</p>
+            <p className="card-title">Live Back-Job Boundaries</p>
             <p className="mt-1 max-w-3xl text-sm text-ink-secondary">
-              Examples show reported, approved, in-progress, resolved, and rejected states without pretending a broad back-job list endpoint exists.
+              This page only shows cases loaded from vehicle or case-id routes. Customer-facing back-job lists remain a planned API gap.
             </p>
           </div>
-          <span className="badge badge-gray">Mobile customer list: planned API gap</span>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-5">
-          {contractExamples.map((example) => {
-            const meta = STATUS_META[example.status] ?? STATUS_META.reported
-            const visibility = getBackJobCustomerVisibility(example.status)
-            return (
-              <div key={example.id} className="rounded-2xl border border-surface-border bg-surface-raised p-4">
-                <span className={`badge ${meta.cls}`}>{meta.label}</span>
-                <p className="mt-3 text-2xl font-bold text-ink-primary">{example.findings.length}</p>
-                <p className="mt-1 text-xs text-ink-muted">Finding(s)</p>
-                <p className="mt-3 text-xs text-ink-secondary">{visibilityCopy[visibility]}</p>
-              </div>
-            )
-          })}
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2 text-xs text-ink-muted">
-          <span className="badge badge-gray">Service adviser review: {String(staffBackJobResolvedStateMocks.serviceAdviserCanReview)}</span>
-          <span className="badge badge-gray">Technician review: {String(staffBackJobResolvedStateMocks.technicianCanReview)}</span>
-          <span className="badge badge-gray">Approved can create rework: {String(staffBackJobResolvedStateMocks.approvedCanCreateRework)}</span>
+          <span className="badge badge-gray">No placeholder cases</span>
         </div>
       </section>
     </div>

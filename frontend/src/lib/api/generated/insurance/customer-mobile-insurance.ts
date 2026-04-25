@@ -1,5 +1,11 @@
-import { insuranceRoutes, type InsuranceInquiryStatus, type InsuranceInquiryType } from './requests';
+import {
+  insuranceRoutes,
+  type InsuranceInquiryStatus,
+  type InsuranceInquiryType,
+  type UploadInsuranceDocumentRequest,
+} from './requests';
 import type {
+  InsuranceDocumentResponse,
   InsuranceInquiryResponse,
   InsuranceRecordResponse,
 } from './responses';
@@ -23,6 +29,18 @@ export type CustomerInsuranceTrackingState =
   | 'tracking_unauthorized_session'
   | 'tracking_load_failed';
 
+export type CustomerInsuranceDocumentUploadState =
+  | 'document_idle'
+  | 'document_ready'
+  | 'document_uploading'
+  | 'document_uploaded'
+  | 'document_validation_error'
+  | 'document_closed'
+  | 'document_missing_inquiry'
+  | 'document_unauthorized'
+  | 'document_forbidden'
+  | 'document_failed';
+
 export interface CustomerInsuranceIntakeStateRule {
   state: CustomerInsuranceIntakeState;
   surface: 'customer-mobile';
@@ -39,6 +57,27 @@ export interface CustomerInsuranceTrackingStateRule {
   description: string;
 }
 
+export interface CustomerInsuranceDocumentUploadStateRule {
+  state: CustomerInsuranceDocumentUploadState;
+  surface: 'customer-mobile';
+  truth: 'insurance-document-route' | 'client-guard';
+  routeKey: 'uploadInquiryDocument';
+  description: string;
+}
+
+export interface CustomerInsuranceDocumentPresentation {
+  id: string;
+  inquiryId: string;
+  fileName: string;
+  fileUrl: string;
+  documentType: UploadInsuranceDocumentRequest['documentType'];
+  documentTypeLabel: string;
+  notes: string | null;
+  uploadedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CustomerInsuranceInquiryPresentation {
   id: string;
   userId: string;
@@ -52,6 +91,8 @@ export interface CustomerInsuranceInquiryPresentation {
   policyNumber: string | null;
   notes: string | null;
   documentCount: number;
+  documents: CustomerInsuranceDocumentPresentation[];
+  canAttachDocuments: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +120,13 @@ export const customerInsuranceDraftTemplate = {
   notes: '',
 };
 
+export const customerInsuranceDocumentDraftTemplate: UploadInsuranceDocumentRequest = {
+  documentType: 'photo',
+  fileName: '',
+  fileUrl: '',
+  notes: '',
+};
+
 export const customerInsuranceStatusHints: Record<InsuranceInquiryStatus, string> = {
   submitted: 'Your inquiry is recorded and waiting for staff review.',
   under_review: 'A service adviser is currently reviewing the insurance request.',
@@ -87,6 +135,21 @@ export const customerInsuranceStatusHints: Record<InsuranceInquiryStatus, string
   rejected: 'The inquiry cannot continue in its current state.',
   closed: 'The inquiry is closed and no longer accepting changes.',
 };
+
+export const customerInsuranceDocumentTypeLabels: Record<UploadInsuranceDocumentRequest['documentType'], string> = {
+  or_cr: 'OR/CR',
+  policy: 'Policy copy',
+  photo: 'Damage photo',
+  estimate: 'Repair estimate',
+  other: 'Other document',
+};
+
+export const customerInsuranceDocumentTypeOptions = Object.entries(
+  customerInsuranceDocumentTypeLabels,
+).map(([value, label]) => ({
+  value: value as UploadInsuranceDocumentRequest['documentType'],
+  label,
+}));
 
 export const customerInsuranceIntakeStateRules: CustomerInsuranceIntakeStateRule[] = [
   {
@@ -199,24 +262,120 @@ export const customerInsuranceTrackingStateRules: CustomerInsuranceTrackingState
   },
 ];
 
+export const customerInsuranceDocumentUploadStateRules: CustomerInsuranceDocumentUploadStateRule[] = [
+  {
+    state: 'document_idle',
+    surface: 'customer-mobile',
+    truth: 'client-guard',
+    routeKey: 'uploadInquiryDocument',
+    description: 'No document draft is currently being uploaded for the selected inquiry.',
+  },
+  {
+    state: 'document_ready',
+    surface: 'customer-mobile',
+    truth: 'client-guard',
+    routeKey: 'uploadInquiryDocument',
+    description: 'The customer has started a document metadata draft using supported document types.',
+  },
+  {
+    state: 'document_uploading',
+    surface: 'customer-mobile',
+    truth: 'client-guard',
+    routeKey: 'uploadInquiryDocument',
+    description: 'The supporting document metadata request is in flight.',
+  },
+  {
+    state: 'document_uploaded',
+    surface: 'customer-mobile',
+    truth: 'insurance-document-route',
+    routeKey: 'uploadInquiryDocument',
+    description: 'The backend accepted document metadata and returned the updated inquiry with document count.',
+  },
+  {
+    state: 'document_validation_error',
+    surface: 'customer-mobile',
+    truth: 'insurance-document-route',
+    routeKey: 'uploadInquiryDocument',
+    description: 'The document metadata is missing a required field or uses an unsupported document type.',
+  },
+  {
+    state: 'document_closed',
+    surface: 'customer-mobile',
+    truth: 'insurance-document-route',
+    routeKey: 'uploadInquiryDocument',
+    description: 'Closed or rejected inquiries cannot accept additional supporting documents.',
+  },
+  {
+    state: 'document_missing_inquiry',
+    surface: 'customer-mobile',
+    truth: 'insurance-document-route',
+    routeKey: 'uploadInquiryDocument',
+    description: 'The selected inquiry id is missing or no longer accessible.',
+  },
+  {
+    state: 'document_unauthorized',
+    surface: 'customer-mobile',
+    truth: 'client-guard',
+    routeKey: 'uploadInquiryDocument',
+    description: 'The customer session is missing before document metadata can be submitted.',
+  },
+  {
+    state: 'document_forbidden',
+    surface: 'customer-mobile',
+    truth: 'insurance-document-route',
+    routeKey: 'uploadInquiryDocument',
+    description: 'The current customer does not own the selected inquiry.',
+  },
+  {
+    state: 'document_failed',
+    surface: 'customer-mobile',
+    truth: 'insurance-document-route',
+    routeKey: 'uploadInquiryDocument',
+    description: 'A non-classified API or network failure prevented document metadata upload.',
+  },
+];
+
+export const buildCustomerInsuranceDocumentPresentation = (
+  document: InsuranceDocumentResponse,
+): CustomerInsuranceDocumentPresentation => ({
+  id: document.id,
+  inquiryId: document.inquiryId,
+  fileName: document.fileName,
+  fileUrl: document.fileUrl,
+  documentType: document.documentType,
+  documentTypeLabel: customerInsuranceDocumentTypeLabels[document.documentType],
+  notes: document.notes ?? null,
+  uploadedByUserId: document.uploadedByUserId ?? null,
+  createdAt: document.createdAt,
+  updatedAt: document.updatedAt,
+});
+
 export const buildCustomerInsuranceInquiryPresentation = (
   inquiry: InsuranceInquiryResponse,
-): CustomerInsuranceInquiryPresentation => ({
-  id: inquiry.id,
-  userId: inquiry.userId,
-  vehicleId: inquiry.vehicleId,
-  inquiryType: inquiry.inquiryType,
-  subject: inquiry.subject,
-  description: inquiry.description,
-  statusValue: inquiry.status,
-  statusHint: customerInsuranceStatusHints[inquiry.status],
-  providerName: inquiry.providerName ?? null,
-  policyNumber: inquiry.policyNumber ?? null,
-  notes: inquiry.notes ?? null,
-  documentCount: Array.isArray(inquiry.documents) ? inquiry.documents.length : 0,
-  createdAt: inquiry.createdAt,
-  updatedAt: inquiry.updatedAt,
-});
+): CustomerInsuranceInquiryPresentation => {
+  const documents = Array.isArray(inquiry.documents)
+    ? inquiry.documents.map(buildCustomerInsuranceDocumentPresentation)
+    : [];
+
+  return {
+    id: inquiry.id,
+    userId: inquiry.userId,
+    vehicleId: inquiry.vehicleId,
+    inquiryType: inquiry.inquiryType,
+    subject: inquiry.subject,
+    description: inquiry.description,
+    statusValue: inquiry.status,
+    statusHint: customerInsuranceStatusHints[inquiry.status],
+    providerName: inquiry.providerName ?? null,
+    policyNumber: inquiry.policyNumber ?? null,
+    notes: inquiry.notes ?? null,
+    documentCount: documents.length,
+    documents,
+    canAttachDocuments: !['closed', 'rejected'].includes(inquiry.status),
+    createdAt: inquiry.createdAt,
+    updatedAt: inquiry.updatedAt,
+  };
+};
 
 export const buildCustomerInsuranceRecordPresentation = (
   record: InsuranceRecordResponse,
@@ -258,5 +417,6 @@ export const getCustomerInsuranceTrackingState = ({
 export const customerInsuranceContractSources = {
   createInquiry: insuranceRoutes.createInquiry,
   getInquiryById: insuranceRoutes.getInquiryById,
+  uploadInquiryDocument: insuranceRoutes.uploadInquiryDocument,
   listVehicleInsuranceRecords: insuranceRoutes.listVehicleInsuranceRecords,
 } as const;
