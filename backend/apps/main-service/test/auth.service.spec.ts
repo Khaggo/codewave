@@ -29,7 +29,7 @@ describe('AuthService', () => {
 
     const authRepository = {
       createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
-      updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: false }),
+      updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: true }),
       createOtpChallenge: jest.fn().mockResolvedValue({
         id: 'challenge-1',
         userId: 'user-1',
@@ -297,8 +297,8 @@ describe('AuthService', () => {
       }),
     );
     expect(authRepository.createAccount).toHaveBeenCalledWith('staff-1', expect.any(String));
-    expect(usersService.setActivationStatus).toHaveBeenCalledWith('staff-1', false);
-    expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('staff-1', false);
+    expect(usersService.setActivationStatus).toHaveBeenCalledWith('staff-1', true);
+    expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('staff-1', true);
     expect(created?.staffCode).toBe('SA-0001');
 
     await service.updateStaffAccountStatus(

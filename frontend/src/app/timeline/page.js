@@ -9,7 +9,7 @@ export default function TimelinePage() {
         <span className="badge badge-green">Customer mobile feature</span>
         <h1 className="mt-4 text-2xl font-extrabold text-ink-primary">Vehicle lifecycle is handled in the mobile garage</h1>
         <p className="mt-2 text-sm leading-6 text-ink-secondary">
-          This staff web route no longer displays sample vehicle timelines. Customer-safe lifecycle history now belongs
+          This staff web page no longer displays sample vehicle timelines. Customer-safe lifecycle history now belongs
           in the mobile Garage flow, while staff can continue work through job orders, QA, and invoice pages.
         </p>
       </div>

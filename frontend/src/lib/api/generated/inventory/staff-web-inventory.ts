@@ -215,9 +215,9 @@ export const staffInventoryStateScenarios: StaffInventoryStateScenario[] = [
 ];
 
 export const staffInventoryKnownApiGaps = [
-  'No live ecommerce inventory controller is exposed yet beyond an empty module stub, so quantity and reservation counts remain planned.',
-  'Manual stock adjustments are not live-backed and must remain documented as future work.',
-  'Reserved quantity, movement logs, and low-stock policy thresholds are not present in the live product DTOs.',
+  'Quantity and reservation counts remain planned, so the demo should not show fake stock numbers.',
+  'Manual stock adjustments are future work and should stay out of demo-critical flows for now.',
+  'Reserved quantity, movement logs, and low-stock policy thresholds are not available in product records yet.',
 ] as const;
 
 export const buildStaffInventoryCategoryPresentation = (

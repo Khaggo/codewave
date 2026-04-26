@@ -6,15 +6,20 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  Edit3,
   Gauge,
   ListChecks,
   RefreshCw,
+  Save,
   ShieldAlert,
+  Trash2,
+  X,
   XCircle,
   Users,
 } from 'lucide-react'
 import {
   createTimeSlotDefinition,
+  deleteTimeSlotDefinition,
   getCurrentQueue,
   getDailySchedule,
   getTimeSlotDefinitions,
@@ -366,10 +371,17 @@ function SlotDefinitionsPanel({
   status,
   error,
   form,
+  editForm,
+  editingSlotId,
   mutationState,
   onFormChange,
+  onEditFormChange,
   onCreate,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
   onToggleActive,
+  onDelete,
 }) {
   if (status === 'loading' && slots.length === 0) {
     return (
@@ -396,7 +408,7 @@ function SlotDefinitionsPanel({
         <div>
           <p className="card-title">Slot Definitions</p>
           <p className="text-xs text-ink-muted mt-1">
-            These live definitions power the mobile slot picker and the staff schedule.
+            Manage the appointment windows customers can choose from the mobile booking flow.
           </p>
         </div>
         {error ? <span className="badge badge-orange">Using last loaded definitions</span> : null}
@@ -467,36 +479,115 @@ function SlotDefinitionsPanel({
         </div>
       ) : null}
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-2 mt-4">
-        {slots.map((slot) => (
-          <div key={slot.timeSlotId} className="rounded-xl border border-surface-border bg-surface-raised p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-bold text-ink-primary">{slot.label}</p>
-                <p className="text-xs text-ink-muted mt-1">
-                  {formatTimeSlotWindow(slot) || 'Time window unavailable'}
-                </p>
-              </div>
-              <span className={`badge ${slot.isActive === false ? 'badge-gray' : 'badge-green'}`}>
-                {slot.isActive === false ? 'Inactive' : 'Active'}
-              </span>
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-4">
+        {slots.map((slot) => {
+          const isEditing = editingSlotId === slot.timeSlotId
+          const isBusy = mutationState.status === 'submitting' && mutationState.target === slot.timeSlotId
+
+          return (
+            <div key={slot.timeSlotId} className="rounded-xl border border-surface-border bg-surface-raised p-3">
+              {isEditing ? (
+                <div className="space-y-3">
+                  <label className="text-xs text-ink-muted">
+                    Label
+                    <input
+                      value={editForm.label}
+                      onChange={(event) => onEditFormChange({ label: event.target.value })}
+                      className="input mt-1 !py-2"
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs text-ink-muted">
+                      Start
+                      <input
+                        type="time"
+                        value={editForm.startTime}
+                        onChange={(event) => onEditFormChange({ startTime: event.target.value })}
+                        className="input mt-1 !py-2"
+                      />
+                    </label>
+                    <label className="text-xs text-ink-muted">
+                      End
+                      <input
+                        type="time"
+                        value={editForm.endTime}
+                        onChange={(event) => onEditFormChange({ endTime: event.target.value })}
+                        className="input mt-1 !py-2"
+                      />
+                    </label>
+                  </div>
+                  <label className="text-xs text-ink-muted">
+                    Capacity
+                    <input
+                      type="number"
+                      min="1"
+                      max="99"
+                      value={editForm.capacity}
+                      onChange={(event) => onEditFormChange({ capacity: event.target.value })}
+                      className="input mt-1 !py-2"
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className="btn-primary !px-3 !py-2 !text-xs" onClick={() => onSaveEdit(slot)} disabled={isBusy}>
+                      {isBusy ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
+                      Save
+                    </button>
+                    <button type="button" className="btn-ghost !px-3 !py-2 !text-xs" onClick={onCancelEdit} disabled={isBusy}>
+                      <X size={13} />
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-bold text-ink-primary">{slot.label}</p>
+                      <p className="text-xs text-ink-muted mt-1">
+                        {formatTimeSlotWindow(slot) || 'Time window unavailable'}
+                      </p>
+                    </div>
+                    <span className={`badge ${slot.isActive === false ? 'badge-gray' : 'badge-green'}`}>
+                      {slot.isActive === false ? 'Inactive' : 'Active'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-ink-muted mt-3">
+                    Capacity {slot.capacity ?? 'unset'} booking{slot.capacity === 1 ? '' : 's'} per date.
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={mutationState.status === 'submitting'}
+                      onClick={() => onStartEdit(slot)}
+                      className="btn-ghost !px-3 !py-2 !text-xs"
+                    >
+                      <Edit3 size={13} />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      disabled={mutationState.status === 'submitting'}
+                      onClick={() => onToggleActive(slot)}
+                      className={`${slot.isActive === false ? 'btn-primary' : 'btn-ghost'} !px-3 !py-2 !text-xs`}
+                    >
+                      {isBusy ? <RefreshCw size={13} className="animate-spin" /> : null}
+                      {slot.isActive === false ? 'Activate' : 'Pause'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={mutationState.status === 'submitting'}
+                      onClick={() => onDelete(slot)}
+                      className="btn-danger col-span-2 !px-3 !py-2 !text-xs"
+                    >
+                      {isBusy ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      Delete Slot
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-            <p className="text-[11px] text-ink-muted mt-3">
-              Capacity {slot.capacity ?? 'unset'} booking{slot.capacity === 1 ? '' : 's'} per date.
-            </p>
-            <button
-              type="button"
-              disabled={mutationState.status === 'submitting'}
-              onClick={() => onToggleActive(slot)}
-              className={`mt-3 w-full justify-center ${slot.isActive === false ? 'btn-primary' : 'btn-ghost'} !px-3 !py-2 !text-xs`}
-            >
-              {mutationState.status === 'submitting' && mutationState.target === slot.timeSlotId ? (
-                <RefreshCw size={13} className="animate-spin" />
-              ) : null}
-              {slot.isActive === false ? 'Activate Slot' : 'Pause Slot'}
-            </button>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -715,6 +806,8 @@ export default function BookingsList() {
   const [slotDefinitionsState, setSlotDefinitionsState] = useState(initialLoadState)
   const [timeSlotOptions, setTimeSlotOptions] = useState([])
   const [slotForm, setSlotForm] = useState(initialSlotForm)
+  const [editingSlotId, setEditingSlotId] = useState('')
+  const [slotEditForm, setSlotEditForm] = useState(initialSlotForm)
   const [slotMutationState, setSlotMutationState] = useState({
     status: 'idle',
     target: '',
@@ -850,6 +943,42 @@ export default function BookingsList() {
     )
   }
 
+  function handleSlotEditFormChange(patch) {
+    setSlotEditForm((previous) => ({
+      ...previous,
+      ...patch,
+    }))
+    setSlotMutationState((previous) =>
+      previous.status === 'error'
+        ? {
+            status: 'idle',
+            target: '',
+            message: '',
+          }
+        : previous,
+    )
+  }
+
+  function handleStartEditSlot(slot) {
+    setEditingSlotId(slot.timeSlotId)
+    setSlotEditForm({
+      label: slot.label ?? '',
+      startTime: slot.startTime ?? '08:00',
+      endTime: slot.endTime ?? '09:00',
+      capacity: String(slot.capacity ?? 1),
+    })
+    setSlotMutationState({
+      status: 'idle',
+      target: '',
+      message: '',
+    })
+  }
+
+  function handleCancelEditSlot() {
+    setEditingSlotId('')
+    setSlotEditForm(initialSlotForm)
+  }
+
   async function handleCreateSlotDefinition(event) {
     event.preventDefault()
 
@@ -947,6 +1076,109 @@ export default function BookingsList() {
         status: 'error',
         target: slot.timeSlotId,
         message: error?.message || 'Slot definition could not be updated.',
+      })
+    }
+  }
+
+  async function handleSaveSlotDefinition(slot) {
+    if (!slot?.timeSlotId || !user?.accessToken || !canReadBookingOperations) {
+      setSlotMutationState({
+        status: 'error',
+        target: slot?.timeSlotId ?? '',
+        message: 'Sign in with a service adviser or super admin account before managing slots.',
+      })
+      return
+    }
+
+    const payload = {
+      label: slotEditForm.label.trim(),
+      startTime: slotEditForm.startTime,
+      endTime: slotEditForm.endTime,
+      capacity: Number(slotEditForm.capacity),
+    }
+
+    if (
+      !payload.label ||
+      !payload.startTime ||
+      !payload.endTime ||
+      !Number.isInteger(payload.capacity) ||
+      payload.capacity < 1
+    ) {
+      setSlotMutationState({
+        status: 'error',
+        target: slot.timeSlotId,
+        message: 'Add a label, start time, end time, and whole-number capacity before saving this slot.',
+      })
+      return
+    }
+
+    setSlotMutationState({
+      status: 'submitting',
+      target: slot.timeSlotId,
+      message: '',
+    })
+
+    try {
+      await updateTimeSlotDefinition(
+        {
+          timeSlotId: slot.timeSlotId,
+          ...payload,
+        },
+        user.accessToken,
+      )
+      setEditingSlotId('')
+      setSlotEditForm(initialSlotForm)
+      setSlotMutationState({
+        status: 'success',
+        target: '',
+        message: 'Slot definition updated.',
+      })
+      await refreshBookingOperations()
+    } catch (error) {
+      setSlotMutationState({
+        status: 'error',
+        target: slot.timeSlotId,
+        message: error?.message || 'Slot definition could not be saved.',
+      })
+    }
+  }
+
+  async function handleDeleteSlotDefinition(slot) {
+    if (!slot?.timeSlotId || !user?.accessToken || !canReadBookingOperations) {
+      setSlotMutationState({
+        status: 'error',
+        target: slot?.timeSlotId ?? '',
+        message: 'Sign in with a service adviser or super admin account before deleting slots.',
+      })
+      return
+    }
+
+    const confirmed =
+      typeof window === 'undefined' ||
+      window.confirm(`Delete ${slot.label}? This archives the slot and preserves historical bookings.`)
+
+    if (!confirmed) return
+
+    setSlotMutationState({
+      status: 'submitting',
+      target: slot.timeSlotId,
+      message: '',
+    })
+
+    try {
+      await deleteTimeSlotDefinition(slot.timeSlotId, user.accessToken)
+      setEditingSlotId('')
+      setSlotMutationState({
+        status: 'success',
+        target: '',
+        message: 'Slot archived. Customers will no longer see it in booking choices.',
+      })
+      await refreshBookingOperations()
+    } catch (error) {
+      setSlotMutationState({
+        status: 'error',
+        target: slot.timeSlotId,
+        message: error?.message || 'Slot definition could not be deleted.',
       })
     }
   }
@@ -1166,10 +1398,10 @@ export default function BookingsList() {
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-ink-muted">Upcoming Mobile Bookings</p>
               <p className="text-sm text-ink-secondary mt-1">
-                Pick one of these dates to see customer-created pending bookings in the schedule view.
+                Select a day to review customer-created requests and pending staff actions.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 lg:max-w-5xl">
               {bookedScheduleDates.map((date) => (
                 <button
                   key={date.dateKey}
@@ -1177,14 +1409,21 @@ export default function BookingsList() {
                     hasAutoSelectedUpcomingDate.current = true
                     setSelectedDate(date.dateKey)
                   }}
-                  className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                  className={`rounded-xl border px-4 py-3 text-left transition ${
                     selectedDate === date.dateKey
-                      ? 'border-[#f07c00] bg-[#f07c00] text-white'
-                      : 'border-surface-border bg-surface-raised text-ink-secondary hover:border-[#f07c00]'
+                      ? 'border-brand-orange bg-brand-orange/10'
+                      : 'border-surface-border bg-surface-raised hover:border-brand-orange/60'
                   }`}
                 >
-                  {formatDate(date.dateKey)} - {date.totalBookings} booking{date.totalBookings === 1 ? '' : 's'}
-                  {date.pendingCount ? ` / ${date.pendingCount} pending` : ''}
+                  <span className="block text-sm font-black text-ink-primary">{formatDate(date.dateKey)}</span>
+                  <span className="mt-1 block text-xs text-ink-muted">
+                    {date.totalBookings} booking{date.totalBookings === 1 ? '' : 's'}
+                  </span>
+                  <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                    date.pendingCount ? 'bg-brand-orange/10 text-brand-orange' : 'bg-emerald-500/10 text-emerald-400'
+                  }`}>
+                    {date.pendingCount ? `${date.pendingCount} pending` : 'No pending actions'}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1199,10 +1438,17 @@ export default function BookingsList() {
         status={slotDefinitionsState.status}
         error={slotDefinitionsState.error}
         form={slotForm}
+        editForm={slotEditForm}
+        editingSlotId={editingSlotId}
         mutationState={slotMutationState}
         onFormChange={handleSlotFormChange}
+        onEditFormChange={handleSlotEditFormChange}
         onCreate={handleCreateSlotDefinition}
+        onStartEdit={handleStartEditSlot}
+        onCancelEdit={handleCancelEditSlot}
+        onSaveEdit={handleSaveSlotDefinition}
         onToggleActive={handleToggleSlotActive}
+        onDelete={handleDeleteSlotDefinition}
       />
 
       <div className="flex gap-1 p-1 bg-surface-card border border-surface-border rounded-xl w-fit max-w-full overflow-x-auto">

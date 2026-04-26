@@ -51,6 +51,7 @@ export const timeSlots = pgTable('time_slots', {
   endTime: varchar('end_time', { length: 10 }).notNull(),
   capacity: integer('capacity').notNull().default(1),
   isActive: boolean('is_active').notNull().default(true),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

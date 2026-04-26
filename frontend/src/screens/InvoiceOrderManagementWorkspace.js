@@ -24,7 +24,6 @@ import { getInvoiceAgingAnalytics } from '@/lib/analyticsAdminClient'
 import { getJobOrderById } from '@/lib/jobOrderWorkbenchClient'
 import {
   formatInvoiceOrderCurrency,
-  getEcommerceInvoiceOrderApiBaseUrl,
   loadStaffEcommerceOrderSnapshot,
 } from '@/lib/invoiceOrderManagementClient'
 import { useUser } from '@/lib/userContext'
@@ -169,11 +168,9 @@ function RouteLedger({ routes }) {
       {routes.map((route) => (
         <div key={`${route.method}-${route.path}`} className="rounded-2xl border border-surface-border bg-surface-raised p-4">
           <div className="flex items-start justify-between gap-3">
-            <p className="font-mono text-xs font-bold text-ink-primary">
-              {route.method} {route.path}
-            </p>
+            <p className="text-sm font-bold text-ink-primary">{route.label}</p>
             <span className={`badge ${route.status === 'live' ? 'badge-green' : 'badge-orange'}`}>
-              {route.status}
+              {route.status === 'live' ? 'Ready' : 'Planned'}
             </span>
           </div>
           {route.notes ? <p className="mt-3 text-xs leading-5 text-ink-muted">{route.notes}</p> : null}
@@ -321,7 +318,7 @@ export default function InvoiceOrderManagementWorkspace() {
           hasData: Boolean(jobOrder?.invoiceRecord),
         }),
         message: jobOrder?.invoiceRecord
-          ? 'Service invoice-ready record loaded from the job-order owner route.'
+          ? 'Service invoice-ready record loaded from the finalized job order.'
           : 'Job order loaded, but it has not produced an invoice-ready record yet.',
         jobOrder,
       })
@@ -368,8 +365,8 @@ export default function InvoiceOrderManagementWorkspace() {
           partialFailure: Boolean(snapshot.invoiceError),
         }),
         message: snapshot.invoiceError
-          ? 'Order loaded, but invoice detail was not available from the ecommerce invoice route.'
-          : 'Order and invoice tracking loaded from ecommerce owner routes.',
+          ? 'Order loaded, but invoice detail was not available yet.'
+          : 'Order and invoice tracking loaded.',
         order: snapshot.order,
         invoice: snapshot.invoice,
         invoiceError: snapshot.invoiceError,
@@ -452,7 +449,7 @@ export default function InvoiceOrderManagementWorkspace() {
           icon={ShoppingBag}
           label="Ecommerce Source"
           value="Orders"
-          sub={`Known-order reads use ${getEcommerceInvoiceOrderApiBaseUrl()}.`}
+          sub="Known-order reads stay read-only from this staff hub."
         />
         <MetricCard
           icon={BarChart3}
@@ -471,7 +468,7 @@ export default function InvoiceOrderManagementWorkspace() {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <SectionShell
           title="Service Invoice Lookup"
-          description="Load a known job order and inspect whether the job-order owner route has produced an invoice-ready record."
+          description="Load a known job order and inspect whether finalization has produced an invoice-ready record."
           action={<span className="badge badge-gray">{jobOrderLoadLabel}</span>}
         >
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -561,7 +558,7 @@ export default function InvoiceOrderManagementWorkspace() {
 
         <SectionShell
           title="Ecommerce Order / Invoice Lookup"
-          description="Load a known ecommerce order id from the ecommerce owner routes. This hub is read-only until broad staff queues are added."
+          description="Load a known ecommerce order id. This hub is read-only until broad staff queues are added."
           action={<span className="badge badge-gray">{ecommerceLoadLabel}</span>}
         >
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -777,16 +774,16 @@ export default function InvoiceOrderManagementWorkspace() {
       </SectionShell>
 
       <SectionShell
-        title="Live Route Ledger"
-        description="This page stays honest about owner routes, available mutations, and the route gaps needed for a broader staff finance queue."
+        title="Workflow Coverage"
+        description="This page keeps demo-visible finance actions clear while future queue work stays separated from the current workflow."
       >
         <div className="space-y-5">
           <RouteLedger routes={allSurfaceRoutes} />
           <div className="rounded-3xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">Mutation routes intentionally not duplicated here</p>
+            <p className="text-sm font-bold text-ink-primary">Actions intentionally not duplicated here</p>
             <p className="mt-2 text-sm leading-6 text-ink-muted">
               Service payment remains in the Job Order Workbench. Ecommerce order status, cancel,
-              invoice payment entry, and invoice status routes are live contracts, but this hub keeps
+              invoice payment entry, and invoice status actions are handled by their owner workspaces, but this hub keeps
               them read-only until a dedicated staff ecommerce queue is built.
             </p>
             <RouteLedger

@@ -36,7 +36,7 @@ function StaffRouteGuardState({ guard, onLogout }) {
       </h2>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-muted">{guard.message}</p>
       <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-dim">
-        Blocked route: {guard.pathname}
+        Blocked page: {guard.pathname}
       </p>
 
       {suggestedRoutes.length ? (

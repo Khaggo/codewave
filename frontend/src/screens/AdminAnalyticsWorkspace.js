@@ -501,7 +501,7 @@ export default function AdminAnalyticsWorkspace() {
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
               This hub keeps analytics read-only and derived, while still preserving the existing
-              layman-summary verification workspace behind the same adviser/admin route.
+              layman-summary verification workspace behind the same adviser/admin page.
             </p>
           </div>
 
@@ -537,7 +537,7 @@ export default function AdminAnalyticsWorkspace() {
             icon={Clock3}
             label="Latest Refresh"
             value={latestRefresh ? formatShortDateTime(latestRefresh) : 'Pending'}
-            sub="Most recent snapshot timestamp returned by the live analytics routes."
+            sub="Most recent timestamp from the analytics snapshot."
           />
           <StatCard
             icon={FileClock}
@@ -567,7 +567,7 @@ export default function AdminAnalyticsWorkspace() {
         {analyticsFutureApiGaps.map((gap) => (
           <InfoPanel
             key={gap}
-            title="Documented API Gap"
+            title="Future Enhancement"
             body={gap}
           />
         ))}

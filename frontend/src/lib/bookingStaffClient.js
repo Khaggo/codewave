@@ -143,6 +143,19 @@ export const updateTimeSlotDefinition = ({ timeSlotId, ...payload }, accessToken
   });
 };
 
+export const deleteTimeSlotDefinition = (timeSlotId, accessToken) => {
+  if (!timeSlotId) {
+    throw new ApiError('Select a time slot before deleting its definition.', 400, {
+      path: '/api/time-slots/:id',
+    });
+  }
+
+  return request(`/api/time-slots/${timeSlotId}`, {
+    method: 'DELETE',
+    accessToken,
+  });
+};
+
 export const updateBookingStatus = ({ bookingId, status, reason }, accessToken) => {
   if (!bookingId) {
     throw new ApiError('Select a booking before updating its status.', 400, {

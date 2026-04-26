@@ -21,7 +21,6 @@ import {
   getAllowedJobOrderStatusTargets,
   getJobOrderWorkbenchHandoffState,
   getSelectedJobOrderHandoffCandidate,
-  jobOrderWorkbenchContractSources,
   staffJobOrderWorkbenchRoles,
 } from '@/lib/api/generated/job-orders/staff-web-workbench'
 import {
@@ -30,7 +29,6 @@ import {
   canStaffFinalizeOrRecordPayment,
   canStaffReadExecutionJobOrder,
   getJobOrderExecutionPhase,
-  jobOrderExecutionContractSources,
 } from '@/lib/api/generated/job-orders/staff-web-execution'
 import {
   createJobOrderFromBooking,
@@ -41,6 +39,7 @@ import {
   recordJobOrderInvoicePayment,
   updateJobOrderStatus,
 } from '@/lib/jobOrderWorkbenchClient'
+import { listStaffAccounts } from '@/lib/authClient'
 
 const STATUS_META = {
   draft: { label: 'Draft', cls: 'badge-gray' },
@@ -188,7 +187,7 @@ export default function JobOrderWorkbench() {
   const [handoffCandidates, setHandoffCandidates] = useState([])
   const [handoffState, setHandoffState] = useState({
     status: 'handoff_empty',
-    message: 'Choose a schedule date and refresh to load confirmed bookings from the live backend.',
+    message: 'Choose a schedule date and refresh to load confirmed bookings.',
   })
   const [selectedBookingId, setSelectedBookingId] = useState('')
   const [createDraft, setCreateDraft] = useState({
@@ -228,6 +227,11 @@ export default function JobOrderWorkbench() {
     receivedAt: '',
   })
   const [paymentState, setPaymentState] = useState(initialPaymentState)
+  const [staffDirectoryState, setStaffDirectoryState] = useState({
+    status: 'idle',
+    accounts: [],
+    message: '',
+  })
 
   const selectedCandidate = useMemo(
     () => getSelectedJobOrderHandoffCandidate(handoffCandidates, selectedBookingId),
@@ -253,6 +257,43 @@ export default function JobOrderWorkbench() {
     userId: user?.id,
   })
   const executionPhase = getJobOrderExecutionPhase(activeJobOrder)
+  const technicianOptions = useMemo(
+    () =>
+      staffDirectoryState.accounts.filter(
+        (account) =>
+          account.isActive &&
+          (account.accountType === 'mechanic' ||
+            account.accountType === 'technician' ||
+            account.role === 'technician'),
+      ),
+    [staffDirectoryState.accounts],
+  )
+
+  const loadStaffDirectory = useCallback(async () => {
+    if (!user?.accessToken || !['service_adviser', 'super_admin'].includes(role)) {
+      return
+    }
+
+    setStaffDirectoryState((current) => ({ ...current, status: 'loading', message: '' }))
+    try {
+      const accounts = await listStaffAccounts(user.accessToken)
+      setStaffDirectoryState({
+        status: 'success',
+        accounts,
+        message: accounts.length ? '' : 'No staff directory records are available yet.',
+      })
+    } catch (error) {
+      setStaffDirectoryState((current) => ({
+        ...current,
+        status: 'error',
+        message: error?.message || 'Technician directory could not be loaded.',
+      }))
+    }
+  }, [role, user?.accessToken])
+
+  useEffect(() => {
+    void loadStaffDirectory()
+  }, [loadStaffDirectory])
 
   const loadBookingHandoffs = useCallback(async () => {
     if (!canManageHandoffs) {
@@ -275,7 +316,7 @@ export default function JobOrderWorkbench() {
 
     setHandoffState({
       status: 'handoff_loaded',
-      message: 'Loading confirmed booking handoffs from the live booking schedule...',
+      message: 'Loading confirmed booking handoffs...',
     })
 
     try {
@@ -392,7 +433,7 @@ export default function JobOrderWorkbench() {
 
     setDetailState({
       status: 'detail_loaded',
-      message: 'Loading job-order detail from the live backend route...',
+      message: 'Loading job-order detail...',
     })
 
     try {
@@ -463,9 +504,8 @@ export default function JobOrderWorkbench() {
         notes: createDraft.notes,
         items: createDraft.items,
         assignedTechnicianIds: createDraft.assignedTechnicianIdsText
-          .split(',')
-          .map((value) => value.trim())
-          .filter(Boolean),
+          ? [createDraft.assignedTechnicianIdsText]
+          : [],
       })
 
       setActiveJobOrder(jobOrder)
@@ -833,7 +873,7 @@ export default function JobOrderWorkbench() {
       <div className="space-y-5">
         <BlockingState
           title="Job-order workbench is staff-only"
-          copy="This route is reserved for technicians, service advisers, and super admins. Customer accounts remain mobile-only."
+          copy="This workspace is reserved for technicians, service advisers, and super admins. Customer accounts remain mobile-only."
         />
       </div>
     )
@@ -849,20 +889,15 @@ export default function JobOrderWorkbench() {
               Booking Handoff, Execution Evidence, and Invoice-Ready Finalization
             </h1>
             <p className="text-sm text-ink-muted mt-2 max-w-3xl">
-              Confirmed bookings stay booking-owned until handoff. This workbench uses the live booking
-              schedule to discover eligible sources, then uses live job-order create, read, status,
-              progress, photo, finalization, and invoice-payment routes without inventing a list endpoint.
+              Start from a confirmed booking, create a job order, assign workshop staff, then move the work
+              through progress, evidence, QA-ready finalization, and payment tracking.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <span className="badge badge-green">Handoff {jobOrderWorkbenchContractSources.handoff.status}</span>
-            <span className="badge badge-green">Create {jobOrderWorkbenchContractSources.create.status}</span>
-            <span className="badge badge-green">Detail {jobOrderWorkbenchContractSources.detail.status}</span>
-            <span className="badge badge-green">Status {jobOrderWorkbenchContractSources.updateStatus.status}</span>
-            <span className="badge badge-green">Progress {jobOrderExecutionContractSources.progress.status}</span>
-            <span className="badge badge-green">Photos {jobOrderExecutionContractSources.photo.status}</span>
-            <span className="badge badge-green">Finalize {jobOrderExecutionContractSources.finalize.status}</span>
-            <span className="badge badge-green">Payment {jobOrderExecutionContractSources.payment.status}</span>
+            <span className="badge badge-green">Confirmed handoff</span>
+            <span className="badge badge-blue">Workshop execution</span>
+            <span className="badge badge-orange">QA-ready finish</span>
+            <span className="badge badge-gray">Invoice follow-up</span>
           </div>
         </div>
       </div>
@@ -875,7 +910,7 @@ export default function JobOrderWorkbench() {
           sub={
             handoffState.status === 'handoff_empty'
               ? 'No confirmed booking source is ready today'
-              : 'Derived from live booking schedule'
+              : 'Ready for job-order handoff'
           }
         />
         <SummaryTile
@@ -898,13 +933,13 @@ export default function JobOrderWorkbench() {
         />
       </div>
 
-      <div className="grid xl:grid-cols-[360px_minmax(0,1fr)] gap-5">
+      <div className="grid 2xl:grid-cols-[420px_minmax(0,1fr)] gap-5">
         <div className="card p-4">
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="card-title">Confirmed Booking Handoffs</p>
               <p className="text-xs text-ink-muted mt-1">
-                Confirmed bookings stay booking-owned. This panel only selects eligible handoff sources.
+                Select a confirmed booking, then create the matching workshop job order on the right.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -978,9 +1013,9 @@ export default function JobOrderWorkbench() {
             <p className="text-sm text-ink-primary mt-1">
               Pending, cancelled, and completed bookings are hidden from handoff creation.
             </p>
-            <p className="text-xs text-ink-muted mt-2">
-              Confirm the booking on the schedule page first, then refresh this workbench for the live handoff candidate.
-            </p>
+              <p className="text-xs text-ink-muted mt-2">
+                Confirm the booking on the schedule page first, then refresh this workbench.
+              </p>
           </div>
         </div>
 
@@ -990,12 +1025,14 @@ export default function JobOrderWorkbench() {
               <div>
                 <p className="card-title">Create Job Order From Booking</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  The create route is live. This form seeds work items from requested services and keeps
-                  booking fields separate from job-order fields.
+                  Review the service work, assign a technician when ready, and keep booking details separate
+                  from workshop execution notes.
                 </p>
               </div>
-              <span className="badge badge-gray">
-                Technician directory lookup is not live yet
+              <span className={`badge ${staffDirectoryState.status === 'error' ? 'badge-red' : 'badge-green'}`}>
+                {staffDirectoryState.status === 'loading'
+                  ? 'Loading technicians'
+                  : `${technicianOptions.length} technician option${technicianOptions.length === 1 ? '' : 's'}`}
               </span>
             </div>
 
@@ -1018,7 +1055,7 @@ export default function JobOrderWorkbench() {
                   <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
                     <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Adviser Snapshot</p>
                     <p className="text-sm text-ink-primary mt-1">{user?.staffCode ?? 'Missing staff code'}</p>
-                    <p className="text-xs text-ink-muted mt-2">Live create route requires adviser id + code snapshot.</p>
+                    <p className="text-xs text-ink-muted mt-2">This identifies who prepared the job order.</p>
                   </div>
                 </div>
 
@@ -1036,17 +1073,19 @@ export default function JobOrderWorkbench() {
                           />
                           <input
                             type="number"
-                            min="0"
-                            step="0.5"
+                            min="1"
+                            step="1"
                             value={item.estimatedHours ?? ''}
                             onChange={(event) =>
                               handleCreateItemChange(index, {
                                 estimatedHours:
-                                  event.target.value === '' ? undefined : Number(event.target.value),
+                                  event.target.value === ''
+                                    ? undefined
+                                    : Math.max(1, Math.ceil(Number(event.target.value))),
                               })
                             }
                             className="w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                            placeholder="Hours"
+                            placeholder="Whole hours"
                           />
                         </div>
                         <textarea
@@ -1062,8 +1101,8 @@ export default function JobOrderWorkbench() {
                 </label>
 
                 <label className="text-xs text-ink-muted block">
-                  Assigned technician ids
-                  <input
+                  Assigned technician
+                  <select
                     value={createDraft.assignedTechnicianIdsText}
                     onChange={(event) =>
                       setCreateDraft((current) => ({
@@ -1072,11 +1111,21 @@ export default function JobOrderWorkbench() {
                       }))
                     }
                     className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                    placeholder="Comma-separated technician ids"
-                  />
+                  >
+                    <option value="">Create as draft - assign later</option>
+                    {technicianOptions.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.displayName || account.email} - {account.roleLabel}
+                        {account.staffCode ? ` (${account.staffCode})` : ''}
+                      </option>
+                    ))}
+                  </select>
                   <span className="block text-[11px] text-ink-muted mt-1">
-                    Keep assignment explicit until a live staff directory route is approved.
+                    Leaving this blank creates a draft job order instead of sending an invalid technician ID.
                   </span>
+                  {staffDirectoryState.message ? (
+                    <span className="block text-[11px] text-ink-muted mt-1">{staffDirectoryState.message}</span>
+                  ) : null}
                 </label>
 
                 <label className="text-xs text-ink-muted block">
@@ -1128,7 +1177,7 @@ export default function JobOrderWorkbench() {
               <div>
                 <p className="card-title">Job-Order Detail</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  There is no live list route for job orders in this slice. Load by created id or a known id.
+                  Load a created job order or paste a known job-order id.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
@@ -1139,7 +1188,7 @@ export default function JobOrderWorkbench() {
                   className="w-full lg:w-[320px] rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
                 />
                 <button onClick={handleLoadJobOrder} className="btn-primary justify-center">
-                  <RefreshCw size={14} /> Load Live Detail
+                  <RefreshCw size={14} /> Load Detail
                 </button>
               </div>
             </div>
@@ -1220,7 +1269,7 @@ export default function JobOrderWorkbench() {
                 <AlertTriangle size={28} className="mx-auto text-ink-dim mb-3" />
                 <p className="text-sm font-bold text-ink-primary">No job order loaded yet</p>
                 <p className="text-xs text-ink-muted mt-2">
-                  Create a job order from confirmed booking handoff or load a known id from the live route.
+                  Create a job order from confirmed booking handoff or load a known job-order id.
                 </p>
               </div>
             )}
@@ -1231,7 +1280,7 @@ export default function JobOrderWorkbench() {
               <div>
                 <p className="card-title">Status Update</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Only live job-order status transitions are allowed. Progress, photos, finalization, and payment use separate job-order routes below.
+                  Only valid status transitions are shown. Progress, photos, finalization, and payment have separate actions below.
                 </p>
               </div>
               <span className="badge badge-gray">
@@ -1267,12 +1316,12 @@ export default function JobOrderWorkbench() {
                 </select>
               </label>
               <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Route</p>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Transition Guide</p>
                 <p className="text-sm text-ink-primary mt-1">
-                  {jobOrderWorkbenchContractSources.updateStatus.method} {jobOrderWorkbenchContractSources.updateStatus.path}
+                  Choose the next allowed status for the loaded job order.
                 </p>
                 <p className="text-xs text-ink-muted mt-2">
-                  Invalid transition and forbidden-role failures stay distinct in this workbench.
+                  If no transition appears, the job order is already blocked, finalized, or waiting for another workflow step.
                 </p>
               </div>
               <label className="text-xs text-ink-muted md:col-span-2">
@@ -1339,7 +1388,7 @@ export default function JobOrderWorkbench() {
               <div className="rounded-xl border border-surface-border bg-surface-card p-4">
                 <p className="text-sm font-bold text-ink-primary">Technician Progress Entry</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Only the assigned technician can use the live progress route.
+                  Only the assigned technician can append workshop progress.
                 </p>
                 <div className="grid md:grid-cols-2 gap-3 mt-3">
                   <label className="text-xs text-ink-muted">
@@ -1419,7 +1468,7 @@ export default function JobOrderWorkbench() {
               <div className="rounded-xl border border-surface-border bg-surface-card p-4">
                 <p className="text-sm font-bold text-ink-primary">Photo Evidence</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  This records an evidence URL; file storage/upload remains outside this route.
+                  Add a photo link or file reference that staff can review during QA.
                 </p>
                 <div className="grid md:grid-cols-2 gap-3 mt-3">
                   <label className="text-xs text-ink-muted">

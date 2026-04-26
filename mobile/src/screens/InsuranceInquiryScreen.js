@@ -691,7 +691,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   <View>
                     <Text style={styles.sectionTitle}>Create insurance inquiry</Text>
                     <Text style={styles.sectionSubtitle}>
-                      Status values stay backend-owned. This form only uses documented live fields.
+                      Status values stay staff-owned. This form only collects customer-safe intake details.
                     </Text>
                   </View>
                 </View>

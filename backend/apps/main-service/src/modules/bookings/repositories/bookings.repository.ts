@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gte, inArray, lte, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, ne } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -38,7 +38,11 @@ export class BookingsRepository extends BaseRepository {
   }
 
   async listTimeSlots() {
-    return this.db.select().from(timeSlots).orderBy(asc(timeSlots.startTime));
+    return this.db
+      .select()
+      .from(timeSlots)
+      .where(isNull(timeSlots.deletedAt))
+      .orderBy(asc(timeSlots.startTime));
   }
 
   async findServiceIds(serviceIds: string[]) {
@@ -84,6 +88,20 @@ export class BookingsRepository extends BaseRepository {
       .returning();
 
     return this.assertFound(updatedTimeSlot, 'Time slot not found');
+  }
+
+  async archiveTimeSlot(id: string) {
+    const [archivedTimeSlot] = await this.db
+      .update(timeSlots)
+      .set({
+        isActive: false,
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(timeSlots.id, id))
+      .returning();
+
+    return this.assertFound(archivedTimeSlot, 'Time slot not found');
   }
 
   async countActiveBookingsForSlot(timeSlotId: string, scheduledDate: string, excludeBookingId?: string) {

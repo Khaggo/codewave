@@ -431,8 +431,8 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(payload.password, 10);
     await this.authRepository.createAccount(user.id, passwordHash);
-    await this.usersService.setActivationStatus(user.id, false);
-    await this.authRepository.updateAccountStatus(user.id, false);
+    await this.usersService.setActivationStatus(user.id, true);
+    await this.authRepository.updateAccountStatus(user.id, true);
 
     const auditLog = await this.authRepository.createStaffAdminAuditLog({
       action: 'staff_account_provisioned',
@@ -443,7 +443,7 @@ export class AuthService {
       targetEmail: user.email,
       targetStaffCode: user.staffCode,
       previousIsActive: null,
-      nextIsActive: false,
+      nextIsActive: true,
       reason: null,
     });
 
@@ -459,6 +459,33 @@ export class AuthService {
     });
 
     return this.usersService.findById(user.id);
+  }
+
+  async listStaffAccounts(actor: { userId: string; role: string }) {
+    const staffAccounts = await this.usersService.listStaffAccounts(actor.userId);
+    return staffAccounts.map((account) => this.toManagedStaffAccount(account));
+  }
+
+  async listCustomersWithVehicles(_actor: { userId: string; role: string }) {
+    const customers = await this.usersService.listCustomersWithVehicles();
+
+    return customers.map((customer) => {
+      const profile = Array.isArray(customer.profile)
+        ? customer.profile[0] ?? null
+        : customer.profile;
+      const addresses = Array.isArray(customer.addresses) ? customer.addresses : [];
+      const vehicles = Array.isArray(customer.vehicles) ? customer.vehicles : [];
+
+      return {
+        ...customer,
+        profile,
+        addresses,
+        vehicles,
+        displayName: this.buildDisplayName(customer),
+        defaultAddress: addresses.find((address) => address.isDefault) ?? addresses[0] ?? null,
+        vehicleCount: vehicles.length,
+      };
+    });
   }
 
   private resolveStaffAccountType(payload: CreateStaffAccountDto): StaffAccountType {
@@ -522,6 +549,46 @@ export class AuthService {
     throw new ConflictException('Unable to generate a unique staff ID');
   }
 
+  private inferStaffAccountType(user: any): StaffAccountType {
+    const staffCode = String(user?.staffCode ?? '').toUpperCase();
+
+    if (staffCode.startsWith('MEC-')) return 'mechanic';
+    if (staffCode.startsWith('TEC-')) return 'technician';
+    if (staffCode.startsWith('ADM-')) return 'admin';
+    if (staffCode.startsWith('STA-') || staffCode.startsWith('SA-')) return 'staff';
+
+    return roleFallbackAccountTypes[user?.role] ?? 'staff';
+  }
+
+  private buildDisplayName(user: any) {
+    const profile = Array.isArray(user?.profile) ? user.profile[0] ?? null : user?.profile;
+    const fullName = [profile?.firstName, profile?.lastName]
+      .map((part) => String(part ?? '').trim())
+      .filter(Boolean)
+      .join(' ');
+
+    return fullName || user?.email || user?.id;
+  }
+
+  private toManagedStaffAccount(user: any) {
+    const accountType = this.inferStaffAccountType(user);
+    const roleLabel =
+      accountType === 'admin'
+        ? 'Admin'
+        : accountType === 'mechanic'
+          ? 'Mechanic'
+          : accountType === 'technician'
+            ? 'Technician'
+            : 'Staff';
+
+    return {
+      ...user,
+      accountType,
+      roleLabel,
+      displayName: this.buildDisplayName(user),
+    };
+  }
+
   async updateStaffAccountStatus(
     userId: string,
     payload: UpdateStaffAccountStatusDto,
@@ -537,13 +604,6 @@ export class AuthService {
     }
 
     const previousIsActive = user.isActive;
-
-    if (payload.isActive) {
-      const identity = await this.authRepository.findGoogleIdentityByEmail(user.email);
-      if (!identity) {
-        throw new BadRequestException('Staff account has not completed activation');
-      }
-    }
 
     await this.usersService.setActivationStatus(userId, payload.isActive);
     await this.authRepository.updateAccountStatus(userId, payload.isActive);

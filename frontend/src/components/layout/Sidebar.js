@@ -45,6 +45,7 @@ const NAV = [
   {
     group: 'Customer Records',
     items: [
+      { href: '/admin/customers', label: 'Customers & Vehicles', icon: Users },
       { href: '/backjobs', label: 'Back-Jobs', icon: Wrench },
       { href: '/insurance', label: 'Insurance', icon: ShieldCheck },
       { href: '/loyalty', label: 'Loyalty Management', icon: Award },
@@ -91,18 +92,18 @@ export default function Sidebar({ collapsed, onToggle }) {
       `}
     >
       <div
-        className={`flex items-center gap-2.5 border-b border-surface-border
-                       ${collapsed ? 'px-3 py-4 justify-center' : 'px-4 py-4'}`}
+        className={`flex h-16 items-center gap-3 border-b border-surface-border
+                       ${collapsed ? 'px-2 justify-center' : 'px-4'}`}
       >
         <div
-          className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
+          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
           style={{ background: 'linear-gradient(135deg,#f07c00,#c9951a)' }}
         >
-          <Cog size={16} className="text-white" />
+          <Cog size={21} className="text-white" />
         </div>
         {!collapsed ? (
           <div className="overflow-hidden leading-none">
-            <p className="text-sm font-extrabold text-ink-primary tracking-tight whitespace-nowrap">CRUISERS CRIB</p>
+            <p className="text-base font-extrabold text-ink-primary tracking-tight whitespace-nowrap">CRUISERS CRIB</p>
             <p className="text-[9px] font-medium text-ink-muted tracking-widest uppercase whitespace-nowrap mt-0.5">
               Auto Care Center
             </p>

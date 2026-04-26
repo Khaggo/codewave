@@ -576,7 +576,7 @@ export default function BackJobsContent() {
             }}
           >
             <p className="text-sm font-bold text-ink-primary">Load Vehicle Back-Jobs</p>
-            <p className="mt-1 text-xs text-ink-muted">Uses `GET /api/vehicles/:id/back-jobs`.</p>
+            <p className="mt-1 text-xs text-ink-muted">Enter a vehicle id to review the return cases tied to that vehicle.</p>
             <label className="mt-3 block text-xs text-ink-muted">
               Vehicle id
               <input
@@ -600,7 +600,7 @@ export default function BackJobsContent() {
             }}
           >
             <p className="text-sm font-bold text-ink-primary">Load Case Detail</p>
-            <p className="mt-1 text-xs text-ink-muted">Uses `GET /api/back-jobs/:id`.</p>
+            <p className="mt-1 text-xs text-ink-muted">Enter a case id when staff need to review one specific back-job.</p>
             <label className="mt-3 block text-xs text-ink-muted">
               Back-job id
               <input
@@ -681,7 +681,7 @@ export default function BackJobsContent() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="card-title">Create Back-Job Case</p>
-              <p className="mt-1 text-xs text-ink-muted">Uses `POST /api/back-jobs`.</p>
+              <p className="mt-1 text-xs text-ink-muted">Create an internal return case after staff verifies the customer complaint.</p>
             </div>
             <Plus size={18} className="text-brand-orange" />
           </div>
@@ -760,7 +760,7 @@ export default function BackJobsContent() {
           <section className="card p-5 space-y-4">
             <div>
               <p className="card-title">Review Status Update</p>
-              <p className="mt-1 text-xs text-ink-muted">Uses `PATCH /api/back-jobs/:id/status` and backend transition rules.</p>
+              <p className="mt-1 text-xs text-ink-muted">Move the selected case through review, approval, or closure.</p>
             </div>
             <label className="block text-xs text-ink-muted">
               Next status
@@ -802,7 +802,7 @@ export default function BackJobsContent() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="card-title">Create Linked Rework Job Order</p>
-                <p className="mt-1 text-xs text-ink-muted">Uses `POST /api/job-orders` with `sourceType = back_job`.</p>
+                <p className="mt-1 text-xs text-ink-muted">Create a linked workshop order after the back-job is approved for rework.</p>
               </div>
               <Link2 size={18} className="text-brand-orange" />
             </div>
@@ -851,7 +851,7 @@ export default function BackJobsContent() {
           <div>
             <p className="card-title">Live Back-Job Boundaries</p>
             <p className="mt-1 max-w-3xl text-sm text-ink-secondary">
-              This page only shows cases loaded from vehicle or case-id routes. Customer-facing back-job lists remain a planned API gap.
+              This page only shows cases staff intentionally load by vehicle or case id. Customer-facing back-job lists remain planned work.
             </p>
           </div>
           <span className="badge badge-gray">No placeholder cases</span>

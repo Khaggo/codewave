@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import {
   ApiBadRequestResponse,
@@ -122,6 +122,31 @@ export class BookingsController {
     return this.bookingsService.updateTimeSlot(
       id,
       payload,
+      (request.user as { userId: string }).userId,
+    );
+  }
+
+  @Delete('time-slots/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Archive a booking time slot definition for staff operations.' })
+  @ApiParam({
+    name: 'id',
+    description: 'Time slot identifier.',
+    example: 'e7318032-2fe0-4f40-b3d4-5ba2a8c94320',
+  })
+  @ApiOkResponse({
+    description: 'The archived time slot definition. Historical bookings keep their slot reference.',
+    type: TimeSlotResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'Time slot not found.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can manage time slots.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  archiveTimeSlot(@Param('id') id: string, @Req() request: Request) {
+    return this.bookingsService.archiveTimeSlot(
+      id,
       (request.user as { userId: string }).userId,
     );
   }

@@ -279,6 +279,7 @@ type TimeSlotRecord = {
   endTime: string;
   capacity: number;
   isActive: boolean;
+  deletedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -1068,6 +1069,24 @@ class InMemoryUsersRepository {
     return cloneUser(user);
   }
 
+  async listStaffAccounts(excludeUserId?: string) {
+    return Array.from(this.users.values())
+      .filter((user) => user.role !== 'customer' && !user.deletedAt && user.id !== excludeUserId)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((user) => cloneUser(user))
+      .filter(Boolean);
+  }
+
+  async listCustomersWithVehicles() {
+    return Array.from(this.users.values())
+      .filter((user) => user.role === 'customer' && !user.deletedAt)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((user) => ({
+        ...cloneUser(user),
+        vehicles: [],
+      }));
+  }
+
   async update(id: string, updateUserDto: UpdateUserDto) {
     const user = this.users.get(id);
     if (!user) {
@@ -1519,6 +1538,7 @@ class InMemoryBookingsRepository {
       endTime: '10:00',
       capacity: 2,
       isActive: true,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -1530,6 +1550,7 @@ class InMemoryBookingsRepository {
       endTime: '15:00',
       capacity: 1,
       isActive: true,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -1554,6 +1575,7 @@ class InMemoryBookingsRepository {
 
   async listTimeSlots() {
     return Array.from(this.timeSlots.values())
+      .filter((slot) => !slot.deletedAt)
       .sort((left, right) => left.startTime.localeCompare(right.startTime))
       .map((slot) => ({ ...slot }));
   }
@@ -1585,6 +1607,7 @@ class InMemoryBookingsRepository {
       endTime: payload.endTime,
       capacity: payload.capacity,
       isActive: payload.isActive ?? true,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -1620,6 +1643,23 @@ class InMemoryBookingsRepository {
 
     this.timeSlots.set(id, updatedTimeSlot);
     return { ...updatedTimeSlot };
+  }
+
+  async archiveTimeSlot(id: string) {
+    const slot = this.timeSlots.get(id);
+    if (!slot) {
+      throw new NotFoundException('Time slot not found');
+    }
+
+    const archivedTimeSlot: TimeSlotRecord = {
+      ...slot,
+      isActive: false,
+      deletedAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    this.timeSlots.set(id, archivedTimeSlot);
+    return { ...archivedTimeSlot };
   }
 
   async countActiveBookingsForSlot(timeSlotId: string, scheduledDate: string, excludeBookingId?: string) {

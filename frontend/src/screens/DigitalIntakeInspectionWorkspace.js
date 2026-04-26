@@ -18,7 +18,6 @@ import {
 import { ApiError } from '@/lib/authClient'
 import { createVehicleInspection, listVehicleInspections } from '@/lib/inspectionStaffClient'
 import { useUser } from '@/lib/userContext'
-import { inspectionsRoutes } from '@/lib/api/generated/inspections/requests'
 import {
   getSelectedInspection,
   getStaffInspectionCaptureSuccessState,
@@ -286,7 +285,7 @@ export default function DigitalIntakeInspectionWorkspace() {
 
     setHistoryState({
       status: 'history_loading',
-      message: 'Loading vehicle-scoped inspection history from the live backend route...',
+      message: 'Loading vehicle-scoped inspection history...',
     })
 
     try {
@@ -455,8 +454,8 @@ export default function DigitalIntakeInspectionWorkspace() {
             <div>
               <p className="text-sm font-bold text-ink-primary">Vehicle History</p>
               <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                Current live support is vehicle-scoped through `GET /api/vehicles/:id/inspections`.
-                There is no broad inspection queue endpoint yet.
+                Inspection history is vehicle-scoped today. Staff should start from a known customer vehicle
+                rather than expecting a broad queue on this page.
               </p>
             </div>
           </div>
@@ -483,8 +482,7 @@ export default function DigitalIntakeInspectionWorkspace() {
             <div>
               <p className="card-title">Live Vehicle Inspection Capture</p>
               <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                Uses `{inspectionsRoutes.createInspection.method} {inspectionsRoutes.createInspection.path}`.
-                Keep this vehicle-owned; do not create booking or job-order truth here.
+                Save one vehicle-owned inspection record. Do not create booking or job-order truth here.
               </p>
             </div>
             <span className="badge badge-gray">Known id required</span>
@@ -645,8 +643,7 @@ export default function DigitalIntakeInspectionWorkspace() {
               <div>
                 <p className="card-title">Vehicle Inspection History</p>
                 <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                  Uses `{inspectionsRoutes.listInspectionsByVehicle.method} {inspectionsRoutes.listInspectionsByVehicle.path}`.
-                  A broad inspection queue remains planned work.
+                  Load prior intake and condition records for the vehicle currently being reviewed.
                 </p>
               </div>
               <span className="badge badge-gray">Read state: {formatLabel(historyState.status)}</span>
@@ -753,25 +750,25 @@ export default function DigitalIntakeInspectionWorkspace() {
       <section className="card p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="card-title">Contract And Gap Notes</p>
+            <p className="card-title">Workflow Notes</p>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
-              This route intentionally exposes existing inspection capability instead of creating duplicate
+              This workspace intentionally exposes existing inspection capability instead of creating duplicate
               booking, vehicle, job-order, or QA truth.
             </p>
           </div>
-          <span className="badge badge-gray">Live vehicle-scoped routes only</span>
+          <span className="badge badge-gray">Vehicle-scoped workflow</span>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">Live APIs</p>
+            <p className="text-sm font-bold text-ink-primary">Vehicle History</p>
             <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              Create and read stay vehicle-scoped through `/api/vehicles/:id/inspections`.
+              Create and read inspection records from the selected customer vehicle context.
             </p>
           </div>
           <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">Planned Gap</p>
+            <p className="text-sm font-bold text-ink-primary">Queue Expectation</p>
             <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              A broad inspection queue or filter endpoint is not live yet, so staff should enter a known vehicle id.
+              A broad intake queue is planned later, so staff should enter a known vehicle id for the demo.
             </p>
           </div>
           <div className="rounded-2xl border border-surface-border bg-surface-card p-4">

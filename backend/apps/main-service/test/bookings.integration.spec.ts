@@ -64,6 +64,27 @@ describe('BookingsController integration', () => {
         }),
       );
 
+      const archiveTimeSlotResponse = await request(app.getHttpServer())
+        .delete(`/api/time-slots/${createTimeSlotResponse.body.id}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
+      expect(archiveTimeSlotResponse.status).toBe(200);
+      expect(archiveTimeSlotResponse.body).toEqual(
+        expect.objectContaining({
+          id: createTimeSlotResponse.body.id,
+          isActive: false,
+        }),
+      );
+
+      const timeSlotsAfterArchive = await request(app.getHttpServer()).get('/api/time-slots');
+      expect(timeSlotsAfterArchive.status).toBe(200);
+      expect(timeSlotsAfterArchive.body).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: createTimeSlotResponse.body.id,
+          }),
+        ]),
+      );
+
       const availabilityResponse = await request(app.getHttpServer())
         .get('/api/bookings/availability')
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)

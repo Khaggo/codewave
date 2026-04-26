@@ -14,6 +14,7 @@ const ROUTE_TITLES = {
   '/insurance': 'Insurance Inquiries',
   '/shop': 'Shop & Inventory',
   '/loyalty': 'Loyalty Management',
+  '/admin/customers': 'Customers & Vehicles',
   '/admin/users': 'User Administration',
   '/admin/job-orders': 'Job Order Workbench',
   '/admin/intake-inspections': 'Intake Inspections',
@@ -27,6 +28,7 @@ const ROUTE_TITLES = {
 const SEARCH_DESTINATIONS = [
   { label: 'Dashboard', sub: 'Staff overview and live operations shortcuts', href: '/' },
   { label: 'Bookings', sub: 'Daily schedule, queue, status updates, rescheduling', href: '/bookings' },
+  { label: 'Customers & Vehicles', sub: 'Customer profile and vehicle records', href: '/admin/customers' },
   { label: 'Job Order Workbench', sub: 'Create job orders, progress, photos, finalization, payment', href: '/admin/job-orders' },
   { label: 'Intake Inspections', sub: 'Vehicle-scoped inspection capture and history', href: '/admin/intake-inspections' },
   { label: 'QA Audit', sub: 'Load quality gates and record super-admin overrides', href: '/admin/qa-audit' },
@@ -150,7 +152,7 @@ function GlobalSearch() {
                   No live page result for &quot;<span className="font-medium text-ink-secondary">{query}</span>&quot;.
                 </p>
                 <p className="mt-2 text-xs leading-5 text-ink-muted">
-                  Search is limited to real portal pages until a backend global-search endpoint exists.
+                  Search currently covers real portal pages only.
                 </p>
               </div>
             )}
@@ -180,7 +182,7 @@ export default function Topbar({ onMenuToggle, user, onLogout }) {
 
   return (
     <header className="sticky top-0 z-20 border-b border-surface-border bg-surface-card">
-      <div className="flex h-14 items-center gap-3 px-4">
+      <div className="flex h-16 items-center gap-3 px-4">
         <button onClick={onMenuToggle} className="rounded-lg p-1.5 text-ink-muted hover:bg-surface-hover md:hidden">
           <Menu size={20} />
         </button>

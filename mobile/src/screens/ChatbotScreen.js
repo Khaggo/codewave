@@ -423,7 +423,7 @@ export default function ChatbotScreen({ account, navigation }) {
             <SupportStatePanel
               icon="shield-alert-outline"
               title="Customer-only support surface"
-              message="This chatbot route is reserved for customer mobile sessions. Staff review and intent management stay out of scope here."
+              message="This chatbot screen is reserved for customer mobile sessions. Staff review and intent management stay out of scope here."
               tone="danger"
             />
           ) : null}

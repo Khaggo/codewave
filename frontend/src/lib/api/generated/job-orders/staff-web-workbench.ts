@@ -319,7 +319,7 @@ const buildDefaultItems = (booking: BookingResponse): CreateJobOrderItemRequest[
       description: service.description ?? undefined,
       estimatedHours:
         typeof service.durationMinutes === 'number' && service.durationMinutes > 0
-          ? Number((service.durationMinutes / 60).toFixed(1))
+          ? Math.max(1, Math.ceil(service.durationMinutes / 60))
           : undefined,
     }));
 

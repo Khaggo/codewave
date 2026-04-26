@@ -168,52 +168,30 @@ describe('AuthController integration', () => {
           email: expect.stringMatching(/^maria\d{3}\.mechanic@autocare\.com$/),
           role: 'technician',
           staffCode: expect.stringMatching(/^MEC-\d{4}$/),
-          isActive: false,
+          isActive: true,
         }),
       );
       const generatedStaffEmail = createStaffResponse.body.email;
-
-      const staffLoginWhileInactive = await request(app.getHttpServer()).post('/api/auth/login').send({
-        email: generatedStaffEmail,
-        password: 'SecurePass123',
-      });
-      expect(staffLoginWhileInactive.status).toBe(401);
-
-      const staffActivationStart = await request(app.getHttpServer())
-        .post('/api/auth/staff-activation/google/start')
-        .send({
-          googleIdToken: `google-id-token:${generatedStaffEmail}:google-staff-1:Maria:Santos`,
-        });
-
-      expect(staffActivationStart.status).toBe(201);
-
-      const notificationsRepository = app.get(NotificationsRepository);
-      const otpNotification = await notificationsRepository.findNotificationByDedupeKey(
-        `auth-otp-${staffActivationStart.body.enrollmentId}`,
-      );
-      expect(otpNotification).toBeTruthy();
-
-      if (!otpNotification) {
-        throw new Error('OTP notification not found');
-      }
-
-      const otpMatch = otpNotification.message.match(/(\d{4,8})/);
-      expect(otpMatch).toBeTruthy();
-
-      const staffActivationVerify = await request(app.getHttpServer())
-        .post('/api/auth/staff-activation/verify-email')
-        .send({
-          enrollmentId: staffActivationStart.body.enrollmentId,
-          otp: otpMatch?.[1],
-        });
-
-      expect(staffActivationVerify.status).toBe(200);
 
       const staffLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
         email: generatedStaffEmail,
         password: 'SecurePass123',
       });
       expect(staffLogin.status).toBe(200);
+
+      const staffListResponse = await request(app.getHttpServer())
+        .get('/api/admin/staff-accounts')
+        .set('Authorization', `Bearer ${adminLogin.body.accessToken}`);
+      expect(staffListResponse.status).toBe(200);
+      expect(staffListResponse.body).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: createStaffResponse.body.id,
+            accountType: 'mechanic',
+            roleLabel: 'Mechanic',
+          }),
+        ]),
+      );
 
       const deactivateResponse = await request(app.getHttpServer())
         .patch(`/api/admin/staff-accounts/${createStaffResponse.body.id}/status`)

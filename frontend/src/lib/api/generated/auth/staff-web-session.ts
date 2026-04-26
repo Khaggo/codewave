@@ -81,6 +81,13 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     notes: 'Back-job review and release coordination remain adviser/admin workflows.',
   },
   {
+    key: 'customer-directory',
+    href: '/admin/customers',
+    label: 'Customers & Vehicles',
+    visibleTo: ['service_adviser', 'super_admin'],
+    notes: 'Staff can review customer profile and vehicle context without exposing customer self-service flows on web.',
+  },
+  {
     key: 'service-timeline',
     href: '/timeline',
     label: 'Service Timeline',

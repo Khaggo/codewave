@@ -1084,13 +1084,13 @@ export default function LoyaltyManager() {
         <div className="space-y-4">
           <InfoPanel
             tone="warning"
-            title="Customer account list needs one backend route"
-            body="The backend can read a specific customer's loyalty balance by user id, but it does not yet expose an admin route to list or search all loyalty accounts. The cards below use analytics totals only."
+            title="Customer account list planned"
+            body="This demo view currently shows analytics totals only. A searchable loyalty-account directory can be added later without showing placeholder rows."
           />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <StatCard label="Known Accounts" value={(state.analytics?.totals.accountCount ?? 0).toLocaleString()} />
             <StatCard label="Total Balance" value={(state.analytics?.totals.totalPointsBalance ?? 0).toLocaleString()} helper="Across all loyalty accounts" />
-            <StatCard label="Manual Adjustment" value="Blocked" helper="Needs an admin adjustment endpoint" />
+            <StatCard label="Manual Adjustment" value="Blocked" helper="Planned for a later staff control" />
           </div>
         </div>
       ) : null}
@@ -1099,8 +1099,8 @@ export default function LoyaltyManager() {
         <div className="space-y-4">
           <InfoPanel
             tone="warning"
-            title="Detailed redemption log needs one backend route"
-            body="The backend records redemptions and analytics can summarize top rewards, but the web app does not yet have a live route to list every redemption row for staff review."
+            title="Detailed redemption log planned"
+            body="Redemptions are summarized through analytics today. A full staff review log can be added later without inventing fake transaction rows."
           />
           <div className="card overflow-hidden">
             <div className="px-5 py-4 border-b border-surface-border">

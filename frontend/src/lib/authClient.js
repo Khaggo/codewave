@@ -72,6 +72,52 @@ const normalizeSession = (sessionResponse) => {
   };
 };
 
+const inferAccountType = (account) => {
+  const explicitType = account?.accountType;
+  if (explicitType) return explicitType;
+
+  const staffCode = String(account?.staffCode ?? '').toUpperCase();
+  if (staffCode.startsWith('MEC-')) return 'mechanic';
+  if (staffCode.startsWith('TEC-')) return 'technician';
+  if (staffCode.startsWith('ADM-')) return 'admin';
+  return 'staff';
+};
+
+const accountTypeLabel = {
+  staff: 'Staff',
+  mechanic: 'Mechanic',
+  technician: 'Technician',
+  admin: 'Admin',
+};
+
+const normalizeManagedStaffAccount = (account) => {
+  const accountType = inferAccountType(account);
+  const name = buildDisplayName(account);
+
+  return {
+    ...account,
+    accountType,
+    roleLabel: accountTypeLabel[accountType] ?? formatRoleLabel(account?.role),
+    displayName: account?.displayName ?? name,
+    initials: buildInitials(name),
+  };
+};
+
+const normalizeCustomerRecord = (customer) => {
+  const name = buildDisplayName(customer);
+  const vehicles = Array.isArray(customer?.vehicles) ? customer.vehicles : [];
+  const addresses = Array.isArray(customer?.addresses) ? customer.addresses : [];
+
+  return {
+    ...customer,
+    displayName: customer?.displayName ?? name,
+    vehicles,
+    addresses,
+    defaultAddress: customer?.defaultAddress ?? addresses.find((address) => address.isDefault) ?? addresses[0] ?? null,
+    vehicleCount: customer?.vehicleCount ?? vehicles.length,
+  };
+};
+
 const request = async (path, options = {}) => {
   const { body, headers, ...rest } = options;
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -127,7 +173,17 @@ export const createStaffAccount = async (payload, accessToken) =>
       Authorization: `Bearer ${accessToken}`,
     },
     body: payload,
-  });
+  }).then(normalizeManagedStaffAccount);
+
+export const listStaffAccounts = async (accessToken) =>
+  request('/api/admin/staff-accounts', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }).then((accounts) =>
+    Array.isArray(accounts) ? accounts.map((account) => normalizeManagedStaffAccount(account)) : [],
+  );
 
 export const updateStaffAccountStatus = async (userId, payload, accessToken) =>
   request(`/api/admin/staff-accounts/${userId}/status`, {
@@ -136,7 +192,17 @@ export const updateStaffAccountStatus = async (userId, payload, accessToken) =>
       Authorization: `Bearer ${accessToken}`,
     },
     body: payload,
-  });
+  }).then(normalizeManagedStaffAccount);
+
+export const listAdminCustomers = async (accessToken) =>
+  request('/api/admin/customers', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }).then((customers) =>
+    Array.isArray(customers) ? customers.map((customer) => normalizeCustomerRecord(customer)) : [],
+  );
 
 export const refreshAuthSession = async (refreshToken) =>
   normalizeSession(

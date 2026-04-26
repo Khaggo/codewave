@@ -9,7 +9,7 @@ export default function ShopPage() {
         <span className="badge badge-blue">Live admin surfaces</span>
         <h1 className="mt-4 text-2xl font-extrabold text-ink-primary">Shop data is managed through admin pages</h1>
         <p className="mt-2 text-sm leading-6 text-ink-secondary">
-          This legacy shop route no longer shows local demo inventory. Use the catalog and inventory workspaces
+          This legacy shop page no longer shows local demo inventory. Use the catalog and inventory workspaces
           below so the demo only presents live backend-backed product and stock workflows.
         </p>
       </div>

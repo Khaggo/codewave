@@ -84,7 +84,7 @@ export const createJobOrderFromBooking = async ({
           description: trimOrUndefined(item?.description),
           estimatedHours:
             typeof item?.estimatedHours === 'number' && Number.isFinite(item.estimatedHours)
-              ? item.estimatedHours
+              ? Math.max(1, Math.ceil(item.estimatedHours))
               : undefined,
         }))
         .filter((item) => item.name)

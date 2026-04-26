@@ -39,7 +39,6 @@ import {
 import {
   buildDigitalGarageSnapshot,
   createEmptyCustomerDigitalGarageSnapshot,
-  digitalGarageRoutes,
   digitalGarageUnsupportedActions,
   loadCustomerDigitalGarageSnapshot,
 } from '../lib/digitalGarageClient';
@@ -100,7 +99,6 @@ const tabs = [
   { key: 'insurance', label: 'Insurance', icon: 'shield-outline' },
   { key: 'rewards', label: 'Rewards', icon: 'star-four-points-outline' },
   { key: 'store', label: 'Shop', icon: 'shopping-outline' },
-  { key: 'menu', label: 'Profile', icon: 'account-outline' },
 ];
 
 const genderOptions = ['Male', 'Female', 'Prefer not to say'];
@@ -1665,9 +1663,9 @@ function BookingServiceCard({ item, isSelected, onPress, isCompact = false }) {
 function BookingDateCard({ item, isSelected, onPress, isCompact, cardStyle }) {
   return (
     <MotionPressable
+      containerStyle={[styles.bookingDatePressable, cardStyle]}
       style={[
         styles.bookingDateCard,
-        cardStyle,
         isCompact && styles.bookingDateCardCompact,
         isSelected && styles.bookingDateCardActive,
         item.statusTone === 'success' && styles.bookingDateCardSuccess,
@@ -2021,14 +2019,12 @@ export default function Dashboard({
 }) {
   const isWeb = Platform.OS === 'web';
   const { width: windowWidth } = useWindowDimensions();
-  const isTinyPhone = !isWeb && windowWidth < 340;
-  const isVeryCompactPhone = !isWeb && windowWidth < 360;
-  const isCompactPhone = !isWeb && windowWidth < 390;
-  const bookingDateCardStyle = isVeryCompactPhone
-    ? { flexBasis: '100%', maxWidth: '100%' }
-    : isCompactPhone
-      ? { flexBasis: '47%', maxWidth: '47%' }
-      : { flexBasis: '31%', maxWidth: '31%' };
+  const isTinyPhone = !isWeb && windowWidth < 360;
+  const isVeryCompactPhone = !isWeb && windowWidth < 390;
+  const isCompactPhone = !isWeb && windowWidth < 430;
+  const bookingDateCardStyle = isCompactPhone
+    ? { width: '100%', maxWidth: '100%' }
+    : { width: '48%', maxWidth: '48%' };
   const [activeTab, setActiveTab] = useState('explore');
   const [menuScreen, setMenuScreen] = useState('root');
   const [bookingMode, setBookingMode] = useState('book');
@@ -2619,7 +2615,7 @@ export default function Dashboard({
   }, [catalogDetailState.status, productOverlayAnim]);
 
   useEffect(() => {
-    if (activeTab !== 'messages') {
+    if (activeTab !== 'messages' && activeTab !== 'insurance') {
       return undefined;
     }
 
@@ -3187,10 +3183,8 @@ export default function Dashboard({
   }, [activeTab, menuScreen]);
 
   useEffect(() => {
-    const activeIndex = Math.max(
-      tabs.findIndex((tab) => tab.key === activeTab),
-      0
-    );
+    const nextActiveIndex = tabs.findIndex((tab) => tab.key === activeTab);
+    const activeIndex = nextActiveIndex >= 0 ? nextActiveIndex : 0;
     const slotWidth = windowWidth / tabs.length;
     const itemInset = isTinyPhone ? 0 : isVeryCompactPhone ? 1 : isCompactPhone ? 3 : 6;
 
@@ -3206,16 +3200,6 @@ export default function Dashboard({
 
   const handleTabPress = (tabKey) => {
     setActiveTab(tabKey);
-
-    if (tabKey === 'menu') {
-      setMenuScreen('root');
-    } else if (tabKey === 'insurance') {
-      setMenuScreen('root');
-      setProfileSection('insurance');
-    } else if (tabKey === 'rewards') {
-      setMenuScreen('root');
-      setProfileSection('rewards');
-    }
   };
 
   const handleOpenCart = () => {
@@ -3899,6 +3883,15 @@ export default function Dashboard({
     }
 
     navigateToBooking('book');
+  };
+
+  const navigateToInsurancePage = (vehicleId = null) => {
+    if (vehicleId) {
+      setSelectedGarageVehicleId(vehicleId);
+    }
+
+    setActiveTab('insurance');
+    setIsProfileTooltipVisible(false);
   };
 
   const navigateToProfileSection = (sectionKey) => {
@@ -4990,17 +4983,16 @@ export default function Dashboard({
           />
 
           <View style={styles.infoBlock}>
-            <Text style={styles.infoTitle}>Catalog and checkout boundary</Text>
+            <Text style={styles.infoTitle}>Catalog and checkout</Text>
             <Text style={styles.infoText}>
-              Product browse, cart mutation, invoice preview, and invoice checkout all use the ecommerce
-              service on the same host as your main API, but on port 3001.
+              Browse available items, manage your cart, and review checkout totals from the customer shop.
             </Text>
           </View>
 
           <View style={styles.infoBlock}>
             <Text style={styles.infoTitle}>Need post-checkout tracking?</Text>
             <Text style={styles.infoText}>
-              Open the Orders tab to review direct ecommerce order and invoice truth without mixing that state into your live cart, notifications, or loyalty history.
+              Open the Orders tab to review submitted shop orders and invoice updates.
             </Text>
             <TouchableOpacity
               style={styles.secondaryButton}
@@ -5017,7 +5009,7 @@ export default function Dashboard({
             <View style={styles.storeOrdersToolbarCopy}>
               <Text style={styles.bookingSectionLabel}>Order History</Text>
               <Text style={styles.storeOrdersToolbarText}>
-                Read-only customer order and invoice truth from ecommerce routes. Notifications and loyalty refresh separately.
+                Review submitted orders and invoice updates without changing your active cart.
               </Text>
             </View>
 
@@ -5394,7 +5386,7 @@ export default function Dashboard({
               <View style={styles.bookingDiscoveryBannerCopy}>
                 <Text style={styles.bookingDiscoveryBannerTitle}>Live booking discovery</Text>
                 <Text style={styles.bookingDiscoveryBannerText}>
-                  Services, slot definitions, and appointment-date availability come from live backend routes. Choosing a slot here does not hold capacity until booking create.
+                  Choose a service, shop window, and available date. Capacity is confirmed only after you submit the booking request.
                 </Text>
               </View>
             </View>
@@ -5500,7 +5492,7 @@ export default function Dashboard({
                 <BookingDiscoveryStatePanel
                   icon="wrench-clock"
                   title="No services are available right now"
-                  message="The live services route returned no active booking services. Keep this state explicit instead of filling the list with placeholders."
+                  message="No active booking services are published right now."
                 />
               ) : null}
               {paginatedBookingServiceOptions.map((service) => (
@@ -5526,7 +5518,7 @@ export default function Dashboard({
                 <BookingDiscoveryStatePanel
                   icon="calendar-remove-outline"
                   title="No bookable time slots are open"
-                  message="The live time-slot route returned no active slots. Keep this visible to the customer instead of pretending a slot is available."
+                  message="No active shop windows are open for customer booking right now."
                 />
               ) : null}
               {bookingTimeSlotOptions.length ? (
@@ -5829,7 +5821,7 @@ export default function Dashboard({
             <View>
               <Text style={styles.bookingSectionLabel}>Booking History</Text>
               <Text style={styles.bookingHistoryToolbarText}>
-                Customer-visible records from your booking history endpoint.
+                Customer-visible records from your booking history.
               </Text>
             </View>
             <TouchableOpacity
@@ -5885,7 +5877,7 @@ export default function Dashboard({
             <BookingDiscoveryStatePanel
               icon="calendar-blank-outline"
               title="No bookings yet"
-              message="Submitted bookings will appear here after the create endpoint returns a booking record."
+              message="Submitted bookings will appear here after they are saved."
             />
           )}
 
@@ -5893,7 +5885,7 @@ export default function Dashboard({
             <BookingDiscoveryStatePanel
               icon="timer-sand"
               title="Refreshing booking detail"
-              message="Loading the selected booking detail from the live detail endpoint."
+              message="Loading the selected booking detail."
               isLoading
             />
           ) : null}
@@ -5992,6 +5984,207 @@ export default function Dashboard({
     ));
   };
 
+  const renderRewardsContent = () =>
+    renderScrollableContent(styles.menuRootContent, (
+      <>
+      <View style={styles.profileHomeHeader}>
+        <View>
+          <Text style={styles.bookingEyebrow}>LOYALTY</Text>
+          <Text style={styles.profileHomeTitle}>Rewards</Text>
+        </View>
+        <NotificationIconButton
+          count={notificationsFeed.filter((item) => item.unread).length}
+          onPress={handleToggleNotifications}
+        />
+      </View>
+
+      <View style={styles.loyaltyCard}>
+        <View style={styles.loyaltyCardHeader}>
+          <View style={styles.loyaltyCardTitleRow}>
+            <MaterialCommunityIcons name="trophy-outline" size={19} color="#FFCC33" />
+            <Text style={styles.loyaltyCardTitle}>Your Rewards Wallet</Text>
+          </View>
+          <View style={styles.loyaltyPointsWrap}>
+            <Text style={styles.loyaltyPointsValue}>{loyaltyPointsBalance.toLocaleString()}</Text>
+            <Text style={styles.loyaltyPointsLabel}>Total Points</Text>
+          </View>
+        </View>
+
+        <View style={styles.loyaltyMetaRow}>
+          <Text style={styles.currentTierText}>{loyaltyTier.label}</Text>
+          <Text style={styles.nextTierText}>
+            {loyaltyTier.nextTierLabel
+              ? `${loyaltyTier.pointsToNext.toLocaleString()} pts to ${loyaltyTier.nextTierLabel}`
+              : 'Top loyalty tier reached'}
+          </Text>
+        </View>
+
+        <View style={styles.loyaltyTrack}>
+          <View
+            style={[
+              styles.loyaltyFill,
+              {
+                width: `${Math.max(loyaltyTier.progressRatio, 0.08) * 100}%`,
+              },
+            ]}
+          />
+        </View>
+      </View>
+
+      <Text style={styles.sectionHeading}>Available Rewards</Text>
+      {loyaltyState.status === 'loading' && !loyaltyRewards.length ? (
+        <View style={styles.infoPanel}>
+          <Text style={styles.infoPanelTitle}>Loading rewards</Text>
+          <Text style={styles.infoPanelText}>
+            We are syncing your points balance and reward catalog.
+          </Text>
+        </View>
+      ) : null}
+
+      {loyaltyState.errorMessage ? (
+        <View style={styles.infoPanel}>
+          <Text style={styles.infoPanelTitle}>Rewards unavailable</Text>
+          <Text style={styles.infoPanelText}>{loyaltyState.errorMessage}</Text>
+        </View>
+      ) : null}
+
+      {loyaltyRewards.length ? (
+        loyaltyRewards.map((item) => (
+          <RewardOfferCard
+            key={item.key}
+            item={{
+              ...item,
+              loading: loyaltyState.redeemingRewardId === item.id,
+            }}
+            onClaim={() => handleRedeemReward(item)}
+          />
+        ))
+      ) : loyaltyState.status !== 'loading' ? (
+        <View style={styles.infoPanel}>
+          <Text style={styles.infoPanelTitle}>Reward catalog is empty</Text>
+          <Text style={styles.infoPanelText}>
+            Rewards will appear here once staff publish active catalog entries.
+          </Text>
+        </View>
+      ) : null}
+
+      {loyaltyTransactions.length ? (
+        <View style={styles.loyaltyActivityCard}>
+          <Text style={styles.loyaltyActivityTitle}>Recent Loyalty Activity</Text>
+          <Text style={styles.loyaltyActivitySubtitle}>
+            Points earned and redeemed from your customer loyalty account.
+          </Text>
+          {loyaltyTransactions.slice(0, 5).map((item) => (
+            <LoyaltyTransactionRow key={item.id} item={item} />
+          ))}
+        </View>
+      ) : (
+        <View style={styles.infoPanel}>
+          <Text style={styles.infoPanelTitle}>No loyalty activity yet</Text>
+          <Text style={styles.infoPanelText}>
+            Complete paid service work, then come back here to track your rewards ledger.
+          </Text>
+        </View>
+      )}
+      </>
+    ));
+
+  const renderInsuranceContent = () => {
+    const vehicles = digitalGarageState.vehicleSummaries?.length
+      ? digitalGarageState.vehicleSummaries
+      : (digitalGarageState.vehicles ?? account?.ownedVehicles ?? []).map((vehicle, index) => ({
+          id: vehicle.id,
+          title: buildOwnedVehicleLabel(vehicle),
+          subtitle: [vehicle.plateNumber, vehicle.color].filter(Boolean).join(' - ') || 'Vehicle details saved',
+          ordinalLabel: `Vehicle ${index + 1}`,
+        }));
+
+    return renderScrollableContent(styles.menuRootContent, (
+      <>
+      <View style={styles.profileHomeHeader}>
+        <View>
+          <Text style={styles.bookingEyebrow}>INSURANCE</Text>
+          <Text style={styles.profileHomeTitle}>Insurance</Text>
+        </View>
+        <NotificationIconButton
+          count={notificationsFeed.filter((item) => item.unread).length}
+          onPress={handleToggleNotifications}
+        />
+      </View>
+
+      <View style={styles.infoPanel}>
+        <Text style={styles.infoPanelTitle}>Insurance inquiry center</Text>
+        <Text style={styles.infoPanelText}>
+          Start or continue CTPL and comprehensive insurance inquiries using a vehicle already attached to your account.
+        </Text>
+        <TouchableOpacity
+          style={[styles.primaryButton, styles.editProfileButton]}
+          onPress={() => navigateToInsuranceInquiry(selectedGarageVehicleId)}
+          activeOpacity={0.86}
+        >
+          <Text style={styles.primaryButtonText}>Open Insurance Inquiry Form</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.sectionHeading}>Choose Vehicle Context</Text>
+      {digitalGarageState.status === 'garage_loading' && !vehicles.length ? (
+        <View style={styles.infoPanel}>
+          <Text style={styles.infoPanelTitle}>Loading vehicles</Text>
+          <Text style={styles.infoPanelText}>We are preparing your vehicle list for insurance intake.</Text>
+        </View>
+      ) : null}
+
+      {vehicles.length ? (
+        <View style={styles.garageVehicleList}>
+          {vehicles.map((vehicle) => {
+            const isSelected = vehicle.id === selectedGarageVehicleId;
+
+            return (
+              <MotionPressable
+                key={vehicle.id ?? vehicle.title}
+                style={[styles.garageVehicleCard, isSelected && styles.garageVehicleCardSelected]}
+                onPress={() => setSelectedGarageVehicleId(vehicle.id)}
+                scaleTo={0.99}
+              >
+                <View style={styles.garageVehicleHeader}>
+                  <View style={styles.garageVehicleIconWrap}>
+                    <MaterialCommunityIcons name="shield-car" size={20} color={colors.primary} />
+                  </View>
+                  <View style={styles.garageVehicleCopy}>
+                    <View style={styles.garageVehicleTitleRow}>
+                      <Text style={styles.garageVehicleTitle}>{vehicle.title}</Text>
+                      {isSelected ? (
+                        <View style={styles.garagePrimaryPill}>
+                          <Text style={styles.garagePrimaryPillText}>Selected</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={styles.garageVehicleMeta}>{vehicle.subtitle}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.garageActionButton}
+                  onPress={() => navigateToInsuranceInquiry(vehicle.id)}
+                  activeOpacity={0.86}
+                >
+                  <Text style={styles.garageActionText}>Start Inquiry</Text>
+                </TouchableOpacity>
+              </MotionPressable>
+            );
+          })}
+        </View>
+      ) : digitalGarageState.status !== 'garage_loading' ? (
+        <View style={styles.infoPanel}>
+          <Text style={styles.infoPanelTitle}>No vehicles available</Text>
+          <Text style={styles.infoPanelText}>
+            Add a vehicle first so insurance inquiries can stay tied to the correct ownership record.
+          </Text>
+        </View>
+      ) : null}
+      </>
+    ));
+  };
+
   const renderHomeContent = () => {
     const currentHour = new Date().getHours();
     const greeting =
@@ -6043,7 +6236,7 @@ export default function Dashboard({
         icon: 'shield-outline',
         bgColor: 'rgba(52, 127, 255, 0.14)',
         iconColor: '#347FFF',
-        onPress: () => navigateToInsuranceInquiry(),
+        onPress: () => navigateToInsurancePage(),
       },
       {
         key: 'rewards',
@@ -6271,7 +6464,7 @@ export default function Dashboard({
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={styles.timelineStateTitle}>Loading your Digital Garage</Text>
             <Text style={styles.timelineStateText}>
-              We are reading your customer-owned vehicles from the live backend route.
+              We are loading the vehicles connected to your customer account.
             </Text>
           </View>
         );
@@ -6333,7 +6526,7 @@ export default function Dashboard({
                       ) : null}
                     </View>
                     <Text style={styles.garageVehicleMeta}>{vehicle.subtitle}</Text>
-                    <Text style={styles.garageVehicleRoute}>{vehicle.routeTruth}</Text>
+                    <Text style={styles.garageVehicleRoute}>{vehicle.ordinalLabel ?? 'Customer vehicle'}</Text>
                   </View>
                 </View>
 
@@ -6470,7 +6663,7 @@ export default function Dashboard({
 
         <View style={styles.garageHeroCard}>
           <View style={styles.garageHeroCopy}>
-            <Text style={styles.garageHeroEyebrow}>Live vehicle owner route</Text>
+            <Text style={styles.garageHeroEyebrow}>Selected vehicle</Text>
             <Text style={styles.garageHeroTitle}>
               {selectedGarageVehicleSummary?.title ?? primaryVehicleLabel}
             </Text>
@@ -6489,15 +6682,15 @@ export default function Dashboard({
         {renderGarageVehicleState()}
 
         <View style={styles.garagePlannedActionsCard}>
-          <Text style={styles.garagePlannedTitle}>Planned garage actions</Text>
+          <Text style={styles.garagePlannedTitle}>Coming garage tools</Text>
           <Text style={styles.garagePlannedText}>
-            These actions are intentionally labeled as future API work so the app does not invent vehicle ownership truth locally.
+            These controls stay disabled until staff approve the next vehicle-management workflow.
           </Text>
           {digitalGarageUnsupportedActions.map((action) => (
             <View key={action.key} style={styles.garagePlannedRow}>
               <View style={styles.garagePlannedRowCopy}>
                 <Text style={styles.garagePlannedActionLabel}>{action.label}</Text>
-                <Text style={styles.garagePlannedRoute}>{action.route}</Text>
+                <Text style={styles.garagePlannedRoute}>Not available in this demo build</Text>
               </View>
               <View style={styles.garagePlannedPill}>
                 <Text style={styles.garagePlannedPillText}>Planned</Text>
@@ -6507,21 +6700,9 @@ export default function Dashboard({
         </View>
 
         <View style={styles.garageRouteCard}>
-          <Text style={styles.garagePlannedTitle}>Connected live routes</Text>
+          <Text style={styles.garagePlannedTitle}>Garage workflow</Text>
           <Text style={styles.garagePlannedText}>
-            Garage cards reuse existing vehicle, booking, insurance, and lifecycle contracts.
-          </Text>
-          <Text style={styles.garageRouteText}>
-            {digitalGarageRoutes.listOwnedVehicles.method} {digitalGarageRoutes.listOwnedVehicles.path}
-          </Text>
-          <Text style={styles.garageRouteText}>
-            {digitalGarageRoutes.vehicleTimeline.method} {digitalGarageRoutes.vehicleTimeline.path}
-          </Text>
-          <Text style={styles.garageRouteText}>
-            {digitalGarageRoutes.createBooking.method} {digitalGarageRoutes.createBooking.path}
-          </Text>
-          <Text style={styles.garageRouteText}>
-            {digitalGarageRoutes.createInsuranceInquiry.method} {digitalGarageRoutes.createInsuranceInquiry.path}
+            Use Garage to choose the vehicle context, then continue to booking, insurance, or lifecycle history.
           </Text>
         </View>
 
@@ -6630,8 +6811,12 @@ export default function Dashboard({
       return renderStoreContent();
     }
 
-    if (activeTab === 'insurance' || activeTab === 'rewards') {
-      return renderMenuRoot();
+    if (activeTab === 'insurance') {
+      return renderInsuranceContent();
+    }
+
+    if (activeTab === 'rewards') {
+      return renderRewardsContent();
     }
 
     return renderMenuContent();
@@ -6644,6 +6829,8 @@ export default function Dashboard({
   const isCatalogDetailVisible = catalogDetailState.status !== 'idle';
   const selectedCatalogProduct = catalogDetailState.product ?? catalogDetailState.previewProduct;
   const unreadNotificationCount = notificationsFeed.filter((item) => item.unread).length;
+  const activeBottomTabIndex = tabs.findIndex((tab) => tab.key === activeTab);
+  const hasActiveBottomTab = activeBottomTabIndex >= 0;
   const bottomNavSlotWidth = windowWidth / tabs.length;
   const bottomNavItemInset = isTinyPhone ? 0 : isVeryCompactPhone ? 1 : isCompactPhone ? 3 : 6;
   const bottomNavIndicatorWidth = Math.max(
@@ -7382,6 +7569,7 @@ export default function Dashboard({
                 styles.bottomNavIndicator,
                 {
                   width: bottomNavIndicatorWidth,
+                  opacity: hasActiveBottomTab ? 1 : 0,
                   transform: [{ translateX: bottomNavIndicatorAnim }],
                 },
               ]}
@@ -8953,10 +9141,15 @@ const styles = StyleSheet.create({
   bookingDateRow: {
     paddingRight: 12,
   },
+  bookingDatePressable: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   bookingDateCard: {
-    flexGrow: 1,
-    flexShrink: 1,
-    minHeight: 148,
+    width: '100%',
+    flexGrow: 0,
+    flexShrink: 0,
+    minHeight: 132,
     borderRadius: 20,
     backgroundColor: colors.surfaceStrong,
     borderWidth: 1,
@@ -8967,7 +9160,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   bookingDateCardCompact: {
-    minHeight: 138,
+    minHeight: 116,
   },
   bookingDateCardActive: {
     backgroundColor: colors.primary,
@@ -9121,7 +9314,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
-    gap: 10,
+    gap: 12,
   },
   bookingAvailabilityGridCompact: {
     gap: 8,
@@ -9203,11 +9396,12 @@ const styles = StyleSheet.create({
   bookingTimeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: 10,
     marginBottom: 18,
   },
   bookingTimeSlotContainer: {
-    width: '48.6%',
+    width: '48%',
   },
   bookingTimeSlotContainerCompact: {
     width: '100%',

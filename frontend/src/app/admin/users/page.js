@@ -43,24 +43,16 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <section
-        className="relative overflow-hidden rounded-2xl border p-6"
-        style={{
-          background: 'linear-gradient(135deg, rgba(17,17,19,0.98) 0%, rgba(26,16,0,0.92) 100%)',
-          borderColor: 'rgba(240,124,0,0.15)',
-        }}
-      >
-        <div
-          className="absolute right-0 top-0 h-56 w-56 rounded-full opacity-[0.08] blur-3xl pointer-events-none"
-          style={{ background: 'radial-gradient(circle, #f07c00, transparent)' }}
-        />
+      <section className="card relative overflow-hidden p-6">
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-72 bg-gradient-to-l from-brand-orange/10 to-transparent" />
         <div className="relative">
-          <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: '#f07c00' }}>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-orange">
             Super Admin
           </p>
           <h1 className="mt-3 text-3xl font-black text-ink-primary">User Administration Workspace</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
-            Provision protected operations accounts, capture the exact role mapping, and manage activation status updates from one super-admin-only page. This keeps the web portal staff/admin-only while still letting you create staff, mechanic, technician, and admin identities on demand.
+            Provision operations accounts, capture the exact role mapping, and manage account status from one
+            super-admin-only page. Created accounts can sign in immediately with the generated email and selected password.
           </p>
         </div>
       </section>
@@ -68,11 +60,8 @@ export default function AdminUsersPage() {
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {accountTypeCards.map(({ title, copy, icon: Icon }) => (
           <div key={title} className="card p-5">
-            <div
-              className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl"
-              style={{ backgroundColor: 'rgba(240,124,0,0.12)' }}
-            >
-              <Icon size={18} style={{ color: '#f07c00' }} />
+            <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand-orange/10 text-brand-orange">
+              <Icon size={18} />
             </div>
             <h2 className="text-lg font-extrabold text-ink-primary">{title}</h2>
             <p className="mt-2 text-sm leading-6 text-ink-secondary">{copy}</p>

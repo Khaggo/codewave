@@ -32,7 +32,7 @@ function AISummaryCard({ vehicleId }) {
          style={{ borderColor: 'rgba(201,149,26,0.3)', background: 'rgba(201,149,26,0.05)' }}>
       {/* Coming Soon overlay */}
       <div className="absolute top-2.5 right-2.5">
-        <span className="badge badge-gold text-[10px]">Powered by Claude API · Coming Soon</span>
+        <span className="badge badge-gold text-[10px]">AI Summary · Coming Soon</span>
       </div>
 
       <div className="flex items-start gap-3 mt-1">

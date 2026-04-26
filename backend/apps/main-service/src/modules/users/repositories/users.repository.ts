@@ -1,9 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
 import { AppDatabase } from '@shared/db/database.types';
+import { vehicles } from '@main-modules/vehicles/schemas/vehicles.schema';
 
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateAddressDto } from '../dto/update-address.dto';
@@ -77,6 +78,58 @@ export class UsersRepository extends BaseRepository {
         addresses: true,
       },
     });
+  }
+
+  async listStaffAccounts(excludeUserId?: string) {
+    const filters = [ne(users.role, 'customer'), isNull(users.deletedAt)];
+
+    if (excludeUserId) {
+      filters.push(ne(users.id, excludeUserId));
+    }
+
+    return this.db.query.users.findMany({
+      where: and(...filters),
+      with: {
+        profile: true,
+        addresses: {
+          orderBy: desc(addresses.createdAt),
+        },
+      },
+      orderBy: desc(users.createdAt),
+    });
+  }
+
+  async listCustomersWithVehicles() {
+    const customerRows = await this.db.query.users.findMany({
+      where: and(eq(users.role, 'customer'), isNull(users.deletedAt)),
+      with: {
+        profile: true,
+        addresses: {
+          orderBy: desc(addresses.createdAt),
+        },
+      },
+      orderBy: desc(users.createdAt),
+    });
+
+    const customerIds = customerRows.map((user) => user.id);
+    const vehicleRows = customerIds.length
+      ? await this.db.query.vehicles.findMany({
+          where: inArray(vehicles.userId, customerIds),
+          orderBy: desc(vehicles.createdAt),
+        })
+      : [];
+    const vehiclesByUserId = new Map<string, (typeof vehicleRows)[number][]>();
+
+    vehicleRows.forEach((vehicle) => {
+      const currentVehicles = vehiclesByUserId.get(vehicle.userId) ?? [];
+      currentVehicles.push(vehicle);
+      vehiclesByUserId.set(vehicle.userId, currentVehicles);
+    });
+
+    return customerRows.map((user) => ({
+      ...user,
+      vehicles: vehiclesByUserId.get(user.id) ?? [],
+    }));
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {

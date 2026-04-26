@@ -196,6 +196,20 @@
     background-repeat: no-repeat;
   }
   .select:focus { border-color: rgb(var(--brand-orange)); box-shadow: 0 0 0 3px rgb(var(--brand-orange) / 0.1); }
+  .select option {
+    background-color: rgb(var(--surface-input));
+    color: rgb(var(--ink-primary));
+  }
+
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
 
   /* ── Scrollable area (main content) ─────────────────────── */
   .cc-scrollbar::-webkit-scrollbar       { width: 4px; }

@@ -56,6 +56,14 @@ export class UsersService {
     return this.usersRepository.findByStaffCode(staffCode);
   }
 
+  async listStaffAccounts(excludeUserId?: string) {
+    return this.usersRepository.listStaffAccounts(excludeUserId);
+  }
+
+  async listCustomersWithVehicles() {
+    return this.usersRepository.listCustomersWithVehicles();
+  }
+
   async update(id: string, updateUserDto: UpdateUserDto) {
     return this.usersRepository.update(id, updateUserDto);
   }

@@ -462,7 +462,7 @@ export default function QAAuditWorkspace() {
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand-orange">Live QA Operations</p>
             <h1 className="mt-3 text-3xl font-bold text-ink-primary">Quality Gate Review And Override</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
-              Load a real job order QA gate, review findings and release blocks, then record super-admin overrides through the live backend route when an exception is justified.
+              Load a real job order QA gate, review findings and release blocks, then record super-admin overrides when an exception is justified.
             </p>
           </div>
           <Link href="/admin/job-orders" className="btn-primary">
@@ -482,10 +482,10 @@ export default function QAAuditWorkspace() {
       <section className="card p-5 md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="card-title">Live QA Gate Lookup</p>
+            <p className="card-title">QA Gate Lookup</p>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
-              This page uses `GET /api/job-orders/:jobOrderId/qa` and `PATCH /api/job-orders/:jobOrderId/qa/override`.
-              There is no broad QA list endpoint yet, so this page intentionally shows an empty state until a known job-order id is loaded.
+              Paste one job-order id to review its QA findings and release state. A broad QA queue is planned later,
+              so this page intentionally shows an empty state until staff load a known job order.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -616,7 +616,7 @@ export default function QAAuditWorkspace() {
             </p>
           </div>
           <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">Next Route</p>
+            <p className="text-sm font-bold text-ink-primary">Next Step</p>
             <Link href="/admin/job-orders" className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-brand-orange">
               Continue in Job Orders <ExternalLink size={14} />
             </Link>

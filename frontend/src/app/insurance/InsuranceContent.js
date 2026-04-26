@@ -21,7 +21,6 @@ import {
   getSelectedInsuranceQueueItem,
   getStaffInsuranceQueueState,
   insuranceReviewStaffRoles,
-  staffInsuranceContractSources,
 } from '@/lib/api/generated/insurance/staff-web-insurance'
 
 const STATUS_META = {
@@ -259,7 +258,7 @@ export default function InsuranceContent() {
       <div className="space-y-5">
         <BlockingState
           title="Insurance review is adviser/admin only"
-          copy="This workspace is reserved for service advisers and super admins. The sidebar may already hide the route, but this page also blocks direct navigation for non-authorized roles."
+          copy="This workspace is reserved for service advisers and super admins. The sidebar may already hide the page, but this page also blocks direct navigation for non-authorized roles."
         />
       </div>
     )
@@ -274,18 +273,18 @@ export default function InsuranceContent() {
             <h1 className="text-xl md:text-2xl font-black text-ink-primary mt-1">Queue, Detail, and Claim Status Updates</h1>
             <p className="text-sm text-ink-muted mt-2 max-w-3xl">
               This web surface keeps staff review distinct from customer intake. Enter a known inquiry id from mobile intake,
-              then use live detail and status routes without placeholder queue data.
+              then review details and move the claim status without placeholder queue data.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <span className="badge badge-orange">
-              Queue route {staffInsuranceContractSources.queue.status}
+              Queue planned
             </span>
             <span className="badge badge-green">
-              Detail route {staffInsuranceContractSources.detail.status}
+              Detail review ready
             </span>
             <span className="badge badge-green">
-              Status update {staffInsuranceContractSources.update.status}
+              Status update ready
             </span>
           </div>
         </div>
@@ -296,7 +295,7 @@ export default function InsuranceContent() {
           icon={ClipboardList}
           label="Review Queue"
           value={queueItems.length}
-          sub={queueState === 'queue_loaded' ? 'Live queue items loaded' : 'No live queue endpoint yet'}
+          sub={queueState === 'queue_loaded' ? 'Queue items loaded' : 'Manual inquiry lookup for now'}
         />
         <SummaryTile
           icon={ShieldCheck}
@@ -319,8 +318,8 @@ export default function InsuranceContent() {
       </div>
 
       <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3 text-xs text-ink-muted">
-        The current backend does not expose a live insurance queue list route yet. Use a known inquiry id from mobile intake
-        to load detail with `GET /api/insurance/inquiries/:id`, then update status through the live staff route.
+        A full insurance queue is planned for later. For demo readiness, use a known inquiry id from mobile intake
+        to load detail, then update the review status from this staff workspace.
       </div>
 
       <div className="grid xl:grid-cols-[360px_minmax(0,1fr)] gap-5">
@@ -342,7 +341,7 @@ export default function InsuranceContent() {
               <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-8 text-center">
                 <p className="text-sm font-bold text-ink-primary">No queue items yet</p>
                 <p className="text-xs text-ink-muted mt-2">
-                  A live queue list is not available yet. Paste a known inquiry id in the detail panel to continue.
+                  A full queue list is planned later. Paste a known inquiry id in the detail panel to continue.
                 </p>
               </div>
             ) : (
@@ -384,7 +383,7 @@ export default function InsuranceContent() {
               <div>
                 <p className="card-title">Inquiry Detail</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Load the selected inquiry from the live backend route to confirm current staff state before updating it.
+                  Load the selected inquiry to confirm current staff state before updating it.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
@@ -395,7 +394,7 @@ export default function InsuranceContent() {
                   className="w-full lg:w-[320px] rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
                 />
                 <button onClick={handleLoadLiveDetail} className="btn-primary justify-center">
-                  <RefreshCw size={14} /> Load Live Detail
+                  <RefreshCw size={14} /> Load Detail
                 </button>
               </div>
             </div>
@@ -508,9 +507,9 @@ export default function InsuranceContent() {
                 </select>
               </label>
               <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Current route</p>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Review Control</p>
                 <p className="text-sm text-ink-primary mt-1">
-                  {staffInsuranceContractSources.update.method} {staffInsuranceContractSources.update.path}
+                  Status and notes are the only editable fields in this workflow.
                 </p>
                 <p className="text-xs text-ink-muted mt-2">
                   Role failures, missing records, and invalid transitions stay distinct from one another.

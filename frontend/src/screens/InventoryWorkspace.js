@@ -383,7 +383,7 @@ export default function InventoryWorkspace() {
         <InfoPanel
           icon={ShieldAlert}
           title="Inventory visibility is adviser/admin only"
-          body="Technician sessions should not see inventory and stock administration routes in this phase."
+          body="Technician sessions should not see inventory and stock administration pages in this phase."
           tone="warning"
         />
       </div>
@@ -411,7 +411,7 @@ export default function InventoryWorkspace() {
 
           <div className="flex flex-wrap gap-2">
             <span className="badge badge-green">Live: catalog reads</span>
-            <span className="badge badge-orange">Planned: stock routes</span>
+            <span className="badge badge-orange">Planned: stock controls</span>
             <span className="badge badge-gray">{loadStateLabel}</span>
           </div>
         </div>
@@ -438,7 +438,7 @@ export default function InventoryWorkspace() {
         <InfoPanel
           icon={ShieldAlert}
           title="Inventory session needs attention"
-          body="The staff session could not read the ecommerce inventory visibility routes. Sign in again, then retry this page."
+          body="The staff session could not read inventory visibility data. Sign in again, then retry this page."
           tone="warning"
         />
       ) : null}
@@ -468,7 +468,7 @@ export default function InventoryWorkspace() {
       {staffInventoryKnownApiGaps.length ? (
         <div className="grid gap-3 lg:grid-cols-3">
           {staffInventoryKnownApiGaps.map((gap) => (
-            <InfoPanel key={gap} title="Known API gap" body={gap} />
+            <InfoPanel key={gap} title="Future Stock Control" body={gap} />
           ))}
         </div>
       ) : null}
@@ -478,14 +478,14 @@ export default function InventoryWorkspace() {
           icon={Boxes}
           label="Live Product Records"
           value={stats.liveProducts}
-          sub="Backed by GET /api/products."
+          sub="Current product records loaded from the catalog."
           toneClass="border-brand-orange/15 bg-brand-orange/10 text-brand-orange"
         />
         <StatCard
           icon={Eye}
           label="Published Products"
           value={stats.publishedProducts}
-          sub="Visible product records returned by the live catalog route."
+          sub="Visible product records returned by the catalog."
           toneClass="border-emerald-500/15 bg-emerald-500/10 text-emerald-400"
         />
         <StatCard
@@ -499,7 +499,7 @@ export default function InventoryWorkspace() {
           icon={Warehouse}
           label="Planned Stock States"
           value={staffInventoryStateScenarios.length}
-          sub="In-stock, low-stock, reserved, and out-of-stock remain typed mock states."
+          sub="In-stock, low-stock, reserved, and out-of-stock are future readiness states."
           toneClass="border-amber-500/15 bg-amber-500/10 text-amber-400"
         />
       </section>
@@ -507,7 +507,7 @@ export default function InventoryWorkspace() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
         <SectionShell
           title="Live Product Visibility"
-          description="This table is backed by the live ecommerce product route. Quantity-on-hand remains planned, so the page shows contract status instead of fake stock counts."
+          description="This table shows current catalog product visibility. Quantity-on-hand remains planned, so the page avoids fake stock counts."
           action={
             <button
               type="button"
@@ -526,7 +526,7 @@ export default function InventoryWorkspace() {
               <Package size={22} className="mx-auto text-ink-muted" />
               <p className="mt-3 text-sm font-bold text-ink-primary">No live product records yet</p>
               <p className="mt-2 text-xs leading-6 text-ink-muted">
-                The live catalog route returned zero products, so stock states remain documented in the planned glossary below.
+                The catalog returned zero products, so stock states remain documented in the planned glossary below.
               </p>
             </div>
           ) : (
@@ -539,7 +539,7 @@ export default function InventoryWorkspace() {
                     <th className="px-5 py-3.5 font-semibold">Category</th>
                     <th className="px-5 py-3.5 font-semibold">Price</th>
                     <th className="px-5 py-3.5 font-semibold">Visibility</th>
-                    <th className="px-5 py-3.5 font-semibold">Stock Route</th>
+                    <th className="px-5 py-3.5 font-semibold">Stock Readiness</th>
                     <th className="px-5 py-3.5 font-semibold">Updated</th>
                   </tr>
                 </thead>
@@ -599,7 +599,7 @@ export default function InventoryWorkspace() {
         <div className="space-y-4">
           <SectionShell
             title="Selected Product Detail"
-            description="Backed by GET /api/products/:id so staff can refresh canonical product metadata without guessing stock quantities."
+            description="Select a product to refresh its current catalog metadata without guessing stock quantities."
           >
             {!selectedProduct ? (
               <div className="rounded-3xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
@@ -653,10 +653,10 @@ export default function InventoryWorkspace() {
                   </dl>
 
                   <div className="mt-4 rounded-2xl border border-surface-border bg-surface p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Stock Contract Status</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Stock Readiness</p>
                     <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedProduct.stockRouteLabel}</p>
                     <p className="mt-2 text-xs leading-6 text-ink-muted">
-                      The current live DTO does not expose quantity on hand, reserved units, or movement history.
+                      Current product records do not expose quantity on hand, reserved units, or movement history.
                     </p>
                   </div>
                 </div>
@@ -665,8 +665,8 @@ export default function InventoryWorkspace() {
           </SectionShell>
 
           <SectionShell
-            title="Route Ledger"
-            description="Every route stays labeled as live or planned so the web surface does not invent backend stock behavior."
+            title="Workflow Coverage"
+            description="Every stock capability stays labeled as ready or planned so the page does not invent inventory behavior."
           >
             <div className="space-y-3">
               {staffInventoryRouteRules.map((routeRule) => (
@@ -677,9 +677,6 @@ export default function InventoryWorkspace() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-bold text-ink-primary">{routeRule.label}</p>
-                      <p className="mt-1 font-mono text-xs text-ink-muted">
-                        {routeRule.method} {routeRule.path}
-                      </p>
                     </div>
                     <RouteBadge status={routeRule.status} />
                   </div>
@@ -693,7 +690,7 @@ export default function InventoryWorkspace() {
 
       <SectionShell
         title="Planned Stock State Glossary"
-        description="These are typed visibility scenarios for the future inventory routes. They stay explicit mock states until backend inventory contracts are live."
+        description="These visibility scenarios describe future stock controls. They stay clearly marked as planned until inventory quantities are implemented."
       >
         <motion.div
           variants={containerVariants}

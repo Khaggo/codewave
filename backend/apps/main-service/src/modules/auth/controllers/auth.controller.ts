@@ -194,6 +194,24 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @Get('admin/staff-accounts')
+  @ApiOperation({ summary: 'List staff-capable accounts for assignment and super-admin account management.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'The staff-capable account directory, excluding the requesting staff user.',
+    type: UserResponseDto,
+    isArray: true,
+  })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can list staff accounts.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  listStaffAccounts(@Req() request: Request) {
+    return this.authService.listStaffAccounts(
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   @Post('admin/staff-accounts')
   @ApiOperation({ summary: 'Provision a new staff identity and credential pair.' })
@@ -239,6 +257,24 @@ export class AuthController {
     return this.authService.updateStaffAccountStatus(
       userId,
       payload,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @Get('admin/customers')
+  @ApiOperation({ summary: 'List customer records with vehicle details for staff administration.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'Customer records with profile, address, and vehicle context.',
+    type: UserResponseDto,
+    isArray: true,
+  })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can list customer records.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  listAdminCustomers(@Req() request: Request) {
+    return this.authService.listCustomersWithVehicles(
       request.user as { userId: string; role: string },
     );
   }

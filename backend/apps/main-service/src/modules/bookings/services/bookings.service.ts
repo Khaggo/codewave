@@ -226,7 +226,7 @@ export class BookingsService {
     await this.assertStaffActor(actorUserId);
     const existingTimeSlot = await this.bookingsRepository.findTimeSlotById(id);
 
-    if (!existingTimeSlot) {
+    if (!existingTimeSlot || existingTimeSlot.deletedAt) {
       throw new NotFoundException('Time slot not found');
     }
 
@@ -236,6 +236,17 @@ export class BookingsService {
     );
 
     return this.bookingsRepository.updateTimeSlot(id, payload);
+  }
+
+  async archiveTimeSlot(id: string, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+    const existingTimeSlot = await this.bookingsRepository.findTimeSlotById(id);
+
+    if (!existingTimeSlot || existingTimeSlot.deletedAt) {
+      throw new NotFoundException('Time slot not found');
+    }
+
+    return this.bookingsRepository.archiveTimeSlot(id);
   }
 
   async create(createBookingDto: CreateBookingDto) {
