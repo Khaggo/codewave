@@ -35,7 +35,7 @@ const FormField = forwardRef(function FormField({
       style={[styles.container, containerStyle]}
       importantForAutofill={importantForAutofill}
     >
-      <Text style={styles.label}>{label}</Text>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
 
       <View
         style={[
@@ -43,6 +43,7 @@ const FormField = forwardRef(function FormField({
           isFocused && editable && styles.inputFocused,
           !editable && styles.inputReadonly,
           error && styles.inputError,
+          multiline && styles.inputWrapMultiline,
         ]}
         importantForAutofill={importantForAutofill}
       >
@@ -51,7 +52,7 @@ const FormField = forwardRef(function FormField({
             name={icon}
             size={18}
             color={colors.mutedText}
-            style={styles.leadingIcon}
+            style={[styles.leadingIcon, multiline && styles.leadingIconMultiline]}
           />
         ) : null}
 
@@ -97,46 +98,52 @@ export default FormField;
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
     color: colors.labelText,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1.8,
-    marginBottom: 10,
+    letterSpacing: 1.2,
+    marginBottom: 6,
     textTransform: 'uppercase',
   },
   inputWrap: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.medium,
+    borderRadius: radius.md,
     backgroundColor: colors.input,
-    minHeight: 58,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+  },
+  inputWrapMultiline: {
+    alignItems: 'flex-start',
+    paddingTop: 12,
   },
   leadingIcon: {
-    marginRight: 10,
+    marginRight: 8,
+  },
+  leadingIconMultiline: {
+    marginTop: 2,
   },
   input: {
     flex: 1,
     color: colors.text,
-    paddingVertical: 16,
-    fontSize: 16,
+    paddingVertical: 12,
+    fontSize: 14,
   },
   inputFocused: {
     borderColor: colors.primary,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
     elevation: 2,
   },
   inputReadonly: {
     backgroundColor: colors.readonly,
-    color: colors.mutedText,
   },
   inputError: {
     borderColor: colors.danger,
@@ -145,8 +152,9 @@ const styles = StyleSheet.create({
     paddingLeft: 0,
   },
   inputMultiline: {
-    paddingTop: 16,
-    paddingBottom: 16,
+    paddingTop: 0,
+    paddingBottom: 12,
+    minHeight: 84,
     textAlignVertical: 'top',
   },
   inputReadonlyText: {
@@ -155,13 +163,13 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.danger,
     fontSize: 12,
-    marginTop: 8,
-    lineHeight: 18,
+    marginTop: 6,
+    lineHeight: 16,
   },
   helperText: {
     color: colors.mutedText,
     fontSize: 12,
-    marginTop: 8,
-    lineHeight: 18,
+    marginTop: 6,
+    lineHeight: 16,
   },
 });

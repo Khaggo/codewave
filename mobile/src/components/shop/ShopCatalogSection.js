@@ -63,7 +63,8 @@ function ProductCard({ product, onOpenProduct, isWideLayout = false }) {
         </View>
 
         <View style={styles.detailBadge}>
-          <MaterialCommunityIcons name="chevron-right" size={18} color={colors.labelText} />
+          <Text style={styles.detailBadgeText}>View details</Text>
+          <MaterialCommunityIcons name="chevron-right" size={16} color={colors.labelText} />
         </View>
       </View>
     </TouchableOpacity>
@@ -128,11 +129,7 @@ export default function ShopCatalogSection({
     <View style={styles.section}>
       <View style={[styles.header, isCompactLayout && styles.headerCompact]}>
         <View style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>CRUISERS CRIB</Text>
-          <Text style={styles.title}>Auto Shop</Text>
-          <Text style={[styles.subtitle, isCompactLayout && styles.subtitleCompact]}>
-            Browse the live catalog, then open your cart to review invoice checkout.
-          </Text>
+          <Text style={styles.title}>Catalog</Text>
         </View>
 
         <View style={[styles.headerActions, isCompactLayout && styles.headerActionsCompact]}>
@@ -208,7 +205,7 @@ export default function ShopCatalogSection({
 
       <View style={[styles.toolbar, isCompactLayout && styles.toolbarCompact]}>
         <Text style={styles.productCount}>
-          {products.length} live product{products.length === 1 ? '' : 's'}
+          {filteredProducts.length} result{filteredProducts.length === 1 ? '' : 's'}
         </Text>
 
         <TouchableOpacity
@@ -307,8 +304,8 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 14,
+    justifyContent: 'space-between',
   },
   headerCompact: {
     flexWrap: 'wrap',
@@ -322,29 +319,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   headerActionsCompact: {
-    width: '100%',
     justifyContent: 'flex-end',
-  },
-  eyebrow: {
-    color: colors.mutedText,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.4,
+    width: '100%',
   },
   title: {
     color: colors.text,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '800',
-  },
-  subtitle: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 6,
-    maxWidth: 240,
-  },
-  subtitleCompact: {
-    maxWidth: '100%',
   },
   refreshButton: {
     alignItems: 'center',
@@ -539,8 +520,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: 12,
+    justifyContent: 'space-between',
     marginTop: 14,
   },
   priceWrap: {
@@ -562,11 +543,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: 18,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    height: 36,
+    flexDirection: 'row',
+    gap: 6,
     justifyContent: 'center',
-    width: 36,
+    minHeight: 36,
+    paddingHorizontal: 12,
+  },
+  detailBadgeText: {
+    color: colors.labelText,
+    fontSize: 12,
+    fontWeight: '700',
   },
   stateCard: {
     alignItems: 'center',

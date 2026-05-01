@@ -1,11 +1,11 @@
 import {
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 
 export default function ScreenShell({
@@ -14,9 +14,10 @@ export default function ScreenShell({
   keyboardVerticalOffset = 12,
   showsVerticalScrollIndicator = false,
   scrollEnabled = true,
+  edges = ['top', 'bottom', 'left', 'right'],
 }) {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={edges}>
       <View style={styles.screen}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
