@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AuthFrame from '../components/AuthFrame';
 import PasswordChecklist from '../components/PasswordChecklist';
@@ -88,8 +88,8 @@ export default function ResetPassword({ navigation, route, onResetPassword }) {
 
       <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit} activeOpacity={0.88}>
         <View style={styles.primaryButtonContent}>
-          <Text style={styles.primaryButtonText}>Save Password</Text>
-          <MaterialCommunityIcons name="arrow-right" size={18} color={colors.onPrimary} />
+          <Text style={styles.primaryButtonText}>Save password</Text>
+          <Feather name="arrow-right" size={16} color={colors.onPrimary} />
         </View>
       </TouchableOpacity>
     </AuthFrame>
@@ -99,25 +99,20 @@ export default function ResetPassword({ navigation, route, onResetPassword }) {
 const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    paddingVertical: 18,
+    borderRadius: radius.md,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.34,
-    shadowRadius: 24,
-    elevation: 5,
   },
   primaryButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
