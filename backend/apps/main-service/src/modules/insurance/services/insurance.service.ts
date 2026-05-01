@@ -59,6 +59,16 @@ export class InsuranceService {
     return inquiry;
   }
 
+  async findByUserId(userId: string, actor: InsuranceActor) {
+    await this.assertStaffReviewer(actor.userId);
+    const user = await this.usersService.findById(userId);
+    if (!user || user.role !== 'customer') {
+      throw new NotFoundException('Customer not found');
+    }
+
+    return this.insuranceRepository.findByUserId(userId);
+  }
+
   async updateStatus(id: string, payload: UpdateInsuranceInquiryStatusDto, actor: InsuranceActor) {
     await this.assertStaffReviewer(actor.userId);
 

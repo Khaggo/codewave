@@ -62,15 +62,15 @@ const LOAD_STATE_LABELS = {
 
 function StatCard({ icon: Icon, label, value, sub, toneClass }) {
   return (
-    <div className="card p-5">
+    <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-ink-muted">{label}</p>
-          <p className="mt-3 text-3xl font-bold text-ink-primary">{value}</p>
-          {sub ? <p className="mt-2 text-xs leading-5 text-ink-muted">{sub}</p> : null}
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
+          <p className="mt-3 text-3xl font-black tracking-tight tabular-nums text-ink-primary">{value}</p>
+          {sub ? <p className="mt-1.5 text-[11px] text-ink-muted">{sub}</p> : null}
         </div>
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${toneClass}`}>
-          <Icon size={20} />
+        <div className={`flex h-8 w-8 items-center justify-center rounded-lg border ${toneClass}`}>
+          <Icon size={14} />
         </div>
       </div>
     </div>
@@ -84,9 +84,9 @@ function InfoPanel({ icon: Icon = Database, title, body, tone = 'info' }) {
       : 'border-brand-orange/15 bg-brand-orange/10 text-brand-orange'
 
   return (
-    <div className="card p-4 flex gap-3">
-      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border ${iconTone}`}>
-        <Icon size={18} />
+    <div className="card flex gap-3 p-4">
+      <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border ${iconTone}`}>
+        <Icon size={16} />
       </div>
       <div>
         <p className="text-sm font-bold text-ink-primary">{title}</p>
@@ -101,7 +101,7 @@ function SectionShell({ title, description, children, action }) {
     <section className="card overflow-hidden">
       <div className="flex items-start justify-between gap-4 border-b border-surface-border bg-surface-raised/70 px-5 py-4">
         <div>
-          <p className="text-lg font-bold text-ink-primary">{title}</p>
+          <p className="card-title">{title}</p>
           <p className="mt-1 text-sm text-ink-muted">{description}</p>
         </div>
         {action}
@@ -362,8 +362,6 @@ export default function InventoryWorkspace() {
   const hasPartialFailure = Boolean(
     snapshot.errors.products || snapshot.errors.categories,
   )
-  const loadStateLabel = LOAD_STATE_LABELS[requestState] ?? 'Inventory Visibility'
-
   if (!user?.accessToken) {
     return (
       <div className="space-y-6">
@@ -391,28 +389,21 @@ export default function InventoryWorkspace() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="ops-page-shell">
       <motion.section
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.28, ease: 'easeOut' }}
-        className="card relative overflow-hidden p-6 md:p-7"
+        className="space-y-4"
       >
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-72 bg-gradient-to-l from-brand-orange/10 to-transparent" />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand-orange">Inventory Admin</p>
-            <h1 className="mt-3 text-3xl font-bold text-ink-primary">Live Product Visibility, Planned Stock Controls</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
-              This workspace now shows the real ecommerce product directory on the web while keeping quantity, reservation,
-              and adjustment controls explicitly marked as planned until the inventory backend is actually exposed.
+        <div className="ops-page-header">
+          <div className="space-y-2">
+            <p className="ops-page-kicker">Inventory Operations</p>
+            <h1 className="ops-page-title">Product Visibility And Inventory Readiness</h1>
+            <p className="ops-page-copy">
+              Review live catalog visibility, inspect product metadata, and keep planned stock behavior clearly separated
+              from the current read-only inventory surface.
             </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <span className="badge badge-green">Live: catalog reads</span>
-            <span className="badge badge-orange">Planned: stock controls</span>
-            <span className="badge badge-gray">{loadStateLabel}</span>
           </div>
         </div>
       </motion.section>
@@ -465,15 +456,7 @@ export default function InventoryWorkspace() {
         />
       ) : null}
 
-      {staffInventoryKnownApiGaps.length ? (
-        <div className="grid gap-3 lg:grid-cols-3">
-          {staffInventoryKnownApiGaps.map((gap) => (
-            <InfoPanel key={gap} title="Future Stock Control" body={gap} />
-          ))}
-        </div>
-      ) : null}
-
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="ops-summary-grid">
         <StatCard
           icon={Boxes}
           label="Live Product Records"
@@ -511,7 +494,7 @@ export default function InventoryWorkspace() {
           action={
             <button
               type="button"
-              className="btn-secondary"
+              className="ops-action-secondary min-w-[132px] self-start xl:self-auto"
               onClick={() => {
                 void loadInventory({ notifyFailure: true })
               }}
@@ -522,10 +505,10 @@ export default function InventoryWorkspace() {
           }
         >
           {snapshot.products.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
+            <div className="flex min-h-[180px] flex-col items-center justify-center rounded-3xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
               <Package size={22} className="mx-auto text-ink-muted" />
               <p className="mt-3 text-sm font-bold text-ink-primary">No live product records yet</p>
-              <p className="mt-2 text-xs leading-6 text-ink-muted">
+              <p className="mt-1 max-w-md text-xs text-ink-muted">
                 The catalog returned zero products, so stock states remain documented in the planned glossary below.
               </p>
             </div>
@@ -550,7 +533,7 @@ export default function InventoryWorkspace() {
                     return (
                       <tr
                         key={product.id}
-                        className={isSelected ? 'bg-brand-orange/8' : 'hover:bg-surface-hover transition-colors'}
+                        className={isSelected ? 'bg-brand-orange/8' : 'transition-colors hover:bg-surface-hover'}
                       >
                         <td className="px-5 py-4">
                           <button
@@ -602,10 +585,10 @@ export default function InventoryWorkspace() {
             description="Select a product to refresh its current catalog metadata without guessing stock quantities."
           >
             {!selectedProduct ? (
-              <div className="rounded-3xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
+              <div className="flex min-h-[180px] flex-col items-center justify-center rounded-3xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
                 <Eye size={22} className="mx-auto text-ink-muted" />
                 <p className="mt-3 text-sm font-bold text-ink-primary">Select a product</p>
-                <p className="mt-2 text-xs leading-6 text-ink-muted">
+                <p className="mt-1 max-w-md text-xs text-ink-muted">
                   Choose any live product row to inspect its current catalog metadata.
                 </p>
               </div>
@@ -628,7 +611,7 @@ export default function InventoryWorkspace() {
 
                 <div className="rounded-3xl border border-surface-border bg-surface-raised p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-orange">Live Product Metadata</p>
-                  <p className="mt-2 text-xl font-bold text-ink-primary">{selectedProduct.name}</p>
+                  <p className="mt-2 text-xl font-bold tracking-tight text-ink-primary">{selectedProduct.name}</p>
                   <p className="mt-2 text-sm leading-6 text-ink-secondary">
                     {selectedProduct.description || 'No product description published yet.'}
                   </p>
@@ -665,8 +648,8 @@ export default function InventoryWorkspace() {
           </SectionShell>
 
           <SectionShell
-            title="Workflow Coverage"
-            description="Every stock capability stays labeled as ready or planned so the page does not invent inventory behavior."
+            title="Inventory Coverage"
+            description="Every stock capability stays labeled as live or planned so the page does not invent inventory behavior."
           >
             <div className="space-y-3">
               {staffInventoryRouteRules.map((routeRule) => (
@@ -687,6 +670,19 @@ export default function InventoryWorkspace() {
           </SectionShell>
         </div>
       </div>
+
+      {staffInventoryKnownApiGaps.length ? (
+        <SectionShell
+          title="Planned Stock Controls"
+          description="These controls remain intentionally out of the live workspace until the backend exposes actual stock behavior."
+        >
+          <div className="grid gap-3 lg:grid-cols-3">
+            {staffInventoryKnownApiGaps.map((gap) => (
+              <InfoPanel key={gap} title="Planned Capability" body={gap} />
+            ))}
+          </div>
+        </SectionShell>
+      ) : null}
 
       <SectionShell
         title="Planned Stock State Glossary"

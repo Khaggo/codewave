@@ -288,6 +288,64 @@ export function addInventoryProduct(input) {
   return cloneProduct(nextProduct)
 }
 
+export function updateInventoryProduct(productId, input) {
+  const store = getStore()
+  const existingProduct = store.state.products.find((product) => product.id === productId)
+
+  if (!existingProduct) {
+    throw new Error(`Product ${productId} does not exist.`)
+  }
+
+  const category = store.state.categories.find(
+    (entry) =>
+      entry.id === input?.categoryId ||
+      normalizeCategoryName(entry.name) === normalizeCategoryName(input?.category)
+  )
+
+  if (!category) {
+    throw new Error('Product category does not exist.')
+  }
+
+  const updatedFields = sanitizeProductInput(
+    {
+      ...existingProduct,
+      ...input,
+      createdAt: existingProduct.createdAt,
+      publishedAt: existingProduct.publishedAt,
+      status: existingProduct.status,
+    },
+    {
+      categoryId: category.id,
+      categoryName: category.name,
+    }
+  )
+
+  let updatedProduct = null
+
+  store.state = {
+    ...store.state,
+    products: store.state.products.map((product) => {
+      if (product.id !== productId) {
+        return product
+      }
+
+      updatedProduct = {
+        ...product,
+        ...updatedFields,
+        category: category.name,
+        categoryId: category.id,
+        images: [...updatedFields.images],
+        updatedAt: new Date().toISOString(),
+      }
+
+      return updatedProduct
+    }),
+  }
+
+  emitChange()
+  return cloneProduct(updatedProduct)
+}
+
 export function archiveInventoryProduct(productId) {
   const store = getStore()
   let archivedProduct = null

@@ -1,8 +1,10 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  BellRing,
   CalendarDays,
   CheckCircle2,
   Clock,
@@ -26,7 +28,10 @@ import {
   updateBookingStatus,
   updateTimeSlotDefinition,
 } from '@/lib/bookingStaffClient'
+import { useToast } from '@/components/Toast'
 import { useUser } from '@/lib/userContext'
+import BookingActionConfirmModal from './BookingActionConfirmModal'
+import BookingsCalendarView from './BookingsCalendarView'
 
 const STAFF_BOOKING_ROLES = new Set(['service_adviser', 'super_admin'])
 
@@ -61,6 +66,12 @@ const initialScheduleWindowState = {
   error: '',
 }
 
+const initialCalendarState = {
+  status: 'idle',
+  dates: [],
+  error: '',
+}
+
 const initialSlotForm = {
   label: '',
   startTime: '08:00',
@@ -76,22 +87,28 @@ const STAFF_ACTIONS_BY_STATUS = {
       status: 'confirmed',
       label: 'Accept Booking',
       icon: CheckCircle2,
-      className: 'btn-primary !px-3 !py-1.5 !text-xs',
+      className: 'booking-status-action-primary',
       reason: 'Accepted by staff from admin appointments.',
     },
     {
       status: 'declined',
       label: 'Decline',
       icon: XCircle,
-      className: 'btn-ghost !px-3 !py-1.5 !text-xs',
+      className: 'booking-status-action-secondary',
       reason: 'Declined by staff from admin appointments.',
+      requiresConfirmation: true,
+      confirmMessage: 'Are you sure you want to decline this booking?',
+      confirmLabel: 'Decline booking',
     },
     {
       status: 'cancelled',
       label: 'Cancel',
       icon: XCircle,
-      className: 'btn-danger !px-3 !py-1.5 !text-xs',
+      className: 'booking-status-action-danger',
       reason: 'Cancelled by staff from admin appointments.',
+      requiresConfirmation: true,
+      confirmMessage: 'Are you sure you want to cancel this booking?',
+      confirmLabel: 'Cancel booking',
     },
   ],
   confirmed: [
@@ -99,15 +116,18 @@ const STAFF_ACTIONS_BY_STATUS = {
       status: 'completed',
       label: 'Mark Complete',
       icon: CheckCircle2,
-      className: 'btn-primary !px-3 !py-1.5 !text-xs',
+      className: 'booking-status-action-primary',
       reason: 'Completed by staff from admin appointments.',
     },
     {
       status: 'cancelled',
       label: 'Cancel',
       icon: XCircle,
-      className: 'btn-danger !px-3 !py-1.5 !text-xs',
+      className: 'booking-status-action-danger',
       reason: 'Cancelled by staff from admin appointments.',
+      requiresConfirmation: true,
+      confirmMessage: 'Are you sure you want to cancel this booking?',
+      confirmLabel: 'Cancel booking',
     },
   ],
   rescheduled: [
@@ -115,15 +135,18 @@ const STAFF_ACTIONS_BY_STATUS = {
       status: 'confirmed',
       label: 'Accept New Slot',
       icon: CheckCircle2,
-      className: 'btn-primary !px-3 !py-1.5 !text-xs',
+      className: 'booking-status-action-primary',
       reason: 'Accepted rescheduled slot from admin appointments.',
     },
     {
       status: 'cancelled',
       label: 'Cancel',
       icon: XCircle,
-      className: 'btn-danger !px-3 !py-1.5 !text-xs',
+      className: 'booking-status-action-danger',
       reason: 'Cancelled by staff from admin appointments.',
+      requiresConfirmation: true,
+      confirmMessage: 'Are you sure you want to cancel this booking?',
+      confirmLabel: 'Cancel booking',
     },
   ],
 }
@@ -144,6 +167,23 @@ function buildScheduleDateWindow() {
 
     return toDateKey(date)
   })
+}
+
+function toDateFromKey(dateKey) {
+  return new Date(`${dateKey}T00:00:00`)
+}
+
+function startOfMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function buildMonthDateWindow(monthDate = new Date()) {
+  const activeMonth = startOfMonth(monthDate)
+  const daysInMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 0).getDate()
+
+  return Array.from({ length: daysInMonth }, (_, index) =>
+    toDateKey(new Date(activeMonth.getFullYear(), activeMonth.getMonth(), index + 1)),
+  )
 }
 
 function formatDate(dateKey) {
@@ -192,6 +232,33 @@ function formatTimeSlotWindow(slot) {
   return `${formatClockLabel(slot.startTime)} - ${formatClockLabel(slot.endTime)}`
 }
 
+function toSortableTimeValue(value) {
+  const normalizedValue = String(value ?? '').trim()
+  const match = /^(\d{2}):(\d{2})/.exec(normalizedValue)
+
+  if (!match) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  return Number(match[1]) * 60 + Number(match[2])
+}
+
+function compareSlotsByStartTime(left, right) {
+  const startTimeDifference = toSortableTimeValue(left?.startTime) - toSortableTimeValue(right?.startTime)
+
+  if (startTimeDifference !== 0) {
+    return startTimeDifference
+  }
+
+  const endTimeDifference = toSortableTimeValue(left?.endTime) - toSortableTimeValue(right?.endTime)
+
+  if (endTimeDifference !== 0) {
+    return endTimeDifference
+  }
+
+  return String(left?.label ?? '').localeCompare(String(right?.label ?? ''))
+}
+
 function formatBookingReference(id) {
   return id ? `BK-${id.slice(0, 8).toUpperCase()}` : 'BK-PENDING'
 }
@@ -214,6 +281,20 @@ function getCustomerLabel(record) {
 
 function getVehicleLabel(record) {
   return record?.vehicleLabel || record?.vehicleDisplayName || record?.plateNumber || `Vehicle ${record?.vehicleId ?? 'Unknown'}`
+}
+
+function flattenScheduleBookings(schedule) {
+  return (schedule?.slots ?? []).flatMap((slot) =>
+    (slot.bookings ?? []).map((booking) => ({
+      ...booking,
+      scheduledDate: schedule?.scheduledDate ?? booking?.scheduledDate ?? '',
+      slotLabel: slot.label ?? 'Unassigned slot',
+      slotWindow: formatTimeSlotWindow(slot) || slot.label || 'Time slot unavailable',
+      serviceLabel: getServiceNames(booking),
+      customerLabel: getCustomerLabel(booking),
+      vehicleLabel: getVehicleLabel(booking),
+    })),
+  )
 }
 
 function normalizeSlotOption(slot) {
@@ -247,11 +328,19 @@ function mergeSlotOptions(previousOptions, slots) {
     }
   })
 
-  return Array.from(byId.values()).sort((left, right) => left.label.localeCompare(right.label))
+  return Array.from(byId.values()).sort(compareSlotsByStartTime)
 }
 
 function getBookingStatusActions(status) {
   return STAFF_ACTIONS_BY_STATUS[status] ?? []
+}
+
+function getBookingHandoffStateMeta(booking) {
+  if (booking?.jobOrderId) {
+    return { label: 'Job Order Created', cls: 'badge-green' }
+  }
+
+  return null
 }
 
 function buildErrorState(error, fallback) {
@@ -318,8 +407,8 @@ function StatusBadge({ status }) {
 
 function EmptyState({ icon: Icon, title, copy }) {
   return (
-    <div className="px-5 py-12 text-center">
-      <Icon size={30} className="mx-auto text-ink-dim mb-3" />
+    <div className="flex min-h-[180px] flex-col items-center justify-center px-5 py-8 text-center">
+      <Icon size={22} className="mx-auto mb-3 text-ink-dim" />
       <p className="text-sm font-bold text-ink-primary">{title}</p>
       <p className="text-xs text-ink-muted mt-1 max-w-md mx-auto">{copy}</p>
     </div>
@@ -348,20 +437,18 @@ function BlockingState({ state, onRetry }) {
 
 function SummaryTile({ icon: Icon, label, value, sub }) {
   return (
-    <div className="card p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs text-ink-muted">{label}</p>
-          <p className="text-2xl font-black text-ink-primary mt-1">{value}</p>
-          {sub ? <p className="text-[11px] text-ink-muted mt-1">{sub}</p> : null}
-        </div>
+    <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
           style={{ background: 'rgba(240, 124, 0, 0.14)', color: '#f07c00' }}
         >
-          <Icon size={18} />
+          <Icon size={14} />
         </div>
       </div>
+      <p className="text-3xl font-black tracking-tight tabular-nums text-ink-primary mt-3">{value}</p>
+      {sub ? <p className="text-[11px] text-ink-muted mt-1.5">{sub}</p> : null}
     </div>
   )
 }
@@ -391,17 +478,6 @@ function SlotDefinitionsPanel({
     )
   }
 
-  if (slots.length === 0) {
-    return (
-      <div className="card p-4">
-        <p className="card-title">Slot Definitions</p>
-        <p className="text-xs text-ink-muted mt-1">
-          {error || 'No time-slot definitions are available yet. Seed or publish slots before customers can book.'}
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div className="card p-4">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
@@ -414,7 +490,7 @@ function SlotDefinitionsPanel({
         {error ? <span className="badge badge-orange">Using last loaded definitions</span> : null}
       </div>
 
-      <form onSubmit={onCreate} className="grid md:grid-cols-5 gap-2 mt-4 rounded-xl border border-surface-border bg-surface-raised p-3">
+      <form onSubmit={onCreate} className="booking-slot-create-form">
         <label className="text-xs text-ink-muted md:col-span-2">
           New slot label
           <input
@@ -456,14 +532,14 @@ function SlotDefinitionsPanel({
         <button
           type="submit"
           disabled={mutationState.status === 'submitting'}
-          className="btn-primary md:col-span-5 justify-center"
+          className="booking-slot-create-action"
         >
           {mutationState.status === 'submitting' && mutationState.target === 'create' ? (
             <RefreshCw size={14} className="animate-spin" />
           ) : (
             <Clock size={14} />
           )}
-          Add Slot Definition
+          Add Slot
         </button>
       </form>
 
@@ -479,13 +555,19 @@ function SlotDefinitionsPanel({
         </div>
       ) : null}
 
+      {slots.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-surface-border bg-surface-panel px-4 py-3 text-xs text-ink-muted mt-4">
+          {error || 'No time-slot definitions are available yet. Create the first slot here or seed slots before customers can book.'}
+        </div>
+      ) : null}
+
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-4">
         {slots.map((slot) => {
           const isEditing = editingSlotId === slot.timeSlotId
           const isBusy = mutationState.status === 'submitting' && mutationState.target === slot.timeSlotId
 
           return (
-            <div key={slot.timeSlotId} className="rounded-xl border border-surface-border bg-surface-raised p-3">
+            <div key={slot.timeSlotId} className="booking-slot-card">
               {isEditing ? (
                 <div className="space-y-3">
                   <label className="text-xs text-ink-muted">
@@ -540,10 +622,10 @@ function SlotDefinitionsPanel({
                 </div>
               ) : (
                 <>
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-bold text-ink-primary">{slot.label}</p>
-                      <p className="text-xs text-ink-muted mt-1">
+                  <div className="booking-slot-card-header">
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-bold text-ink-primary">{slot.label}</p>
+                      <p className="mt-1 text-sm text-ink-secondary">
                         {formatTimeSlotWindow(slot) || 'Time window unavailable'}
                       </p>
                     </div>
@@ -551,15 +633,15 @@ function SlotDefinitionsPanel({
                       {slot.isActive === false ? 'Inactive' : 'Active'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-ink-muted mt-3">
+                  <p className="mt-3 text-xs text-ink-muted">
                     Capacity {slot.capacity ?? 'unset'} booking{slot.capacity === 1 ? '' : 's'} per date.
                   </p>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="booking-slot-card-actions">
                     <button
                       type="button"
                       disabled={mutationState.status === 'submitting'}
                       onClick={() => onStartEdit(slot)}
-                      className="btn-ghost !px-3 !py-2 !text-xs"
+                      className="booking-slot-action-secondary"
                     >
                       <Edit3 size={13} />
                       Edit
@@ -568,7 +650,7 @@ function SlotDefinitionsPanel({
                       type="button"
                       disabled={mutationState.status === 'submitting'}
                       onClick={() => onToggleActive(slot)}
-                      className={`${slot.isActive === false ? 'btn-primary' : 'btn-ghost'} !px-3 !py-2 !text-xs`}
+                      className={slot.isActive === false ? 'booking-slot-action-primary' : 'booking-slot-action-secondary'}
                     >
                       {isBusy ? <RefreshCw size={13} className="animate-spin" /> : null}
                       {slot.isActive === false ? 'Activate' : 'Pause'}
@@ -577,7 +659,7 @@ function SlotDefinitionsPanel({
                       type="button"
                       disabled={mutationState.status === 'submitting'}
                       onClick={() => onDelete(slot)}
-                      className="btn-danger col-span-2 !px-3 !py-2 !text-xs"
+                      className="booking-slot-action-danger"
                     >
                       {isBusy ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
                       Delete Slot
@@ -610,7 +692,7 @@ function LoadingRows() {
   )
 }
 
-function ScheduleSlotCard({ slot, onStatusAction, busyBookingId }) {
+function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId }) {
   const bookings = slot.bookings ?? []
   const activeCount = (slot.pendingCount ?? 0) + (slot.confirmedCount ?? 0) + (slot.rescheduledCount ?? 0)
   const capacity = slot.totalCapacity ?? 0
@@ -619,34 +701,35 @@ function ScheduleSlotCard({ slot, onStatusAction, busyBookingId }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-surface-border">
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-          <div>
+      <div className="px-5 py-3.5 border-b border-surface-border">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div className="min-w-0">
             <p className="text-sm font-bold text-ink-primary">{slot.label}</p>
-            <p className="text-xs text-ink-muted mt-1">
-              {bookings.length} booking{bookings.length === 1 ? '' : 's'} against {capacity} slot capacity
+            {formatTimeSlotWindow(slot) ? (
+              <p className="text-xs text-ink-secondary mt-1">{formatTimeSlotWindow(slot)}</p>
+            ) : null}
+            <p className="text-[11px] text-ink-muted mt-0.5">
+              {bookings.length} booking{bookings.length === 1 ? '' : 's'} · {capacity} capacity ·{' '}
+              <span className="tabular-nums" style={{ color: isHighPressure ? '#ef4444' : '#f07c00' }}>
+                {utilization}%
+              </span>
+              {isHighPressure ? ' · high-pressure' : ''}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 text-[11px]">
+          <div className="flex flex-wrap gap-1.5 text-[11px] shrink-0">
             <span className="badge badge-orange">{slot.pendingCount ?? 0} pending</span>
             <span className="badge badge-green">{slot.confirmedCount ?? 0} confirmed</span>
             <span className="badge badge-blue">{slot.rescheduledCount ?? 0} rescheduled</span>
           </div>
         </div>
-        <div className="mt-4">
-          <div className="h-2 rounded-full bg-surface-raised overflow-hidden">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${utilization}%`,
-                background: isHighPressure ? '#ef4444' : 'linear-gradient(90deg, #f07c00, #c9951a)',
-              }}
-            />
-          </div>
-          <p className="text-[11px] text-ink-muted mt-2">
-            {utilization}% operational utilization
-            {isHighPressure ? ' - high-pressure slot, monitor confirmations closely.' : ''}
-          </p>
+        <div className="mt-3 h-1.5 rounded-full bg-surface-raised overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{
+              width: `${utilization}%`,
+              background: isHighPressure ? '#ef4444' : 'linear-gradient(90deg, #f07c00, #c9951a)',
+            }}
+          />
         </div>
       </div>
 
@@ -654,41 +737,58 @@ function ScheduleSlotCard({ slot, onStatusAction, busyBookingId }) {
         <EmptyState
           icon={CalendarDays}
           title="No bookings in this slot"
-          copy="The schedule read model returned this time slot with no matching bookings for the selected filters."
+          copy="No matching bookings for the selected filters."
         />
       ) : (
         <div className="divide-y divide-surface-border">
-          {bookings.map((booking) => (
-            <div key={booking.id} className="px-5 py-4">
-              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-mono text-xs font-bold" style={{ color: '#f07c00' }}>
+          {bookings.map((booking) => {
+            const actions = booking.jobOrderId ? [] : getBookingStatusActions(booking.status)
+            const handoffStateMeta = getBookingHandoffStateMeta(booking)
+            return (
+              <div key={booking.id} className="px-5 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <p className="font-mono text-[11px] font-bold tracking-wide" style={{ color: '#f07c00' }}>
                     {formatBookingReference(booking.id)}
                   </p>
-                  <p className="text-sm font-semibold text-ink-primary mt-1 truncate">{getServiceNames(booking)}</p>
-                  <p className="text-xs text-ink-muted mt-1">
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    {handoffStateMeta ? <span className={`badge ${handoffStateMeta.cls}`}>{handoffStateMeta.label}</span> : null}
+                    <StatusBadge status={booking.status} />
+                  </div>
+                </div>
+                <p className="text-sm font-semibold text-ink-primary mt-1.5 truncate">{getServiceNames(booking)}</p>
+                <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+                  <p className="text-xs text-ink-muted truncate">
                     {getCustomerLabel(booking)}
-                    {booking.customerEmail && booking.customerEmail !== getCustomerLabel(booking) ? ` • ${booking.customerEmail}` : ''}
+                    {booking.customerEmail && booking.customerEmail !== getCustomerLabel(booking) ? ` · ${booking.customerEmail}` : ''}
                   </p>
-                  <p className="text-xs text-ink-muted mt-1">
+                  <p className="text-xs text-ink-muted truncate">
                     {getVehicleLabel(booking)}
-                    {booking.plateNumber && booking.plateNumber !== getVehicleLabel(booking) ? ` • Plate ${booking.plateNumber}` : ''}
+                    {booking.plateNumber && booking.plateNumber !== getVehicleLabel(booking) ? ` · Plate ${booking.plateNumber}` : ''}
                   </p>
                 </div>
-                <StatusBadge status={booking.status} />
-              </div>
-              {booking.notes ? (
-                <p className="text-xs text-ink-muted mt-3 pt-3 border-t border-surface-border">
-                  <span className="font-semibold text-ink-secondary">Customer notes:</span> {booking.notes}
-                </p>
-              ) : null}
-              {getBookingStatusActions(booking.status).length > 0 ? (
-                <div className="mt-3 pt-3 border-t border-surface-border">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted mb-2">
-                    Staff handling
+
+                {booking.notes ? (
+                  <p className="text-xs text-ink-muted mt-3">
+                    <span className="font-semibold text-ink-secondary">Notes:</span> {booking.notes}
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {getBookingStatusActions(booking.status).map((action) => {
+                ) : null}
+
+                {booking.jobOrderId ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn-ghost min-h-10 w-full justify-center px-4 text-sm sm:w-auto sm:min-w-[152px]"
+                      onClick={() => onOpenJobOrder(booking)}
+                    >
+                      <ListChecks size={13} />
+                      Open Job Order
+                    </button>
+                  </div>
+                ) : null}
+
+                {actions.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {actions.map((action) => {
                       const Icon = action.icon
                       const isBusy = busyBookingId === booking.id
 
@@ -706,14 +806,10 @@ function ScheduleSlotCard({ slot, onStatusAction, busyBookingId }) {
                       )
                     })}
                   </div>
-                </div>
-              ) : (
-                <p className="text-[11px] text-ink-muted mt-3 pt-3 border-t border-surface-border">
-                  No further staff actions are available for this booking state.
-                </p>
-              )}
-            </div>
-          ))}
+                ) : null}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -793,16 +889,19 @@ function QueueTable({ queue }) {
 }
 
 export default function BookingsList() {
+  const router = useRouter()
   const user = useUser()
   const hasAutoSelectedUpcomingDate = useRef(false)
   const selectedDateRef = useRef(toDateKey())
   const [tab, setTab] = useState('schedule')
   const [selectedDate, setSelectedDate] = useState(() => toDateKey())
+  const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()))
   const [statusFilter, setStatusFilter] = useState('all')
   const [timeSlotFilter, setTimeSlotFilter] = useState('all')
   const [scheduleState, setScheduleState] = useState(initialLoadState)
   const [queueState, setQueueState] = useState(initialLoadState)
   const [scheduleWindowState, setScheduleWindowState] = useState(initialScheduleWindowState)
+  const [calendarState, setCalendarState] = useState(initialCalendarState)
   const [slotDefinitionsState, setSlotDefinitionsState] = useState(initialLoadState)
   const [timeSlotOptions, setTimeSlotOptions] = useState([])
   const [slotForm, setSlotForm] = useState(initialSlotForm)
@@ -818,6 +917,8 @@ export default function BookingsList() {
     busyBookingId: '',
     message: '',
   })
+  const [pendingAction, setPendingAction] = useState(null)
+  const { toast } = useToast()
 
   const canReadBookingOperations = STAFF_BOOKING_ROLES.has(user?.role)
 
@@ -874,8 +975,12 @@ export default function BookingsList() {
       return
     }
 
-    const sharedQuery = {
+    const scheduleQuery = {
       scheduledDate: selectedDate,
+      timeSlotId: timeSlotFilter === 'all' ? undefined : timeSlotFilter,
+    }
+    const queueQuery = {
+      scheduledDate: toDateKey(),
       timeSlotId: timeSlotFilter === 'all' ? undefined : timeSlotFilter,
     }
 
@@ -885,12 +990,12 @@ export default function BookingsList() {
     const [scheduleResult, queueResult] = await Promise.allSettled([
       getDailySchedule(
         {
-          ...sharedQuery,
+          ...scheduleQuery,
           status: statusFilter === 'all' ? undefined : statusFilter,
         },
         user.accessToken,
       ),
-      getCurrentQueue(sharedQuery, user.accessToken),
+      getCurrentQueue(queueQuery, user.accessToken),
     ])
 
     if (scheduleResult.status === 'fulfilled') {
@@ -1065,16 +1170,26 @@ export default function BookingsList() {
       setSlotMutationState({
         status: 'success',
         target: '',
+        message: '',
+      })
+      toast({
+        type: 'success',
+        title: slot.isActive === false ? 'Slot activated' : 'Slot paused',
         message:
           slot.isActive === false
-            ? 'Slot reactivated. Customers can select it again.'
-            : 'Slot paused. Customers will no longer be able to select it.',
+            ? 'Customers can select this slot again.'
+            : 'Customers will no longer be able to select this slot.',
       })
       await refreshBookingOperations()
     } catch (error) {
       setSlotMutationState({
         status: 'error',
         target: slot.timeSlotId,
+        message: error?.message || 'Slot definition could not be updated.',
+      })
+      toast({
+        type: 'error',
+        title: 'Slot update failed',
         message: error?.message || 'Slot definition could not be updated.',
       })
     }
@@ -1250,20 +1365,140 @@ export default function BookingsList() {
     void loadUpcomingScheduleWindow()
   }, [loadUpcomingScheduleWindow])
 
+  const loadCalendarMonth = useCallback(async (activeMonth = calendarMonth) => {
+    if (!user?.accessToken) {
+      setCalendarState({
+        status: 'unauthorized',
+        dates: [],
+        error: 'Sign in with a staff session before reading calendar booking visibility.',
+      })
+      return
+    }
+
+    if (!canReadBookingOperations) {
+      setCalendarState({
+        status: 'forbidden',
+        dates: [],
+        error: 'Only service advisers and super admins can open the bookings calendar view.',
+      })
+      return
+    }
+
+    const dateKeys = buildMonthDateWindow(activeMonth)
+    const sharedQuery = {
+      status: statusFilter === 'all' ? undefined : statusFilter,
+      timeSlotId: timeSlotFilter === 'all' ? undefined : timeSlotFilter,
+    }
+
+    setCalendarState((previous) => ({
+      ...previous,
+      status: 'loading',
+      error: '',
+    }))
+
+    const results = await Promise.allSettled(
+      dateKeys.map((dateKey) =>
+        getDailySchedule(
+          {
+            scheduledDate: dateKey,
+            ...sharedQuery,
+          },
+          user.accessToken,
+        ),
+      ),
+    )
+
+    const fulfilledResults = results
+      .map((result, index) => {
+        if (result.status !== 'fulfilled') {
+          return null
+        }
+
+        const data = result.value
+        const summary = summarizeSchedule(data)
+
+        return {
+          dateKey: dateKeys[index],
+          totalBookings: summary.totalBookings,
+          pendingCount: summary.pendingCount,
+          confirmedCount: summary.confirmedCount,
+          rescheduledCount: summary.rescheduledCount,
+          bookings: flattenScheduleBookings(data),
+        }
+      })
+      .filter(Boolean)
+
+    if (fulfilledResults.length === 0) {
+      const rejectedResult = results.find((result) => result.status === 'rejected')
+      setCalendarState({
+        status: 'error',
+        dates: [],
+        error: buildErrorState(rejectedResult?.reason, 'Calendar bookings could not be loaded.').error,
+      })
+      return
+    }
+
+    setCalendarState({
+      status: 'success',
+      dates: fulfilledResults,
+      error: results.some((result) => result.status === 'rejected')
+        ? 'Some days could not be loaded for this month. The visible days are still usable.'
+        : '',
+    })
+  }, [calendarMonth, canReadBookingOperations, statusFilter, timeSlotFilter, user?.accessToken])
+
+  useEffect(() => {
+    if (tab !== 'calendar') {
+      return
+    }
+
+    void loadCalendarMonth(calendarMonth)
+  }, [calendarMonth, loadCalendarMonth, tab])
+
   async function refreshBookingOperations() {
     setActionState((previous) => ({
       ...previous,
       message: '',
     }))
 
-    await Promise.allSettled([
+    const refreshTasks = [
       loadSlotDefinitions(),
       loadStaffBookingReads(),
       loadUpcomingScheduleWindow(selectedDateRef.current),
-    ])
+    ]
+
+    if (tab === 'calendar') {
+      refreshTasks.push(loadCalendarMonth(calendarMonth))
+    }
+
+    await Promise.allSettled(refreshTasks)
   }
 
-  async function handleBookingStatusAction(booking, action) {
+  function openJobOrderFromBooking(booking, overrideJobOrderId) {
+    const jobOrderId = overrideJobOrderId ?? booking?.jobOrderId
+
+    if (!jobOrderId) {
+      return
+    }
+
+    const params = new URLSearchParams()
+    params.set('jobOrderId', jobOrderId)
+
+    if (booking?.id) {
+      params.set('bookingId', booking.id)
+    }
+
+    router.push(`/admin/job-orders?${params.toString()}`)
+  }
+
+  function handleSelectedDateChange(nextDateKey) {
+    const normalizedDate = nextDateKey || toDateKey()
+    hasAutoSelectedUpcomingDate.current = true
+    setSelectedDate(normalizedDate)
+    setCalendarMonth(startOfMonth(toDateFromKey(normalizedDate)))
+  }
+
+  async function submitBookingStatusAction(booking, action) {
     if (!booking?.id || !action?.status) {
       return
     }
@@ -1302,6 +1537,7 @@ export default function BookingsList() {
             : `Booking moved to ${getStatusMeta(action.status).label.toLowerCase()}.`,
       })
 
+      setPendingAction(null)
       await refreshBookingOperations()
     } catch (error) {
       setActionState({
@@ -1309,128 +1545,188 @@ export default function BookingsList() {
         busyBookingId: '',
         message: error?.message || 'Booking status could not be updated.',
       })
+      setPendingAction(null)
     }
+  }
+
+  function handleBookingStatusAction(booking, action) {
+    if (action?.requiresConfirmation) {
+      setPendingAction({ booking, action })
+      return
+    }
+
+    void submitBookingStatusAction(booking, action)
+  }
+
+  function handlePendingActionCancel() {
+    if (actionState.status === 'submitting') {
+      return
+    }
+
+    setPendingAction(null)
+  }
+
+  function handlePendingActionConfirm() {
+    if (!pendingAction) {
+      return
+    }
+
+    void submitBookingStatusAction(pendingAction.booking, pendingAction.action)
   }
 
   const scheduleSummary = useMemo(() => summarizeSchedule(scheduleState.data), [scheduleState.data])
   const bookedScheduleDates = useMemo(
-    () => scheduleWindowState.dates.filter((date) => date.totalBookings > 0),
+    () => scheduleWindowState.dates.filter((date) => date.pendingCount > 0),
     [scheduleWindowState.dates],
+  )
+  const calendarBookingsByDate = useMemo(
+    () =>
+      Object.fromEntries(
+        calendarState.dates.map((date) => [date.dateKey, date.bookings ?? []]),
+      ),
+    [calendarState.dates],
   )
   const queueCount = queueState.data?.currentCount ?? 0
   const hasScheduleData = Boolean(scheduleState.data)
   const hasQueueData = Boolean(queueState.data)
-  const scheduleSlots = scheduleState.data?.slots ?? []
-  const slotDefinitions = slotDefinitionsState.data ?? []
+  const scheduleSlots = useMemo(
+    () => [...(scheduleState.data?.slots ?? [])].sort(compareSlotsByStartTime),
+    [scheduleState.data?.slots],
+  )
+  const slotDefinitions = useMemo(
+    () => [...(slotDefinitionsState.data ?? [])].sort(compareSlotsByStartTime),
+    [slotDefinitionsState.data],
+  )
+  const slotMetaById = useMemo(
+    () =>
+      new Map(
+        mergeSlotOptions(slotDefinitions, timeSlotOptions).map((slot) => [slot.timeSlotId, slot]),
+      ),
+    [slotDefinitions, timeSlotOptions],
+  )
+  const scheduleSlotsWithMeta = useMemo(
+    () =>
+      scheduleSlots.map((slot) => {
+        const slotMeta = slotMetaById.get(slot.timeSlotId)
+
+        return {
+          ...slot,
+          startTime: slot.startTime ?? slotMeta?.startTime,
+          endTime: slot.endTime ?? slotMeta?.endTime,
+        }
+      }),
+    [scheduleSlots, slotMetaById],
+  )
   const scheduleHasBookings = scheduleSummary.totalBookings > 0
   const isLoadingSchedule = scheduleState.status === 'loading' && !hasScheduleData
   const isLoadingQueue = queueState.status === 'loading' && !hasQueueData
+  const isLoadingCalendar = calendarState.status === 'loading' && calendarState.dates.length === 0
+  const isRefreshingOperations =
+    scheduleState.status === 'loading' || queueState.status === 'loading' || (tab === 'calendar' && calendarState.status === 'loading')
 
   return (
-    <div className="space-y-5">
-      <div className="card p-4 md:p-5">
-        <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-muted">Staff Booking Operations</p>
-            <h1 className="text-xl md:text-2xl font-black text-ink-primary mt-1">Schedule, Queue, and Booking Handling</h1>
-            <p className="text-sm text-ink-muted mt-2 max-w-2xl">
-              Service advisers and super admins can accept pending mobile bookings, decline or cancel requests, mark
-              confirmed work complete, and monitor the queue produced by confirmed appointments.
-            </p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full xl:w-auto">
-            <label className="text-xs text-ink-muted">
-              Schedule date
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(event) => {
-                  hasAutoSelectedUpcomingDate.current = true
-                  setSelectedDate(event.target.value || toDateKey())
-                }}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              />
-            </label>
-            <label className="text-xs text-ink-muted">
-              Schedule status
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-ink-muted">
-              Slot filter
-              <select
-                value={timeSlotFilter}
-                onChange={(event) => setTimeSlotFilter(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="all">All slots</option>
-                {timeSlotOptions.map((slot) => (
-                  <option key={slot.timeSlotId} value={slot.timeSlotId}>
-                    {formatTimeSlotWindow(slot) ? `${slot.label} (${formatTimeSlotWindow(slot)})` : slot.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              onClick={refreshBookingOperations}
-              disabled={scheduleState.status === 'loading' || queueState.status === 'loading'}
-              className="btn-primary self-end justify-center"
-            >
-              <RefreshCw size={14} /> Refresh
-            </button>
-          </div>
+    <div className="booking-page-shell">
+      <section className="booking-page-header">
+        <div className="space-y-2">
+          <p className="booking-page-kicker">Staff Booking Operations</p>
+          <h1 className="booking-page-title">Schedule, Queue &amp; Booking Handling</h1>
+          <p className="booking-page-copy">
+            Service advisers and super admins can review customer-created bookings, adjust slot operations, and manage
+            queue flow from one consistent control surface.
+          </p>
         </div>
-      </div>
+        <button
+          onClick={refreshBookingOperations}
+          disabled={isRefreshingOperations}
+          className="btn-ghost min-h-11 min-w-[148px] self-start xl:self-auto"
+        >
+          <RefreshCw size={14} className={isRefreshingOperations ? 'animate-spin' : ''} />
+          Refresh
+        </button>
+      </section>
+
+      <section className="booking-control-strip">
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="block">
+            <span className="label">Schedule date</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => {
+                handleSelectedDateChange(event.target.value || toDateKey())
+              }}
+              className="input"
+            />
+          </label>
+          <label className="block">
+            <span className="label">Schedule status</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="select"
+            >
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="label">Slot filter</span>
+            <select
+              value={timeSlotFilter}
+              onChange={(event) => setTimeSlotFilter(event.target.value)}
+              className="select"
+            >
+              <option value="all">All slots</option>
+              {timeSlotOptions.map((slot) => (
+                <option key={slot.timeSlotId} value={slot.timeSlotId}>
+                  {formatTimeSlotWindow(slot) ? `${slot.label} (${formatTimeSlotWindow(slot)})` : slot.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </section>
 
       {bookedScheduleDates.length > 0 ? (
-        <div className="card p-4">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-ink-muted">Upcoming Mobile Bookings</p>
-              <p className="text-sm text-ink-secondary mt-1">
-                Select a day to review customer-created requests and pending staff actions.
-              </p>
-            </div>
-            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 lg:max-w-5xl">
-              {bookedScheduleDates.map((date) => (
+        <div
+          className="flex flex-col md:flex-row md:items-center gap-3 rounded-lg border px-4 py-2.5"
+          style={{ background: 'rgba(240,124,0,0.06)', borderColor: 'rgba(240,124,0,0.25)' }}
+        >
+          <div className="flex items-center gap-2.5 shrink-0">
+            <BellRing size={16} style={{ color: '#f07c00' }} />
+            <p className="text-xs font-semibold text-ink-primary">
+              Pending customer bookings
+              <span className="text-ink-muted font-normal"> — pick a date to review</span>
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 md:ml-auto">
+            {bookedScheduleDates.map((date) => {
+              const isActive = selectedDate === date.dateKey
+              return (
                 <button
                   key={date.dateKey}
-                  onClick={() => {
-                    hasAutoSelectedUpcomingDate.current = true
-                    setSelectedDate(date.dateKey)
-                  }}
-                  className={`rounded-xl border px-4 py-3 text-left transition ${
-                    selectedDate === date.dateKey
-                      ? 'border-brand-orange bg-brand-orange/10'
-                      : 'border-surface-border bg-surface-raised hover:border-brand-orange/60'
+                  onClick={() => handleSelectedDateChange(date.dateKey)}
+                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                    isActive ? 'text-white' : 'hover:brightness-110'
                   }`}
+                  style={
+                    isActive
+                      ? { background: '#f07c00', color: '#fff' }
+                      : { background: 'rgba(240,124,0,0.12)', color: '#f07c00' }
+                  }
                 >
-                  <span className="block text-sm font-black text-ink-primary">{formatDate(date.dateKey)}</span>
-                  <span className="mt-1 block text-xs text-ink-muted">
-                    {date.totalBookings} booking{date.totalBookings === 1 ? '' : 's'}
-                  </span>
-                  <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                    date.pendingCount ? 'bg-brand-orange/10 text-brand-orange' : 'bg-emerald-500/10 text-emerald-400'
-                  }`}>
-                    {date.pendingCount ? `${date.pendingCount} pending` : 'No pending actions'}
-                  </span>
+                  {formatDate(date.dateKey)} · {date.totalBookings}
+                  {date.pendingCount ? `/${date.pendingCount} pending` : ''}
                 </button>
-              ))}
-            </div>
+              )
+            })}
           </div>
         </div>
       ) : scheduleWindowState.status === 'loading' ? (
-        <div className="card p-4 text-xs text-ink-muted">Scanning the next month for customer-created bookings...</div>
+        <div className="text-xs text-ink-muted px-1">Scanning the next month for customer-created bookings...</div>
       ) : null}
 
       <SlotDefinitionsPanel
@@ -1451,31 +1747,30 @@ export default function BookingsList() {
         onDelete={handleDeleteSlotDefinition}
       />
 
-      <div className="flex gap-1 p-1 bg-surface-card border border-surface-border rounded-xl w-fit max-w-full overflow-x-auto">
+      <div className="booking-segmented-control">
         {[
           { key: 'schedule', icon: CalendarDays, label: 'Daily Schedule' },
+          { key: 'calendar', icon: CalendarDays, label: 'Calendar View' },
           { key: 'queue', icon: ListChecks, label: 'Current Queue' },
         ].map((item) => (
           <button
             key={item.key}
             onClick={() => setTab(item.key)}
-            className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all whitespace-nowrap shrink-0 ${
-              tab === item.key ? 'text-white' : 'text-ink-muted hover:text-ink-secondary hover:bg-surface-hover'
-            }`}
-            style={tab === item.key ? { background: '#f07c00' } : {}}
+            className={`booking-tab-button ${tab === item.key ? 'booking-tab-button-active' : ''}`}
           >
-            <item.icon size={14} /> {item.label}
+            <item.icon size={14} />
+            {item.label}
           </button>
         ))}
       </div>
 
       {tab === 'schedule' ? (
-        <div className="space-y-4">
+        <section className="space-y-5">
           {!hasScheduleData && ['unauthorized', 'forbidden', 'validation-error', 'error'].includes(scheduleState.status) ? (
             <BlockingState state={scheduleState} onRetry={refreshBookingOperations} />
           ) : (
             <>
-              <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <SummaryTile
                   icon={CalendarDays}
                   label="Scheduled Date"
@@ -1541,11 +1836,12 @@ export default function BookingsList() {
                       />
                     </div>
                   ) : null}
-                  {scheduleSlots.map((slot) => (
+                  {scheduleSlotsWithMeta.map((slot) => (
                     <ScheduleSlotCard
                       key={slot.timeSlotId}
                       slot={slot}
                       onStatusAction={handleBookingStatusAction}
+                      onOpenJobOrder={openJobOrderFromBooking}
                       busyBookingId={actionState.busyBookingId}
                     />
                   ))}
@@ -1553,21 +1849,39 @@ export default function BookingsList() {
               )}
             </>
           )}
-        </div>
+        </section>
+      ) : null}
+
+      {tab === 'calendar' ? (
+        <BookingsCalendarView
+          monthDate={calendarMonth}
+          groupedBookingsByDate={calendarBookingsByDate}
+          loading={isLoadingCalendar}
+          error={calendarState.error}
+          selectedDate={selectedDate}
+          onSelectDate={handleSelectedDateChange}
+          onPreviousMonth={() =>
+            setCalendarMonth((previous) => new Date(previous.getFullYear(), previous.getMonth() - 1, 1))
+          }
+          onNextMonth={() =>
+            setCalendarMonth((previous) => new Date(previous.getFullYear(), previous.getMonth() + 1, 1))
+          }
+          onToday={() => handleSelectedDateChange(toDateKey())}
+        />
       ) : null}
 
       {tab === 'queue' ? (
-        <div className="space-y-4">
+        <section className="space-y-5">
           {!hasQueueData && ['unauthorized', 'forbidden', 'validation-error', 'error'].includes(queueState.status) ? (
             <BlockingState state={queueState} onRetry={refreshBookingOperations} />
           ) : (
             <>
-              <div className="grid sm:grid-cols-3 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <SummaryTile
                   icon={ListChecks}
                   label="Current Queue"
                   value={queueCount}
-                  sub={`For ${formatDate(queueState.data?.scheduledDate ?? selectedDate)}`}
+                  sub={`For ${formatDate(queueState.data?.scheduledDate ?? toDateKey())}`}
                 />
                 <SummaryTile
                   icon={Clock}
@@ -1592,8 +1906,18 @@ export default function BookingsList() {
               {isLoadingQueue ? <LoadingRows /> : <QueueTable queue={queueState.data} />}
             </>
           )}
-        </div>
+        </section>
       ) : null}
+
+      <BookingActionConfirmModal
+        visible={Boolean(pendingAction)}
+        title="Confirm booking action"
+        message={pendingAction?.action?.confirmMessage ?? ''}
+        confirmLabel={pendingAction?.action?.confirmLabel ?? 'Confirm'}
+        submitting={actionState.status === 'submitting'}
+        onCancel={handlePendingActionCancel}
+        onConfirm={handlePendingActionConfirm}
+      />
     </div>
   )
 }

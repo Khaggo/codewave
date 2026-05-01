@@ -14,6 +14,8 @@ import { AI_WORKER_QUEUE_NAME } from './ai-worker.constants';
         connection: {
           host: configService.getOrThrow<string>('redis.host'),
           port: configService.getOrThrow<number>('redis.port'),
+          username: configService.get<string>('redis.username'),
+          password: configService.get<string>('redis.password'),
         },
       }),
     }),

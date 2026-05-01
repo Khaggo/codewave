@@ -11,9 +11,10 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { useUser } from '@/lib/userContext'
-import { ApiError } from '@/lib/authClient'
+import { ApiError, listAdminCustomers } from '@/lib/authClient'
 import {
   getInsuranceInquiryById,
+  listInsuranceInquiriesByUserId,
   updateInsuranceInquiryStatus,
 } from '@/lib/insuranceStaffClient'
 import {
@@ -102,6 +103,8 @@ export default function InsuranceContent() {
   const role = user?.role ?? null
   const canReviewInsurance = insuranceReviewStaffRoles.includes(role)
   const [queueItems, setQueueItems] = useState([])
+  const [customers, setCustomers] = useState([])
+  const [selectedCustomerUserId, setSelectedCustomerUserId] = useState('')
   const [selectedInquiryId, setSelectedInquiryId] = useState('')
   const [manualInquiryId, setManualInquiryId] = useState('')
   const [liveInquiry, setLiveInquiry] = useState(null)
@@ -127,6 +130,40 @@ export default function InsuranceContent() {
     () => getAllowedInsuranceStatusTargets(activeInquiry?.status ?? 'closed'),
     [activeInquiry?.status],
   )
+
+  useEffect(() => {
+    if (!user?.accessToken || !canReviewInsurance) {
+      setCustomers([])
+      return
+    }
+
+    void listAdminCustomers(user.accessToken)
+      .then((items) => setCustomers(items))
+      .catch(() => setCustomers([]))
+  }, [canReviewInsurance, user?.accessToken])
+
+  useEffect(() => {
+    if (!user?.accessToken || !selectedCustomerUserId || !canReviewInsurance) {
+      setQueueItems([])
+      return
+    }
+
+    setDetailMessage('')
+    void listInsuranceInquiriesByUserId({
+      userId: selectedCustomerUserId,
+      accessToken: user.accessToken,
+    })
+      .then((items) => {
+        setQueueItems(items)
+        setSelectedInquiryId(items[0]?.id ?? '')
+        setManualInquiryId(items[0]?.id ?? '')
+      })
+      .catch((error) => {
+        setQueueItems([])
+        setDetailState('load_failed')
+        setDetailMessage(error?.message || 'Insurance inquiries could not be loaded for this customer.')
+      })
+  }, [canReviewInsurance, selectedCustomerUserId, user?.accessToken])
 
   useEffect(() => {
     if (!selectedQueueItem) return
@@ -318,8 +355,7 @@ export default function InsuranceContent() {
       </div>
 
       <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3 text-xs text-ink-muted">
-        A full insurance queue is planned for later. For demo readiness, use a known inquiry id from mobile intake
-        to load detail, then update the review status from this staff workspace.
+        Pick a customer first, then choose from that customer&apos;s live insurance inquiries instead of pasting inquiry ids.
       </div>
 
       <div className="grid xl:grid-cols-[360px_minmax(0,1fr)] gap-5">
@@ -328,7 +364,7 @@ export default function InsuranceContent() {
             <div>
               <p className="card-title">Insurance Review Queue</p>
               <p className="text-xs text-ink-muted mt-1">
-                No placeholder queue is shown. Staff review starts from a known live inquiry id.
+                Queue items load from the selected customer&apos;s live insurance inquiries.
               </p>
             </div>
             <span className={`badge ${queueState === 'queue_loaded' ? 'badge-orange' : 'badge-gray'}`}>
@@ -337,11 +373,26 @@ export default function InsuranceContent() {
           </div>
 
           <div className="space-y-3 mt-4">
+            <label className="block text-xs text-ink-muted">
+              Customer
+              <select
+                value={selectedCustomerUserId}
+                onChange={(event) => setSelectedCustomerUserId(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              >
+                <option value="">Choose customer</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.displayName} / {customer.email}
+                  </option>
+                ))}
+              </select>
+            </label>
             {queueItems.length === 0 ? (
               <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-8 text-center">
                 <p className="text-sm font-bold text-ink-primary">No queue items yet</p>
                 <p className="text-xs text-ink-muted mt-2">
-                  A full queue list is planned later. Paste a known inquiry id in the detail panel to continue.
+                  Select a customer with insurance activity to continue.
                 </p>
               </div>
             ) : (
@@ -387,12 +438,18 @@ export default function InsuranceContent() {
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
-                <input
+                <select
                   value={manualInquiryId}
                   onChange={(event) => setManualInquiryId(event.target.value)}
-                  placeholder="Insurance inquiry id"
                   className="w-full lg:w-[320px] rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                />
+                >
+                  <option value="">Choose inquiry</option>
+                  {queueItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.subject} / {formatStatusLabel(item.status)}
+                    </option>
+                  ))}
+                </select>
                 <button onClick={handleLoadLiveDetail} className="btn-primary justify-center">
                   <RefreshCw size={14} /> Load Detail
                 </button>

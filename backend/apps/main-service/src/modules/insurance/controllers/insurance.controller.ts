@@ -69,6 +69,28 @@ export class InsuranceController {
     return this.insuranceService.findById(id, request.user as { userId: string; role: string });
   }
 
+  @Get('users/:id/insurance-inquiries')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'List insurance inquiries for one customer account.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Customer identifier.',
+    example: '55555555-5555-4555-8555-555555555555',
+  })
+  @ApiOkResponse({
+    description: 'Insurance inquiries attached to the target customer.',
+    type: InsuranceInquiryResponseDto,
+    isArray: true,
+  })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can list customer insurance inquiries.' })
+  @ApiNotFoundResponse({ description: 'Customer not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  findByUserId(@Param('id') id: string, @Req() request: Request) {
+    return this.insuranceService.findByUserId(id, request.user as { userId: string; role: string });
+  }
+
   @Patch('insurance/inquiries/:id/status')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RolesGuard)

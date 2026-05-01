@@ -15,7 +15,8 @@ import {
   Wrench,
 } from 'lucide-react'
 
-import { ApiError } from '@/lib/authClient'
+import { ApiError, listAdminCustomers } from '@/lib/authClient'
+import { listVehicleBookings } from '@/lib/bookingStaffClient'
 import { createVehicleInspection, listVehicleInspections } from '@/lib/inspectionStaffClient'
 import { useUser } from '@/lib/userContext'
 import {
@@ -84,6 +85,7 @@ const getMessageTone = (state) => {
 }
 
 const initialDraft = {
+  customerUserId: '',
   vehicleId: '',
   bookingId: '',
   inspectionType: inspectionCaptureSubmissionTemplate.request.inspectionType,
@@ -97,7 +99,36 @@ const initialDraft = {
   findingVerified: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.isVerified ?? true,
 }
 
-const quickLinks = [
+const inspectionFindingCategoryOptions = [
+  { value: 'general', label: 'General' },
+  { value: 'engine', label: 'Engine' },
+  { value: 'brakes', label: 'Brakes' },
+  { value: 'suspension', label: 'Suspension' },
+  { value: 'electrical', label: 'Electrical' },
+  { value: 'body', label: 'Body' },
+  { value: 'interior', label: 'Interior' },
+  { value: 'fluids', label: 'Fluids' },
+  { value: 'tires', label: 'Tires' },
+]
+
+const technicianLinks = [
+  {
+    href: '/admin/job-orders',
+    icon: Wrench,
+    title: 'Job Order Workbench',
+    roleNote: 'technician execution',
+    copy: 'Load a known job order, record progress, update status, and attach photo evidence from the workshop.',
+  },
+  {
+    href: '/admin',
+    icon: ClipboardList,
+    title: 'Technician Dashboard',
+    roleNote: 'assigned work queue',
+    copy: 'Return to your technician task board to review active job orders and open the next vehicle in queue.',
+  },
+]
+
+const staffLinks = [
   {
     href: '/bookings',
     icon: ClipboardList,
@@ -192,9 +223,12 @@ function InspectionCard({ inspection, isSelected, onSelect }) {
 export default function DigitalIntakeInspectionWorkspace() {
   const user = useUser()
   const role = user?.role ?? null
+  const isTechnician = role === 'technician'
   const canUseInspection = inspectionStaffRoles.includes(role)
   const [draft, setDraft] = useState(initialDraft)
   const [inspections, setInspections] = useState([])
+  const [customers, setCustomers] = useState([])
+  const [vehicleBookings, setVehicleBookings] = useState([])
   const [selectedInspectionId, setSelectedInspectionId] = useState('')
   const [historyState, setHistoryState] = useState({
     status: 'history_empty',
@@ -223,10 +257,40 @@ export default function DigitalIntakeInspectionWorkspace() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!user?.accessToken || isTechnician) {
+      setCustomers([])
+      return
+    }
+
+    void listAdminCustomers(user.accessToken)
+      .then((items) => setCustomers(items))
+      .catch(() => setCustomers([]))
+  }, [isTechnician, user?.accessToken])
+
+  useEffect(() => {
+    if (!draft.vehicleId || !user?.accessToken || isTechnician) {
+      setVehicleBookings([])
+      return
+    }
+
+    void listVehicleBookings(draft.vehicleId, user.accessToken)
+      .then((items) => setVehicleBookings(items))
+      .catch(() => setVehicleBookings([]))
+  }, [draft.vehicleId, isTechnician, user?.accessToken])
+
+  const selectedCustomer = useMemo(
+    () => customers.find((customer) => customer.id === draft.customerUserId) ?? null,
+    [customers, draft.customerUserId],
+  )
+  const customerVehicleOptions = selectedCustomer?.vehicles ?? []
+
   const selectedInspection = useMemo(
     () => getSelectedInspection(inspections, selectedInspectionId),
     [inspections, selectedInspectionId],
   )
+  const inspectionSummaryCount = selectedInspection?.findings?.length ?? 0
+  const routeLinks = isTechnician ? technicianLinks : staffLinks
 
   const updateDraft = (patch) => {
     setDraft((current) => ({
@@ -399,81 +463,102 @@ export default function DigitalIntakeInspectionWorkspace() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="card relative overflow-hidden p-6 md:p-7">
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-80 bg-gradient-to-l from-brand-orange/10 to-transparent" />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand-orange">
-              Digital Intake And Inspection
-            </p>
-            <h1 className="mt-3 text-3xl font-bold text-ink-primary">
-              Capture Vehicle Condition Before Release Decisions
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
-              Use this staff surface for vehicle-scoped intake, pre-repair, completion, and return
-              inspection records. QA release review stays separate in the quality-gate workspace and
-              should not replace physical inspection evidence.
-            </p>
+    <div className="ops-page-shell">
+      <section className="ops-page-header">
+        <div className="space-y-2">
+          <p className="ops-page-kicker">Digital Intake And Inspection</p>
+          <h1 className="ops-page-title">
+            {isTechnician ? 'Capture Vehicle Condition And Workshop Findings' : 'Capture Vehicle Condition Before Release Decisions'}
+          </h1>
+          <p className="ops-page-copy">
+            {isTechnician
+              ? 'Use this technician surface to review known vehicle history, capture intake or completion findings, and keep inspection evidence attached to the vehicle before and after service work.'
+              : 'Use this staff surface for vehicle-scoped intake, pre-repair, completion, and return inspection records. QA release review stays separate in the quality-gate workspace and should not replace physical inspection evidence.'}
+          </p>
+        </div>
+      </section>
+
+      <section className="ops-summary-grid">
+        <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Inspection capture</p>
+              <p className="mt-3 text-xl font-black tracking-tight text-ink-primary">
+                {isTechnician ? 'Technician-owned findings' : 'Vehicle-scoped intake'}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-ink-muted">
+                {isTechnician
+                  ? 'Capture the condition you observed on the vehicle without creating separate booking or job-order truth.'
+                  : 'Staff records observed condition and findings against the vehicle. Booking id is optional and only references existing booking truth.'}
+              </p>
+            </div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
+              <ClipboardCheck size={14} />
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <span className={`badge ${canUseInspection ? 'badge-green' : 'badge-red'}`}>
-              Inspection: {canUseInspection ? formatLabel(role) : 'Forbidden'}
-            </span>
-            <span className="badge badge-gray">Mobile: customer controls hidden</span>
+        </div>
+        <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Vehicle history</p>
+              <p className="mt-3 text-xl font-black tracking-tight text-ink-primary">
+                {isTechnician ? 'History before repair' : 'Known vehicle lookup'}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-ink-muted">
+                {isTechnician
+                  ? 'Load the active vehicle first so you can compare current findings against prior intake or return records.'
+                  : 'Inspection history is vehicle-scoped today. Staff should start from a known customer vehicle rather than expecting a broad queue on this page.'}
+              </p>
+            </div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-blue-500/15 bg-blue-500/10 text-blue-300">
+              <History size={14} />
+            </div>
+          </div>
+        </div>
+        <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                {isTechnician ? 'Verification state' : 'QA boundary'}
+              </p>
+              <p className="mt-3 text-xl font-black tracking-tight text-ink-primary">
+                {isTechnician ? 'Verified evidence matters' : 'Release review stays separate'}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-ink-muted">
+                {isTechnician
+                  ? 'Verified findings and clear notes help the next release review without replacing the later QA gate process.'
+                  : 'QA review uses job-order quality gates after work evidence exists. Super-admin overrides stay audit-visible and do not erase inspection findings.'}
+              </p>
+            </div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/15 bg-emerald-500/10 text-emerald-300">
+              <ShieldCheck size={14} />
+            </div>
+          </div>
+        </div>
+        <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">History state</p>
+              <p className="mt-3 text-3xl font-black tracking-tight tabular-nums text-ink-primary">
+                {inspections.length}
+              </p>
+              <p className="mt-1.5 text-[11px] text-ink-muted">
+                {historyState.status === 'history_loaded'
+                  ? 'Loaded inspection records for the active vehicle'
+                  : 'Enter a vehicle id to load inspection history'}
+              </p>
+            </div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
+              <FileSearch size={14} />
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-4">
-        {quickLinks.map((item) => (
+      <section className={`grid gap-4 ${isTechnician ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
+        {routeLinks.map((item) => (
           <RouteCard key={item.href} item={item} />
         ))}
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-3">
-        <div className="card p-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
-              <ClipboardCheck size={17} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-ink-primary">Intake Capture</p>
-              <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                Staff records observed condition and findings against the vehicle. Booking id is optional
-                and only references existing booking truth.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="card p-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-blue-500/15 bg-blue-500/10 text-blue-300">
-              <History size={17} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-ink-primary">Vehicle History</p>
-              <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                Inspection history is vehicle-scoped today. Staff should start from a known customer vehicle
-                rather than expecting a broad queue on this page.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="card p-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/15 bg-emerald-500/10 text-emerald-300">
-              <ShieldCheck size={17} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-ink-primary">QA Release Boundary</p>
-              <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                QA review uses job-order quality gates after work evidence exists. Super-admin overrides
-                stay audit-visible and do not erase inspection findings.
-              </p>
-            </div>
-          </div>
-        </div>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
@@ -482,30 +567,85 @@ export default function DigitalIntakeInspectionWorkspace() {
             <div>
               <p className="card-title">Live Vehicle Inspection Capture</p>
               <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                Save one vehicle-owned inspection record. Do not create booking or job-order truth here.
+                {isTechnician
+                  ? 'Save one vehicle-owned inspection record and keep the evidence tied to the vehicle being serviced.'
+                  : 'Save one vehicle-owned inspection record. Do not create booking or job-order truth here.'}
               </p>
             </div>
-            <span className="badge badge-gray">Known id required</span>
+            <span className="badge badge-gray">{isTechnician ? 'Assigned vehicle context' : 'Vehicle and booking selectors'}</span>
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {!isTechnician ? (
+              <label className="text-xs text-ink-muted">
+                Customer
+                <select
+                  value={draft.customerUserId}
+                  onChange={(event) =>
+                    updateDraft({
+                      customerUserId: event.target.value,
+                      vehicleId: '',
+                      bookingId: '',
+                    })
+                  }
+                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                >
+                  <option value="">Choose a customer</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.displayName} / {customer.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="text-xs text-ink-muted">
-              Vehicle id
-              <input
-                value={draft.vehicleId}
-                onChange={(event) => updateDraft({ vehicleId: event.target.value })}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                placeholder="Paste vehicle UUID"
-              />
+              Vehicle
+              {isTechnician ? (
+                <input
+                  value={draft.vehicleId}
+                  onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
+                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  placeholder="Paste vehicle UUID"
+                />
+              ) : (
+                <select
+                  value={draft.vehicleId}
+                  onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
+                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                >
+                  <option value="">Choose a customer vehicle</option>
+                  {customerVehicleOptions.map((vehicle) => (
+                    <option key={vehicle.id} value={vehicle.id}>
+                      {vehicle.plateNumber || vehicle.id} / {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')}
+                    </option>
+                  ))}
+                </select>
+              )}
             </label>
             <label className="text-xs text-ink-muted">
-              Optional booking id
-              <input
-                value={draft.bookingId}
-                onChange={(event) => updateDraft({ bookingId: event.target.value })}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                placeholder="Booking UUID if this came from intake"
-              />
+              Optional booking
+              {isTechnician ? (
+                <input
+                  value={draft.bookingId}
+                  onChange={(event) => updateDraft({ bookingId: event.target.value })}
+                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  placeholder="Booking UUID if this came from intake"
+                />
+              ) : (
+                <select
+                  value={draft.bookingId}
+                  onChange={(event) => updateDraft({ bookingId: event.target.value })}
+                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                >
+                  <option value="">No booking link</option>
+                  {vehicleBookings.map((booking) => (
+                    <option key={booking.id} value={booking.id}>
+                      {booking.customerLabel} / {booking.scheduledDate} / {booking.status}
+                    </option>
+                  ))}
+                </select>
+              )}
             </label>
             <label className="text-xs text-ink-muted">
               Inspection type
@@ -559,12 +699,17 @@ export default function DigitalIntakeInspectionWorkspace() {
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <label className="text-xs text-ink-muted">
                 Category
-                <input
+                <select
                   value={draft.findingCategory}
                   onChange={(event) => updateDraft({ findingCategory: event.target.value })}
                   className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                  placeholder="brakes, body, fluids"
-                />
+                >
+                  {inspectionFindingCategoryOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="text-xs text-ink-muted">
                 Severity
@@ -643,7 +788,9 @@ export default function DigitalIntakeInspectionWorkspace() {
               <div>
                 <p className="card-title">Vehicle Inspection History</p>
                 <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                  Load prior intake and condition records for the vehicle currently being reviewed.
+                  {isTechnician
+                    ? 'Load prior intake, pre-repair, and return records for the vehicle currently being worked on.'
+                    : 'Load prior intake and condition records for the vehicle currently being reviewed.'}
                 </p>
               </div>
               <span className="badge badge-gray">Read state: {formatLabel(historyState.status)}</span>
@@ -689,7 +836,9 @@ export default function DigitalIntakeInspectionWorkspace() {
               <div>
                 <p className="card-title">Selected Inspection Detail</p>
                 <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                  Verification state is derived from findings and stays separate from lifecycle summary review.
+                  {isTechnician
+                    ? 'Review findings, verification, and notes before continuing work or adding new inspection evidence.'
+                    : 'Verification state is derived from findings and stays separate from lifecycle summary review.'}
                 </p>
               </div>
               {selectedInspection ? (
@@ -715,6 +864,9 @@ export default function DigitalIntakeInspectionWorkspace() {
                 </div>
                 <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
                   <p className="text-sm font-bold text-ink-primary">Findings</p>
+                  <p className="mt-1 text-xs text-ink-muted">
+                    {inspectionSummaryCount} finding{inspectionSummaryCount === 1 ? '' : 's'} attached to this inspection record.
+                  </p>
                   <div className="mt-3 space-y-3">
                     {selectedInspection.findings?.length ? (
                       selectedInspection.findings.map((finding) => (
@@ -752,29 +904,39 @@ export default function DigitalIntakeInspectionWorkspace() {
           <div>
             <p className="card-title">Workflow Notes</p>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
-              This workspace intentionally exposes existing inspection capability instead of creating duplicate
-              booking, vehicle, job-order, or QA truth.
+              {isTechnician
+                ? 'This page supports technician capture and vehicle history review. It should stay focused on evidence and condition tracking, not admin routing.'
+                : 'This workspace intentionally exposes existing inspection capability instead of creating duplicate booking, vehicle, job-order, or QA truth.'}
             </p>
           </div>
-          <span className="badge badge-gray">Vehicle-scoped workflow</span>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
             <p className="text-sm font-bold text-ink-primary">Vehicle History</p>
             <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              Create and read inspection records from the selected customer vehicle context.
+              {isTechnician
+                ? 'Load prior inspection records before you continue diagnosis, repair, or completion checks.'
+                : 'Create and read inspection records from the selected customer vehicle context.'}
             </p>
           </div>
           <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">Queue Expectation</p>
+            <p className="text-sm font-bold text-ink-primary">
+              {isTechnician ? 'Workshop Discipline' : 'Queue Expectation'}
+            </p>
             <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              A broad intake queue is planned later, so staff should enter a known vehicle id for the demo.
+              {isTechnician
+                ? 'Use clear finding labels, verified evidence, and attachment refs so the next handoff is easy to review.'
+                : 'A broad intake queue is planned later, so staff should enter a known vehicle id for the demo.'}
             </p>
           </div>
           <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">Product Boundary</p>
+            <p className="text-sm font-bold text-ink-primary">
+              {isTechnician ? 'Job Order Handoff' : 'Product Boundary'}
+            </p>
             <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              Customer mobile remains customer-only and does not expose staff inspection capture controls.
+              {isTechnician
+                ? 'Use Job Orders for progress and execution updates after inspection capture. This page stays vehicle-history-first.'
+                : 'Customer mobile remains customer-only and does not expose staff inspection capture controls.'}
             </p>
           </div>
         </div>

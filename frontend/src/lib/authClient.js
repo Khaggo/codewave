@@ -204,6 +204,15 @@ export const listAdminCustomers = async (accessToken) =>
     Array.isArray(customers) ? customers.map((customer) => normalizeCustomerRecord(customer)) : [],
   );
 
+export const updateAdminCustomerStatus = async (userId, payload, accessToken) =>
+  request(`/api/admin/customers/${userId}/status`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: payload,
+  }).then(normalizeCustomerRecord);
+
 export const refreshAuthSession = async (refreshToken) =>
   normalizeSession(
     await request('/api/auth/refresh', {

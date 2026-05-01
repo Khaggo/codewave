@@ -122,6 +122,20 @@ export const getTimeSlotDefinitions = (accessToken) =>
     accessToken,
   });
 
+export const listVehicleBookings = async (vehicleId, accessToken) => {
+  if (!vehicleId) {
+    throw new ApiError('Select a vehicle before loading booking records.', 400, {
+      path: '/api/vehicles/:id/bookings',
+    })
+  }
+
+  const bookings = await request(`/api/vehicles/${vehicleId}/bookings`, {
+    accessToken,
+  })
+
+  return Array.isArray(bookings) ? bookings.map((booking) => normalizeStaffBooking(booking)) : []
+}
+
 export const createTimeSlotDefinition = (payload, accessToken) =>
   request('/api/time-slots', {
     method: 'POST',
