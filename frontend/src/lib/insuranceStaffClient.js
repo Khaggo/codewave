@@ -130,6 +130,23 @@ export const getInsuranceInquiryById = async ({ inquiryId, accessToken }) => {
   );
 };
 
+export const listInsuranceInquiriesByUserId = async ({ userId, accessToken }) => {
+  if (!userId) {
+    throw new ApiError('Select a customer before loading insurance inquiries.', 400, {
+      path: '/api/users/:id/insurance-inquiries',
+    });
+  }
+
+  const inquiries = await request(`/api/users/${userId}/insurance-inquiries`, {
+    method: 'GET',
+    headers: buildAuthorizedHeaders(accessToken),
+  });
+
+  return Array.isArray(inquiries)
+    ? inquiries.map((inquiry) => normalizeInsuranceInquiryForStaff(inquiry)).filter(Boolean)
+    : [];
+};
+
 export const updateInsuranceInquiryStatus = async ({
   inquiryId,
   status,

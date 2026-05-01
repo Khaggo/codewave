@@ -247,6 +247,133 @@ describe('JobOrdersController integration', () => {
     }
   });
 
+  it('derives confirmed booking handoffs from daily schedule and lists technician assigned job orders', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      const adviser = await seedAuthUser({
+        email: 'adviser.handoffs@example.com',
+        password: 'password123',
+        firstName: 'Hana',
+        lastName: 'Handoff',
+        role: 'service_adviser',
+        staffCode: 'SA-HANDOFF',
+      });
+      const technician = await seedAuthUser({
+        email: 'technician.handoffs@example.com',
+        password: 'password123',
+        firstName: 'Tia',
+        lastName: 'Technician',
+        role: 'technician',
+        staffCode: 'TECH-HANDOFF',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+      expect(adviserLogin.status).toBe(200);
+      const technicianLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: technician.email,
+        password: 'password123',
+      });
+      expect(technicianLogin.status).toBe(200);
+
+      const servicesResponse = await request(app.getHttpServer()).get('/api/services');
+      const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
+
+      const customerResponse = await request(app.getHttpServer()).post('/api/users').send({
+        email: 'handoff.customer@example.com',
+        firstName: 'Cora',
+        lastName: 'Confirmed',
+      });
+      expect(customerResponse.status).toBe(201);
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customerResponse.body.id,
+        plateNumber: 'HND123',
+        make: 'Honda',
+        model: 'City',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
+        userId: customerResponse.body.id,
+        vehicleId: vehicleResponse.body.id,
+        timeSlotId: timeSlotsResponse.body[0].id,
+        scheduledDate: '2026-05-07',
+        serviceIds: [servicesResponse.body[0].id],
+      });
+      expect(bookingResponse.status).toBe(201);
+
+      const confirmBookingResponse = await request(app.getHttpServer())
+        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'confirmed',
+        });
+      expect(confirmBookingResponse.status).toBe(200);
+
+      const scheduleResponse = await request(app.getHttpServer())
+        .get('/api/bookings/daily-schedule?scheduledDate=2026-05-07&status=confirmed')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
+      expect(scheduleResponse.status).toBe(200);
+      expect(scheduleResponse.body).toEqual(
+        expect.objectContaining({
+          scheduledDate: '2026-05-07',
+          slots: expect.any(Array),
+        }),
+      );
+      const scheduleBookings = scheduleResponse.body.slots.flatMap((slot: { bookings?: Array<{ id: string }> }) =>
+        Array.isArray(slot.bookings) ? slot.bookings : [],
+      );
+      expect(scheduleBookings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: bookingResponse.body.id,
+            status: 'confirmed',
+          }),
+        ]),
+      );
+
+      const createJobOrderResponse = await request(app.getHttpServer())
+        .post('/api/job-orders')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          sourceType: 'booking',
+          sourceId: bookingResponse.body.id,
+          customerUserId: customerResponse.body.id,
+          vehicleId: vehicleResponse.body.id,
+          serviceAdviserUserId: adviser.id,
+          serviceAdviserCode: adviser.staffCode,
+          items: [{ name: 'Prepare confirmed handoff work' }],
+          assignedTechnicianIds: [technician.id],
+        });
+      expect(createJobOrderResponse.status).toBe(201);
+
+      const assignedJobOrdersResponse = await request(app.getHttpServer())
+        .get('/api/job-orders/assigned')
+        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`);
+      expect(assignedJobOrdersResponse.status).toBe(200);
+      expect(assignedJobOrdersResponse.body).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: createJobOrderResponse.body.id,
+            sourceId: bookingResponse.body.id,
+          }),
+        ]),
+      );
+
+      const adviserAssignedResponse = await request(app.getHttpServer())
+        .get('/api/job-orders/assigned')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
+      expect(adviserAssignedResponse.status).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('rejects unauthorized access and duplicate booking job orders', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 

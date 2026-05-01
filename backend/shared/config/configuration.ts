@@ -58,8 +58,9 @@ const toStringArray = (value: string | undefined, fallback: string[]): string[] 
 export default (): AppConfig => ({
   env: process.env.NODE_ENV ?? 'development',
   ports: {
-    mainService: toNumber(process.env.MAIN_SERVICE_PORT, 3000),
-    ecommerceService: toNumber(process.env.ECOMMERCE_SERVICE_PORT, 3001),
+    // Railway injects PORT for each running service, so prefer it when present.
+    mainService: toNumber(process.env.PORT ?? process.env.MAIN_SERVICE_PORT, 3000),
+    ecommerceService: toNumber(process.env.PORT ?? process.env.ECOMMERCE_SERVICE_PORT, 3001),
   },
   cors: {
     origins: toStringArray(process.env.CORS_ORIGINS, [

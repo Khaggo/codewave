@@ -66,6 +66,71 @@ export const normalizeJobOrderForWorkbench = (jobOrder) => {
   };
 };
 
+export const normalizeJobOrderWorkbenchSummary = (jobOrder) => ({
+  id: jobOrder?.id ?? '',
+  status: jobOrder?.status ?? 'draft',
+  sourceType: jobOrder?.sourceType ?? 'booking',
+  workDate: jobOrder?.workDate ?? null,
+  vehicleId: jobOrder?.vehicleId ?? null,
+  serviceAdviserCode: jobOrder?.serviceAdviserCode ?? null,
+  assignedTechnicianIds: Array.isArray(jobOrder?.assignedTechnicianIds)
+    ? jobOrder.assignedTechnicianIds.filter(Boolean)
+    : [],
+  updatedAt: jobOrder?.updatedAt ?? null,
+});
+
+export const listJobOrderWorkbenchSummaries = async ({ accessToken, month }) => {
+  const params = new URLSearchParams();
+  const normalizedMonth = trimOrUndefined(month);
+  if (normalizedMonth) {
+    params.set('month', normalizedMonth);
+  }
+
+  const path = params.size ? `/api/job-orders/workbench-summaries?${params.toString()}` : '/api/job-orders/workbench-summaries';
+  const summaries = await request(path, {
+    method: 'GET',
+    headers: buildAuthorizedHeaders(accessToken),
+  });
+
+  return Array.isArray(summaries) ? summaries.map((jobOrder) => normalizeJobOrderWorkbenchSummary(jobOrder)) : [];
+};
+
+export const listJobOrderWorkbenchCalendar = async ({ accessToken, month }) => {
+  const params = new URLSearchParams();
+  const normalizedMonth = trimOrUndefined(month);
+  if (normalizedMonth) {
+    params.set('month', normalizedMonth);
+  }
+
+  const path = params.size ? `/api/job-orders/workbench-calendar?${params.toString()}` : '/api/job-orders/workbench-calendar';
+  const data = await request(path, {
+    method: 'GET',
+    headers: buildAuthorizedHeaders(accessToken),
+  });
+
+  return {
+    jobOrderDates: Array.isArray(data?.jobOrderDates) ? data.jobOrderDates : [],
+    bookingQueueDates: Array.isArray(data?.bookingQueueDates) ? data.bookingQueueDates : [],
+  };
+};
+
+export const listVehicleJobOrders = async ({ vehicleId, accessToken }) => {
+  if (!vehicleId) {
+    throw new ApiError('Select a vehicle before loading job orders.', 400, {
+      path: '/api/job-orders/vehicles/:id',
+    });
+  }
+
+  const jobOrders = await request(`/api/job-orders/vehicles/${vehicleId}`, {
+    method: 'GET',
+    headers: buildAuthorizedHeaders(accessToken),
+  });
+
+  return Array.isArray(jobOrders)
+    ? jobOrders.map((jobOrder) => normalizeJobOrderForWorkbench(jobOrder)).filter(Boolean)
+    : [];
+};
+
 export const createJobOrderFromBooking = async ({
   accessToken,
   sourceId,

@@ -17,6 +17,7 @@ import { AddJobOrderPhotoDto } from '../dto/add-job-order-photo.dto';
 import { AddJobOrderProgressDto } from '../dto/add-job-order-progress.dto';
 import { CreateJobOrderDto } from '../dto/create-job-order.dto';
 import { FinalizeJobOrderDto } from '../dto/finalize-job-order.dto';
+import { ListJobOrderWorkbenchQueryDto } from '../dto/list-job-order-workbench-query.dto';
 import { RecordJobOrderInvoicePaymentDto } from '../dto/record-job-order-invoice-payment.dto';
 import { UpdateJobOrderStatusDto } from '../dto/update-job-order-status.dto';
 import { JobOrdersRepository } from '../repositories/job-orders.repository';
@@ -81,6 +82,107 @@ export class JobOrdersService {
     }
 
     return createdJobOrder;
+  }
+
+  async listAssignedToTechnician(actor: JobOrderActor) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+
+    if (resolvedActor.role !== 'technician') {
+      throw new ForbiddenException('Only technicians can list their assigned job orders');
+    }
+
+    return this.jobOrdersRepository.findAssignedToTechnician(resolvedActor.id);
+  }
+
+  async listWorkbenchSummaries(actor: JobOrderActor, query: ListJobOrderWorkbenchQueryDto) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    const summaries =
+      resolvedActor.role === 'technician'
+        ? await this.jobOrdersRepository.findAssignedSummaries(resolvedActor.id)
+        : await this.jobOrdersRepository.findAllSummaries();
+
+    const bookingSourceIds = summaries
+      .filter((jobOrder) => jobOrder.sourceType === 'booking')
+      .map((jobOrder) => jobOrder.sourceId);
+    const scheduledDateRows = await this.bookingsRepository.findScheduledDatesByIds(bookingSourceIds);
+    const scheduledDateByBookingId = new Map(
+      scheduledDateRows.map((row) => [row.id, row.scheduledDate]),
+    );
+
+    return summaries
+      .map((jobOrder) => {
+        const fallbackDate = jobOrder.createdAt.toISOString().slice(0, 10);
+        const workDate =
+          jobOrder.sourceType === 'booking'
+            ? scheduledDateByBookingId.get(jobOrder.sourceId) ?? fallbackDate
+            : fallbackDate;
+
+        return {
+          id: jobOrder.id,
+          status: jobOrder.status,
+          sourceType: jobOrder.sourceType,
+          workDate,
+          vehicleId: jobOrder.vehicleId,
+          serviceAdviserCode: jobOrder.serviceAdviserCode,
+          assignedTechnicianIds: (jobOrder.assignments ?? [])
+            .map((assignment) => assignment.technicianUserId)
+            .filter(Boolean),
+          updatedAt: jobOrder.updatedAt.toISOString(),
+        };
+      })
+      .filter((jobOrder) => (query.month ? jobOrder.workDate.startsWith(query.month) : true))
+      .sort((left, right) => {
+        if (left.workDate !== right.workDate) {
+          return left.workDate.localeCompare(right.workDate);
+        }
+
+        return right.updatedAt.localeCompare(left.updatedAt);
+      });
+  }
+
+  async listWorkbenchCalendar(actor: JobOrderActor, query: ListJobOrderWorkbenchQueryDto) {
+    const summaries = await this.listWorkbenchSummaries(actor, query);
+    const month = query.month;
+
+    const jobOrderCounts = new Map<string, number>();
+    summaries.forEach((jobOrder) => {
+      if (!jobOrder.workDate) return;
+      jobOrderCounts.set(jobOrder.workDate, (jobOrderCounts.get(jobOrder.workDate) ?? 0) + 1);
+    });
+
+    const bookingQueueCounts = new Map<string, number>();
+    if (month) {
+      const startDate = `${month}-01`;
+      const endDate = `${month}-31`;
+      const queueBookings = await this.bookingsRepository.findByScheduledDateRange(startDate, endDate, {
+        statuses: ['confirmed', 'rescheduled'],
+      });
+
+      queueBookings.forEach((booking) => {
+        bookingQueueCounts.set(
+          booking.scheduledDate,
+          (bookingQueueCounts.get(booking.scheduledDate) ?? 0) + 1,
+        );
+      });
+    }
+
+    return {
+      jobOrderDates: [...jobOrderCounts.entries()]
+        .map(([date, count]) => ({ date, count }))
+        .sort((left, right) => left.date.localeCompare(right.date)),
+      bookingQueueDates: [...bookingQueueCounts.entries()]
+        .map(([date, count]) => ({ date, count }))
+        .sort((left, right) => left.date.localeCompare(right.date)),
+    };
+  }
+
+  async findByVehicleId(vehicleId: string, actor: JobOrderActor) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    if (!['service_adviser', 'super_admin'].includes(resolvedActor.role)) {
+      throw new ForbiddenException('Only service advisers or super admins can list vehicle job orders');
+    }
+
+    return this.jobOrdersRepository.findByVehicleId(vehicleId);
   }
 
   async findById(id: string, actor: JobOrderActor) {
@@ -155,16 +257,14 @@ export class JobOrdersService {
     this.assertViewerCanAccess(jobOrder, actorInfo);
     this.assertJobOrderCanAcceptEvidence(jobOrder.status);
 
-    if (actorInfo.role !== 'technician') {
-      throw new ForbiddenException('Only assigned technicians can append job-order progress entries');
-    }
+    if (actorInfo.role === 'technician') {
+      const isAssignedTechnician = assignments.some(
+        (assignment) => assignment.technicianUserId === actorInfo.userId,
+      );
 
-    const isAssignedTechnician = assignments.some(
-      (assignment) => assignment.technicianUserId === actorInfo.userId,
-    );
-
-    if (!isAssignedTechnician) {
-      throw new ForbiddenException('Only assigned technicians can append progress entries');
+      if (!isAssignedTechnician) {
+        throw new ForbiddenException('Only assigned technicians can append progress entries');
+      }
     }
 
     if (payload.completedItemIds?.length) {
