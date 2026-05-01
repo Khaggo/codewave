@@ -25,7 +25,6 @@ export default function OtpInputGroup({
       return;
     }
 
-    // This lets users paste the full code and spreads the digits across the boxes.
     sanitizedValue
       .slice(0, digits.length - index)
       .split('')
@@ -93,25 +92,25 @@ export default function OtpInputGroup({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
-    gap: 12,
+    gap: 10,
   },
   input: {
-    height: 56,
-    borderRadius: 14,
-    borderWidth: 2,
+    height: 52,
+    borderRadius: radius.md,
+    borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.input,
     color: colors.text,
-    fontSize: 26,
-    fontWeight: '800',
-    lineHeight: 28,
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 26,
     paddingHorizontal: 0,
     paddingVertical: 0,
     textAlign: 'center',
@@ -121,8 +120,8 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.22,
-    shadowRadius: 14,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
     elevation: 2,
   },
   inputError: {
@@ -130,16 +129,16 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: colors.danger,
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 12,
-    lineHeight: 18,
+    lineHeight: 16,
     textAlign: 'center',
   },
   helperText: {
     color: colors.mutedText,
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 12,
-    lineHeight: 18,
+    lineHeight: 16,
     textAlign: 'center',
   },
 });

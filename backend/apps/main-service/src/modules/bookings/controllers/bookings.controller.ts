@@ -22,12 +22,15 @@ import { BookingAvailabilityQueryDto } from '../dto/booking-availability-query.d
 import { BookingAvailabilityResponseDto } from '../dto/booking-availability-response.dto';
 import { BookingResponseDto } from '../dto/booking-response.dto';
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateServiceCategoryDto } from '../dto/create-service-category.dto';
+import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { DailyScheduleQueryDto } from '../dto/daily-schedule-query.dto';
 import { DailyScheduleResponseDto } from '../dto/daily-schedule-response.dto';
 import { QueueCurrentQueryDto } from '../dto/queue-current-query.dto';
 import { QueueCurrentResponseDto } from '../dto/queue-current-response.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
+import { ServiceCategoryResponseDto } from '../dto/service-category-response.dto';
 import { ServiceResponseDto } from '../dto/service-response.dto';
 import { TimeSlotResponseDto } from '../dto/time-slot-response.dto';
 import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
@@ -48,6 +51,60 @@ export class BookingsController {
   })
   listServices() {
     return this.bookingsService.listServices();
+  }
+
+  @Get('service-categories')
+  @ApiOperation({ summary: 'List booking service categories.' })
+  @ApiOkResponse({
+    description: 'Configured booking service categories.',
+    type: ServiceCategoryResponseDto,
+    isArray: true,
+  })
+  listServiceCategories() {
+    return this.bookingsService.listServiceCategories();
+  }
+
+  @Post('service-categories')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a booking service category for staff operations.' })
+  @ApiCreatedResponse({
+    description: 'The created booking service category.',
+    type: ServiceCategoryResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The submitted service category payload is invalid.' })
+  @ApiConflictResponse({ description: 'The service category name already exists.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can manage booking services.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  createServiceCategory(@Body() payload: CreateServiceCategoryDto, @Req() request: Request) {
+    return this.bookingsService.createServiceCategory(
+      payload,
+      (request.user as { userId: string }).userId,
+    );
+  }
+
+  @Post('services')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a booking service offering for staff operations.' })
+  @ApiCreatedResponse({
+    description: 'The created booking service.',
+    type: ServiceResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The submitted service payload is invalid.' })
+  @ApiConflictResponse({ description: 'The service name already exists.' })
+  @ApiNotFoundResponse({ description: 'The selected service category was not found.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can manage booking services.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  createService(@Body() payload: CreateServiceDto, @Req() request: Request) {
+    return this.bookingsService.createService(
+      payload,
+      (request.user as { userId: string }).userId,
+    );
   }
 
   @Get('time-slots')
@@ -283,5 +340,29 @@ export class BookingsController {
   @ApiNotFoundResponse({ description: 'User not found.' })
   findByUserId(@Param('id') id: string) {
     return this.bookingsService.findByUserId(id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @Get('vehicles/:id/bookings')
+  @ApiOperation({ summary: 'List bookings tied to a specific vehicle for staff lookup selectors.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Vehicle identifier.',
+    example: '7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d',
+  })
+  @ApiOkResponse({
+    description: 'Bookings attached to the target vehicle.',
+    type: BookingResponseDto,
+    isArray: true,
+  })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can list vehicle booking records.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  findByVehicleId(@Param('id') id: string, @Req() request: Request) {
+    return this.bookingsService.findByVehicleId(
+      id,
+      (request.user as { userId: string }).userId,
+    );
   }
 }

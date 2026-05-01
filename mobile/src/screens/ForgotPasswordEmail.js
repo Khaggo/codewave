@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import AuthFrame from '../components/AuthFrame';
 import FormField from '../components/FormField';
 import { colors, radius } from '../theme';
@@ -33,12 +33,12 @@ export default function ForgotPasswordEmail({ navigation, registeredAccount }) {
     <AuthFrame
       title="Forgot password?"
       subtitle="Enter the registered email address and we'll move you to the 6-digit OTP reset flow."
-      backLabel="Back to Login"
+      backLabel="Back to login"
       onBack={() => navigation.replace('Login')}
       centerContent
     >
       <FormField
-        label="Email Address"
+        label="Email address"
         value={email}
         onChangeText={(value) => {
           setEmail(value);
@@ -55,10 +55,10 @@ export default function ForgotPasswordEmail({ navigation, registeredAccount }) {
         icon="email-outline"
       />
 
-      <TouchableOpacity style={styles.primaryButton} onPress={handleSendOtp} activeOpacity={0.88}>
+      <TouchableOpacity style={styles.primaryButton} onPress={handleSendOtp} activeOpacity={0.9}>
         <View style={styles.primaryButtonContent}>
           <Text style={styles.primaryButtonText}>Send OTP</Text>
-          <MaterialCommunityIcons name="arrow-right" size={18} color={colors.onPrimary} />
+          <Feather name="arrow-right" size={16} color={colors.onPrimary} />
         </View>
       </TouchableOpacity>
 
@@ -72,39 +72,34 @@ export default function ForgotPasswordEmail({ navigation, registeredAccount }) {
 const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    paddingVertical: 18,
+    borderRadius: radius.md,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.34,
-    shadowRadius: 24,
-    elevation: 5,
   },
   primaryButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   secondaryButton: {
-    marginTop: 12,
-    borderRadius: radius.medium,
+    marginTop: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: 17,
+    paddingVertical: 13,
     alignItems: 'center',
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.surfaceRaised,
   },
   secondaryButtonText: {
     color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

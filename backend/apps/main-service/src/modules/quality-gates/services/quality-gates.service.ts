@@ -376,7 +376,9 @@ export class QualityGatesService {
     const booking = await this.bookingsRepository.findOptionalById(jobOrder.sourceId);
     const concernSegments = [
       booking?.notes ?? '',
-      ...(booking?.requestedServices ?? []).map((requestedService) => requestedService.service.name),
+      ...(booking?.requestedServices ?? [])
+        .map((requestedService) => requestedService?.service?.name ?? '')
+        .filter(Boolean),
     ];
 
     return {

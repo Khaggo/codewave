@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import OtpInputGroup from '../components/OtpInputGroup';
 import ScreenShell from '../components/ScreenShell';
@@ -120,13 +120,13 @@ export default function ForgotPasswordOTP({ navigation, route }) {
     <ScreenShell contentContainerStyle={styles.content}>
       <View style={styles.page}>
         <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="arrow-left" size={18} color={colors.mutedText} />
+          <Feather name="arrow-left" size={18} color={colors.mutedText} />
           <Text style={styles.backLinkText}>Back</Text>
         </TouchableOpacity>
 
         <View style={styles.headerRow}>
           <View style={styles.headerIconWrap}>
-            <MaterialCommunityIcons name="email-outline" size={22} color={colors.primary} />
+            <Feather name="mail" size={20} color={colors.primary} />
           </View>
           <Text style={styles.title}>Verify Your Email</Text>
         </View>
@@ -176,8 +176,8 @@ export default function ForgotPasswordOTP({ navigation, route }) {
           activeOpacity={0.88}
         >
           <View style={styles.primaryButtonContent}>
-            <MaterialCommunityIcons name="shield-check-outline" size={18} color={colors.onPrimary} />
-            <Text style={styles.primaryButtonText}>Verify & Change Password</Text>
+            <Feather name="shield" size={16} color={colors.onPrimary} />
+            <Text style={styles.primaryButtonText}>Verify & change password</Text>
           </View>
         </TouchableOpacity>
 
@@ -331,29 +331,24 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     marginTop: 8,
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    minHeight: 54,
+    borderRadius: radius.md,
+    minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.26,
-    shadowRadius: 24,
-    elevation: 5,
   },
   primaryButtonDisabled: {
-    opacity: 0.72,
+    opacity: 0.7,
   },
   primaryButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   resendRow: {
     flexDirection: 'row',
@@ -379,17 +374,17 @@ const styles = StyleSheet.create({
   },
   demoCard: {
     marginHorizontal: 24,
-    borderRadius: radius.medium,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#20406A',
-    backgroundColor: '#0D1A31',
-    paddingVertical: 14,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     alignItems: 'center',
   },
   demoText: {
-    color: '#6FB1FF',
-    fontSize: 14,
+    color: colors.mutedText,
+    fontSize: 13,
   },
   demoCode: {
     color: colors.text,

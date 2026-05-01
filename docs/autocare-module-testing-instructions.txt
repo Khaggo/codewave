@@ -1,0 +1,1028 @@
+AUTOCARE MODULE TESTING AND USAGE GUIDE
+Project: Cruisers Crib Auto Care Center / AUTOCARE
+Last updated: 2026-04-27
+
+PURPOSE OF THIS FILE
+This guide explains what each web and mobile module is for, how to use it, and how to manually test it during demo preparation.
+
+Product split:
+- Web application: staff, admin, and super-admin users only.
+- Mobile application: customer users only through Expo Go or Expo web.
+
+Recommended test accounts:
+- Super admin web login:
+  Email: merwen.super.admin@example.com
+  Password: SuperPassword67.
+- Staff web login:
+  Email: smoke.staff@example.com
+  Password: SmokeStaff123!
+- Customer mobile login:
+  Email: neversheet@gmail.com
+  Password: Password1.
+
+
+============================================================
+PART 1 - START THE SYSTEM
+============================================================
+
+1. Start Docker services
+Open a terminal:
+
+cd D:\mainprojects\codewave\backend
+docker compose up -d
+
+2. Push the database schema
+Run:
+
+npm run db:push
+
+3. Start the backend
+Run:
+
+npm run dev:main
+
+Expected result:
+- Backend runs on port 3000.
+- Health check should load at:
+  http://127.0.0.1:3000/api/health
+
+4. Start the web app
+Open a second terminal:
+
+cd D:\mainprojects\codewave\frontend
+npm run dev -- --port 3002
+
+Expected result:
+- Web opens at:
+  http://127.0.0.1:3002
+
+5. Start the mobile app for Expo Go
+Open a third terminal:
+
+cd D:\mainprojects\codewave\mobile
+npx expo start --lan --clear
+
+Expected result:
+- Expo shows a QR code.
+- Phone and computer must be on the same Wi-Fi.
+- mobile/.env.local should point to the computer LAN IP, for example:
+  EXPO_PUBLIC_API_BASE_URL=http://192.168.254.109:3000
+
+6. Start mobile in Expo web if testing in browser
+Run from the mobile folder:
+
+npx expo start --web --clear
+
+Expected result:
+- Expo web opens in the browser.
+- If testing from the same computer, mobile/.env.local can use:
+  EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:3000
+
+
+============================================================
+PART 2 - WEB APPLICATION MODULES
+============================================================
+
+
+1. STAFF / ADMIN LOGIN AND ROLE CONTROL
+
+What this module is for:
+This module protects the web system so only staff, technicians, admins, and super admins can enter. Customers should not use the web portal.
+
+Who uses it:
+- Staff
+- Technician
+- Admin
+- Super admin
+
+How to use it:
+1. Open http://127.0.0.1:3002.
+2. Enter a staff/admin email and password.
+3. Click login.
+4. Confirm the sidebar and dashboard appear.
+
+What to test:
+1. Log in with the super admin account.
+2. Log out.
+3. Log in with the staff account.
+4. Try a mobile customer account on the web.
+
+Expected result:
+- Super admin can access admin pages.
+- Staff can access staff operation pages.
+- Customer login should not be accepted on the web portal.
+
+
+2. DASHBOARD
+
+What this module is for:
+The dashboard gives staff a quick overview of daily operations. It should help the user understand what needs attention without exposing unfinished or fake widgets.
+
+Who uses it:
+- Staff
+- Admin
+- Super admin
+
+How to use it:
+1. Log in to the web app.
+2. Open Dashboard from the sidebar.
+3. Review the visible summary cards and quick links.
+
+What to test:
+1. Confirm the dashboard does not show fake/mock data.
+2. Confirm incomplete future widgets are not visible.
+3. Confirm empty states are clear if there is no live data.
+4. Change the theme and confirm the dashboard still looks readable.
+
+Expected result:
+- The dashboard should feel clean and demo-ready.
+- It should not show confusing future-only cards.
+- It should use real backend data or safe empty states.
+
+
+3. BOOKING SCHEDULE
+
+What this module is for:
+This module lets staff view customer bookings created from mobile, manage booking statuses, and configure slot definitions used by the mobile booking screen.
+
+Who uses it:
+- Staff
+- Admin
+- Super admin
+
+How to use it:
+1. Open Booking Schedule from the sidebar.
+2. Review Upcoming Mobile Bookings.
+3. Select a date card.
+4. Review bookings for that date.
+5. Use actions like accept, decline, cancel, complete, or reschedule if available for that booking state.
+6. Scroll to Slot Definitions.
+7. Add, edit, pause, activate, or delete a slot definition.
+
+What to test:
+1. Create a booking from the mobile app.
+2. Go to the web Booking Schedule page.
+3. Select the booking date.
+4. Confirm the booking appears.
+5. Change the booking status.
+6. Confirm the status is reflected on mobile booking history.
+7. Add a new slot definition.
+8. Confirm the slot appears in mobile booking.
+9. Pause a slot.
+10. Confirm paused slots are unavailable on mobile.
+11. Edit a slot label, time, or capacity.
+12. Delete a slot.
+13. Confirm deleted slots disappear from pickers but old bookings remain safe.
+
+Expected result:
+- Mobile-created bookings are visible on the web schedule.
+- Date cards clearly show booking counts and pending counts.
+- Slot add/edit/pause/activate/delete works without breaking historical bookings.
+
+
+4. INTAKE INSPECTION
+
+What this module is for:
+This module supports the staff intake process when a customer vehicle arrives. It helps staff record inspection details before or during service.
+
+Who uses it:
+- Staff
+- Technician
+- Admin
+- Super admin
+
+How to use it:
+1. Open Intake Inspection from the sidebar.
+2. Read the page instructions.
+3. Select or review a booking/vehicle that needs intake.
+4. Add inspection findings if the workflow allows it.
+5. Save the inspection record.
+
+What to test:
+1. Confirm the page explains its purpose clearly.
+2. Confirm there is no raw API wording shown to the user.
+3. Confirm empty states explain what to do next.
+4. Confirm navigation back to booking/job order flow is understandable.
+
+Expected result:
+- Staff can understand that this page is for vehicle intake checks.
+- No confusing technical labels should be visible.
+
+
+5. JOB ORDERS
+
+What this module is for:
+This module turns confirmed booking handoffs into job orders for workshop execution. It separates booking truth from job-order work progress.
+
+Who uses it:
+- Staff
+- Technician
+- Admin
+- Super admin
+
+How to use it:
+1. Open Job Orders from the sidebar.
+2. Select a confirmed booking handoff from the left panel.
+3. Review the job order draft.
+4. Select a technician or mechanic from the dropdown if assigning immediately.
+5. Create the job order.
+6. Load the created job order.
+7. Add progress updates, photo evidence, finalization notes, or payment status if available.
+
+What to test:
+1. Confirm the page follows a clear workflow:
+   select booking, review draft, assign technician, create/load job order, update progress, finalize.
+2. Create a job order from a confirmed booking.
+3. Try creating a draft without technician assignment.
+4. Confirm invalid free-text technician IDs are no longer needed.
+5. Confirm the page does not show API route wording.
+6. Confirm job order cards and panels are aligned and readable.
+
+Expected result:
+- Job order creation should not fail because of invalid technician text input.
+- Staff should understand what step to do next.
+
+
+6. QA AUDIT
+
+What this module is for:
+This module supports quality assurance review before a vehicle is released. It is used to check if work passed inspection or needs override/rework.
+
+Who uses it:
+- Admin
+- Super admin
+- QA-capable staff, depending on role setup
+
+How to use it:
+1. Open QA Audit from the sidebar.
+2. Review any job orders or inspections waiting for QA.
+3. Open the QA record.
+4. Mark checks as passed, failed, or needing review if available.
+5. Use override only if the logged-in role is allowed.
+
+What to test:
+1. Confirm the page explains what QA staff should do.
+2. Confirm there are clear empty states if nothing needs QA.
+3. Confirm no fake QA entries are shown.
+4. Confirm actions are role-appropriate.
+
+Expected result:
+- The page should make QA purpose obvious.
+- The user should know whether they are reviewing, approving, or overriding.
+
+
+7. INVOICES AND ORDERS
+
+What this module is for:
+This module displays invoice and order-related operational records. It should support staff in reviewing service billing and order status without exposing incomplete future workflows.
+
+Who uses it:
+- Staff
+- Admin
+- Super admin
+
+How to use it:
+1. Open Invoices & Orders from the sidebar.
+2. Review available invoice/order records.
+3. Open details if available.
+4. Use available actions only when they are connected to live backend behavior.
+
+What to test:
+1. Confirm the page uses live data or clear empty states.
+2. Confirm unfinished cards like finance export/date range are not shown as demo-critical features.
+3. Confirm actions are understandable.
+
+Expected result:
+- The page should not confuse the adviser with unfinished finance features.
+- It should clearly explain what staff can do now.
+
+
+8. BACK-JOBS
+
+What this module is for:
+This module tracks work that needs review or rework after a completed service. It helps the business monitor quality issues and repeat repair cases.
+
+Who uses it:
+- Staff
+- Admin
+- Super admin
+
+How to use it:
+1. Open Back-Jobs from the sidebar.
+2. Review listed back-job cases.
+3. Open a case.
+4. Check linked customer, vehicle, service, and status.
+5. Update the review status if actions are available.
+
+What to test:
+1. Confirm there is no fake placeholder data.
+2. Confirm empty states explain when no back-jobs exist.
+3. Confirm customer-safe updates are understandable if surfaced later to mobile.
+
+Expected result:
+- Staff can understand which vehicle/service needs rework review.
+- The module should support quality tracking without confusing the main booking flow.
+
+
+9. INSURANCE REVIEW
+
+What this module is for:
+This module lets staff review customer insurance inquiries submitted from mobile.
+
+Who uses it:
+- Staff
+- Admin
+- Super admin
+
+How to use it:
+1. Open Insurance from the sidebar.
+2. Review submitted inquiries.
+3. Open an inquiry.
+4. Check customer, vehicle, inquiry type, notes, and status.
+5. Update review status if available.
+
+What to test:
+1. Submit an insurance inquiry from mobile.
+2. Open the web Insurance page.
+3. Confirm the inquiry appears.
+4. Confirm the page explains what staff should do next.
+
+Expected result:
+- Customer inquiries from mobile should be visible for staff review.
+- The workflow should be clear and non-technical.
+
+
+10. LOYALTY MANAGEMENT
+
+What this module is for:
+This module lets staff/admin view and manage customer loyalty points, rewards, and related history.
+
+Who uses it:
+- Staff
+- Admin
+- Super admin
+
+How to use it:
+1. Open Loyalty Management from the sidebar.
+2. Search or select a customer if available.
+3. Review points, tier, rewards, and activity history.
+4. Adjust or review loyalty actions if the current role allows it.
+
+What to test:
+1. Confirm the page loads without mock data.
+2. Confirm empty states are clear.
+3. Confirm mobile Rewards page reflects customer loyalty data.
+
+Expected result:
+- Loyalty should connect to customer activity and rewards.
+- Staff should understand what points/rewards mean.
+
+
+11. CATALOG ADMIN
+
+What this module is for:
+This module manages service and shop catalog items shown to customers on mobile.
+
+Who uses it:
+- Admin
+- Super admin
+- Staff if role allows catalog management
+
+How to use it:
+1. Open Catalog Admin from the sidebar.
+2. Review catalog items.
+3. Add or edit item details if allowed.
+4. Check dropdown styling and form fields.
+5. Save changes.
+6. Confirm mobile Shop or Book screens reflect live catalog/service data.
+
+What to test:
+1. Confirm catalog items load.
+2. Confirm dropdowns look clean in every theme.
+3. Confirm number input fields do not show ugly browser spinner controls.
+4. Confirm no fake catalog items appear unless seeded intentionally.
+
+Expected result:
+- Catalog admin should feel polished and readable.
+- Mobile should load catalog/service items from the backend.
+
+
+12. INVENTORY ADMIN
+
+What this module is for:
+This module tracks stock visibility for shop/service-related inventory.
+
+Who uses it:
+- Staff
+- Admin
+- Super admin
+
+How to use it:
+1. Open Inventory Admin from the sidebar.
+2. Review stock items.
+3. Check low-stock or empty states.
+4. Use available live actions only.
+
+What to test:
+1. Confirm no fake inventory cards are shown.
+2. Confirm empty states are useful.
+3. Confirm the page does not expose unfinished backend features as if complete.
+
+Expected result:
+- Staff can understand stock visibility.
+- Demo should not be distracted by incomplete future inventory workflows.
+
+
+13. STAFF ACCOUNTS
+
+What this module is for:
+This is the official super-admin page for creating and managing staff, mechanic, technician, and admin accounts.
+
+Who uses it:
+- Super admin only
+
+How to use it:
+1. Log in as super admin.
+2. Open Staff Accounts from the sidebar.
+3. Fill in first name, last name, password, account type, and phone number if needed.
+4. Select account type:
+   Staff
+   Mechanic
+   Technician
+   Admin
+5. Submit the form.
+6. Copy the generated email shown after creation.
+7. Log out.
+8. Log in using the generated email and the password you entered.
+
+Important behavior:
+- Staff IDs are generated automatically.
+- Emails are generated automatically using a pattern like:
+  firstname123.role@autocare.com
+- Mechanic is a UI label that maps to the technician permission set.
+- New accounts should be active immediately for demo login.
+- Super admin should not appear in staff status dropdown controls.
+
+What to test:
+1. Create a staff account.
+2. Create a technician account.
+3. Create a mechanic account.
+4. Create an admin account.
+5. Confirm each generated email is unique.
+6. Confirm each generated staff ID is unique.
+7. Confirm the created account can log in immediately.
+8. Confirm the status dropdown lists staff/mechanics/technicians/admins.
+9. Confirm super admin is not shown in the account status dropdown.
+10. Deactivate and reactivate a created account.
+
+Expected result:
+- Account creation works.
+- Generated emails and IDs prevent duplicates.
+- New accounts can log in with the chosen password.
+
+
+14. CUSTOMERS AND VEHICLES
+
+What this module is for:
+This admin page lists customer details and their registered vehicles so staff can quickly understand customer records.
+
+Who uses it:
+- Staff
+- Admin
+- Super admin
+
+How to use it:
+1. Open Customers & Vehicles from the sidebar.
+2. Search by customer name, email, phone, plate number, or vehicle model if available.
+3. Open or review customer cards.
+4. Check customer details:
+   name, email, phone, birthday, address summary.
+5. Check vehicle details:
+   make, model, year, plate, default vehicle indicator.
+
+What to test:
+1. Register or log in as a mobile customer.
+2. Add a vehicle from mobile Garage.
+3. Refresh Customers & Vehicles on web.
+4. Confirm the customer and vehicle appear.
+5. Confirm soft-deleted customers do not appear as normal active customers.
+
+Expected result:
+- Staff can see customer records and vehicles clearly.
+- This page helps staff identify the customer behind bookings.
+
+Known follow-up check:
+- If latest booking status is required in this page, confirm it is visible. If not visible, treat that as a follow-up task.
+
+
+15. ANALYTICS AND SUMMARIES
+
+What this module is for:
+This module gives management-level summaries for bookings, operations, loyalty, back-jobs, invoices, and audit activity.
+
+Who uses it:
+- Admin
+- Super admin
+
+How to use it:
+1. Open Analytics & Summaries from the sidebar.
+2. Review available summary cards.
+3. Change filters only if they are connected to live functionality.
+4. Confirm charts or summaries are clearly labeled.
+
+What to test:
+1. Confirm no fake analytics are presented as real.
+2. Confirm empty states explain missing data.
+3. Confirm theme switching keeps charts/cards readable.
+
+Expected result:
+- Analytics should support demo storytelling without pretending future data exists.
+
+
+16. SETTINGS AND THEME CUSTOMIZATION
+
+What this module is for:
+This module lets staff change the visual theme of the web app.
+
+Available themes:
+- Light
+- Dark
+- Professional Blue
+- Automotive Red
+- Minimal Gray
+- Premium Black
+
+How to use it:
+1. Use the theme dropdown in the top navigation.
+2. Select each theme.
+3. Visit important pages:
+   Dashboard
+   Booking Schedule
+   Job Orders
+   Staff Accounts
+   Customers & Vehicles
+   Catalog Admin
+4. Confirm styling updates consistently.
+
+What to test:
+1. Confirm Staff Accounts panels change with the theme.
+2. Confirm dropdowns are readable.
+3. Confirm buttons, cards, and form fields have enough contrast.
+4. Confirm sidebar and topbar alignment looks clean.
+
+Expected result:
+- All supported themes should look intentional and readable.
+
+
+============================================================
+PART 3 - MOBILE APPLICATION MODULES
+============================================================
+
+
+1. CUSTOMER REGISTRATION
+
+What this module is for:
+This module lets customers create an account from the mobile app. Registration includes customer information and first vehicle information.
+
+Who uses it:
+- Customer
+
+How to use it:
+1. Open the mobile app in Expo Go.
+2. Tap Register.
+3. Enter customer details.
+4. Enter email and password.
+5. Enter vehicle details if the form asks for them.
+6. Submit registration.
+7. Check email for OTP.
+8. Enter OTP.
+9. Complete profile details such as birthday if prompted.
+10. Save the first vehicle if prompted.
+
+What to test:
+1. Register with a new email.
+2. Verify OTP.
+3. Save profile birthday.
+4. Save first vehicle.
+5. Log out.
+6. Log in again with email/password.
+
+Expected result:
+- Customer account activates after OTP.
+- Customer can log in after activation.
+- First vehicle appears in Garage.
+
+
+2. CUSTOMER LOGIN
+
+What this module is for:
+This module lets activated customers enter the mobile app.
+
+Who uses it:
+- Customer
+
+How to use it:
+1. Open the mobile app.
+2. Tap Login.
+3. Enter customer email and password.
+4. Submit.
+
+What to test:
+1. Log in with neversheet@gmail.com / Password1.
+2. Confirm Home page opens.
+3. Confirm customer profile data appears.
+4. Try a staff/admin account in mobile.
+
+Expected result:
+- Customer login works.
+- Staff/admin accounts should not be treated as normal customer mobile users.
+
+
+3. HOME
+
+What this module is for:
+The Home page is the main customer dashboard. It should help the customer quickly see account status, bookings, vehicle shortcuts, and important actions.
+
+Who uses it:
+- Customer
+
+How to use it:
+1. Log in to mobile.
+2. Open Home from bottom navigation.
+3. Review cards and shortcuts.
+4. Tap the profile/avatar button in the top-right to access profile/account settings.
+
+What to test:
+1. Confirm the page looks clean on your phone.
+2. Confirm layout does not shift badly on different screen sizes.
+3. Confirm profile access works from the top-right.
+4. Confirm bottom nav does not include Profile if the design requires profile access from the top-right only.
+
+Expected result:
+- Home should feel modern, clear, and easy to navigate.
+- Important shortcuts should be easy to find.
+
+
+4. GARAGE
+
+What this module is for:
+Garage lets customers manage their vehicles and view vehicle-related service information.
+
+Who uses it:
+- Customer
+
+How to use it:
+1. Tap Garage in the bottom navigation.
+2. Review vehicle cards.
+3. Add a vehicle if available.
+4. Edit vehicle details if available.
+5. Open a vehicle to view more details.
+
+What to test:
+1. Confirm vehicles load from the backend.
+2. Add or review a vehicle.
+3. Confirm the vehicle appears in web Customers & Vehicles.
+4. Confirm empty state is clear if there are no vehicles.
+
+Expected result:
+- Customer vehicles should be visible and usable.
+- Garage should support booking by providing vehicle choices.
+
+
+5. VEHICLE TIMELINE AND LIFECYCLE VIEW
+
+What this module is for:
+This page shows a detailed timeline of a vehicle's history and future maintenance insights. It is designed to support future AI-driven vehicle insights.
+
+Who uses it:
+- Customer
+
+Suggested location:
+- Garage section/page
+
+How to use it:
+1. Open Garage.
+2. Select a vehicle.
+3. Open Timeline or Lifecycle view.
+4. Review maintenance history, service milestones, repair records, and predicted recommendations if available.
+
+What to test:
+1. Confirm the timeline page is separate and easy to find.
+2. Confirm maintenance/service history is readable.
+3. Confirm empty states explain that history will appear after services.
+4. Confirm future AI recommendation areas are labeled as future/coming soon if not live yet.
+
+Expected result:
+- The customer should understand the vehicle's history at a glance.
+- The design should be ready for future AI insights without pretending AI is already live.
+
+
+6. BOOKING
+
+What this module is for:
+Booking lets customers choose a service, choose a vehicle, choose a slot, choose a date, and create an appointment.
+
+Who uses it:
+- Customer
+
+How to use it:
+1. Tap Book in the bottom navigation.
+2. Select a service.
+3. Select a vehicle.
+4. Select a slot definition.
+5. Select an appointment date from the availability window.
+6. Add notes if needed.
+7. Submit booking.
+8. Open booking history or progress to confirm it was created.
+
+What to test:
+1. Confirm service list loads from the backend.
+2. Confirm service selection is usable without too much scrolling.
+3. Confirm slot cards fit the phone screen.
+4. Confirm unavailable slots are clearly disabled.
+5. Confirm date availability does not distort into vertical broken shapes.
+6. Confirm date selection supports future dates from the live booking window.
+7. Create a booking.
+8. Open the web Booking Schedule.
+9. Confirm the booking appears on the correct date.
+
+Expected result:
+- Booking should work end-to-end.
+- Mobile booking should appear on the web schedule.
+- Layout should remain stable on different phone sizes.
+
+
+7. INSURANCE
+
+What this module is for:
+Insurance lets customers submit insurance-related inquiries connected to their vehicle.
+
+Who uses it:
+- Customer
+
+How to use it:
+1. Tap Insurance in the bottom navigation.
+2. Select a vehicle if required.
+3. Fill out inquiry details.
+4. Submit the inquiry.
+5. Check status if the page supports it.
+
+What to test:
+1. Confirm Insurance is a real page, not just a redirect to Profile.
+2. Submit an inquiry.
+3. Open web Insurance page.
+4. Confirm staff can see the inquiry.
+5. Confirm empty states are clear if no inquiries exist.
+
+Expected result:
+- Insurance should work as a dedicated customer module.
+- Staff should be able to review customer inquiries from the web.
+
+
+8. REWARDS
+
+What this module is for:
+Rewards lets customers view loyalty points, rewards, tier, and loyalty activity.
+
+Who uses it:
+- Customer
+
+How to use it:
+1. Tap Rewards in the bottom navigation.
+2. Review points and available rewards.
+3. Review activity history if available.
+4. Redeem rewards only if the action is live.
+
+What to test:
+1. Confirm Rewards is a real page, not just a profile section.
+2. Confirm points/rewards load from the backend or show a clear empty state.
+3. Confirm the page is readable on your phone.
+4. Confirm web Loyalty Management matches the customer loyalty information if applicable.
+
+Expected result:
+- Customer can understand loyalty value.
+- The page should not show fake rewards as real.
+
+
+9. SHOP
+
+What this module is for:
+Shop lets customers browse catalog items or service-related products.
+
+Who uses it:
+- Customer
+
+How to use it:
+1. Tap Shop in the bottom navigation.
+2. Wait for catalog items to load.
+3. Browse items.
+4. Open item details if available.
+5. Use cart/order actions only if they are live.
+
+What to test:
+1. Confirm catalog items load.
+2. Confirm loading and empty states look good.
+3. Confirm the page does not break if there are no catalog items.
+4. Confirm item data matches Catalog Admin where applicable.
+
+Expected result:
+- Shop should load catalog data successfully.
+- It should not look broken while waiting for backend data.
+
+
+10. PROFILE AND ACCOUNT SETTINGS
+
+What this module is for:
+Profile lets customers manage account details, birthday, address, and account settings.
+
+Who uses it:
+- Customer
+
+How to use it:
+1. Open Home.
+2. Tap the profile/avatar button in the top-right.
+3. Review account details.
+4. Edit supported profile fields.
+5. Save changes.
+
+What to test:
+1. Update birthday if available.
+2. Update address if available.
+3. Confirm saved data persists after refresh/relogin.
+4. Confirm delete account behavior is soft delete if tested.
+5. Confirm a soft-deleted Gmail/email can be used again for a new registration if that feature is in scope.
+
+Expected result:
+- Customer profile data should save correctly.
+- Profile should be accessible without needing a Profile bottom-nav tab.
+
+
+============================================================
+PART 4 - RECOMMENDED FULL DEMO TEST FLOW
+============================================================
+
+Use this order when personally checking everything:
+
+1. Backend health check
+- Open http://127.0.0.1:3000/api/health.
+- Confirm backend is running.
+
+2. Web super admin login
+- Open http://127.0.0.1:3002.
+- Log in with merwen.super.admin@example.com.
+- Confirm Dashboard loads.
+
+3. Theme check
+- Switch through Light, Dark, Professional Blue, Automotive Red, Minimal Gray, and Premium Black.
+- Visit Dashboard, Booking Schedule, Job Orders, Staff Accounts, and Catalog Admin.
+- Confirm themes apply consistently.
+
+4. Staff account creation
+- Go to Staff Accounts.
+- Create one technician.
+- Save the generated email.
+- Log out.
+- Log in with the generated email and chosen password.
+- Confirm login works.
+
+5. Customer mobile login
+- Open Expo Go.
+- Log in with neversheet@gmail.com.
+- Confirm Home loads.
+
+6. Vehicle check
+- Open Garage.
+- Confirm at least one vehicle exists.
+- If needed, add a vehicle.
+- Go to web Customers & Vehicles and confirm the vehicle appears.
+
+7. Booking check
+- On mobile, open Book.
+- Select service, vehicle, slot, and date.
+- Submit booking.
+- On web, open Booking Schedule.
+- Select the booking date.
+- Confirm the new booking appears.
+
+8. Slot definition check
+- On web Booking Schedule, add a slot.
+- Confirm it appears on mobile booking.
+- Edit the slot.
+- Pause the slot.
+- Confirm mobile shows it unavailable or hides it depending on design.
+- Delete the slot.
+- Confirm it no longer appears in mobile pickers.
+
+9. Job order check
+- On web Booking Schedule, confirm or accept a booking if needed.
+- Open Job Orders.
+- Select the confirmed booking handoff.
+- Create a job order.
+- Load the job order.
+- Add progress or finalization if available.
+
+10. Insurance check
+- On mobile, open Insurance.
+- Submit an inquiry.
+- On web, open Insurance.
+- Confirm the inquiry appears.
+
+11. Rewards/Loyalty check
+- On mobile, open Rewards.
+- Confirm points/rewards display or clear empty state.
+- On web, open Loyalty Management.
+- Confirm related customer loyalty information if available.
+
+12. Shop/Catalog check
+- On web, open Catalog Admin.
+- Confirm catalog items exist or create/edit one if allowed.
+- On mobile, open Shop.
+- Confirm catalog items load.
+
+13. QA and invoice check
+- On web, open QA Audit.
+- Confirm workflow or empty state is understandable.
+- Open Invoices & Orders.
+- Confirm invoice/order records or empty states are understandable.
+
+14. Final presentation polish check
+- Confirm no visible fake/mock data appears.
+- Confirm no user-facing cards mention raw API endpoints.
+- Confirm mobile layout works on the actual phone size.
+- Confirm the logo, sidebar, and topbar alignment look clean.
+
+
+============================================================
+PART 5 - COMMON ISSUES AND WHAT THEY MEAN
+============================================================
+
+Issue: Mobile cannot connect to backend in Expo Go.
+Likely cause:
+- mobile/.env.local is using 127.0.0.1 instead of the computer LAN IP.
+Fix:
+- Use the computer Wi-Fi IP:
+  EXPO_PUBLIC_API_BASE_URL=http://YOUR_COMPUTER_LAN_IP:3000
+
+Issue: Web cannot load backend data.
+Likely cause:
+- Backend is not running on port 3000.
+Fix:
+- Start backend and open:
+  http://127.0.0.1:3000/api/health
+
+Issue: A new backend endpoint does not exist.
+Likely cause:
+- Backend server was not restarted after code changes.
+Fix:
+- Stop and restart npm run dev:main.
+
+Issue: Staff account was created but cannot log in.
+Likely cause:
+- The backend is running old code, the account is inactive, or the wrong generated email/password was used.
+Fix:
+- Restart backend.
+- Create a new account from Staff Accounts.
+- Use the generated email and the exact password entered during creation.
+
+Issue: Mobile booking appears on phone but not web schedule.
+Likely cause:
+- Wrong selected date on web, backend mismatch, or mobile is pointing to a different backend URL.
+Fix:
+- Confirm mobile EXPO_PUBLIC_API_BASE_URL points to the same backend.
+- Select the exact booking date in web Booking Schedule.
+
+Issue: Mobile layout shifts on another phone.
+Likely cause:
+- The screen width triggers a different compact layout.
+Fix:
+- Test on small, baseline, and larger phone sizes.
+- Prioritize checking Book, Home, Garage, Shop, Insurance, Rewards, and bottom navigation.
+
+
+============================================================
+PART 6 - DEMO READINESS CHECKLIST
+============================================================
+
+Before presenting:
+
+[ ] Backend health endpoint works.
+[ ] Web app opens.
+[ ] Mobile app opens in Expo Go.
+[ ] Super admin can log in.
+[ ] Staff account creation works.
+[ ] New staff/technician/admin account can log in.
+[ ] Customer mobile login works.
+[ ] Customer vehicle appears in Garage.
+[ ] Customer vehicle appears in web Customers & Vehicles.
+[ ] Mobile booking creates a booking.
+[ ] Web Booking Schedule shows that booking.
+[ ] Slot edit/pause/activate/delete works.
+[ ] Job Order page has a clear workflow.
+[ ] Insurance mobile page exists.
+[ ] Rewards mobile page exists.
+[ ] Shop catalog loads.
+[ ] Themes work across important web pages.
+[ ] No fake/mock data is shown as real.
+[ ] Empty states are clear.
+[ ] Mobile design works on the actual demo phone.
+

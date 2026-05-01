@@ -4,12 +4,14 @@ import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { enableScreens } from 'react-native-screens';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import LandingPage from './src/screens/LandingPage';
 import RegisterPage from './src/screens/RegisterPage';
 import LoginPage from './src/screens/LoginPage';
 import OTPScreen from './src/screens/OTPScreen';
 import CompleteOnboardingPage from './src/screens/CompleteOnboardingPage';
 import Dashboard from './src/screens/Dashboard';
+import TechnicianDashboard from './src/screens/TechnicianDashboard';
 import ForgotPasswordEmail from './src/screens/ForgotPasswordEmail';
 import ForgotPasswordOTP from './src/screens/ForgotPasswordOTP';
 import ResetPassword from './src/screens/ResetPassword';
@@ -32,8 +34,13 @@ import {
   verifyDeleteAccountOtp,
   verifyRegistrationOtp,
 } from './src/lib/authClient';
+import {
+  assertMobileAppSessionAllowed,
+  getMobileAppSessionAccessState,
+} from './src/lib/mobileSessionAccess';
 import { cloneDate, formatVehicleDisplayName } from './src/utils/validation';
 import { colors } from './src/theme';
+import { ThemeProvider } from './src/theme/ThemeProvider';
 
 enableScreens(false);
 
@@ -54,15 +61,15 @@ function CustomerSurfaceStateScreen({
   navigation,
   title,
   message,
-  primaryActionLabel = 'Sign In',
+  primaryActionLabel = 'Sign in',
   onPrimaryAction,
-  secondaryActionLabel = 'Back to Home',
+  secondaryActionLabel = 'Back to home',
   onSecondaryAction,
 }) {
   return (
     <View style={styles.guardScreen}>
       <View style={styles.guardCard}>
-        <Text style={styles.guardEyebrow}>Customer Guardrail</Text>
+        <Text style={styles.guardEyebrow}>Customer guardrail</Text>
         <Text style={styles.guardTitle}>{title}</Text>
         <Text style={styles.guardMessage}>{message}</Text>
 
@@ -70,7 +77,7 @@ function CustomerSurfaceStateScreen({
           <TouchableOpacity
             style={styles.guardPrimaryAction}
             onPress={onPrimaryAction ?? (() => navigation.replace('Login'))}
-            activeOpacity={0.88}
+            activeOpacity={0.9}
           >
             <Text style={styles.guardPrimaryActionText}>{primaryActionLabel}</Text>
           </TouchableOpacity>
@@ -78,7 +85,7 @@ function CustomerSurfaceStateScreen({
           <TouchableOpacity
             style={styles.guardSecondaryAction}
             onPress={onSecondaryAction ?? (() => navigation.replace('Landing'))}
-            activeOpacity={0.88}
+            activeOpacity={0.9}
           >
             <Text style={styles.guardSecondaryActionText}>{secondaryActionLabel}</Text>
           </TouchableOpacity>
@@ -156,7 +163,23 @@ function MenuScreen(props) {
     handleStartDeleteAccountOtp,
   } = useAppSessionContext();
   const currentAccount = activeAccount || registeredAccount;
-  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+  const accessState = getMobileAppSessionAccessState(currentAccount);
+
+  if (accessState === 'technician_session_active') {
+    return (
+      <TechnicianDashboard
+        {...props}
+        account={currentAccount}
+        onSignOut={() => {
+          clearCustomerSession();
+          props.navigation.reset({
+            index: 0,
+            routes: [{ name: 'Landing' }],
+          });
+        }}
+      />
+    );
+  }
 
   if (accessState !== 'customer_session_active') {
     return (
@@ -719,12 +742,17 @@ export default function App() {
       password,
       existingAccount: registeredAccount,
     });
-    const accessState = getCustomerMobileSessionAccessState(nextAccount);
 
-    if (accessState !== 'customer_session_active') {
+    try {
+      assertMobileAppSessionAllowed(nextAccount);
+    } catch (error) {
+      const accessState = getMobileAppSessionAccessState(nextAccount);
+
       throw new ApiError(
-        customerMobileGuardMessages[accessState] ??
-          customerMobileGuardMessages.staff_session_blocked,
+        error instanceof Error && error.message
+          ? error.message
+          : customerMobileGuardMessages[accessState] ??
+              customerMobileGuardMessages.staff_session_blocked,
         accessState === 'unauthorized_session' ? 401 : 403,
         {
           reason: accessState,
@@ -864,6 +892,8 @@ export default function App() {
   };
 
   return (
+    <SafeAreaProvider>
+    <ThemeProvider>
     <View style={styles.appRoot}>
       <StatusBar style="light" backgroundColor={colors.background} translucent={false} />
       <AppSessionContext.Provider value={appSessionContextValue}>
@@ -873,17 +903,21 @@ export default function App() {
             detachInactiveScreens={false}
             screenOptions={{
               headerStyle: {
-                backgroundColor: colors.primary,
+                backgroundColor: colors.surface,
                 shadowColor: 'transparent',
                 elevation: 0,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.borderSoft,
               },
-              headerTintColor: colors.onPrimary,
+              headerTintColor: colors.text,
               headerTitleAlign: 'center',
               headerBackTitleVisible: false,
               title: 'CRUISERS CRIB',
               headerTitleStyle: {
-                fontWeight: '800',
-                letterSpacing: 1.1,
+                fontWeight: '700',
+                letterSpacing: 0.6,
+                fontSize: 16,
+                color: colors.text,
                 fontFamily: Platform.select({
                   ios: 'System',
                   android: 'Roboto',
@@ -982,6 +1016,8 @@ export default function App() {
         </NavigationContainer>
       </AppSessionContext.Provider>
     </View>
+    </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -996,50 +1032,55 @@ const styles = StyleSheet.create({
   guardCard: {
     width: '100%',
     maxWidth: 440,
-    borderRadius: 24,
+    borderRadius: 16,
     paddingHorizontal: 24,
-    paddingVertical: 28,
+    paddingVertical: 24,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 14,
+    gap: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.32,
+    shadowRadius: 20,
+    elevation: 4,
   },
   guardEyebrow: {
     color: colors.primary,
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   guardTitle: {
     color: colors.text,
-    fontSize: 24,
-    fontWeight: '900',
+    fontSize: 22,
+    fontWeight: '700',
   },
   guardMessage: {
     color: colors.mutedText,
-    fontSize: 15,
-    lineHeight: 23,
+    fontSize: 14,
+    lineHeight: 21,
   },
   guardActions: {
     marginTop: 8,
-    gap: 12,
+    gap: 10,
   },
   guardPrimaryAction: {
     backgroundColor: colors.primary,
-    borderRadius: 16,
-    paddingVertical: 15,
+    borderRadius: 12,
+    paddingVertical: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
   guardPrimaryActionText: {
     color: colors.onPrimary,
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '600',
   },
   guardSecondaryAction: {
-    borderRadius: 16,
-    paddingVertical: 14,
+    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1048,8 +1089,8 @@ const styles = StyleSheet.create({
   },
   guardSecondaryActionText: {
     color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
   },
   appRoot: {
     flex: 1,

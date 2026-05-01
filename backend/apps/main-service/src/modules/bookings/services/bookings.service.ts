@@ -25,6 +25,8 @@ import {
 } from '../bookings.constants';
 import { BookingAvailabilityQueryDto } from '../dto/booking-availability-query.dto';
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateServiceCategoryDto } from '../dto/create-service-category.dto';
+import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { DailyScheduleQueryDto } from '../dto/daily-schedule-query.dto';
 import { QueueCurrentQueryDto } from '../dto/queue-current-query.dto';
@@ -112,6 +114,49 @@ export class BookingsService {
 
   async listServices() {
     return this.bookingsRepository.listServices();
+  }
+
+  async listServiceCategories() {
+    return this.bookingsRepository.listServiceCategories();
+  }
+
+  async createServiceCategory(payload: CreateServiceCategoryDto, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+
+    const normalizedName = payload.name.trim();
+    const existingCategory = await this.bookingsRepository.findServiceCategoryByName(normalizedName);
+    if (existingCategory) {
+      throw new ConflictException('Service category name already exists');
+    }
+
+    return this.bookingsRepository.createServiceCategory({
+      ...payload,
+      name: normalizedName,
+      description: payload.description?.trim(),
+    });
+  }
+
+  async createService(payload: CreateServiceDto, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+
+    const normalizedName = payload.name.trim();
+    const existingService = await this.bookingsRepository.findServiceByName(normalizedName);
+    if (existingService) {
+      throw new ConflictException('Service name already exists');
+    }
+
+    if (payload.categoryId) {
+      const category = await this.bookingsRepository.findServiceCategoryById(payload.categoryId);
+      if (!category) {
+        throw new NotFoundException('Service category not found');
+      }
+    }
+
+    return this.bookingsRepository.createService({
+      ...payload,
+      name: normalizedName,
+      description: payload.description?.trim(),
+    });
   }
 
   async listTimeSlots() {
@@ -267,6 +312,12 @@ export class BookingsService {
   async findByUserId(userId: string) {
     await this.assertUserExists(userId);
     const bookings = await this.bookingsRepository.findByUserId(userId);
+    return bookings.map((booking) => this.toBookingView(booking));
+  }
+
+  async findByVehicleId(vehicleId: string, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+    const bookings = await this.bookingsRepository.findByVehicleId(vehicleId);
     return bookings.map((booking) => this.toBookingView(booking));
   }
 

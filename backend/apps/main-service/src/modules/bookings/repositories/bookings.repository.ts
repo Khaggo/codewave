@@ -6,6 +6,8 @@ import { DRIZZLE_DB } from '@shared/db/database.constants';
 import { AppDatabase } from '@shared/db/database.types';
 
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateServiceCategoryDto } from '../dto/create-service-category.dto';
+import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
@@ -15,6 +17,7 @@ import {
   bookings,
   bookingStatusHistory,
   bookingStatusEnum,
+  serviceCategories,
   services,
   timeSlots,
 } from '../schemas/bookings.schema';
@@ -35,6 +38,56 @@ export class BookingsRepository extends BaseRepository {
 
   async listServices() {
     return this.db.select().from(services).orderBy(asc(services.name));
+  }
+
+  async listServiceCategories() {
+    return this.db.select().from(serviceCategories).orderBy(asc(serviceCategories.name));
+  }
+
+  async findServiceCategoryById(id: string) {
+    return this.db.query.serviceCategories.findFirst({
+      where: eq(serviceCategories.id, id),
+    });
+  }
+
+  async findServiceCategoryByName(name: string) {
+    return this.db.query.serviceCategories.findFirst({
+      where: eq(serviceCategories.name, name),
+    });
+  }
+
+  async findServiceByName(name: string) {
+    return this.db.query.services.findFirst({
+      where: eq(services.name, name),
+    });
+  }
+
+  async createServiceCategory(payload: CreateServiceCategoryDto) {
+    const [createdCategory] = await this.db
+      .insert(serviceCategories)
+      .values({
+        name: payload.name.trim(),
+        description: payload.description?.trim() || null,
+        isActive: true,
+      })
+      .returning();
+
+    return createdCategory;
+  }
+
+  async createService(payload: CreateServiceDto) {
+    const [createdService] = await this.db
+      .insert(services)
+      .values({
+        categoryId: payload.categoryId ?? null,
+        name: payload.name.trim(),
+        description: payload.description?.trim() || null,
+        durationMinutes: payload.durationMinutes,
+        isActive: payload.isActive ?? true,
+      })
+      .returning();
+
+    return createdService;
   }
 
   async listTimeSlots() {
@@ -267,6 +320,56 @@ export class BookingsRepository extends BaseRepository {
     if (options?.timeSlotId) {
       filters.push(eq(bookings.timeSlotId, options.timeSlotId));
     }
+
+    if (options?.statuses?.length) {
+      filters.push(inArray(bookings.status, options.statuses));
+    }
+
+    return this.db.query.bookings.findMany({
+      where: and(...filters),
+      with: {
+        user: {
+          with: {
+            profile: true,
+          },
+        },
+        vehicle: true,
+        timeSlot: true,
+        requestedServices: {
+          with: {
+            service: true,
+          },
+        },
+        statusHistory: {
+          orderBy: desc(bookingStatusHistory.changedAt),
+        },
+      },
+      orderBy: [asc(bookings.scheduledDate), asc(bookings.createdAt)],
+    });
+  }
+
+  async findScheduledDatesByIds(ids: string[]) {
+    if (!ids.length) {
+      return [];
+    }
+
+    return this.db
+      .select({
+        id: bookings.id,
+        scheduledDate: bookings.scheduledDate,
+      })
+      .from(bookings)
+      .where(inArray(bookings.id, ids));
+  }
+
+  async findDetailedByScheduledDateRange(
+    startDate: string,
+    endDate: string,
+    options?: {
+      statuses?: BookingStatus[];
+    },
+  ) {
+    const filters = [gte(bookings.scheduledDate, startDate), lte(bookings.scheduledDate, endDate)];
 
     if (options?.statuses?.length) {
       filters.push(inArray(bookings.status, options.statuses));

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import {
   ApiBadRequestResponse,
@@ -10,6 +10,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -23,6 +24,8 @@ import { AddJobOrderProgressDto } from '../dto/add-job-order-progress.dto';
 import { CreateJobOrderDto } from '../dto/create-job-order.dto';
 import { FinalizeJobOrderDto } from '../dto/finalize-job-order.dto';
 import { JobOrderResponseDto } from '../dto/job-order-response.dto';
+import { JobOrderWorkbenchSummaryResponseDto } from '../dto/job-order-workbench-summary-response.dto';
+import { ListJobOrderWorkbenchQueryDto } from '../dto/list-job-order-workbench-query.dto';
 import { RecordJobOrderInvoicePaymentDto } from '../dto/record-job-order-invoice-payment.dto';
 import { UpdateJobOrderStatusDto } from '../dto/update-job-order-status.dto';
 import { JobOrdersService } from '../services/job-orders.service';
@@ -48,6 +51,99 @@ export class JobOrdersController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   create(@Body() payload: CreateJobOrderDto, @Req() request: Request) {
     return this.jobOrdersService.create(payload, request.user as { userId: string; role: string });
+  }
+
+  @Get('assigned')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('technician')
+  @ApiOperation({ summary: 'List job orders assigned to the current technician.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'Job orders assigned to the current technician, most recently updated first.',
+    type: JobOrderResponseDto,
+    isArray: true,
+  })
+  @ApiForbiddenResponse({ description: 'Only technicians can list their assigned job orders.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  listAssigned(@Req() request: Request) {
+    return this.jobOrdersService.listAssignedToTechnician(
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Get('workbench-summaries')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('technician', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'List accessible job-order summary records for workbench date indicators and selectors.' })
+  @ApiBearerAuth('access-token')
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    description: 'Optional month filter in YYYY-MM format.',
+    example: '2026-05',
+  })
+  @ApiOkResponse({
+    description: 'Accessible job-order summaries used by the web workbench calendar and id selectors.',
+    type: JobOrderWorkbenchSummaryResponseDto,
+    isArray: true,
+  })
+  @ApiBadRequestResponse({ description: 'The month filter is invalid.' })
+  @ApiForbiddenResponse({ description: 'Only staff workbench roles can read job-order summaries.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  listWorkbenchSummaries(
+    @Query() query: ListJobOrderWorkbenchQueryDto,
+    @Req() request: Request,
+  ) {
+    return this.jobOrdersService.listWorkbenchSummaries(
+      request.user as { userId: string; role: string },
+      query,
+    );
+  }
+
+  @Get('workbench-calendar')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('technician', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'List date markers for job orders and booking handoff queue visibility in one workbench month.' })
+  @ApiBearerAuth('access-token')
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    description: 'Optional month filter in YYYY-MM format.',
+    example: '2026-05',
+  })
+  @ApiOkResponse({
+    description: 'Date markers used by the web workbench calendar strip.',
+  })
+  listWorkbenchCalendar(
+    @Query() query: ListJobOrderWorkbenchQueryDto,
+    @Req() request: Request,
+  ) {
+    return this.jobOrdersService.listWorkbenchCalendar(
+      request.user as { userId: string; role: string },
+      query,
+    );
+  }
+
+  @Get('vehicles/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'List job orders attached to one vehicle for staff selectors.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Vehicle identifier.',
+    example: '7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d',
+  })
+  @ApiOkResponse({
+    description: 'Job orders attached to the target vehicle.',
+    type: JobOrderResponseDto,
+    isArray: true,
+  })
+  findByVehicleId(@Param('id') id: string, @Req() request: Request) {
+    return this.jobOrdersService.findByVehicleId(
+      id,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @Get(':id')
