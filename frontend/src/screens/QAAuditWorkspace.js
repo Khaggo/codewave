@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import {
   AlertTriangle,
   BadgeCheck,
@@ -14,6 +13,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 
+import PortalLink from '@/components/PortalLink'
 import { useToast } from '@/components/Toast.jsx'
 import { ApiError } from '@/lib/authClient'
 import { listJobOrderWorkbenchSummaries } from '@/lib/jobOrderWorkbenchClient'
@@ -502,9 +502,9 @@ function ContractSourcesPanel() {
         </div>
         <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
           <p className="text-sm font-bold text-ink-primary">Next Step</p>
-          <Link href="/admin/job-orders" className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-brand-orange">
+          <PortalLink href="/admin/job-orders" className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-brand-orange">
             Continue in Job Orders <ExternalLink size={14} />
-          </Link>
+          </PortalLink>
         </div>
       </div>
     </div>

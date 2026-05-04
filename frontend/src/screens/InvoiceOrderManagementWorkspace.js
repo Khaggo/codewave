@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
@@ -18,6 +17,7 @@ import {
   Wrench,
 } from 'lucide-react'
 
+import PortalLink from '@/components/PortalLink'
 import { ApiError, listAdminCustomers } from '@/lib/authClient'
 import { getInvoiceAgingAnalytics } from '@/lib/analyticsAdminClient'
 import { getJobOrderById, listJobOrderWorkbenchSummaries } from '@/lib/jobOrderWorkbenchClient'
@@ -791,10 +791,10 @@ export default function InvoiceOrderManagementWorkspace() {
                   />
                 )}
 
-                <Link href="/admin/job-orders" className="btn-ghost w-fit">
+                <PortalLink href="/admin/job-orders" className="btn-ghost w-fit">
                   <ExternalLink size={14} />
                   Open Job Order Workbench
-                </Link>
+                </PortalLink>
               </div>
             ) : (
               <div className="mt-4 rounded-2xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">

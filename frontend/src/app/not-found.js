@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import PortalLink from '@/components/PortalLink'
 
 export default function NotFound() {
   return (
@@ -11,9 +11,9 @@ export default function NotFound() {
             The page you&apos;re looking for doesn&apos;t exist or has been moved.
           </p>
         </div>
-        <Link href="/" className="btn-primary inline-flex">
+        <PortalLink href="/" className="btn-primary inline-flex">
           Back to Dashboard
-        </Link>
+        </PortalLink>
       </div>
     </div>
   )

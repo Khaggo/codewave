@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import PortalLink from '@/components/PortalLink'
 import { usePathname } from 'next/navigation'
 import {
   BarChart3,
@@ -128,7 +128,7 @@ export default function Sidebar({ collapsed, onToggle }) {
               {section.items.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href
                 return (
-                  <Link
+                  <PortalLink
                     key={href}
                     href={href}
                     title={collapsed ? label : undefined}
@@ -152,7 +152,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                     {!collapsed && active ? (
                       <span className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0 bg-brand-orange" />
                     ) : null}
-                  </Link>
+                  </PortalLink>
                 )
               })}
             </div>

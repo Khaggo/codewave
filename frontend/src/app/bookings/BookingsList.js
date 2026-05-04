@@ -1,6 +1,5 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
@@ -889,7 +888,6 @@ function QueueTable({ queue }) {
 }
 
 export default function BookingsList() {
-  const router = useRouter()
   const user = useUser()
   const hasAutoSelectedUpcomingDate = useRef(false)
   const selectedDateRef = useRef(toDateKey())
@@ -1488,7 +1486,7 @@ export default function BookingsList() {
       params.set('bookingId', booking.id)
     }
 
-    router.push(`/admin/job-orders?${params.toString()}`)
+    window.location.assign(`/admin/job-orders?${params.toString()}`)
   }
 
   function handleSelectedDateChange(nextDateKey) {

@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import PortalLink from '@/components/PortalLink'
 
 export const metadata = { title: 'Service Timeline' }
 
@@ -15,18 +15,18 @@ export default function TimelinePage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Link href="/admin/job-orders" className="card p-5 transition hover:bg-surface-hover">
+        <PortalLink href="/admin/job-orders" className="card p-5 transition hover:bg-surface-hover">
           <p className="text-sm font-bold text-ink-primary">Job Orders</p>
           <p className="mt-1 text-xs leading-5 text-ink-muted">Update workshop progress.</p>
-        </Link>
-        <Link href="/admin/qa-audit" className="card p-5 transition hover:bg-surface-hover">
+        </PortalLink>
+        <PortalLink href="/admin/qa-audit" className="card p-5 transition hover:bg-surface-hover">
           <p className="text-sm font-bold text-ink-primary">QA Audit</p>
           <p className="mt-1 text-xs leading-5 text-ink-muted">Review release readiness.</p>
-        </Link>
-        <Link href="/admin/invoices" className="card p-5 transition hover:bg-surface-hover">
+        </PortalLink>
+        <PortalLink href="/admin/invoices" className="card p-5 transition hover:bg-surface-hover">
           <p className="text-sm font-bold text-ink-primary">Invoices</p>
           <p className="mt-1 text-xs leading-5 text-ink-muted">Finalize customer billing.</p>
-        </Link>
+        </PortalLink>
       </div>
     </div>
   )

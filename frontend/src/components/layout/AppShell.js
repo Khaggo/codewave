@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+import PortalLink from '@/components/PortalLink'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import Login from '@/screens/Login'
@@ -44,13 +44,13 @@ function StaffRouteGuardState({ guard, onLogout }) {
           <p className="text-sm font-semibold text-ink-primary">Available workspaces</p>
           <div className="mt-3 flex flex-wrap gap-3">
             {suggestedRoutes.map((entry) => (
-              <Link
+              <PortalLink
                 key={entry.href}
                 href={entry.href}
                 className="rounded-xl border border-surface-border bg-surface-raised px-4 py-2 text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
               >
                 {entry.label}
-              </Link>
+              </PortalLink>
             ))}
           </div>
         </div>
@@ -58,12 +58,12 @@ function StaffRouteGuardState({ guard, onLogout }) {
 
       <div className="mt-6 flex flex-wrap gap-3">
         {guard.fallbackHref ? (
-          <Link
+          <PortalLink
             href={guard.fallbackHref}
             className="rounded-xl bg-[#f07c00] px-4 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90"
           >
             Open allowed workspace
-          </Link>
+          </PortalLink>
         ) : null}
         <button
           onClick={onLogout}

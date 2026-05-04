@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { ArrowRight, Bell, ChevronDown, LogOut, Menu, Search, X } from 'lucide-react'
+import PortalLink from '@/components/PortalLink'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import { isEcommerceEnabled } from '@/lib/runtimeFlags'
 
@@ -41,7 +42,6 @@ const SEARCH_DESTINATIONS = [
 ]
 
 function GlobalSearch() {
-  const router = useRouter()
   const ecommerceEnabled = isEcommerceEnabled()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -80,10 +80,9 @@ function GlobalSearch() {
     )
   }, [destinations, query])
 
-  function navigate(href) {
+  function handleNavigate() {
     setOpen(false)
     setQuery('')
-    router.push(href)
   }
 
   return (
@@ -132,9 +131,9 @@ function GlobalSearch() {
               <ul className="max-h-72 divide-y divide-surface-border overflow-y-auto">
                 {results.map((result) => (
                   <li key={result.href}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(result.href)}
+                    <PortalLink
+                      href={result.href}
+                      onClick={handleNavigate}
                       className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-hover"
                     >
                       <div
@@ -148,7 +147,7 @@ function GlobalSearch() {
                         <p className="truncate text-xs text-ink-muted">{result.sub}</p>
                       </div>
                       <span className="badge badge-gray flex-shrink-0 text-[10px]">page</span>
-                    </button>
+                    </PortalLink>
                   </li>
                 ))}
               </ul>
