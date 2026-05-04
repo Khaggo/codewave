@@ -23,7 +23,7 @@ export type AppConfig = {
     password?: string;
   };
   rabbitmq: {
-    url: string;
+    url?: string;
     queue: string;
   };
   google: {
@@ -109,7 +109,7 @@ export default (): AppConfig => {
         redisPasswordFromUrl,
     },
     rabbitmq: {
-      url: process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672',
+      url: process.env.RABBITMQ_URL?.trim() || undefined,
       queue: process.env.RABBITMQ_QUEUE ?? 'autocare_events',
     },
     google: {

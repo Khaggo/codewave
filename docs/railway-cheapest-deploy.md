@@ -33,8 +33,6 @@ Create two Railway services from this repository.
   - `DATABASE_URL`
   - `JWT_ACCESS_SECRET`
   - `JWT_REFRESH_SECRET`
-  - `RABBITMQ_URL`
-  - `RABBITMQ_QUEUE`
   - `REDIS_URL` or `REDIS_HOST` and `REDIS_PORT`
   - `CORS_ORIGINS=https://autocare-cc.com`
 - Fastest setup:
@@ -48,7 +46,7 @@ The main API currently expects these backing services:
 
 - PostgreSQL
 - Redis
-- RabbitMQ
+- RabbitMQ optional on the cheapest deploy
 
 Use Railway-managed resources and wire their variables into the API service.
 
@@ -56,7 +54,6 @@ The checked-in `backend/.env.railway.example` uses Railway reference variables a
 
 - `Postgres`
 - `Redis`
-- `RabbitMQ`
 
 If your Railway canvas uses different service names, change those namespaces before pasting.
 
@@ -83,3 +80,4 @@ Only set these when the feature is actually in use:
 - The frontend already disables ecommerce-only surfaces when `NEXT_PUBLIC_ECOMMERCE_API_BASE_URL` is empty.
 - The backend now respects Railway's injected `PORT`.
 - The backend now accepts Railway Redis variables from either `REDIS_URL` or the standard `REDISHOST` / `REDISPORT` / `REDISUSER` / `REDISPASSWORD` values documented by Railway.
+- RabbitMQ is optional for the cheapest Railway deploy; when it is omitted, event publishing stays in-process only until you add RabbitMQ later.
