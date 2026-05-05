@@ -1,6 +1,6 @@
 ---
 name: mcp-session-bootstrap
-description: Warm and verify the workspace MCP tools before task work begins. Use when starting a new repo session, after Codex reloads, when MCP health is uncertain, or before queue-driven implementation work that depends on Serena, Swagger, Notion, Figma, browser tooling, or documentation MCPs.
+description: Warm and verify the workspace MCP tools before task work begins. Use when starting a new repo session, after Codex reloads, when MCP health is uncertain, or before codewave work where Serena or another relevant MCP should be tried first.
 ---
 
 # MCP Session Bootstrap
@@ -12,7 +12,7 @@ Warm the MCP layer once per session, confirm which tools are actually usable, an
 ## Workflow
 
 1. Use `tool_search` if the expected MCP tools are not visible yet.
-2. Activate Serena for the current workspace.
+2. Treat Serena as the default MCP for local repo exploration.
    - Use `mcp__serena__.activate_project` with `codewave`.
    - Use `mcp__serena__.check_onboarding_performed` after activation.
 3. Warm Swagger for backend or contract-sensitive work.
@@ -33,6 +33,7 @@ Warm the MCP layer once per session, confirm which tools are actually usable, an
 ## Guardrails
 
 - Warm all relevant MCPs once per session, not before every substep.
+- Start with Serena or the smallest relevant MCP before broad shell or file reads.
 - Do not spend tokens probing unrelated MCPs for a task that will not use them.
 - Treat missing MCPs as a tooling fact, not a blocker by default.
 - If Swagger is down because the backend is not reachable, say so explicitly and continue with local code inspection when possible.

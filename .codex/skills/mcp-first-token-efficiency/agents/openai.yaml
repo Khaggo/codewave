@@ -1,0 +1,4 @@
+interface:
+  display_name: "MCP-First Token Efficiency"
+  short_description: "Route codewave tasks through Serena or another relevant MCP before broad local reads."
+  default_prompt: "Use Serena or the smallest relevant MCP first for this codewave task, then fall back to local reads only after the task slice is narrowed."

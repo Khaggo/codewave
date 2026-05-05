@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { ArrowRight, Bell, ChevronDown, LogOut, Menu, Search, X } from 'lucide-react'
+import PortalLink from '@/components/PortalLink'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import { isEcommerceEnabled } from '@/lib/runtimeFlags'
 
@@ -17,6 +18,7 @@ const ROUTE_TITLES = {
   '/loyalty': 'Loyalty Management',
   '/admin/customers': 'Customers & Vehicles',
   '/admin/users': 'User Administration',
+  '/admin/services': 'Service Management',
   '/admin/job-orders': 'Job Order Workbench',
   '/admin/intake-inspections': 'Intake Inspections',
   '/admin/qa-audit': 'QA Audit',
@@ -30,60 +32,63 @@ const SEARCH_DESTINATIONS = [
   { label: 'Dashboard', sub: 'Staff overview and live operations shortcuts', href: '/' },
   { label: 'Bookings', sub: 'Daily schedule, queue, status updates, rescheduling', href: '/bookings' },
   { label: 'Customers & Vehicles', sub: 'Customer profile and vehicle records', href: '/admin/customers' },
+  { label: 'Service Timeline', sub: 'Lifecycle history and customer-safe service progression', href: '/timeline' },
   { label: 'Job Order Workbench', sub: 'Create job orders, progress, photos, finalization, payment', href: '/admin/job-orders' },
   { label: 'Intake Inspections', sub: 'Vehicle-scoped inspection capture and history', href: '/admin/intake-inspections' },
   { label: 'QA Audit', sub: 'Load quality gates and record super-admin overrides', href: '/admin/qa-audit' },
   { label: 'Invoice & Orders', sub: 'Known job-order invoices and ecommerce order lookup', href: '/admin/invoices' },
   { label: 'User Administration', sub: 'Create staff, mechanics, technicians, and admin accounts', href: '/admin/users' },
-  { label: 'Catalog Administration', sub: 'Manage services and catalog visibility', href: '/admin/catalog' },
+  { label: 'Service Management', sub: 'Manage booking service categories and customer-bookable services', href: '/admin/services' },
+  { label: 'Catalog Administration', sub: 'Manage ecommerce catalog visibility', href: '/admin/catalog' },
   { label: 'Inventory', sub: 'Stock visibility and inventory alerts', href: '/admin/inventory' },
   { label: 'Analytics', sub: 'Operational summaries and dashboard metrics', href: '/admin/summaries' },
+  { label: 'Settings', sub: 'Session and portal preferences', href: '/settings' },
 ]
 
 function GlobalSearch() {
-  const router = useRouter()
   const ecommerceEnabled = isEcommerceEnabled()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  const [results, setResults] = useState([])
   const wrapRef = useRef(null)
 
   useEffect(() => {
     function handler(event) {
-      if (wrapRef.current && !wrapRef.current.contains(event.target)) {
+      if (open && wrapRef.current && !wrapRef.current.contains(event.target)) {
         setOpen(false)
       }
     }
 
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [open])
 
-  const destinations = SEARCH_DESTINATIONS.filter((destination) =>
-    ecommerceEnabled ? true : !['/admin/catalog', '/admin/inventory'].includes(destination.href),
+  const destinations = useMemo(
+    () =>
+      SEARCH_DESTINATIONS.filter((destination) =>
+        ecommerceEnabled ? true : !['/admin/catalog', '/admin/inventory'].includes(destination.href),
+      ),
+    [ecommerceEnabled],
   )
 
-  useEffect(() => {
+  const results = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     if (!normalizedQuery) {
-      setResults([])
-      return
+      return []
     }
 
-    setResults(
-      destinations.filter((destination) =>
+    return destinations
+      .filter((destination) =>
         [destination.label, destination.sub, destination.href]
           .join(' ')
           .toLowerCase()
           .includes(normalizedQuery),
-      ).slice(0, 8),
-    )
+      )
+      .slice(0, 8)
   }, [destinations, query])
 
-  function navigate(href) {
+  function handleNavigate() {
     setOpen(false)
     setQuery('')
-    router.push(href)
   }
 
   return (
@@ -108,7 +113,6 @@ function GlobalSearch() {
             type="button"
             onClick={() => {
               setQuery('')
-              setResults([])
               setOpen(false)
             }}
             className="text-ink-dim transition-colors hover:text-ink-muted"
@@ -132,9 +136,9 @@ function GlobalSearch() {
               <ul className="max-h-72 divide-y divide-surface-border overflow-y-auto">
                 {results.map((result) => (
                   <li key={result.href}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(result.href)}
+                    <PortalLink
+                      href={result.href}
+                      onClick={handleNavigate}
                       className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-hover"
                     >
                       <div
@@ -148,7 +152,7 @@ function GlobalSearch() {
                         <p className="truncate text-xs text-ink-muted">{result.sub}</p>
                       </div>
                       <span className="badge badge-gray flex-shrink-0 text-[10px]">page</span>
-                    </button>
+                    </PortalLink>
                   </li>
                 ))}
               </ul>

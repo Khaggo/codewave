@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import OtpInputGroup from '../components/OtpInputGroup';
 import ScreenShell from '../components/ScreenShell';
+import { ApiError, requestForgotPasswordOtp } from '../lib/authClient';
 import { colors, radius } from '../theme';
 
 const RESEND_SECONDS = 17;
@@ -13,6 +14,8 @@ export default function ForgotPasswordOTP({ navigation, route }) {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
   const [resendCountdown, setResendCountdown] = useState(RESEND_SECONDS);
+  const [submitting, setSubmitting] = useState(false);
+  const [enrollmentId, setEnrollmentId] = useState(route.params?.enrollmentId ?? null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTranslateY = useRef(new Animated.Value(-8)).current;
 
@@ -82,10 +85,9 @@ export default function ForgotPasswordOTP({ navigation, route }) {
       return;
     }
 
-    if (otp !== '123456') {
-      setError('Incorrect OTP. Use 123456 for this prototype.');
-      showInlineToast('Invalid code. Please try again.');
-      Alert.alert('Invalid Code', 'The OTP you entered is invalid. Please try again.');
+    if (!enrollmentId) {
+      setError('The password reset session expired. Request a new code and try again.');
+      showInlineToast('Password reset session expired.');
       return;
     }
 
@@ -99,21 +101,41 @@ export default function ForgotPasswordOTP({ navigation, route }) {
           onPress: () =>
             navigation.navigate('ResetPassword', {
               email: route.params?.email,
+              enrollmentId,
+              otp,
             }),
         },
       ],
     );
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
     if (resendCountdown > 0) {
       return;
     }
 
-    setOtp('');
-    setError('');
-    setResendCountdown(RESEND_SECONDS);
-    showInlineToast('A fresh verification code was sent.', 'success');
+    setSubmitting(true);
+
+    try {
+      const enrollment = await requestForgotPasswordOtp({
+        email: route.params?.email,
+      });
+
+      setEnrollmentId(enrollment.enrollmentId);
+      setOtp('');
+      setError('');
+      setResendCountdown(RESEND_SECONDS);
+      showInlineToast('A fresh verification code was sent.', 'success');
+    } catch (requestError) {
+      const message =
+        requestError instanceof ApiError
+          ? requestError.message
+          : 'We could not resend the verification code right now.';
+      setError(message);
+      showInlineToast(message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -154,7 +176,9 @@ export default function ForgotPasswordOTP({ navigation, route }) {
           <Text style={styles.messageTitle}>
             We sent a <Text style={styles.messageStrong}>6-digit verification code</Text> to
           </Text>
-          <Text style={styles.emailText}>{route.params?.email || 'your email address'}</Text>
+          <Text style={styles.emailText}>
+            {route.params?.maskedEmail || route.params?.email || 'your email address'}
+          </Text>
           <Text style={styles.messageSubtitle}>Check your inbox and spam folder</Text>
         </View>
 
@@ -171,9 +195,13 @@ export default function ForgotPasswordOTP({ navigation, route }) {
         />
 
         <TouchableOpacity
-          style={[styles.primaryButton, otp.length !== 6 && styles.primaryButtonDisabled]}
+          style={[
+            styles.primaryButton,
+            (otp.length !== 6 || submitting || !enrollmentId) && styles.primaryButtonDisabled,
+          ]}
           onPress={handleVerifyOtp}
           activeOpacity={0.88}
+          disabled={otp.length !== 6 || submitting || !enrollmentId}
         >
           <View style={styles.primaryButtonContent}>
             <MaterialCommunityIcons name="shield-check-outline" size={18} color={colors.onPrimary} />
@@ -186,16 +214,10 @@ export default function ForgotPasswordOTP({ navigation, route }) {
           {resendCountdown > 0 ? (
             <Text style={styles.resendCountdown}>Resend in {resendCountdown}s</Text>
           ) : (
-            <Text style={styles.resendAction} onPress={handleResend}>
-              Resend now
+            <Text style={styles.resendAction} onPress={() => void handleResend()}>
+              {submitting ? 'Sending...' : 'Resend now'}
             </Text>
           )}
-        </View>
-
-        <View style={styles.demoCard}>
-          <Text style={styles.demoText}>
-            Demo code: <Text style={styles.demoCode}>1 2 3 4 5 6</Text>
-          </Text>
         </View>
       </View>
     </ScreenShell>
@@ -376,24 +398,5 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 15,
     fontWeight: '800',
-  },
-  demoCard: {
-    marginHorizontal: 24,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: '#20406A',
-    backgroundColor: '#0D1A31',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  demoText: {
-    color: '#6FB1FF',
-    fontSize: 14,
-  },
-  demoCode: {
-    color: colors.text,
-    fontWeight: '800',
-    letterSpacing: 2,
   },
 });

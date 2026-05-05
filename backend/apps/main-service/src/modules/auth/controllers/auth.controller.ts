@@ -15,6 +15,7 @@ import {
 } from '@nestjs/swagger';
 
 import { Roles } from '../decorators/roles.decorator';
+import { ConfirmChangePasswordWithOtpDto } from '../dto/confirm-change-password-with-otp.dto';
 import { CreateStaffAccountDto } from '../dto/create-staff-account.dto';
 import { DeleteAccountDto } from '../dto/delete-account.dto';
 import { DeleteAccountStartResponseDto } from '../dto/delete-account-start-response.dto';
@@ -26,8 +27,11 @@ import { AuthSessionResponseDto } from '../dto/auth-session-response.dto';
 import { GoogleSignupStartDto } from '../dto/google-signup-start.dto';
 import { GoogleSignupStartResponseDto } from '../dto/google-signup-start-response.dto';
 import { LoginDto } from '../dto/login.dto';
+import { RequestChangePasswordOtpDto } from '../dto/request-change-password-otp.dto';
+import { RequestPasswordResetOtpDto } from '../dto/request-password-reset-otp.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
+import { ResetPasswordWithOtpDto } from '../dto/reset-password-with-otp.dto';
 import { UpdateStaffAccountStatusDto } from '../dto/update-staff-account-status.dto';
 import { VerifyEmailOtpDto } from '../dto/verify-email-otp.dto';
 import { AuthService } from '../services/auth.service';
@@ -141,6 +145,71 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.authService.refresh(refreshTokenDto);
+  }
+
+  @Post('auth/password/forgot/request')
+  @ApiOperation({ summary: 'Send a forgot-password OTP to the customer email.' })
+  @ApiCreatedResponse({
+    description: 'The forgot-password OTP was sent successfully.',
+    type: GoogleSignupStartResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The forgot-password payload is invalid.' })
+  @ApiNotFoundResponse({ description: 'Account not found.' })
+  requestForgotPasswordOtp(@Body() payload: RequestPasswordResetOtpDto) {
+    return this.authService.requestForgotPasswordOtp(payload);
+  }
+
+  @Post('auth/password/forgot/reset')
+  @ApiOperation({ summary: 'Verify a forgot-password OTP and set a new password.' })
+  @ApiOkResponse({
+    description: 'The password was updated successfully.',
+  })
+  @ApiBadRequestResponse({ description: 'The OTP payload is invalid or expired.' })
+  @ApiConflictResponse({ description: 'The OTP has already been used.' })
+  @ApiNotFoundResponse({ description: 'OTP enrollment or account not found.' })
+  @HttpCode(HttpStatus.OK)
+  resetPasswordWithOtp(@Body() payload: ResetPasswordWithOtpDto) {
+    return this.authService.resetPasswordWithOtp(payload);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer')
+  @Post('auth/password/change/request')
+  @ApiOperation({ summary: 'Confirm the current password and send a change-password OTP.' })
+  @ApiBearerAuth('access-token')
+  @ApiCreatedResponse({
+    description: 'The change-password OTP was sent successfully.',
+    type: GoogleSignupStartResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The change-password request payload is invalid.' })
+  @ApiUnauthorizedResponse({ description: 'Missing bearer token or current password confirmation failed.' })
+  requestChangePasswordOtp(@Body() payload: RequestChangePasswordOtpDto, @Req() request: Request) {
+    return this.authService.requestChangePasswordOtp(
+      payload,
+      request.user as { userId: string; email: string; role: string },
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer')
+  @Post('auth/password/change/confirm')
+  @ApiOperation({ summary: 'Verify a change-password OTP and save the new password.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'The password was updated successfully.',
+  })
+  @ApiBadRequestResponse({ description: 'The change-password OTP payload is invalid or expired.' })
+  @ApiConflictResponse({ description: 'The OTP has already been used.' })
+  @ApiUnauthorizedResponse({ description: 'Missing bearer token or the OTP does not belong to the authenticated user.' })
+  @HttpCode(HttpStatus.OK)
+  confirmChangePasswordWithOtp(
+    @Body() payload: ConfirmChangePasswordWithOtpDto,
+    @Req() request: Request,
+  ) {
+    return this.authService.confirmChangePasswordWithOtp(
+      payload,
+      request.user as { userId: string; email: string; role: string },
+    );
   }
 
   @UseGuards(JwtAuthGuard)

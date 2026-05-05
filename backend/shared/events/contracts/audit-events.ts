@@ -15,7 +15,7 @@ export interface StaffAccountProvisionedEventPayload {
   actorUserId: string;
   actorRole: 'super_admin';
   targetUserId: string;
-  targetRole: 'technician' | 'service_adviser' | 'super_admin';
+  targetRole: 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
   targetEmail: string;
   targetStaffCode: string | null;
   reason: string | null;
@@ -26,7 +26,7 @@ export interface StaffAccountStatusChangedEventPayload {
   actorUserId: string;
   actorRole: 'super_admin';
   targetUserId: string;
-  targetRole: 'technician' | 'service_adviser' | 'super_admin';
+  targetRole: 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
   targetEmail: string;
   targetStaffCode: string | null;
   previousIsActive: boolean;

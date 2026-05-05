@@ -6,7 +6,7 @@ export const metadata = { title: 'Admin Inventory' }
 
 export default function AdminInventoryPage() {
   if (!isEcommerceEnabled()) {
-    return <EcommerceUnavailableCard title="Inventory Admin is offline on the cheapest deployment" />
+    return <EcommerceUnavailableCard title="Inventory Admin is waiting for the ecommerce runtime" />
   }
 
   return <InventoryWorkspace />

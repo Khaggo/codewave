@@ -48,6 +48,12 @@ export interface JobOrderQualityGateResponse {
   status: QualityGateStatus;
   riskScore: number;
   blockingReason?: string | null;
+  preCheckStatus: 'pending' | 'completed' | 'unavailable';
+  preCheckSummary?: Record<string, unknown> | null;
+  reviewerVerdict: 'pending' | 'passed' | 'blocked';
+  reviewerNote?: string | null;
+  headTechnicianUserId?: string | null;
+  reviewedAt?: string | null;
   lastAuditRequestedAt: string;
   lastAuditCompletedAt?: string | null;
   auditJob?: AiWorkerJobResponse | null;

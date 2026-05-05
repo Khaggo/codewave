@@ -2,11 +2,13 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   Animated,
   Easing,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   SafeAreaView,
@@ -19,7 +21,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { ApiError } from '../lib/authClient';
+import { ApiError, requestChangePasswordOtp } from '../lib/authClient';
 import {
   buildOwnedVehicleLabel,
   createEmptyBookingAvailability,
@@ -28,8 +30,11 @@ import {
   formatBookingTimeSlotWindow,
   getBookingAvailability,
   getBookingById,
+  getBookingReservationPayment,
   listCustomerBookings,
+  listCustomerServiceHistory,
   loadBookingDiscoverySnapshot,
+  retryBookingReservationPayment,
   toBookingDateString,
 } from '../lib/bookingDiscoveryClient';
 import {
@@ -192,6 +197,12 @@ const createInitialBookingCreateState = () => ({
 const createInitialBookingHistoryState = () => ({
   status: 'idle',
   bookings: [],
+  errorMessage: '',
+});
+
+const createInitialCustomerServiceHistoryState = () => ({
+  status: 'idle',
+  items: [],
   errorMessage: '',
 });
 
@@ -600,8 +611,10 @@ const buildBookingDateCardItem = (availabilityDay, selectedTimeSlot) => {
 };
 
 const bookingStatusLabels = {
+  pending_payment: 'Awaiting reservation fee',
   pending: 'Pending staff review',
   confirmed: 'Confirmed by staff',
+  in_service: 'In service',
   declined: 'Declined',
   rescheduled: 'Rescheduled',
   completed: 'Completed',
@@ -635,6 +648,30 @@ const getBookingTimeLabel = (booking) => {
   return `${booking.timeSlot.label} - ${formatBookingTimeSlotWindow(booking.timeSlot)}`;
 };
 
+const formatReservationAmount = (amountCents) => {
+  const normalizedAmount = Number(amountCents);
+  if (!Number.isFinite(normalizedAmount)) {
+    return 'PHP 0';
+  }
+
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    maximumFractionDigits: 0,
+  }).format(normalizedAmount / 100);
+};
+
+const getReservationPaymentStatusLabel = (payment) => {
+  const status = payment?.status;
+
+  if (status === 'paid') return 'Reservation fee paid';
+  if (status === 'failed') return 'Payment needs retry';
+  if (status === 'expired') return 'Payment expired';
+  if (status === 'cancelled') return 'Payment cancelled';
+  if (status === 'refunded') return 'Refund in review';
+  return 'Payment pending';
+};
+
 const buildBookingTrackingSteps = (booking) => {
   if (!booking) {
     return [
@@ -658,6 +695,31 @@ const buildBookingTrackingSteps = (booking) => {
   }
 
   const status = booking.status;
+  const reservationPayment = booking.reservationPayment ?? null;
+
+  if (status === 'pending_payment') {
+    return [
+      {
+        label: 'Booking Request',
+        status: 'Submitted',
+        state: 'done',
+      },
+      {
+        label: 'Reservation Fee',
+        status: getReservationPaymentStatusLabel(reservationPayment),
+        state: reservationPayment?.status === 'paid' ? 'done' : 'current',
+        note:
+          reservationPayment?.status === 'failed'
+            ? reservationPayment.failureReason || 'Retry the reservation payment session to keep this slot.'
+            : 'Pay the reservation fee before the slot can be confirmed and the QR code can be issued.',
+      },
+      {
+        label: 'Staff Confirmation',
+        status: 'Waiting for payment',
+        state: 'upcoming',
+      },
+    ];
+  }
 
   if (status === 'declined' || status === 'cancelled') {
     return [
@@ -694,18 +756,39 @@ const buildBookingTrackingSteps = (booking) => {
     ];
   }
 
+  if (status === 'in_service') {
+    return [
+      {
+        label: 'Reservation Fee',
+        status: reservationPayment?.status === 'paid' ? 'Paid' : 'Missing',
+        state: reservationPayment?.status === 'paid' ? 'done' : 'current',
+      },
+      {
+        label: 'Booking Confirmed',
+        status: 'Checked in',
+        state: 'done',
+      },
+      {
+        label: 'Workshop In Service',
+        status: 'In progress',
+        state: 'current',
+        note: 'Workshop execution is already in progress. Job-order and QA stages continue on the staff side.',
+      },
+    ];
+  }
+
   if (status === 'confirmed' || status === 'rescheduled') {
     return [
       {
-        label: 'Booking Request',
-        status: 'Submitted',
+        label: 'Reservation Fee',
+        status: reservationPayment?.status === 'paid' ? 'Paid' : 'Awaiting review',
         state: 'done',
       },
       {
         label: status === 'rescheduled' ? 'Rescheduled By Staff' : 'Staff Confirmed',
         status: getBookingStatusLabel(status),
         state: 'current',
-        note: 'Arrival, adviser assignment, and workshop progress stay separate from booking status.',
+        note: 'Your slot is secured. QR release, arrival, adviser assignment, and workshop progress stay separate from booking status.',
       },
       {
         label: 'Appointment Outcome',
@@ -735,56 +818,7 @@ const buildBookingTrackingSteps = (booking) => {
   ];
 };
 
-const recentServiceHistory = [
-  {
-    key: 'svc-pms',
-    icon: 'wrench-outline',
-    title: 'PMS Service',
-    dateLabel: 'Apr 8, 2026',
-    status: 'Completed',
-    summary: 'Periodic maintenance and filter replacement completed.',
-    type: 'Service',
-    priceLabel: '\u20B13,850',
-    mechanic: 'Mech. Juan Ramos',
-    statusTone: 'success',
-  },
-  {
-    key: 'svc-oil',
-    icon: 'flash-outline',
-    title: 'Oil Change',
-    dateLabel: 'Mar 15, 2026',
-    status: 'Completed',
-    summary: 'Synthetic oil, oil filter, and fluid top-up completed.',
-    type: 'Service',
-    priceLabel: '\u20B11,200',
-    mechanic: 'Mech. Marco Lim',
-    statusTone: 'success',
-  },
-  {
-    key: 'svc-tire',
-    icon: 'swap-horizontal',
-    title: 'Tire Rotation',
-    dateLabel: 'Feb 28, 2026',
-    status: 'Completed',
-    summary: 'Cross rotation and tire pressure balancing completed.',
-    type: 'Service',
-    priceLabel: '\u20B1650',
-    mechanic: 'Mech. Rico Santos',
-    statusTone: 'success',
-  },
-  {
-    key: 'svc-brake',
-    icon: 'shield-outline',
-    title: 'Brake Inspection',
-    dateLabel: 'Jan 21, 2026',
-    status: 'Completed',
-    summary: 'Brake pads inspected and fluid level checked.',
-    type: 'Booking',
-    priceLabel: '\u20B1800',
-    mechanic: 'Mech. Rico Santos',
-    statusTone: 'info',
-  },
-];
+const recentServiceHistory = [];
 
 const shopProducts = [
   {
@@ -2037,6 +2071,9 @@ export default function Dashboard({
   const [bookingNotes, setBookingNotes] = useState('');
   const [bookingCreateState, setBookingCreateState] = useState(createInitialBookingCreateState);
   const [bookingHistory, setBookingHistory] = useState(createInitialBookingHistoryState);
+  const [serviceHistoryState, setServiceHistoryState] = useState(
+    createInitialCustomerServiceHistoryState,
+  );
   const [selectedHistoryBookingId, setSelectedHistoryBookingId] = useState(null);
   const [bookingDetailState, setBookingDetailState] = useState(createInitialBookingDetailState);
   const [notificationsFeed, setNotificationsFeed] = useState([]);
@@ -2071,6 +2108,7 @@ export default function Dashboard({
   const [loyaltyState, setLoyaltyState] = useState(createInitialLoyaltyState);
   const [isCartVisible, setIsCartVisible] = useState(false);
   const [profileSection, setProfileSection] = useState('rewards');
+  const pendingReservationRefreshBookingIdRef = useRef(null);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deletePasswordError, setDeletePasswordError] = useState('');
@@ -2100,18 +2138,24 @@ export default function Dashboard({
   const loyaltyRewards = loyaltyState.rewards ?? [];
   const loyaltyTransactions = loyaltyState.transactions ?? [];
   const featuredReward = loyaltyState.featuredReward ?? null;
-  const recentHomeServices = bookingHistory.bookings.length
-    ? bookingHistory.bookings.slice(0, 3).map((booking) => ({
-        key: booking.id ?? getBookingReference(booking),
-        icon:
-          booking.status === 'completed'
-            ? 'check-decagram-outline'
-            : booking.status === 'declined' || booking.status === 'cancelled'
-              ? 'close-circle-outline'
-              : 'calendar-check-outline',
-        title: getBookingServiceNames(booking),
-        dateLabel: `${formatBookingDateLabel(booking.scheduledDate)} - ${getBookingTimeLabel(booking)}`,
-        status: getBookingStatusLabel(booking.status),
+  const recentHomeServices = serviceHistoryState.items.length
+    ? serviceHistoryState.items.slice(0, 3).map((item) => ({
+        key: item.id ?? item.jobOrderId,
+        icon: 'check-decagram-outline',
+        title:
+          Array.isArray(item.completedServiceNames) && item.completedServiceNames.length
+            ? item.completedServiceNames.join(', ')
+            : item.jobOrderReference,
+        dateLabel: item.bookingDate
+          ? formatBookingDateLabel(item.bookingDate)
+          : item.finalizedAt
+            ? new Date(item.finalizedAt).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })
+            : 'Finalized service',
+        status: 'Completed',
       }))
     : recentServiceHistory.slice(0, 3);
   const featuredRewardEyebrow = featuredReward
@@ -2162,6 +2206,7 @@ export default function Dashboard({
     setBookingNotes('');
     setBookingCreateState(createInitialBookingCreateState());
     setBookingHistory(createInitialBookingHistoryState());
+    setServiceHistoryState(createInitialCustomerServiceHistoryState());
     setSelectedHistoryBookingId(null);
     setBookingDetailState(createInitialBookingDetailState());
     setNotificationsFeed([]);
@@ -3100,6 +3145,65 @@ export default function Dashboard({
   ]);
 
   useEffect(() => {
+    if (activeTab !== 'explore') {
+      return;
+    }
+
+    if (serviceHistoryState.status !== 'idle') {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadServiceHistory = async () => {
+      setServiceHistoryState((currentState) => ({
+        ...currentState,
+        status: 'loading',
+        errorMessage: '',
+      }));
+
+      try {
+        const items = await listCustomerServiceHistory({
+          userId: account?.userId,
+          accessToken: account?.accessToken,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setServiceHistoryState({
+          status: 'ready',
+          items,
+          errorMessage: '',
+        });
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Unable to load your recent services right now.';
+        const isUnauthorized = error instanceof ApiError && [401, 403].includes(error.status);
+
+        setServiceHistoryState((currentState) => ({
+          ...currentState,
+          status: isUnauthorized ? 'unauthorized' : 'error',
+          errorMessage: message,
+        }));
+      }
+    };
+
+    void loadServiceHistory();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [account?.accessToken, account?.userId, activeTab, serviceHistoryState.status]);
+
+  useEffect(() => {
     if (activeTab !== 'notifications' || bookingMode !== 'track') {
       return;
     }
@@ -3804,7 +3908,10 @@ export default function Dashboard({
 
       setBookingCreateState({
         status: 'success',
-        message: 'Booking request submitted. It remains pending until staff review it.',
+        message:
+          createdBooking.status === 'pending_payment'
+            ? 'Booking request saved. Finish the reservation fee to secure the slot and receive the QR code.'
+            : 'Booking request submitted successfully.',
         booking: createdBooking,
       });
       setBookingHistory((currentState) => ({
@@ -3859,6 +3966,142 @@ export default function Dashboard({
       }
     }
   };
+
+  const handleOpenReservationPayment = async (booking) => {
+    const checkoutUrl = booking?.reservationPayment?.providerCheckoutUrl;
+
+    if (!checkoutUrl) {
+      Alert.alert(
+        'Payment link unavailable',
+        'This booking does not have an active checkout URL yet. Retry the reservation payment session first.',
+      );
+      return;
+    }
+
+    const canOpen = await Linking.canOpenURL(checkoutUrl);
+    if (!canOpen) {
+      Alert.alert(
+        'Unable to open payment link',
+        'This device cannot open the reservation payment checkout URL right now.',
+      );
+      return;
+    }
+
+    pendingReservationRefreshBookingIdRef.current = booking.id;
+    await Linking.openURL(checkoutUrl);
+  };
+
+  const handleRetryReservationPayment = async (booking) => {
+    if (!booking?.id) {
+      return;
+    }
+
+    try {
+      const updatedBooking = await retryBookingReservationPayment({
+        bookingId: booking.id,
+        accessToken: account?.accessToken,
+      });
+
+      setBookingHistory((currentState) => ({
+        status: 'ready',
+        errorMessage: '',
+        bookings: [
+          updatedBooking,
+          ...currentState.bookings.filter((item) => item.id !== updatedBooking.id),
+        ],
+      }));
+      setSelectedHistoryBookingId(updatedBooking.id);
+      setBookingDetailState({
+        status: 'ready',
+        booking: updatedBooking,
+        errorMessage: '',
+      });
+      Alert.alert(
+        'Reservation payment refreshed',
+        updatedBooking.reservationPayment?.providerCheckoutUrl
+          ? 'A fresh payment session is ready. Continue the reservation payment now.'
+          : 'The booking was refreshed, but a checkout URL is still unavailable. Counter confirmation may be required.',
+      );
+    } catch (error) {
+      Alert.alert(
+        'Unable to refresh reservation payment',
+        error instanceof Error ? error.message : 'Try again in a moment.',
+      );
+    }
+  };
+
+  const handleRefreshReservationPaymentDetail = async (booking) => {
+    if (!booking?.id) {
+      return;
+    }
+
+    try {
+      const reservationPayment = await getBookingReservationPayment({
+        bookingId: booking.id,
+        accessToken: account?.accessToken,
+      });
+      const refreshedBooking = await getBookingById({
+        bookingId: booking.id,
+        accessToken: account?.accessToken,
+      });
+
+      const updatedBooking = {
+        ...refreshedBooking,
+        reservationPayment: refreshedBooking.reservationPayment ?? reservationPayment,
+      };
+
+      setBookingHistory((currentState) => ({
+        ...currentState,
+        bookings: currentState.bookings.map((item) =>
+          item.id === updatedBooking.id ? updatedBooking : item,
+        ),
+      }));
+      setBookingDetailState({
+        status: 'ready',
+        booking: updatedBooking,
+        errorMessage: '',
+      });
+      pendingReservationRefreshBookingIdRef.current = null;
+    } catch (error) {
+      Alert.alert(
+        'Unable to refresh payment status',
+        error instanceof Error ? error.message : 'Try again in a moment.',
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      return undefined;
+    }
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        return;
+      }
+
+      const bookingId = pendingReservationRefreshBookingIdRef.current;
+      if (!bookingId) {
+        return;
+      }
+
+      const pendingBooking =
+        bookingDetailState.booking?.id === bookingId
+          ? bookingDetailState.booking
+          : bookingHistory.bookings.find((item) => item.id === bookingId);
+
+      if (!pendingBooking) {
+        pendingReservationRefreshBookingIdRef.current = null;
+        return;
+      }
+
+      void handleRefreshReservationPaymentDetail(pendingBooking);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [account?.accessToken, bookingDetailState.booking, bookingHistory.bookings]);
 
   const navigateToTimeline = () => {
     setActiveTab('messages');
@@ -4307,10 +4550,10 @@ export default function Dashboard({
     }));
   };
 
-  const handleSavePassword = () => {
+  const handleSavePassword = async () => {
     const nextErrors = validateChangePasswordForm({
       ...securityForm,
-      savedPassword: account?.password || '',
+      savedPassword: '',
     });
 
     if (Object.keys(nextErrors).length > 0) {
@@ -4318,11 +4561,38 @@ export default function Dashboard({
       return;
     }
 
-    navigation.navigate('OTP', {
-      email: account?.email,
-      otpPurpose: 'passwordChange',
-      pendingPassword: securityForm.newPassword,
-    });
+    if (!account?.accessToken) {
+      setSecurityErrors((currentErrors) => ({
+        ...currentErrors,
+        currentPassword: 'Sign in again before requesting a password change code.',
+      }));
+      return;
+    }
+
+    try {
+      const enrollment = await requestChangePasswordOtp({
+        currentPassword: securityForm.currentPassword,
+        accessToken: account.accessToken,
+      });
+
+      navigation.navigate('OTP', {
+        email: account?.email,
+        maskedEmail: enrollment.maskedEmail,
+        otpPurpose: 'passwordChange',
+        enrollmentId: enrollment.enrollmentId,
+        currentPassword: securityForm.currentPassword,
+        pendingPassword: securityForm.newPassword,
+      });
+    } catch (requestError) {
+      const message =
+        requestError instanceof ApiError
+          ? requestError.message
+          : 'Unable to request a password change code right now.';
+      setSecurityErrors((currentErrors) => ({
+        ...currentErrors,
+        currentPassword: message,
+      }));
+    }
   };
 
   const renderScrollableContent = (contentStyle, children) => {
@@ -5751,7 +6021,7 @@ export default function Dashboard({
                 </View>
 
                 <Text style={styles.bookingSummaryNote}>
-                  Submitting creates a pending booking request. Staff confirmation, decline, or reschedule decisions remain separate later booking states.
+                  Submitting creates a reservation-payment hold. Complete the reservation fee first, then the slot moves into the confirmed booking flow and QR issuance.
                 </Text>
               </View>
 
@@ -5949,6 +6219,94 @@ export default function Dashboard({
                   </View>
                 </View>
               </View>
+
+              {selectedBookingDetail.reservationPayment ? (
+                <View style={styles.bookingSummaryCard}>
+                  <Text style={styles.bookingSummaryTitle}>Reservation Fee</Text>
+
+                  <View style={styles.bookingSummaryRow}>
+                    <Text style={styles.bookingSummaryLabel}>Payment status</Text>
+                    <Text style={styles.bookingSummaryValue}>
+                      {getReservationPaymentStatusLabel(selectedBookingDetail.reservationPayment)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.bookingSummaryRow}>
+                    <Text style={styles.bookingSummaryLabel}>Amount</Text>
+                    <Text style={styles.bookingSummaryValue}>
+                      {formatReservationAmount(selectedBookingDetail.reservationPayment.amountCents)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.bookingSummaryRow}>
+                    <Text style={styles.bookingSummaryLabel}>Expires</Text>
+                    <Text style={styles.bookingSummaryValue}>
+                      {selectedBookingDetail.reservationPayment.expiresAt
+                        ? formatDateTime(selectedBookingDetail.reservationPayment.expiresAt)
+                        : 'No expiry recorded'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.bookingSummaryRow}>
+                    <Text style={styles.bookingSummaryLabel}>Reference</Text>
+                    <Text style={styles.bookingSummaryValue}>
+                      {selectedBookingDetail.reservationPayment.referenceNumber || 'Generated after confirmation'}
+                    </Text>
+                  </View>
+
+                  {selectedBookingDetail.reservationPayment.failureReason ? (
+                    <Text style={styles.bookingSummaryNote}>
+                      {selectedBookingDetail.reservationPayment.failureReason}
+                    </Text>
+                  ) : selectedBookingDetail.reservationPayment.status === 'paid' ? (
+                    <Text style={styles.bookingSummaryNote}>
+                      Reservation fee received. This amount will be deducted from the final service invoice.
+                    </Text>
+                  ) : selectedBookingDetail.status === 'pending_payment' ? (
+                    <Text style={styles.bookingSummaryNote}>
+                      Complete the reservation fee first. The booking stays on hold and the QR code is not issued until payment is confirmed.
+                    </Text>
+                  ) : null}
+
+                  <View style={styles.bookingPagerActions}>
+                    {selectedBookingDetail.status === 'pending_payment' ? (
+                      <>
+                        <TouchableOpacity
+                          style={styles.bookingPagerButton}
+                          onPress={() => void handleRefreshReservationPaymentDetail(selectedBookingDetail)}
+                          activeOpacity={0.86}
+                        >
+                          <MaterialCommunityIcons name="refresh" size={16} color={colors.text} />
+                          <Text style={styles.bookingPagerButtonText}>Refresh</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.bookingPagerButton,
+                            !selectedBookingDetail.reservationPayment.providerCheckoutUrl &&
+                              styles.bookingPagerButtonDisabled,
+                          ]}
+                          onPress={() => void handleOpenReservationPayment(selectedBookingDetail)}
+                          activeOpacity={
+                            selectedBookingDetail.reservationPayment.providerCheckoutUrl ? 0.86 : 1
+                          }
+                          disabled={!selectedBookingDetail.reservationPayment.providerCheckoutUrl}
+                        >
+                          <MaterialCommunityIcons name="open-in-new" size={16} color={colors.text} />
+                          <Text style={styles.bookingPagerButtonText}>Continue Payment</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.bookingPagerButton}
+                          onPress={() => void handleRetryReservationPayment(selectedBookingDetail)}
+                          activeOpacity={0.86}
+                        >
+                          <MaterialCommunityIcons name="restore" size={16} color={colors.text} />
+                          <Text style={styles.bookingPagerButtonText}>Retry Session</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : null}
+                  </View>
+                </View>
+              ) : null}
 
               <View style={styles.trackingProgressCard}>
                 <Text style={styles.bookingSectionLabel}>Booking Status</Text>
@@ -6200,9 +6558,13 @@ export default function Dashboard({
       latestCustomerBooking?.status === 'declined' ||
       latestCustomerBooking?.status === 'cancelled'
         ? '100%'
+        : latestCustomerBooking?.status === 'in_service'
+          ? '80%'
         : latestCustomerBooking?.status === 'confirmed' ||
             latestCustomerBooking?.status === 'rescheduled'
           ? '55%'
+          : latestCustomerBooking?.status === 'pending_payment'
+            ? '20%'
           : latestCustomerBooking
             ? '25%'
             : '0%';
@@ -6425,9 +6787,18 @@ export default function Dashboard({
         </TouchableOpacity>
       </View>
 
-      {recentHomeServices.map((item) => (
-        <HomeServiceRow key={item.key} item={item} isCompact={isCompactPhone} />
-      ))}
+      {recentHomeServices.length ? (
+        recentHomeServices.map((item) => (
+          <HomeServiceRow key={item.key} item={item} isCompact={isCompactPhone} />
+        ))
+      ) : (
+        <View style={styles.timelineStateCard}>
+          <Text style={styles.timelineStateTitle}>No completed service yet</Text>
+          <Text style={styles.timelineStateText}>
+            Your finalized workshop history will appear here after your first completed service.
+          </Text>
+        </View>
+      )}
 
       <View style={styles.homeOfferCard}>
         <Text style={styles.homeOfferEyebrow}>{featuredRewardEyebrow}</Text>

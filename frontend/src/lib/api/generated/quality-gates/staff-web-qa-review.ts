@@ -1,7 +1,8 @@
 import type { JobOrderQualityGateResponse, QualityGateFindingResponse } from './responses';
 
-export type StaffQualityGateReviewRole = 'technician' | 'service_adviser' | 'super_admin';
+export type StaffQualityGateReviewRole = 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
 export type StaffQualityGateOverrideRole = 'super_admin';
+export type StaffQualityGateVerdictRole = 'head_technician';
 
 export type StaffQualityGateReviewState =
   | 'qa_ready'
@@ -20,6 +21,14 @@ export type StaffQualityGateOverrideState =
   | 'override_not_blocked'
   | 'override_not_found'
   | 'override_failed';
+
+export type StaffQualityGateVerdictState =
+  | 'verdict_ready'
+  | 'verdict_submitting'
+  | 'verdict_saved'
+  | 'verdict_forbidden_role'
+  | 'verdict_not_found'
+  | 'verdict_failed';
 
 export type QualityGateReleaseState =
   | 'release_unavailable'
@@ -44,6 +53,10 @@ export const staffQualityGateReviewRoles: StaffQualityGateReviewRole[] = [
 
 export const staffQualityGateOverrideRoles: StaffQualityGateOverrideRole[] = [
   'super_admin',
+];
+
+export const staffQualityGateVerdictRoles: StaffQualityGateVerdictRole[] = [
+  'head_technician',
 ];
 
 export const staffQualityGateReviewRules: StaffQualityGateRule<StaffQualityGateReviewState>[] = [
@@ -114,11 +127,14 @@ export const canStaffReadQualityGate = (role?: string | null): role is StaffQual
 export const canStaffOverrideQualityGate = (role?: string | null): role is StaffQualityGateOverrideRole =>
   staffQualityGateOverrideRoles.includes(role as StaffQualityGateOverrideRole);
 
+export const canStaffRecordQualityGateVerdict = (role?: string | null): role is StaffQualityGateVerdictRole =>
+  staffQualityGateVerdictRoles.includes(role as StaffQualityGateVerdictRole);
+
 export const isQualityGateReleaseAllowed = (gate?: JobOrderQualityGateResponse | null) =>
   gate?.status === 'passed' || gate?.status === 'overridden';
 
 export const isQualityGateReleaseBlocked = (gate?: JobOrderQualityGateResponse | null) =>
-  gate?.status === 'pending' || gate?.status === 'blocked';
+  gate?.status === 'pending_review' || gate?.status === 'blocked';
 
 export const getQualityGateReleaseState = (
   gate?: JobOrderQualityGateResponse | null,
@@ -127,7 +143,7 @@ export const getQualityGateReleaseState = (
     return 'release_unavailable';
   }
 
-  if (gate.status === 'pending') {
+  if (gate.status === 'pending_review') {
     return 'release_pending_audit';
   }
 

@@ -24,6 +24,7 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
     licensePlate: profile?.licensePlate || '',
     vehicleMake: profile?.vehicleMake || '',
     vehicleModel: profile?.vehicleModel || '',
+    vehicleColor: profile?.vehicleColor || '',
     vehicleYear:
       profile?.vehicleYear !== null && profile?.vehicleYear !== undefined
         ? String(profile.vehicleYear)
@@ -80,6 +81,7 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
       licensePlate: form.licensePlate.trim().toUpperCase(),
       vehicleMake: form.vehicleMake.trim(),
       vehicleModel: form.vehicleModel.trim(),
+      vehicleColor: form.vehicleColor.trim(),
       vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
       vehicleDisplayName: formatVehicleDisplayName({
         vehicleMake: form.vehicleMake,
@@ -233,6 +235,19 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
         error={errors.vehicleModel}
         isFocused={focusedField === 'vehicleModel'}
         onFocus={() => setFocusedField('vehicleModel')}
+        onBlur={() => setFocusedField('')}
+        editable={isEditing}
+      />
+
+      <FormField
+        label="Vehicle Color"
+        value={form.vehicleColor}
+        onChangeText={(value) => handleFieldChange('vehicleColor', value)}
+        placeholder="Silver"
+        autoCapitalize="words"
+        error={errors.vehicleColor}
+        isFocused={focusedField === 'vehicleColor'}
+        onFocus={() => setFocusedField('vehicleColor')}
         onBlur={() => setFocusedField('')}
         editable={isEditing}
       />

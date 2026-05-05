@@ -64,7 +64,12 @@ type EnqueueAuthOtpDeliveryInput = {
   userId: string;
   email: string;
   otp: string;
-  activationContext: 'customer_signup' | 'staff_activation' | 'account_delete';
+  activationContext:
+    | 'customer_signup'
+    | 'staff_activation'
+    | 'account_delete'
+    | 'forgot_password'
+    | 'change_password';
   dedupeKey: string;
   sourceId: string;
   scheduledFor?: Date;
@@ -198,6 +203,16 @@ export class NotificationsService {
               title: 'Account deletion code',
               message: `Your AUTOCARE account deletion code is ${payload.otp}. It expires soon.`,
             }
+          : payload.activationContext === 'forgot_password'
+            ? {
+                title: 'Password reset code',
+                message: `Your AUTOCARE password reset code is ${payload.otp}. It expires soon.`,
+              }
+            : payload.activationContext === 'change_password'
+              ? {
+                  title: 'Change password code',
+                  message: `Your AUTOCARE change password code is ${payload.otp}. It expires soon.`,
+                }
           : {
               title: 'Account verification code',
               message: `Your AUTOCARE verification code is ${payload.otp}. It expires soon.`,
@@ -387,9 +402,12 @@ export class NotificationsService {
 
     const categoryEnabledMap: Record<NotificationCategory, boolean> = {
       booking_reminder: payload.preferences.bookingRemindersEnabled,
+      booking_payment: payload.preferences.bookingRemindersEnabled,
       insurance_update: payload.preferences.insuranceUpdatesEnabled,
       back_job_update: payload.preferences.serviceFollowUpEnabled,
       invoice_aging: payload.preferences.invoiceRemindersEnabled,
+      invoice_document: payload.preferences.invoiceRemindersEnabled,
+      qa_review: true,
       service_follow_up: payload.preferences.serviceFollowUpEnabled,
       auth_otp: true,
     };

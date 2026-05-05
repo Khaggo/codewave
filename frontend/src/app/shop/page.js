@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import PortalLink from '@/components/PortalLink'
 import EcommerceUnavailableCard from '@/components/EcommerceUnavailableCard'
 import { isEcommerceEnabled } from '@/lib/runtimeFlags'
 
@@ -6,7 +6,7 @@ export const metadata = { title: 'Shop & Inventory' }
 
 export default function ShopPage() {
   if (!isEcommerceEnabled()) {
-    return <EcommerceUnavailableCard title="Shop & Inventory is offline on the cheapest deployment" />
+    return <EcommerceUnavailableCard title="Shop & Inventory is waiting for the ecommerce runtime" />
   }
 
   return (
@@ -21,14 +21,14 @@ export default function ShopPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Link href="/admin/catalog" className="card p-5 transition hover:bg-surface-hover">
+        <PortalLink href="/admin/catalog" className="card p-5 transition hover:bg-surface-hover">
           <p className="text-sm font-bold text-ink-primary">Catalog Admin</p>
           <p className="mt-1 text-xs leading-5 text-ink-muted">Create and edit sellable catalog items.</p>
-        </Link>
-        <Link href="/admin/inventory" className="card p-5 transition hover:bg-surface-hover">
+        </PortalLink>
+        <PortalLink href="/admin/inventory" className="card p-5 transition hover:bg-surface-hover">
           <p className="text-sm font-bold text-ink-primary">Inventory Admin</p>
           <p className="mt-1 text-xs leading-5 text-ink-muted">Review stock visibility and inventory status.</p>
-        </Link>
+        </PortalLink>
       </div>
     </div>
   )

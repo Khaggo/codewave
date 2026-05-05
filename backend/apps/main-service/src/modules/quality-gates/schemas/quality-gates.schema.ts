@@ -16,10 +16,22 @@ import { userRoleEnum, users } from '@main-modules/users/schemas/users.schema';
 import { AiWorkerJobMetadata } from '@shared/queue/ai-worker.types';
 
 export const qualityGateStatusEnum = pgEnum('quality_gate_status', [
-  'pending',
+  'pending_review',
   'passed',
   'blocked',
   'overridden',
+]);
+
+export const qualityPreCheckStatusEnum = pgEnum('quality_pre_check_status', [
+  'pending',
+  'completed',
+  'unavailable',
+]);
+
+export const qualityGateReviewerVerdictEnum = pgEnum('quality_gate_reviewer_verdict', [
+  'pending',
+  'passed',
+  'blocked',
 ]);
 
 export const qualityGateFindingGateEnum = pgEnum('quality_gate_finding_gate', [
@@ -51,6 +63,18 @@ export type QualityGateFindingProvenance = {
   riskContribution?: number;
 };
 
+export type QualityPreCheckSummary = {
+  completedWorkItemCount: number;
+  totalWorkItemCount: number;
+  attachedPhotoCount: number;
+  evidenceGapCount: number;
+  semanticMatchScore: number | null;
+  evidenceGaps: string[];
+  inspectionDiscrepancies: string[];
+  automatedRecommendation: 'ready_for_review' | 'manual_review_required';
+  infrastructureState: 'available' | 'pre_check_unavailable';
+};
+
 export const jobOrderQualityGates = pgTable(
   'job_order_quality_gates',
   {
@@ -58,9 +82,15 @@ export const jobOrderQualityGates = pgTable(
     jobOrderId: uuid('job_order_id')
       .notNull()
       .references(() => jobOrders.id, { onDelete: 'cascade' }),
-    status: qualityGateStatusEnum('status').notNull().default('pending'),
+    status: qualityGateStatusEnum('status').notNull().default('pending_review'),
     riskScore: integer('risk_score').notNull().default(0),
     blockingReason: text('blocking_reason'),
+    preCheckStatus: qualityPreCheckStatusEnum('pre_check_status').notNull().default('pending'),
+    preCheckSummary: jsonb('pre_check_summary').$type<QualityPreCheckSummary | null>(),
+    headTechnicianUserId: uuid('head_technician_user_id').references(() => users.id, { onDelete: 'set null' }),
+    reviewerVerdict: qualityGateReviewerVerdictEnum('reviewer_verdict').notNull().default('pending'),
+    reviewerNote: text('reviewer_note'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     auditJob: jsonb('audit_job').$type<AiWorkerJobMetadata | null>(),
     lastAuditRequestedAt: timestamp('last_audit_requested_at', { withTimezone: true }).notNull().defaultNow(),
     lastAuditCompletedAt: timestamp('last_audit_completed_at', { withTimezone: true }),
@@ -102,6 +132,10 @@ export const jobOrderQualityGatesRelations = relations(jobOrderQualityGates, ({ 
   jobOrder: one(jobOrders, {
     fields: [jobOrderQualityGates.jobOrderId],
     references: [jobOrders.id],
+  }),
+  headTechnician: one(users, {
+    fields: [jobOrderQualityGates.headTechnicianUserId],
+    references: [users.id],
   }),
   findings: many(qualityGateFindings),
   overrides: many(qualityGateOverrides),

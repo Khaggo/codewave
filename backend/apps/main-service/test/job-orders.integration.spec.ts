@@ -374,6 +374,139 @@ describe('JobOrdersController integration', () => {
     }
   });
 
+  it('lets advisers replace persisted assignments while rejecting technician reassignment and operational clears', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      const adviser = await seedAuthUser({
+        email: 'adviser.reassign@example.com',
+        password: 'password123',
+        firstName: 'Rina',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-REASSIGN',
+      });
+      const technicianA = await seedAuthUser({
+        email: 'technician.reassign.a@example.com',
+        password: 'password123',
+        firstName: 'Tess',
+        lastName: 'Tech A',
+        role: 'technician',
+        staffCode: 'TECH-REASSIGN-A',
+      });
+      const technicianB = await seedAuthUser({
+        email: 'technician.reassign.b@example.com',
+        password: 'password123',
+        firstName: 'Trent',
+        lastName: 'Tech B',
+        role: 'technician',
+        staffCode: 'TECH-REASSIGN-B',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+      expect(adviserLogin.status).toBe(200);
+
+      const technicianLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: technicianA.email,
+        password: 'password123',
+      });
+      expect(technicianLogin.status).toBe(200);
+
+      const servicesResponse = await request(app.getHttpServer()).get('/api/services');
+      const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
+
+      const customerResponse = await request(app.getHttpServer()).post('/api/users').send({
+        email: 'joborder.reassign.customer@example.com',
+        firstName: 'Robin',
+        lastName: 'Customer',
+      });
+      expect(customerResponse.status).toBe(201);
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customerResponse.body.id,
+        plateNumber: 'JOB207',
+        make: 'Honda',
+        model: 'Civic',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
+        userId: customerResponse.body.id,
+        vehicleId: vehicleResponse.body.id,
+        timeSlotId: timeSlotsResponse.body[0].id,
+        scheduledDate: '2026-05-08',
+        serviceIds: [servicesResponse.body[0].id],
+      });
+      expect(bookingResponse.status).toBe(201);
+
+      const confirmBookingResponse = await request(app.getHttpServer())
+        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'confirmed',
+        });
+      expect(confirmBookingResponse.status).toBe(200);
+
+      const createDraftResponse = await request(app.getHttpServer())
+        .post('/api/job-orders')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          sourceType: 'booking',
+          sourceId: bookingResponse.body.id,
+          customerUserId: customerResponse.body.id,
+          vehicleId: vehicleResponse.body.id,
+          serviceAdviserUserId: adviser.id,
+          serviceAdviserCode: adviser.staffCode,
+          notes: 'Create as draft for later reassignment.',
+          items: [
+            {
+              name: 'Inspect engine mounts',
+            },
+          ],
+          assignedTechnicianIds: [],
+        });
+      expect(createDraftResponse.status).toBe(201);
+      expect(createDraftResponse.body.status).toBe('draft');
+      expect(createDraftResponse.body.assignments).toEqual([]);
+
+      const replaceAssignmentsResponse = await request(app.getHttpServer())
+        .patch(`/api/job-orders/${createDraftResponse.body.id}/assignments`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          assignedTechnicianIds: [technicianB.id],
+        });
+      expect(replaceAssignmentsResponse.status).toBe(200);
+      expect(replaceAssignmentsResponse.body.status).toBe('assigned');
+      expect(replaceAssignmentsResponse.body.assignments).toEqual([
+        expect.objectContaining({
+          technicianUserId: technicianB.id,
+        }),
+      ]);
+
+      const technicianForbiddenResponse = await request(app.getHttpServer())
+        .patch(`/api/job-orders/${createDraftResponse.body.id}/assignments`)
+        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .send({
+          assignedTechnicianIds: [technicianA.id],
+        });
+      expect(technicianForbiddenResponse.status).toBe(403);
+
+      const clearAssignmentsResponse = await request(app.getHttpServer())
+        .patch(`/api/job-orders/${createDraftResponse.body.id}/assignments`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          assignedTechnicianIds: [],
+        });
+      expect(clearAssignmentsResponse.status).toBe(409);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('rejects unauthorized access and duplicate booking job orders', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 

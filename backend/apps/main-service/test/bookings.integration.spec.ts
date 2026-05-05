@@ -316,12 +316,21 @@ describe('BookingsController integration', () => {
           status: 'confirmed',
         });
 
-      await request(app.getHttpServer())
+      const directCompletionAttempt = await request(app.getHttpServer())
         .patch(`/api/bookings/${firstBooking.body.id}/status`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'completed',
         });
+      expect(directCompletionAttempt.status).toBe(409);
+
+      const workshopHandoff = await request(app.getHttpServer())
+        .patch(`/api/bookings/${firstBooking.body.id}/status`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'in_service',
+        });
+      expect(workshopHandoff.status).toBe(200);
 
       const invalidTransition = await request(app.getHttpServer())
         .patch(`/api/bookings/${firstBooking.body.id}/status`)

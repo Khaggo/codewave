@@ -246,7 +246,7 @@ export default function ShopCatalogSection({
           <ActivityIndicator color={colors.primary} />
           <Text style={styles.stateTitle}>Loading catalog</Text>
           <Text style={styles.stateText}>
-            Pulling categories and active products from ecommerce-service.
+            Pulling the latest categories and purchasable products from the live store catalog.
           </Text>
         </View>
       ) : null}
@@ -256,7 +256,7 @@ export default function ShopCatalogSection({
           <MaterialCommunityIcons name="server-network-off" size={34} color="#FFB86B" />
           <Text style={styles.stateTitle}>Catalog service unavailable</Text>
           <Text style={styles.stateText}>
-            {errorMessage || 'Start ecommerce-service on port 3001, then refresh the catalog.'}
+            {errorMessage || 'We could not reach the store catalog right now. Check the connection and try refreshing again.'}
           </Text>
           <TouchableOpacity activeOpacity={0.86} onPress={onRefresh} style={styles.retryButton}>
             <Text style={styles.retryButtonText}>Retry catalog</Text>

@@ -1,13 +1,14 @@
 import { authRoutes } from './requests';
 import type { ApiErrorResponse, RouteContract } from '../shared';
 
-export type StaffPortalRole = 'technician' | 'service_adviser' | 'super_admin';
+export type StaffPortalRole = 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
 
 export type StaffPortalAccessState =
   | 'unauthenticated'
   | 'login_submitting'
   | 'session_restoring'
   | 'technician_session_active'
+  | 'head_technician_session_active'
   | 'service_adviser_session_active'
   | 'super_admin_session_active'
   | 'customer_blocked'
@@ -32,10 +33,11 @@ export interface StaffPortalNavigationRule {
   href: string;
   label: string;
   visibleTo: StaffPortalRole[];
+  group: 'Overview' | 'Front Desk Flow' | 'Customer Records' | 'Catalog & Stock' | 'Admin';
   notes: string;
 }
 
-export const staffPortalRoles: StaffPortalRole[] = ['technician', 'service_adviser', 'super_admin'];
+export const staffPortalRoles: StaffPortalRole[] = ['technician', 'head_technician', 'service_adviser', 'super_admin'];
 
 export const staffPortalSessionRoutes: RouteContract[] = [
   authRoutes.login,
@@ -48,14 +50,16 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     key: 'dashboard',
     href: '/',
     label: 'Dashboard',
-    visibleTo: ['technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
+    group: 'Overview',
     notes: 'Shared staff landing surface after a valid session is established.',
   },
   {
     key: 'vehicle-records',
     href: '/vehicles',
     label: 'Vehicle Records',
-    visibleTo: ['technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
+    group: 'Customer Records',
     notes: 'All staff roles may view operational vehicle context needed for assigned work and service coordination.',
   },
   {
@@ -63,13 +67,15 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/bookings',
     label: 'Bookings',
     visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Front Desk Flow',
     notes: 'Booking schedule and queue visibility stays adviser/admin only.',
   },
   {
     key: 'digital-intake-inspections',
     href: '/admin/intake-inspections',
     label: 'Intake & Inspection',
-    visibleTo: ['technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
+    group: 'Front Desk Flow',
     notes:
       'Vehicle-scoped inspection capture and history are visible to all active staff roles; booking and QA ownership remain separate.',
   },
@@ -77,7 +83,8 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     key: 'back-jobs',
     href: '/backjobs',
     label: 'Back-Jobs',
-    visibleTo: ['service_adviser', 'super_admin'],
+    visibleTo: ['head_technician', 'service_adviser', 'super_admin'],
+    group: 'Customer Records',
     notes: 'Back-job review and release coordination remain adviser/admin workflows.',
   },
   {
@@ -85,6 +92,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/admin/customers',
     label: 'Customers & Vehicles',
     visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Customer Records',
     notes: 'Staff can review customer profile and vehicle context without exposing customer self-service flows on web.',
   },
   {
@@ -92,6 +100,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/timeline',
     label: 'Service Timeline',
     visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Customer Records',
     notes: 'Reviewed customer-safe timeline visibility remains adviser/admin owned in this phase.',
   },
   {
@@ -99,6 +108,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/insurance',
     label: 'Insurance',
     visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Customer Records',
     notes: 'Insurance review remains adviser/admin only.',
   },
   {
@@ -106,6 +116,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/admin/invoices',
     label: 'Invoices & Orders',
     visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Front Desk Flow',
     notes:
       'Service invoice lookup, ecommerce known-order lookup, and invoice-aging visibility remain adviser/admin finance surfaces.',
   },
@@ -114,6 +125,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/shop',
     label: 'Inventory',
     visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Catalog & Stock',
     notes: 'Current inventory visibility is operational and backoffice-facing, not technician-facing.',
   },
   {
@@ -121,6 +133,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/loyalty',
     label: 'Loyalty Management',
     visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Customer Records',
     notes: 'Customer loyalty administration remains adviser/admin visible.',
   },
   {
@@ -128,6 +141,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/admin/qa-audit',
     label: 'QA Audit',
     visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Front Desk Flow',
     notes: 'Quality-gate review belongs to advisers and super admins, while override authority remains super-admin controlled.',
   },
   {
@@ -135,6 +149,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/admin/summaries',
     label: 'Analytics & Summaries',
     visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Admin',
     notes:
       'Admin analytics plus lifecycle summary review remain adviser/admin visible from the shared summaries hub.',
   },
@@ -143,13 +158,23 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/admin/users',
     label: 'User Administration',
     visibleTo: ['super_admin'],
+    group: 'Admin',
     notes: 'Super admins provision staff, mechanic, technician, and admin identities from this protected page.',
+  },
+  {
+    key: 'service-management',
+    href: '/admin/services',
+    label: 'Service Management',
+    visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Catalog & Stock',
+    notes: 'Booking service categories and customer-bookable service offerings are managed here.',
   },
   {
     key: 'catalog-admin',
     href: '/admin/catalog',
     label: 'Catalog Admin',
     visibleTo: ['super_admin'],
+    group: 'Catalog & Stock',
     notes: 'Catalog administration is a super-admin-only web surface in the current phase.',
   },
   {
@@ -157,6 +182,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/admin/inventory',
     label: 'Inventory Admin',
     visibleTo: ['super_admin'],
+    group: 'Catalog & Stock',
     notes: 'Inventory administration is a super-admin-only web surface in the current phase.',
   },
   {
@@ -164,13 +190,15 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     href: '/admin/appointments',
     label: 'Appointments Admin',
     visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Admin',
     notes: 'Appointment oversight is adviser/admin visible.',
   },
   {
     key: 'job-orders-admin',
     href: '/admin/job-orders',
     label: 'Job Orders',
-    visibleTo: ['technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
+    group: 'Front Desk Flow',
     notes:
       'Technicians may load assigned execution work while booking handoff creation remains adviser/admin owned inside the workbench.',
   },
@@ -178,7 +206,8 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     key: 'settings',
     href: '/settings',
     label: 'Settings',
-    visibleTo: ['technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
+    group: 'Admin',
     notes: 'All staff roles may manage their own web-session settings.',
   },
 ];
@@ -195,6 +224,12 @@ export const staffPortalRoleCapabilities: Record<StaffPortalRole, string[]> = {
     'capture and read vehicle-scoped inspection evidence',
     'load assigned job-order execution work',
     'access assigned-work dashboard states',
+  ],
+  head_technician: [
+    'all technician capabilities',
+    'review pre-check evidence summaries for ready-for-review job orders',
+    'record QA pass or block verdicts after physical inspection',
+    'return blocked work to technician remediation with explicit review notes',
   ],
   service_adviser: [
     'all technician capabilities',

@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ClientsModule, Transport } from '@nestjs/microservices';
+import { ClientProxyFactory, Transport } from '@nestjs/microservices';
 
 import { CommerceEventsModule } from './commerce-events.module';
 import { AUTOCARE_EVENTS_CLIENT } from './events.constants';
@@ -9,24 +9,31 @@ import { AUTOCARE_EVENTS_CLIENT } from './events.constants';
 @Module({
   imports: [
     CommerceEventsModule,
-    ClientsModule.registerAsync([
-      {
-        name: AUTOCARE_EVENTS_CLIENT,
-        imports: [ConfigModule],
-        inject: [ConfigService],
-        useFactory: (configService: ConfigService) => ({
+  ],
+  providers: [
+    {
+      provide: AUTOCARE_EVENTS_CLIENT,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const url = configService.get<string>('rabbitmq.url');
+
+        if (!url) {
+          return null;
+        }
+
+        return ClientProxyFactory.create({
           transport: Transport.RMQ,
           options: {
-            urls: [configService.getOrThrow<string>('rabbitmq.url')],
-            queue: configService.getOrThrow<string>('rabbitmq.queue'),
+            urls: [url],
+            queue: configService.get<string>('rabbitmq.queue', 'autocare_events'),
             queueOptions: {
               durable: true,
             },
           },
-        }),
+        });
       },
-    ]),
+    },
   ],
-  exports: [ClientsModule, CommerceEventsModule],
+  exports: [AUTOCARE_EVENTS_CLIENT, CommerceEventsModule],
 })
 export class EventsModule {}

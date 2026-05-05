@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import {
   ApiBearerAuth,
@@ -32,6 +32,46 @@ import { AnalyticsService } from '../services/analytics.service';
 })
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
+
+  @Post('refresh')
+  @ApiOperation({ summary: 'Rebuild the analytics snapshots from live source records.' })
+  @ApiOkResponse({
+    description: 'Refresh job metadata and the latest section timestamps after the rebuild completes.',
+    schema: {
+      type: 'object',
+      properties: {
+        refreshJob: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            status: { type: 'string', example: 'completed' },
+            triggerSource: { type: 'string', example: 'manual_refresh' },
+            snapshotTypes: {
+              type: 'array',
+              items: { type: 'string', example: 'dashboard' },
+            },
+            sourceCounts: {
+              type: 'object',
+              additionalProperties: { type: 'number' },
+            },
+            startedAt: { type: 'string', format: 'date-time' },
+            completedAt: { type: 'string', format: 'date-time', nullable: true },
+          },
+        },
+        sectionTimestamps: {
+          type: 'object',
+          additionalProperties: {
+            type: 'string',
+            format: 'date-time',
+            nullable: true,
+          },
+        },
+      },
+    },
+  })
+  refresh(@Req() request: Request) {
+    return this.analyticsService.triggerManualRefresh(request.user as { userId: string; role: string });
+  }
 
   @Get('dashboard')
   @ApiOperation({ summary: 'Read the admin dashboard overview from the rebuildable analytics snapshot.' })

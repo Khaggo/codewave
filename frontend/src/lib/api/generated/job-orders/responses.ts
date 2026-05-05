@@ -48,12 +48,22 @@ export interface JobOrderInvoiceRecordResponse {
   serviceAdviserCode: string;
   finalizedByUserId: string;
   paymentStatus: 'pending_payment' | 'paid';
+  currencyCode: string;
+  subtotalAmountCents: number;
+  laborAmountCents: number;
+  partsAmountCents: number;
+  reservationFeeDeductionCents: number;
+  totalAmountCents: number;
   amountPaidCents: number | null;
   paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'other' | null;
+  officialReceiptReference: string;
   paymentReference: string | null;
   recordedByUserId: string | null;
   paidAt: string | null;
   summary?: string | null;
+  pdfGeneratedAt?: string | null;
+  pdfEmailSentAt?: string | null;
+  pdfEmailError?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -14,6 +14,9 @@ import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
 import {
   bookingServices,
+  bookingPaymentPolicies,
+  bookingReservationPayments,
+  bookingReservationPaymentStatusEnum,
   bookings,
   bookingStatusHistory,
   bookingStatusEnum,
@@ -23,6 +26,8 @@ import {
 } from '../schemas/bookings.schema';
 
 type BookingStatus = (typeof bookingStatusEnum.enumValues)[number];
+type BookingReservationPaymentStatus =
+  (typeof bookingReservationPaymentStatusEnum.enumValues)[number];
 type UpdateBookingStatusPersistenceInput = UpdateBookingStatusDto & {
   changedByUserId?: string | null;
 };
@@ -161,7 +166,10 @@ export class BookingsRepository extends BaseRepository {
     const filters = [
       eq(bookings.timeSlotId, timeSlotId),
       eq(bookings.scheduledDate, scheduledDate),
-      inArray(bookings.status, ['pending', 'confirmed', 'rescheduled'] as BookingStatus[]),
+      inArray(
+        bookings.status,
+        ['pending', 'pending_payment', 'confirmed', 'in_service', 'rescheduled'] as BookingStatus[],
+      ),
     ];
 
     if (excludeBookingId) {
@@ -213,7 +221,7 @@ export class BookingsRepository extends BaseRepository {
         vehicleId: createBookingDto.vehicleId,
         timeSlotId: createBookingDto.timeSlotId,
         scheduledDate: createBookingDto.scheduledDate,
-        status: 'pending',
+        status: 'pending_payment',
         notes: createBookingDto.notes ?? null,
       })
       .returning();
@@ -228,8 +236,8 @@ export class BookingsRepository extends BaseRepository {
     await this.db.insert(bookingStatusHistory).values({
       bookingId: createdBooking.id,
       previousStatus: null,
-      nextStatus: 'pending',
-      reason: 'Booking created',
+      nextStatus: 'pending_payment',
+      reason: 'Booking created and awaiting reservation payment',
       changedByUserId: createBookingDto.userId,
     });
 
@@ -252,6 +260,7 @@ export class BookingsRepository extends BaseRepository {
             service: true,
           },
         },
+        reservationPayment: true,
         statusHistory: {
           orderBy: desc(bookingStatusHistory.changedAt),
         },
@@ -277,6 +286,7 @@ export class BookingsRepository extends BaseRepository {
             service: true,
           },
         },
+        reservationPayment: true,
         statusHistory: {
           orderBy: desc(bookingStatusHistory.changedAt),
         },
@@ -300,6 +310,7 @@ export class BookingsRepository extends BaseRepository {
             service: true,
           },
         },
+        reservationPayment: true,
         statusHistory: {
           orderBy: desc(bookingStatusHistory.changedAt),
         },
@@ -340,6 +351,7 @@ export class BookingsRepository extends BaseRepository {
             service: true,
           },
         },
+        reservationPayment: true,
         statusHistory: {
           orderBy: desc(bookingStatusHistory.changedAt),
         },
@@ -390,6 +402,7 @@ export class BookingsRepository extends BaseRepository {
             service: true,
           },
         },
+        reservationPayment: true,
         statusHistory: {
           orderBy: desc(bookingStatusHistory.changedAt),
         },
@@ -408,6 +421,7 @@ export class BookingsRepository extends BaseRepository {
             service: true,
           },
         },
+        reservationPayment: true,
         statusHistory: {
           orderBy: desc(bookingStatusHistory.changedAt),
         },
@@ -480,5 +494,133 @@ export class BookingsRepository extends BaseRepository {
     });
 
     return this.findById(id);
+  }
+
+  async getOrCreatePaymentPolicy() {
+    const existingPolicy = await this.db.query.bookingPaymentPolicies.findFirst({
+      orderBy: desc(bookingPaymentPolicies.updatedAt),
+    });
+
+    if (existingPolicy) {
+      return existingPolicy;
+    }
+
+    const [createdPolicy] = await this.db
+      .insert(bookingPaymentPolicies)
+      .values({})
+      .returning();
+
+    return this.assertFound(createdPolicy, 'Booking payment policy not found');
+  }
+
+  async updatePaymentPolicy(payload: {
+    reservationFeeAmountCents?: number;
+    currencyCode?: string;
+    onlineExpiryWindowMinutes?: number;
+    counterExpiryWindowMinutes?: number;
+  }) {
+    const currentPolicy = await this.getOrCreatePaymentPolicy();
+
+    const [updatedPolicy] = await this.db
+      .update(bookingPaymentPolicies)
+      .set({
+        reservationFeeAmountCents:
+          payload.reservationFeeAmountCents ?? currentPolicy.reservationFeeAmountCents,
+        currencyCode: payload.currencyCode ?? currentPolicy.currencyCode,
+        onlineExpiryWindowMinutes:
+          payload.onlineExpiryWindowMinutes ?? currentPolicy.onlineExpiryWindowMinutes,
+        counterExpiryWindowMinutes:
+          payload.counterExpiryWindowMinutes ?? currentPolicy.counterExpiryWindowMinutes,
+        updatedAt: new Date(),
+      })
+      .where(eq(bookingPaymentPolicies.id, currentPolicy.id))
+      .returning();
+
+    return this.assertFound(updatedPolicy, 'Booking payment policy not found');
+  }
+
+  async createOrReplaceReservationPayment(payload: {
+    bookingId: string;
+    provider: 'paymongo' | 'manual_counter';
+    status: BookingReservationPaymentStatus;
+    amountCents: number;
+    currencyCode: string;
+    providerPaymentId?: string | null;
+    providerCheckoutUrl?: string | null;
+    referenceNumber?: string | null;
+    failureReason?: string | null;
+    expiresAt?: Date | null;
+    paidAt?: Date | null;
+    refundedAt?: Date | null;
+    confirmedByUserId?: string | null;
+    refundStatus?: 'not_required' | 'pending_review' | 'processing' | 'completed';
+    auditMetadata?: string | null;
+  }) {
+    const existing = await this.db.query.bookingReservationPayments.findFirst({
+      where: eq(bookingReservationPayments.bookingId, payload.bookingId),
+    });
+
+    if (existing) {
+      const [updated] = await this.db
+        .update(bookingReservationPayments)
+        .set({
+          provider: payload.provider,
+          status: payload.status,
+          amountCents: payload.amountCents,
+          currencyCode: payload.currencyCode,
+          providerPaymentId: payload.providerPaymentId ?? null,
+          providerCheckoutUrl: payload.providerCheckoutUrl ?? null,
+          referenceNumber: payload.referenceNumber ?? null,
+          failureReason: payload.failureReason ?? null,
+          expiresAt: payload.expiresAt ?? null,
+          paidAt: payload.paidAt ?? null,
+          refundedAt: payload.refundedAt ?? null,
+          confirmedByUserId: payload.confirmedByUserId ?? null,
+          refundStatus: payload.refundStatus ?? existing.refundStatus,
+          auditMetadata: payload.auditMetadata ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(bookingReservationPayments.id, existing.id))
+        .returning();
+
+      return this.assertFound(updated, 'Booking reservation payment not found');
+    }
+
+    const [created] = await this.db
+      .insert(bookingReservationPayments)
+      .values({
+        bookingId: payload.bookingId,
+        provider: payload.provider,
+        status: payload.status,
+        amountCents: payload.amountCents,
+        currencyCode: payload.currencyCode,
+        providerPaymentId: payload.providerPaymentId ?? null,
+        providerCheckoutUrl: payload.providerCheckoutUrl ?? null,
+        referenceNumber: payload.referenceNumber ?? null,
+        failureReason: payload.failureReason ?? null,
+        expiresAt: payload.expiresAt ?? null,
+        paidAt: payload.paidAt ?? null,
+        refundedAt: payload.refundedAt ?? null,
+        confirmedByUserId: payload.confirmedByUserId ?? null,
+        refundStatus: payload.refundStatus ?? 'not_required',
+        auditMetadata: payload.auditMetadata ?? null,
+      })
+      .returning();
+
+    return this.assertFound(created, 'Booking reservation payment not found');
+  }
+
+  async updateBookingQrCode(bookingId: string, qrCodeToken: string) {
+    const [updatedBooking] = await this.db
+      .update(bookings)
+      .set({
+        qrCodeToken,
+        qrCodeIssuedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(bookings.id, bookingId))
+      .returning();
+
+    return this.assertFound(updatedBooking, 'Booking not found');
   }
 }

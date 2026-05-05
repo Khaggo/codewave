@@ -16,6 +16,12 @@ const nodemailer = require('nodemailer') as {
       to: string;
       subject: string;
       text: string;
+      html?: string;
+      attachments?: Array<{
+        filename: string;
+        content: Buffer;
+        contentType?: string;
+      }>;
     }) => Promise<{ messageId?: string | null }>;
   };
 };
@@ -24,6 +30,12 @@ type SendMailInput = {
   to: string;
   subject: string;
   text: string;
+  html?: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer;
+    contentType?: string;
+  }>;
 };
 
 @Injectable()
@@ -65,6 +77,8 @@ export class SmtpMailService {
       to: payload.to,
       subject: payload.subject,
       text: payload.text,
+      html: payload.html,
+      attachments: payload.attachments,
     });
   }
 }

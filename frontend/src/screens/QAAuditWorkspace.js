@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import {
   AlertTriangle,
   BadgeCheck,
@@ -14,12 +13,18 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 
+import PortalLink from '@/components/PortalLink'
 import { useToast } from '@/components/Toast.jsx'
 import { ApiError } from '@/lib/authClient'
 import { listJobOrderWorkbenchSummaries } from '@/lib/jobOrderWorkbenchClient'
-import { getJobOrderQualityGate, overrideJobOrderQualityGate } from '@/lib/qualityGateClient'
+import {
+  getJobOrderQualityGate,
+  overrideJobOrderQualityGate,
+  recordJobOrderQualityGateVerdict,
+} from '@/lib/qualityGateClient'
 import { useUser } from '@/lib/userContext.jsx'
 import {
+  canStaffRecordQualityGateVerdict,
   canStaffOverrideQualityGate,
   canStaffReadQualityGate,
   getBlockingQualityGateFindings,
@@ -39,6 +44,11 @@ const initialOverrideState = {
   message: '',
 }
 
+const initialVerdictState = {
+  status: 'verdict_ready',
+  message: '',
+}
+
 const releaseSummaryByState = {
   release_allowed: {
     value: 'Allowed',
@@ -53,7 +63,7 @@ const releaseSummaryByState = {
     toneClass: 'border-red-500/15 bg-red-500/10 text-red-400',
   },
   release_pending_audit: {
-    value: 'Pending Audit',
+    value: 'Pending Review',
     toneClass: 'border-amber-500/15 bg-amber-500/10 text-amber-300',
   },
   release_unavailable: {
@@ -137,10 +147,10 @@ function getReleaseTone(state) {
 
 function getReleaseCopy(state) {
   if (state === 'release_allowed_by_override') return 'Release allowed by super-admin override'
-  if (state === 'release_allowed') return 'Release allowed after QA pass'
-  if (state === 'release_blocked') return 'Release blocked by QA findings'
-  if (state === 'release_pending_audit') return 'Release pending QA audit'
-  return 'Awaiting QA load before release decision'
+  if (state === 'release_allowed') return 'Release allowed after head-technician pass'
+  if (state === 'release_blocked') return 'Release blocked for technician remediation'
+  if (state === 'release_pending_audit') return 'Awaiting head-technician review'
+  return 'Awaiting pre-check load before release decision'
 }
 
 function getFindingSortPriority(finding) {
@@ -277,6 +287,94 @@ function QualityFindingCard({ finding }) {
   )
 }
 
+function PreCheckSummaryPanel({ qualityGate }) {
+  const summary = qualityGate?.preCheckSummary ?? null
+  const evidenceGaps = Array.isArray(summary?.evidenceGaps) ? summary.evidenceGaps : []
+  const discrepancies = Array.isArray(summary?.inspectionDiscrepancies) ? summary.inspectionDiscrepancies : []
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="card-title">Pre-Check Summary</p>
+          <p className="mt-2 text-sm leading-6 text-ink-secondary">
+            The evidence validator prepares this summary for the head technician. It never passes or blocks release on its own.
+          </p>
+        </div>
+        <span className={`badge ${getQualityStatusTone(qualityGate?.status)}`}>
+          {qualityGate ? formatLabel(qualityGate.preCheckStatus) : 'Awaiting load'}
+        </span>
+      </div>
+      {qualityGate ? (
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="ops-panel-muted">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Completed work items</p>
+              <p className="mt-2 text-lg font-semibold text-ink-primary">
+                {summary?.completedWorkItemCount ?? 0} / {summary?.totalWorkItemCount ?? 0}
+              </p>
+            </div>
+            <div className="ops-panel-muted">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Attached photos</p>
+              <p className="mt-2 text-lg font-semibold text-ink-primary">{summary?.attachedPhotoCount ?? 0}</p>
+            </div>
+            <div className="ops-panel-muted">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Evidence gaps</p>
+              <p className="mt-2 text-lg font-semibold text-ink-primary">{summary?.evidenceGapCount ?? evidenceGaps.length}</p>
+            </div>
+            <div className="ops-panel-muted">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Semantic match</p>
+              <p className="mt-2 text-lg font-semibold text-ink-primary">{summary?.semanticMatchScore ?? '—'}</p>
+            </div>
+          </div>
+          {qualityGate.preCheckStatus === 'unavailable' ? (
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              Pre-check unavailable — manual review required.
+            </div>
+          ) : null}
+          {summary?.automatedRecommendation || summary?.infrastructureState ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="ops-panel-muted text-sm text-ink-secondary">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Validator recommendation</p>
+                <p className="mt-2">{formatLabel(summary?.automatedRecommendation ?? 'not_available')}</p>
+              </div>
+              <div className="ops-panel-muted text-sm text-ink-secondary">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Infrastructure state</p>
+                <p className="mt-2">{formatLabel(summary?.infrastructureState ?? qualityGate.preCheckStatus)}</p>
+              </div>
+            </div>
+          ) : null}
+          {evidenceGaps.length > 0 ? (
+            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+              <p className="text-sm font-bold text-amber-100">Evidence gaps</p>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-amber-50">
+                {evidenceGaps.map((gap) => (
+                  <li key={gap}>{gap}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {discrepancies.length > 0 ? (
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
+              <p className="text-sm font-bold text-red-100">Inspection discrepancies</p>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-red-50">
+                {discrepancies.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <EmptyPanelState
+          title="No pre-check summary loaded yet"
+          copy="Load a ready-for-review job order to inspect the live evidence validator summary before the head technician decides pass or block."
+        />
+      )}
+    </div>
+  )
+}
+
 function ReleaseDecisionPanel({ qualityGate, releaseState }) {
   return (
     <div className="space-y-4">
@@ -284,7 +382,7 @@ function ReleaseDecisionPanel({ qualityGate, releaseState }) {
         <div>
           <p className="card-title">Release Decision</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Completion and customer release should follow this QA state, not generic job-order status alone.
+            Completion and customer release should follow the head-technician verdict, not the automated pre-check alone.
           </p>
         </div>
         <span className={`badge ${getReleaseTone(releaseState)}`}>{getReleaseCopy(releaseState)}</span>
@@ -304,7 +402,7 @@ function ReleaseDecisionPanel({ qualityGate, releaseState }) {
       ) : (
         <EmptyPanelState
           title="No QA gate loaded"
-          copy="Load a known ready-for-QA job order from the Job Order Workbench to review its live release decision."
+          copy="Load a known ready-for-review job order from the Job Order Workbench to review its pre-check summary and release decision."
         />
       )}
     </div>
@@ -318,12 +416,12 @@ function FindingsReviewPanel({ qualityGate }) {
         <div>
           <p className="card-title">Findings Review</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Blocking and review-needed findings stay grouped here once a live QA gate is loaded.
+            Automated pre-check findings stay grouped here so the head technician can quickly confirm what still needs physical verification.
           </p>
         </div>
         <EmptyPanelState
           title="No findings to review yet"
-          copy="This panel will show live severity, provenance, and risk contribution details after a QA gate is loaded."
+          copy="This panel will show live severity, provenance, and risk contribution details after a pre-check review is loaded."
         />
       </div>
     )
@@ -340,7 +438,7 @@ function FindingsReviewPanel({ qualityGate }) {
         <div>
           <p className="card-title">Findings Review</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Review blocking and advisory findings before approving release or recording an override.
+            Review blocking and advisory findings before the head technician passes the job or a super admin records an override.
           </p>
         </div>
         <span className={`badge ${getQualityStatusTone(qualityGate.status)}`}>{formatLabel(qualityGate.status)}</span>
@@ -378,10 +476,10 @@ function AuditTimelinePanel({ qualityGate, releaseState }) {
   return (
     <div className="space-y-4">
       <div>
-        <p className="card-title">Audit Timeline / Worker Detail</p>
-        <p className="mt-2 text-sm leading-6 text-ink-secondary">
-          Monitor audit request timing, worker completion, and the release state that staff should follow.
-        </p>
+          <p className="card-title">Audit Timeline / Worker Detail</p>
+          <p className="mt-2 text-sm leading-6 text-ink-secondary">
+            Monitor pre-check request timing, worker completion, and the release state that staff should follow.
+          </p>
       </div>
       {qualityGate ? (
         <div className="grid gap-3 text-sm text-ink-secondary">
@@ -412,6 +510,105 @@ function AuditTimelinePanel({ qualityGate, releaseState }) {
   )
 }
 
+function HeadTechnicianVerdictPanel({
+  canRecordLiveVerdict,
+  qualityGate,
+  verdict,
+  note,
+  verdictState,
+  onVerdictChange,
+  onNoteChange,
+  onSubmit,
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="card-title">Head Technician Verdict</p>
+          <p className="mt-2 text-sm leading-6 text-ink-secondary">
+            Only the head technician can pass or block the release after physically reviewing the work and the pre-check summary.
+          </p>
+        </div>
+        <span className={`badge ${canRecordLiveVerdict ? 'badge-green' : 'badge-gray'}`}>
+          {canRecordLiveVerdict ? 'Head Technician' : 'Read only'}
+        </span>
+      </div>
+      {qualityGate ? (
+        <>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="ops-panel-muted">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Current verdict</p>
+              <p className="mt-2 text-sm font-semibold text-ink-primary">{formatLabel(qualityGate.reviewerVerdict)}</p>
+            </div>
+            <div className="ops-panel-muted">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Reviewed at</p>
+              <p className="mt-2 text-sm font-semibold text-ink-primary">{formatDateTime(qualityGate.reviewedAt)}</p>
+            </div>
+          </div>
+          {qualityGate.reviewerNote ? (
+            <div className="ops-panel-muted text-sm text-ink-secondary">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Latest verdict note</p>
+              <p className="mt-2 leading-6">{qualityGate.reviewerNote}</p>
+            </div>
+          ) : null}
+          <label className="block text-xs text-ink-muted">
+            Verdict
+            <select
+              value={verdict}
+              onChange={(event) => onVerdictChange(event.target.value)}
+              disabled={!canRecordLiveVerdict}
+              className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <option value="passed">Pass</option>
+              <option value="blocked">Block</option>
+            </select>
+          </label>
+          <label className="block text-xs text-ink-muted">
+            Head-technician note
+            <textarea
+              value={note}
+              onChange={(event) => onNoteChange(event.target.value)}
+              rows={4}
+              disabled={!canRecordLiveVerdict}
+              className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00] disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="Explain the physical inspection result or the remediation instruction for the technician."
+            />
+          </label>
+          {verdictState.message ? (
+            <div
+              className={`rounded-xl border px-4 py-3 text-sm ${
+                verdictState.status === 'verdict_saved'
+                  ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                  : 'border-red-500/25 bg-red-500/10 text-red-200'
+              }`}
+            >
+              {verdictState.message}
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!canRecordLiveVerdict || verdictState.status === 'verdict_submitting'}
+            className="ops-action-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {verdictState.status === 'verdict_submitting' ? (
+              <RefreshCw size={15} className="animate-spin" />
+            ) : (
+              <ShieldCheck size={15} />
+            )}
+            Record Head-Technician Verdict
+          </button>
+        </>
+      ) : (
+        <EmptyPanelState
+          title="No review loaded yet"
+          copy="Load a ready-for-review job order first so the head technician can decide pass or block."
+        />
+      )}
+    </div>
+  )
+}
+
 function OverrideAuditPanel({
   canOverrideLiveQa,
   overrideReason,
@@ -429,7 +626,7 @@ function OverrideAuditPanel({
         <div>
           <p className="card-title">Override Audit</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Overrides remain fully auditable and never remove the original QA findings that caused the release block.
+            Overrides remain fully auditable and never replace the original pre-check findings or the missing head-technician accountability.
           </p>
         </div>
         <span className={`badge ${getReleaseTone(releaseState)}`}>{getReleaseCopy(releaseState)}</span>
@@ -483,7 +680,7 @@ function ContractSourcesPanel() {
         <div>
           <p className="card-title">Contract Sources / Linked Context</p>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
-            QA Audit is a live review and override surface. It does not create inspections, job orders, or fake audit queues.
+            QA Review is a live pre-check, verdict, and override surface. It does not create inspections, job orders, or fake audit queues.
           </p>
         </div>
       </div>
@@ -491,20 +688,20 @@ function ContractSourcesPanel() {
         <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
           <p className="text-sm font-bold text-ink-primary">Staff Action</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Load one live job order from the selector, inspect its findings, then return to Job Orders for execution work.
+            Load one live job order from the selector, inspect the pre-check summary, then return to Job Orders if remediation is needed.
           </p>
         </div>
         <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
           <p className="text-sm font-bold text-ink-primary">Super Admin Action</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Override only blocked gates, with a clear reason that stays in the audit trail.
+            Override only blocked reviews, with a clear reason that stays in the audit trail.
           </p>
         </div>
         <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
           <p className="text-sm font-bold text-ink-primary">Next Step</p>
-          <Link href="/admin/job-orders" className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-brand-orange">
+          <PortalLink href="/admin/job-orders" className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-brand-orange">
             Continue in Job Orders <ExternalLink size={14} />
-          </Link>
+          </PortalLink>
         </div>
       </div>
     </div>
@@ -516,12 +713,16 @@ export default function QAAuditWorkspace() {
   const { toast } = useToast()
   const role = user?.role ?? null
   const canReadLiveQa = canStaffReadQualityGate(role)
+  const canRecordLiveVerdict = canStaffRecordQualityGateVerdict(role)
   const canOverrideLiveQa = canStaffOverrideQualityGate(role)
   const [jobOrderId, setJobOrderId] = useState('')
   const [qualityGate, setQualityGate] = useState(null)
   const [jobOrderOptions, setJobOrderOptions] = useState([])
+  const [verdictDraft, setVerdictDraft] = useState('passed')
+  const [verdictNote, setVerdictNote] = useState('')
   const [overrideReason, setOverrideReason] = useState('')
   const [qaState, setQaState] = useState(initialQaState)
+  const [verdictState, setVerdictState] = useState(initialVerdictState)
   const [overrideState, setOverrideState] = useState(initialOverrideState)
   const qaLoadInFlightRef = useRef(false)
 
@@ -584,7 +785,7 @@ export default function QAAuditWorkspace() {
     if (!canReadLiveQa) {
       setQaState({
         status: 'qa_forbidden_role',
-        message: 'Only assigned technicians, service advisers, and super admins can read quality gates.',
+        message: 'Only assigned technicians, head technicians, service advisers, and super admins can read release reviews.',
       })
       return
     }
@@ -610,10 +811,13 @@ export default function QAAuditWorkspace() {
       })
 
       setQualityGate(loadedQualityGate)
+      setVerdictDraft(loadedQualityGate.reviewerVerdict === 'blocked' ? 'blocked' : 'passed')
+      setVerdictNote(loadedQualityGate.reviewerNote ?? '')
+      setVerdictState(initialVerdictState)
       setOverrideState(initialOverrideState)
       setQaState({
         status: 'qa_loaded',
-        message: 'Live QA gate loaded from the backend.',
+        message: 'Live pre-check and release review loaded from the backend.',
       })
     } catch (error) {
       let nextStatus = 'qa_failed'
@@ -629,7 +833,7 @@ export default function QAAuditWorkspace() {
       setQualityGate(null)
       setQaState({
         status: nextStatus,
-        message: error?.message || 'QA gate could not be loaded.',
+        message: error?.message || 'Review workspace could not be loaded.',
       })
     } finally {
       qaLoadInFlightRef.current = false
@@ -718,14 +922,86 @@ export default function QAAuditWorkspace() {
     }
   }
 
+  async function handleRecordQualityGateVerdict() {
+    if (!qualityGate) {
+      setVerdictState({
+        status: 'verdict_not_found',
+        message: 'Load a pre-check review before recording a head-technician verdict.',
+      })
+      return
+    }
+
+    if (!canRecordLiveVerdict) {
+      setVerdictState({
+        status: 'verdict_forbidden_role',
+        message: 'Only the head technician can record the release verdict.',
+      })
+      return
+    }
+
+    if (!user?.accessToken) {
+      setVerdictState({
+        status: 'verdict_failed',
+        message: 'A valid head-technician session is required before recording the verdict.',
+      })
+      return
+    }
+
+    setVerdictState({
+      status: 'verdict_submitting',
+      message: '',
+    })
+
+    try {
+      const updatedQualityGate = await recordJobOrderQualityGateVerdict({
+        jobOrderId: qualityGate.jobOrderId,
+        verdict: verdictDraft,
+        note: verdictNote,
+        accessToken: user.accessToken,
+      })
+
+      setQualityGate(updatedQualityGate)
+      setVerdictDraft(updatedQualityGate.reviewerVerdict === 'blocked' ? 'blocked' : 'passed')
+      setVerdictNote(updatedQualityGate.reviewerNote ?? '')
+      setVerdictState({
+        status: 'verdict_saved',
+        message:
+          updatedQualityGate.reviewerVerdict === 'blocked'
+            ? 'Head-technician block recorded. The job order should return to in-progress remediation.'
+            : 'Head-technician pass recorded. Finalization can proceed when other blockers are clear.',
+      })
+      toast({
+        type: 'success',
+        title: 'Head-Technician Verdict Recorded',
+        message:
+          updatedQualityGate.reviewerVerdict === 'blocked'
+            ? `${qualityGate.jobOrderId} was returned for technician remediation.`
+            : `${qualityGate.jobOrderId} is now cleared for release review.`,
+      })
+    } catch (error) {
+      let nextStatus = 'verdict_failed'
+
+      if (error instanceof ApiError && error.status === 403) {
+        nextStatus = 'verdict_forbidden_role'
+      } else if (error instanceof ApiError && error.status === 404) {
+        nextStatus = 'verdict_not_found'
+      }
+
+      setVerdictState({
+        status: nextStatus,
+        message: error?.message || 'Head-technician verdict could not be recorded.',
+      })
+    }
+  }
+
   return (
     <div className="ops-page-shell">
       <section className="ops-page-header">
         <div className="space-y-2">
           <p className="ops-page-kicker">Quality Governance</p>
-          <h1 className="ops-page-title">QA Audit Workspace</h1>
+          <h1 className="ops-page-title">QA Review Workspace</h1>
           <p className="ops-page-copy">
-            Review live quality gates, scan blocking findings, and record auditable overrides when release exceptions are justified.
+            Review automated pre-check summaries, let the head technician record the final pass or block verdict, and keep overrides auditable when a super admin must intervene.
           </p>
         </div>
         <button
@@ -754,7 +1030,7 @@ export default function QAAuditWorkspace() {
               onChange={(event) => setJobOrderId(event.target.value)}
               className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
             >
-              <option value="">Choose a job order for QA review</option>
+              <option value="">Choose a job order for pre-check review</option>
               {jobOrderOptions.map((jobOrder) => (
                 <option key={jobOrder.id} value={jobOrder.id}>
                   JO-{jobOrder.id.slice(0, 8).toUpperCase()} / {formatLabel(jobOrder.status)}
@@ -766,6 +1042,9 @@ export default function QAAuditWorkspace() {
             <span className={`badge ${canReadLiveQa ? 'badge-green' : 'badge-red'}`}>
               Read: {canReadLiveQa ? formatLabel(role) : 'Forbidden role'}
             </span>
+            <span className={`badge ${canRecordLiveVerdict ? 'badge-green' : 'badge-gray'}`}>
+              Verdict: {canRecordLiveVerdict ? 'Head Technician' : 'Locked'}
+            </span>
             <span className={`badge ${canOverrideLiveQa ? 'badge-green' : 'badge-gray'}`}>
               Override: {canOverrideLiveQa ? 'Super Admin' : 'Locked'}
             </span>
@@ -776,7 +1055,7 @@ export default function QAAuditWorkspace() {
             ) : (
               <Search size={14} />
             )}
-            Load QA Gate
+            Load Review
           </button>
         </form>
         <StatusMessage state={qaState} />
@@ -785,7 +1064,7 @@ export default function QAAuditWorkspace() {
       <section className="ops-summary-grid">
         <StatCard
           icon={ShieldCheck}
-          label="QA Status"
+          label="Review Status"
           value={qualityGate ? formatLabel(qualityGate.status) : 'Awaiting Load'}
           toneClass={
             qualityGate
@@ -830,12 +1109,29 @@ export default function QAAuditWorkspace() {
           <ReleaseDecisionPanel qualityGate={qualityGate} releaseState={selectedReleaseState} />
         </div>
         <div className="ops-panel">
+          <PreCheckSummaryPanel qualityGate={qualityGate} />
+        </div>
+        <div className="ops-panel">
           <FindingsReviewPanel qualityGate={qualityGate} />
         </div>
         <div className="grid gap-5 xl:grid-cols-2">
           <div className="ops-panel">
+            <HeadTechnicianVerdictPanel
+              canRecordLiveVerdict={canRecordLiveVerdict}
+              qualityGate={qualityGate}
+              verdict={verdictDraft}
+              note={verdictNote}
+              verdictState={verdictState}
+              onVerdictChange={setVerdictDraft}
+              onNoteChange={setVerdictNote}
+              onSubmit={handleRecordQualityGateVerdict}
+            />
+          </div>
+          <div className="ops-panel">
             <AuditTimelinePanel qualityGate={qualityGate} releaseState={selectedReleaseState} />
           </div>
+        </div>
+        <div className="grid gap-5 xl:grid-cols-2">
           <div className="ops-panel">
             <OverrideAuditPanel
               canOverrideLiveQa={canOverrideLiveQa}
@@ -847,9 +1143,9 @@ export default function QAAuditWorkspace() {
               onSubmit={handleOverrideQualityGate}
             />
           </div>
-        </div>
-        <div className="ops-panel">
-          <ContractSourcesPanel />
+          <div className="ops-panel">
+            <ContractSourcesPanel />
+          </div>
         </div>
       </section>
     </div>

@@ -26,7 +26,10 @@ import {
 
 import { useToast } from '@/components/Toast.jsx'
 import { useUser } from '@/lib/userContext'
-import { loadAdminAnalyticsSnapshot } from '@/lib/analyticsAdminClient'
+import {
+  loadAdminAnalyticsSnapshot,
+  refreshAdminAnalyticsSnapshot,
+} from '@/lib/analyticsAdminClient'
 import {
   adminAnalyticsTabs,
   analyticsDerivedStateLabel,
@@ -69,6 +72,14 @@ const FRESHNESS_META = {
   watch: { label: 'Check Freshness', badge: 'badge-orange' },
   stale: { label: 'Stale Snapshot', badge: 'badge-red' },
   unknown: { label: 'Snapshot Pending', badge: 'badge-gray' },
+}
+
+const SNAPSHOT_STATUS_META = {
+  refreshing: { label: 'Refreshing Snapshot', badge: 'badge-blue' },
+  stale: { label: 'Snapshot Stale', badge: 'badge-red' },
+  rebuilt: { label: 'Live Snapshot Rebuilt', badge: 'badge-green' },
+  partial: { label: 'Read Succeeded With Section Failures', badge: 'badge-orange' },
+  pending: { label: 'Snapshot Pending', badge: 'badge-gray' },
 }
 
 const LOAD_STATE_LABELS = {
@@ -334,9 +345,28 @@ export default function AdminAnalyticsWorkspace() {
     [errors],
   )
   const isBusy = requestState === 'loading' || requestState === 'refreshing'
+  const snapshotStatusMeta = useMemo(() => {
+    if (requestState === 'refreshing') {
+      return SNAPSHOT_STATUS_META.refreshing
+    }
+
+    if (partialErrorEntries.length > 0) {
+      return SNAPSHOT_STATUS_META.partial
+    }
+
+    if (freshnessTone === 'stale') {
+      return SNAPSHOT_STATUS_META.stale
+    }
+
+    if (latestRefresh) {
+      return SNAPSHOT_STATUS_META.rebuilt
+    }
+
+    return SNAPSHOT_STATUS_META.pending
+  }, [freshnessTone, latestRefresh, partialErrorEntries.length, requestState])
 
   const loadAnalytics = useCallback(
-    async ({ showToast = false } = {}) => {
+    async ({ showToast = false, refreshSnapshot = false } = {}) => {
       if (!canReadAnalytics || !user?.accessToken) {
         return
       }
@@ -346,6 +376,14 @@ export default function AdminAnalyticsWorkspace() {
       )
 
       try {
+        let refreshResult = null
+
+        if (refreshSnapshot) {
+          refreshResult = await refreshAdminAnalyticsSnapshot({
+            accessToken: user.accessToken,
+          })
+        }
+
         const { snapshot: nextSnapshot, errors: nextErrors } =
           await loadAdminAnalyticsSnapshot({
             accessToken: user.accessToken,
@@ -371,11 +409,19 @@ export default function AdminAnalyticsWorkspace() {
                 ? 'Analytics Partially Refreshed'
                 : nextLoadState === 'analytics_failed'
                   ? 'Analytics Refresh Failed'
-                  : 'Analytics Refreshed',
+                  : refreshSnapshot
+                    ? 'Live Snapshot Rebuilt'
+                    : 'Analytics Refreshed',
             message:
               nextLoadState === 'analytics_failed'
                 ? 'No analytics sections could be refreshed from the live backend.'
-                : `${loadedCount} analytics section${loadedCount === 1 ? '' : 's'} refreshed from the live backend.`,
+                : refreshSnapshot
+                  ? `${loadedCount} analytics section${loadedCount === 1 ? '' : 's'} rebuilt from live source data.`
+                  : `${loadedCount} analytics section${loadedCount === 1 ? '' : 's'} refreshed from the live backend.`,
+            detail:
+              refreshSnapshot && refreshResult?.refreshJob?.completedAt
+                ? `Snapshot rebuild completed at ${new Date(refreshResult.refreshJob.completedAt).toLocaleString('en-PH')}.`
+                : undefined,
           })
         }
       } catch (error) {
@@ -509,6 +555,7 @@ export default function AdminAnalyticsWorkspace() {
             <div className="flex flex-wrap gap-2">
               <span className="badge badge-blue">{analyticsDerivedStateLabel}</span>
               <span className={`badge ${freshnessMeta.badge}`}>{freshnessMeta.label}</span>
+              <span className={`badge ${snapshotStatusMeta.badge}`}>{snapshotStatusMeta.label}</span>
               <span className="badge badge-gray">
                 {LOAD_STATE_LABELS[derivedLoadState]}
               </span>
@@ -516,7 +563,7 @@ export default function AdminAnalyticsWorkspace() {
 
             <button
               type="button"
-              onClick={() => loadAnalytics({ showToast: true })}
+              onClick={() => loadAnalytics({ showToast: true, refreshSnapshot: true })}
               disabled={isBusy}
               className="btn-ghost"
             >

@@ -222,7 +222,7 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
       return;
     }
 
-    const usesLiveOtpFlow = otpPurpose === 'deleteAccount';
+    const usesLiveOtpFlow = otpPurpose === 'deleteAccount' || otpPurpose === 'passwordChange';
 
     if (!usesLiveOtpFlow && otp !== '123456') {
       setError('Incorrect OTP. Use 123456 for this prototype.');
@@ -294,6 +294,11 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
 
     if (otpPurpose === 'deleteAccount') {
       showInlineToast('Resend is not available yet. Go back and restart account deletion to request a new code.');
+      return;
+    }
+
+    if (otpPurpose === 'passwordChange') {
+      showInlineToast('Resend is not available here yet. Go back and restart change password to request a new code.');
       return;
     }
 

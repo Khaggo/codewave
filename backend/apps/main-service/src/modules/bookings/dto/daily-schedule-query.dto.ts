@@ -4,6 +4,8 @@ import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
 import { bookingStatusEnum } from '../schemas/bookings.schema';
 
 type BookingStatus = (typeof bookingStatusEnum.enumValues)[number];
+export const dailyScheduleScopeValues = ['active', 'history', 'all'] as const;
+export type DailyScheduleScope = (typeof dailyScheduleScopeValues)[number];
 
 export class DailyScheduleQueryDto {
   @ApiProperty({
@@ -29,4 +31,13 @@ export class DailyScheduleQueryDto {
   @IsOptional()
   @IsEnum(bookingStatusEnum.enumValues)
   status?: BookingStatus;
+
+  @ApiPropertyOptional({
+    enum: dailyScheduleScopeValues,
+    example: 'active',
+    description: 'Optional schedule scope. Active hides finished outcomes by default, while history focuses on completed/closed records.',
+  })
+  @IsOptional()
+  @IsEnum(dailyScheduleScopeValues)
+  scope?: DailyScheduleScope;
 }

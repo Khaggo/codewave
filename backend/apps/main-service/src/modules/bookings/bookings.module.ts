@@ -9,12 +9,14 @@ import { BOOKINGS_CLOCK } from './bookings.constants';
 import { BookingsController } from './controllers/bookings.controller';
 import { BookingsRepository } from './repositories/bookings.repository';
 import { BookingsService } from './services/bookings.service';
+import { BookingReservationPaymentGatewayService } from './services/booking-reservation-payment-gateway.service';
 
 @Module({
   imports: [AuthModule, UsersModule, VehiclesModule, NotificationsModule],
   controllers: [BookingsController],
   providers: [
     BookingsRepository,
+    BookingReservationPaymentGatewayService,
     BookingsService,
     {
       provide: BOOKINGS_CLOCK,

@@ -4,6 +4,7 @@ import { boolean, date, pgEnum, pgTable, text, timestamp, uuid, varchar } from '
 export const userRoleEnum = pgEnum('user_role', [
   'customer',
   'technician',
+  'head_technician',
   'service_adviser',
   'super_admin',
 ]);

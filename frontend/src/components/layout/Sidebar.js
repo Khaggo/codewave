@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import PortalLink from '@/components/PortalLink'
 import { usePathname } from 'next/navigation'
 import {
   BarChart3,
@@ -19,55 +19,51 @@ import {
   Boxes,
   FileSearch,
   ReceiptText,
+  CarFront,
 } from 'lucide-react'
 
 import { useUser } from '@/lib/userContext'
 import {
+  staffPortalNavigationRules,
   getStaffPortalNavigationForRole,
   isStaffPortalRole,
 } from '@/lib/api/generated/auth/staff-web-session'
 import { isEcommerceEnabled } from '@/lib/runtimeFlags'
 
-const NAV = [
-  {
-    group: null,
-    items: [{ href: '/', label: 'Dashboard', icon: LayoutDashboard }],
-  },
-  {
-    group: 'Front Desk Flow',
-    items: [
-      { href: '/bookings', label: '1. Booking Schedule', icon: CalendarCheck },
-      { href: '/admin/intake-inspections', label: '2. Intake Inspection', icon: FileSearch },
-      { href: '/admin/job-orders', label: '3. Job Orders', icon: ClipboardList },
-      { href: '/admin/qa-audit', label: '4. QA Audit', icon: ClipboardCheck },
-      { href: '/admin/invoices', label: '5. Invoices & Orders', icon: ReceiptText },
-    ],
-  },
-  {
-    group: 'Customer Records',
-    items: [
-      { href: '/admin/customers', label: 'Customers & Vehicles', icon: Users },
-      { href: '/backjobs', label: 'Back-Jobs', icon: Wrench },
-      { href: '/insurance', label: 'Insurance', icon: ShieldCheck },
-      { href: '/loyalty', label: 'Loyalty Management', icon: Award },
-    ],
-  },
-  {
-    group: 'Catalog & Stock',
-    items: [
-      { href: '/admin/catalog', label: 'Catalog Admin', icon: Boxes },
-      { href: '/admin/inventory', label: 'Inventory Admin', icon: ShoppingBag },
-    ],
-  },
-  {
-    group: 'Admin',
-    items: [
-      { href: '/admin/users', label: 'Staff Accounts', icon: Users },
-      { href: '/admin/appointments', label: 'Appointments Admin', icon: CalendarCheck },
-      { href: '/admin/summaries', label: 'Analytics & Summaries', icon: BarChart3 },
-    ],
-  },
-]
+const GROUP_ORDER = ['Overview', 'Front Desk Flow', 'Customer Records', 'Catalog & Stock', 'Admin']
+
+const ICON_BY_PATH = {
+  '/': LayoutDashboard,
+  '/vehicles': CarFront,
+  '/bookings': CalendarCheck,
+  '/admin/intake-inspections': FileSearch,
+  '/admin/job-orders': ClipboardList,
+  '/admin/qa-audit': ClipboardCheck,
+  '/admin/invoices': ReceiptText,
+  '/admin/customers': Users,
+  '/backjobs': Wrench,
+  '/timeline': ClipboardList,
+  '/insurance': ShieldCheck,
+  '/loyalty': Award,
+  '/shop': ShoppingBag,
+  '/admin/services': Wrench,
+  '/admin/catalog': Boxes,
+  '/admin/inventory': ShoppingBag,
+  '/admin/users': Users,
+  '/admin/appointments': CalendarCheck,
+  '/admin/summaries': BarChart3,
+  '/settings': Cog,
+}
+
+const LABEL_BY_KEY = {
+  bookings: '1. Booking Schedule',
+  'digital-intake-inspections': '2. Intake Inspection',
+  'job-orders-admin': '3. Job Orders',
+  'qa-audit': '4. QA Audit',
+  'invoice-order-management': '5. Invoices & Orders',
+  'summary-review': 'Analytics & Summaries',
+  'user-admin': 'Staff Accounts',
+}
 
 export default function Sidebar({ collapsed, onToggle }) {
   const pathname = usePathname()
@@ -78,14 +74,26 @@ export default function Sidebar({ collapsed, onToggle }) {
   )
   const ecommerceBlockedPaths = new Set(['/admin/catalog', '/admin/inventory'])
 
-  const visibleSections = NAV.map((section) => ({
-    ...section,
-    items: section.items.filter(({ href }) =>
-      isStaffPortalRole(user?.role)
-        ? visiblePaths.has(href) && (ecommerceEnabled || !ecommerceBlockedPaths.has(href))
-        : false,
-    ),
-  })).filter((section) => section.items.length > 0)
+  const visibleEntries = isStaffPortalRole(user?.role)
+    ? staffPortalNavigationRules.filter(
+        (entry) => visiblePaths.has(entry.href) && (ecommerceEnabled || !ecommerceBlockedPaths.has(entry.href)),
+      )
+    : []
+
+  const visibleSections = GROUP_ORDER.map((group) => {
+    const items = visibleEntries
+      .filter((entry) => entry.group === group)
+      .map((entry) => ({
+        href: entry.href,
+        label: LABEL_BY_KEY[entry.key] ?? entry.label,
+        icon: ICON_BY_PATH[entry.href] ?? Cog,
+      }))
+
+    return {
+      group: group === 'Overview' ? null : group,
+      items,
+    }
+  }).filter((section) => section.items.length > 0)
 
   return (
     <aside
@@ -128,7 +136,7 @@ export default function Sidebar({ collapsed, onToggle }) {
               {section.items.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href
                 return (
-                  <Link
+                  <PortalLink
                     key={href}
                     href={href}
                     title={collapsed ? label : undefined}
@@ -152,7 +160,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                     {!collapsed && active ? (
                       <span className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0 bg-brand-orange" />
                     ) : null}
-                  </Link>
+                  </PortalLink>
                 )
               })}
             </div>

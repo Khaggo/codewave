@@ -20,6 +20,7 @@ import { toBullSafeJobId } from '@shared/queue/queue-job-id.util';
 import { QualityGatesRepository } from '../repositories/quality-gates.repository';
 import { QualityGateFindingProvenance, qualityGateStatusEnum } from '../schemas/quality-gates.schema';
 import { OverrideQualityGateDto } from '../dto/override-quality-gate.dto';
+import { RecordQualityGateVerdictDto } from '../dto/record-quality-gate-verdict.dto';
 import {
   QualityGateDiscrepancyEngineService,
 } from './quality-gate-discrepancy-engine.service';
@@ -28,7 +29,7 @@ import {
 } from './quality-gate-semantic-auditor.service';
 
 type QualityGateStatus = (typeof qualityGateStatusEnum.enumValues)[number];
-type QualityGateActorRole = 'technician' | 'service_adviser' | 'super_admin';
+type QualityGateActorRole = 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
 type QualityGateActor = {
   userId: string;
   role: string;
@@ -59,12 +60,22 @@ export class QualityGatesService {
 
   async beginQualityGate(jobOrderId: string) {
     const jobOrder = await this.jobOrdersRepository.findById(jobOrderId);
+    const workItems = jobOrder.items ?? [];
+    const photos = jobOrder.photos ?? [];
     if (jobOrder.status !== 'ready_for_qa') {
       throw new ConflictException('Quality gate can only start when the job order is ready for QA');
     }
 
+    const availableHeadTechnicians =
+      typeof this.usersService.listStaffAccounts === 'function'
+        ? (await this.usersService.listStaffAccounts()).filter(
+            (account) => account.isActive && account.role === 'head_technician',
+          )
+        : [];
+    const assignedHeadTechnicianUserId = availableHeadTechnicians[0]?.id ?? null;
+
     const requestedAt = new Date().toISOString();
-    const jobId = toBullSafeJobId(`quality-gate:${jobOrderId}`);
+    const jobId = toBullSafeJobId(`quality-gate:${jobOrderId}:${requestedAt}`);
     const queuedAuditJob = createQueuedAiJobMetadata({
       queueName: AI_WORKER_QUEUE_NAME,
       jobName: RUN_QUALITY_GATE_AUDIT_JOB_NAME,
@@ -74,6 +85,9 @@ export class QualityGatesService {
     });
 
     const gate = await this.qualityGatesRepository.upsertPending(jobOrderId, queuedAuditJob);
+    if (assignedHeadTechnicianUserId) {
+      await this.qualityGatesRepository.assignHeadTechnician(jobOrderId, assignedHeadTechnicianUserId);
+    }
 
     try {
       await this.aiWorkerQueue.add(
@@ -98,14 +112,26 @@ export class QualityGatesService {
       const failureMessage = `Quality gate audit could not be queued: ${message}`;
 
       return this.qualityGatesRepository.completeAudit(jobOrderId, {
-        status: 'blocked',
+        status: 'pending_review',
+        preCheckStatus: 'unavailable',
+        preCheckSummary: {
+          completedWorkItemCount: 0,
+          totalWorkItemCount: workItems.length,
+          attachedPhotoCount: photos.length,
+          evidenceGapCount: 1,
+          semanticMatchScore: null,
+          evidenceGaps: ['Pre-check unavailable — manual review required.'],
+          inspectionDiscrepancies: [],
+          automatedRecommendation: 'manual_review_required',
+          infrastructureState: 'pre_check_unavailable',
+        },
         riskScore: 70,
         blockingReason: failureMessage,
         auditJob: this.buildFailedAuditJob(queuedAuditJob, message),
         findings: [
           this.buildAuditInfrastructureFailureFinding(
             'qa_audit_queue_unavailable',
-            'Quality-gate audit could not be queued, so release is blocked until staff retries QA or a super admin records an override.',
+            'Quality pre-check could not be queued, so head-technician manual review is required.',
           ),
         ],
       });
@@ -156,7 +182,6 @@ export class QualityGatesService {
     findings.push(...(await this.buildGateTwoFindings(jobOrder, completedWorkText)));
 
     const riskScore = this.calculateRiskScore(findings);
-    const hasBlockingFinding = riskScore >= 60;
     const completedAuditJob = {
       ...currentAuditJob,
       status: 'completed' as const,
@@ -166,9 +191,25 @@ export class QualityGatesService {
     };
 
     return this.qualityGatesRepository.completeAudit(jobOrderId, {
-      status: hasBlockingFinding ? 'blocked' : 'passed',
+      status: 'pending_review',
+      preCheckStatus: 'completed',
+      preCheckSummary: {
+        completedWorkItemCount: jobOrder.items.filter((item: any) => item?.isCompleted).length,
+        totalWorkItemCount: jobOrder.items.length,
+        attachedPhotoCount: jobOrder.photos.length,
+        evidenceGapCount: findings.filter((finding) => finding.severity !== 'info').length,
+        semanticMatchScore: this.extractSemanticMatchScore(findings),
+        evidenceGaps: findings
+          .filter((finding) => finding.severity !== 'info')
+          .map((finding) => finding.message),
+        inspectionDiscrepancies: findings
+          .filter((finding) => finding.gate === 'gate_2')
+          .map((finding) => finding.message),
+        automatedRecommendation: 'ready_for_review',
+        infrastructureState: 'available',
+      },
       riskScore,
-      blockingReason: hasBlockingFinding ? this.buildBlockingReason(findings) : null,
+      blockingReason: this.buildBlockingReason(findings),
       auditJob: completedAuditJob,
       findings,
     });
@@ -201,13 +242,41 @@ export class QualityGatesService {
     }
 
     const status = gate.status as QualityGateStatus;
-    if (status === 'blocked') {
-      throw new ConflictException('Quality gate is blocked and must be resolved before invoice generation');
+    if (!['passed', 'overridden'].includes(status)) {
+      const verdict =
+        gate.reviewerVerdict === 'blocked'
+          ? 'Finalization blocked: head-technician verdict is blocked'
+          : 'Finalization blocked: QA verdict is missing';
+      throw new ConflictException(verdict);
+    }
+  }
+
+  async recordReviewerVerdict(jobOrderId: string, payload: RecordQualityGateVerdictDto, actor: QualityGateActor) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    if (resolvedActor.role !== 'head_technician') {
+      throw new ForbiddenException('Only head technicians can record QA verdicts');
     }
 
-    if (!['passed', 'overridden'].includes(status)) {
-      throw new ConflictException('Quality gate must pass before invoice generation');
+    const jobOrder = await this.jobOrdersRepository.findById(jobOrderId);
+    const gate = await this.resolveGateForJobOrder(jobOrderId, jobOrder.status as string);
+    if (!gate) {
+      throw new ConflictException('QA review is not available until the job order enters ready-for-QA');
     }
+
+    const updatedGate = await this.qualityGatesRepository.recordReviewerVerdict(jobOrderId, {
+      reviewerUserId: resolvedActor.id,
+      reviewerVerdict: payload.verdict,
+      reviewerNote: payload.note ?? null,
+    });
+
+    if (payload.verdict === 'blocked' && jobOrder.status === 'ready_for_qa') {
+      await this.jobOrdersRepository.updateStatus(jobOrderId, {
+        status: 'in_progress',
+        reason: payload.note ?? 'Head technician blocked QA review and returned work to remediation.',
+      });
+    }
+
+    return updatedGate;
   }
 
   async overrideBlockedGate(jobOrderId: string, payload: OverrideQualityGateDto, actor: QualityGateActor) {
@@ -260,14 +329,26 @@ export class QualityGatesService {
     }
 
     return this.qualityGatesRepository.completeAudit(jobOrderId, {
-      status: 'blocked',
+      status: 'pending_review',
+      preCheckStatus: 'unavailable',
+      preCheckSummary: {
+        completedWorkItemCount: 0,
+        totalWorkItemCount: 0,
+        attachedPhotoCount: 0,
+        evidenceGapCount: 1,
+        semanticMatchScore: null,
+        evidenceGaps: ['Pre-check unavailable — manual review required.'],
+        inspectionDiscrepancies: [],
+        automatedRecommendation: 'manual_review_required',
+        infrastructureState: 'pre_check_unavailable',
+      },
       riskScore: 70,
       blockingReason: failureMessage,
       auditJob,
       findings: [
         this.buildAuditInfrastructureFailureFinding(
           'qa_audit_worker_failed',
-          'Quality-gate audit worker failed before completion, so release is blocked until staff retries QA or a super admin records an override.',
+          'Quality pre-check worker failed before completion, so manual head-technician review is required.',
         ),
       ],
     });
@@ -409,6 +490,16 @@ export class QualityGatesService {
     }, 0);
   }
 
+  private extractSemanticMatchScore(findings: QualityGateFinding[]) {
+    const semanticFinding = findings.find((finding) => finding.gate === 'gate_1');
+    const ratio = semanticFinding?.provenance?.coverageRatio;
+    if (typeof ratio !== 'number' || !Number.isFinite(ratio)) {
+      return null;
+    }
+
+    return Math.max(0, Math.min(100, Math.round(ratio * 100)));
+  }
+
   private buildBlockingReason(findings: QualityGateFinding[]) {
     const rankedFindings = [...findings].sort((left, right) => {
       const leftRisk = left.provenance?.riskContribution ?? this.fallbackRiskContribution(left);
@@ -448,7 +539,7 @@ export class QualityGatesService {
     jobOrder: Awaited<ReturnType<JobOrdersRepository['findById']>>,
     actor: { userId: string; role: QualityGateActorRole },
   ) {
-    if (['service_adviser', 'super_admin'].includes(actor.role)) {
+    if (['head_technician', 'service_adviser', 'super_admin'].includes(actor.role)) {
       return;
     }
 

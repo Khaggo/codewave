@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
@@ -15,6 +14,7 @@ import {
   Wrench,
 } from 'lucide-react'
 
+import PortalLink from '@/components/PortalLink'
 import { ApiError, listAdminCustomers } from '@/lib/authClient'
 import { listVehicleBookings } from '@/lib/bookingStaffClient'
 import { createVehicleInspection, listVehicleInspections } from '@/lib/inspectionStaffClient'
@@ -156,7 +156,7 @@ function RouteCard({ item }) {
   const Icon = item.icon
 
   return (
-    <Link href={item.href} className="card group p-5 transition-colors hover:border-brand-orange/50">
+    <PortalLink href={item.href} className="card group p-5 transition-colors hover:border-brand-orange/50">
       <div className="flex items-start justify-between gap-3">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
           <Icon size={18} />
@@ -168,7 +168,7 @@ function RouteCard({ item }) {
         {item.roleNote}
       </p>
       <p className="mt-3 text-sm leading-6 text-ink-secondary">{item.copy}</p>
-    </Link>
+    </PortalLink>
   )
 }
 

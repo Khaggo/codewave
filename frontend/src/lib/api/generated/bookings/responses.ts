@@ -106,6 +106,7 @@ export interface DailyScheduleSlotView {
   label: string;
   totalCapacity: number;
   confirmedCount: number;
+  inServiceCount: number;
   pendingCount: number;
   rescheduledCount: number;
   bookings: BookingResponse[];

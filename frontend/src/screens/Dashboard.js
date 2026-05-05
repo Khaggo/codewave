@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import PortalLink from '@/components/PortalLink'
 import {
   AlertTriangle,
   BarChart3,
@@ -65,9 +65,15 @@ const adminShortcuts = [
     superAdminOnly: true,
   },
   {
+    href: '/admin/services',
+    label: 'Service Management',
+    description: 'Create booking service categories and publish customer-bookable services.',
+    icon: Wrench,
+  },
+  {
     href: '/admin/catalog',
     label: 'Catalog Admin',
-    description: 'Publish services and ecommerce catalog items for customer discovery.',
+    description: 'Manage ecommerce product catalog items separately from service offerings.',
     icon: PackageSearch,
   },
   {
@@ -114,7 +120,7 @@ function RouteCard({ item }) {
   const Icon = item.icon
 
   return (
-    <Link href={item.href} className="card group p-5 transition-colors hover:border-brand-orange/50">
+    <PortalLink href={item.href} className="card group p-5 transition-colors hover:border-brand-orange/50">
       <div className="flex items-start justify-between gap-4">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
           <Icon size={19} />
@@ -126,7 +132,7 @@ function RouteCard({ item }) {
       <p className="mt-4 text-xs font-bold uppercase tracking-[0.18em] text-brand-orange">
         Open workspace
       </p>
-    </Link>
+    </PortalLink>
   )
 }
 
@@ -186,14 +192,14 @@ function TechnicianTaskCard({ task }) {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link href={`/admin/job-orders?jobOrderId=${encodeURIComponent(task.id)}`} className="ops-action-primary">
+        <PortalLink href={`/admin/job-orders?jobOrderId=${encodeURIComponent(task.id)}`} className="ops-action-primary">
           <Wrench size={14} />
           Open Job Order
-        </Link>
-        <Link href={`/admin/intake-inspections?vehicleId=${encodeURIComponent(task.vehicleId)}`} className="ops-action-secondary">
+        </PortalLink>
+        <PortalLink href={`/admin/intake-inspections?vehicleId=${encodeURIComponent(task.vehicleId)}`} className="ops-action-secondary">
           <ClipboardCheck size={14} />
           Inspection History
-        </Link>
+        </PortalLink>
       </div>
     </div>
   )
@@ -244,10 +250,10 @@ export default function Dashboard() {
               evidence, and intake history updated from one focused work surface.
             </p>
           </div>
-          <Link href="/admin/job-orders" className="ops-action-primary min-w-[160px] self-start xl:self-auto">
+          <PortalLink href="/admin/job-orders" className="ops-action-primary min-w-[160px] self-start xl:self-auto">
             <Wrench size={14} />
             Open Workbench
-          </Link>
+          </PortalLink>
         </section>
 
         <section className="ops-summary-grid">
@@ -349,7 +355,7 @@ export default function Dashboard() {
               </div>
 
               <div className="mt-4 grid gap-3">
-                <Link href="/admin/intake-inspections" className="rounded-2xl border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-orange/40">
+                <PortalLink href="/admin/intake-inspections" className="rounded-2xl border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-orange/40">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-bold text-ink-primary">Intake Inspection</p>
@@ -359,8 +365,8 @@ export default function Dashboard() {
                     </div>
                     <ClipboardCheck size={18} className="text-brand-orange" />
                   </div>
-                </Link>
-                <Link href="/admin/job-orders" className="rounded-2xl border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-orange/40">
+                </PortalLink>
+                <PortalLink href="/admin/job-orders" className="rounded-2xl border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-orange/40">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-bold text-ink-primary">Job Order Workbench</p>
@@ -370,7 +376,7 @@ export default function Dashboard() {
                     </div>
                     <Wrench size={18} className="text-brand-orange" />
                   </div>
-                </Link>
+                </PortalLink>
               </div>
             </div>
           </div>
@@ -404,10 +410,10 @@ export default function Dashboard() {
               Follow this order when presenting booking to release.
             </p>
           </div>
-          <Link href="/bookings" className="btn-primary">
+          <PortalLink href="/bookings" className="btn-primary">
             <CalendarCheck size={15} />
             Start With Bookings
-          </Link>
+          </PortalLink>
         </div>
         <div className="grid gap-4 lg:grid-cols-5">
           {workflowSteps.map((item) => (

@@ -1,4 +1,4 @@
 interface:
   display_name: "MCP Session Bootstrap"
-  short_description: "Warm and verify the workspace MCP tools before task work begins."
-  default_prompt: "Bootstrap the workspace MCP tools and report what is ready before continuing."
+  short_description: "Warm the MCPs and make Serena or the smallest relevant MCP ready before work begins."
+  default_prompt: "Bootstrap the workspace MCP tools, activate Serena for codewave, and report the smallest relevant MCP route before continuing."

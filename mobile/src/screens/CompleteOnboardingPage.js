@@ -20,6 +20,7 @@ const createInitialForm = (draft) => ({
   licensePlate: String(draft?.licensePlate ?? ''),
   vehicleMake: String(draft?.vehicleMake ?? ''),
   vehicleModel: String(draft?.vehicleModel ?? ''),
+  vehicleColor: String(draft?.vehicleColor ?? ''),
   vehicleYear:
     draft?.vehicleYear !== null && draft?.vehicleYear !== undefined
       ? String(draft.vehicleYear)
@@ -107,6 +108,7 @@ export default function CompleteOnboardingPage({
           licensePlate: form.licensePlate.trim().toUpperCase(),
           vehicleMake: form.vehicleMake.trim(),
           vehicleModel: form.vehicleModel.trim(),
+          vehicleColor: form.vehicleColor.trim(),
           vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
           vehicleDisplayName: formatVehicleDisplayName({
             vehicleMake: form.vehicleMake,
@@ -206,6 +208,19 @@ export default function CompleteOnboardingPage({
         autoCapitalize="words"
         error={errors.vehicleModel}
         icon="car-side"
+        textContentType="none"
+        autoComplete="off"
+        importantForAutofill="no"
+      />
+
+      <FormField
+        label="Vehicle Color"
+        value={form.vehicleColor}
+        onChangeText={(value) => handleFieldChange('vehicleColor', value)}
+        placeholder="Silver"
+        autoCapitalize="words"
+        error={errors.vehicleColor}
+        icon="palette-outline"
         textContentType="none"
         autoComplete="off"
         importantForAutofill="no"
