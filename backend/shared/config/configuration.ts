@@ -36,6 +36,9 @@ export type AppConfig = {
     user?: string;
     pass?: string;
     from: string;
+    connectionTimeoutMs: number;
+    greetingTimeoutMs: number;
+    socketTimeoutMs: number;
   };
   payments: {
     paymongoPublicKey?: string;
@@ -129,6 +132,9 @@ export default (): AppConfig => {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
       from: process.env.SMTP_FROM ?? 'AUTOCARE <no-reply@example.com>',
+      connectionTimeoutMs: toNumber(process.env.SMTP_CONNECTION_TIMEOUT_MS, 10000),
+      greetingTimeoutMs: toNumber(process.env.SMTP_GREETING_TIMEOUT_MS, 10000),
+      socketTimeoutMs: toNumber(process.env.SMTP_SOCKET_TIMEOUT_MS, 15000),
     },
     payments: {
       paymongoPublicKey: process.env.PAYMONGO_PUBLIC_KEY,

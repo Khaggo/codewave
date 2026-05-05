@@ -4,6 +4,7 @@ const LOCAL_API_BASE_URL =
   Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://127.0.0.1:3000';
 const PRODUCTION_API_BASE_URL = 'https://api.autocare-cc.com';
 const defaultApiBaseUrl = __DEV__ ? LOCAL_API_BASE_URL : PRODUCTION_API_BASE_URL;
+const REQUEST_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? 20000);
 
 const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_BASE_URL ??
@@ -292,10 +293,16 @@ const buildUsername = (email) => {
 const request = async (path, options = {}) => {
   const { body, headers, ...rest } = options;
   let response;
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timeoutHandle =
+    controller && Number.isFinite(REQUEST_TIMEOUT_MS) && REQUEST_TIMEOUT_MS > 0
+      ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      : null;
 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...rest,
+      signal: controller?.signal,
       headers: {
         'Content-Type': 'application/json',
         ...(headers ?? {}),
@@ -304,9 +311,11 @@ const request = async (path, options = {}) => {
     });
   } catch (error) {
     const errorMessage =
-      error instanceof Error && error.message
-        ? error.message
-        : 'Unable to reach the API server.';
+      error instanceof Error && error.name === 'AbortError'
+        ? `The request took too long to complete.`
+        : error instanceof Error && error.message
+          ? error.message
+          : 'Unable to reach the API server.';
 
     throw new ApiError(
       `Unable to reach ${API_BASE_URL}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
@@ -314,8 +323,13 @@ const request = async (path, options = {}) => {
       {
         path,
         apiBaseUrl: API_BASE_URL,
+        timedOut: error instanceof Error && error.name === 'AbortError',
       },
     );
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
 
   const rawText = await response.text();
