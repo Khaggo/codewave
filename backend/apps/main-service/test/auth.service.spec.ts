@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -37,7 +37,8 @@ describe('AuthService', () => {
     };
 
     const notificationsService = {
-      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-1' }),
+      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'queued' }),
+      deliverNotification: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'sent' }),
     };
 
     const configService = {
@@ -85,6 +86,7 @@ describe('AuthService', () => {
         activationContext: 'customer_signup',
       }),
     );
+    expect(notificationsService.deliverNotification).toHaveBeenCalledWith('notification-1');
     expect(result).toEqual(
       expect.objectContaining({
         enrollmentId: 'challenge-1',
@@ -108,7 +110,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: AuthRepository, useValue: {} },
-        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
+        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() } },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
         { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: {} },
@@ -149,7 +151,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: AuthRepository, useValue: authRepository },
-        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
+        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() } },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
         { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: {} },
@@ -200,7 +202,7 @@ describe('AuthService', () => {
             findLatestActiveRefreshToken: jest.fn(),
           },
         },
-        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
+        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() } },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
         { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: jwtService },
@@ -258,7 +260,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: AuthRepository, useValue: authRepository },
-        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
+        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() } },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
         { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: {} },
@@ -371,7 +373,8 @@ describe('AuthService', () => {
     };
 
     const notificationsService = {
-      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-1' }),
+      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'queued' }),
+      deliverNotification: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'sent' }),
     };
 
     const googleIdentityService = {
@@ -415,6 +418,7 @@ describe('AuthService', () => {
 
     expect(start.status).toBe('pending_activation');
     expect(notificationsService.enqueueAuthOtpDelivery).toHaveBeenCalled();
+    expect(notificationsService.deliverNotification).toHaveBeenCalledWith('notification-1');
 
     const result = await service.verifyEmailOtp({
       enrollmentId: 'challenge-1',
@@ -480,7 +484,8 @@ describe('AuthService', () => {
     };
 
     const notificationsService = {
-      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-2' }),
+      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-2', status: 'queued' }),
+      deliverNotification: jest.fn().mockResolvedValue({ id: 'notification-2', status: 'sent' }),
     };
 
     const googleIdentityService = {
@@ -526,6 +531,7 @@ describe('AuthService', () => {
     expect(notificationsService.enqueueAuthOtpDelivery).toHaveBeenCalledWith(
       expect.objectContaining({ activationContext: 'staff_activation' }),
     );
+    expect(notificationsService.deliverNotification).toHaveBeenCalledWith('notification-2');
 
     const result = await service.verifyStaffEmailOtp({
       enrollmentId: 'challenge-2',
@@ -561,7 +567,8 @@ describe('AuthService', () => {
     };
 
     const notificationsService = {
-      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-delete-1' }),
+      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-delete-1', status: 'queued' }),
+      deliverNotification: jest.fn().mockResolvedValue({ id: 'notification-delete-1', status: 'sent' }),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -604,6 +611,7 @@ describe('AuthService', () => {
         activationContext: 'account_delete',
       }),
     );
+    expect(notificationsService.deliverNotification).toHaveBeenCalledWith('notification-delete-1');
     expect(result).toEqual(
       expect.objectContaining({
         enrollmentId: 'challenge-delete-1',
@@ -653,7 +661,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: AuthRepository, useValue: authRepository },
-        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn() } },
+        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() } },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
         { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
         { provide: JwtService, useValue: {} },
@@ -691,4 +699,70 @@ describe('AuthService', () => {
       message: 'The account was archived successfully. You can sign up again with the same email later.',
     });
   });
+
+  it('surfaces OTP delivery failures during registration instead of silently succeeding', async () => {
+    const usersService = {
+      findByEmail: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+        profile: {
+          firstName: 'Jane',
+          lastName: 'Doe',
+        },
+      }),
+      setActivationStatus: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const authRepository = {
+      createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
+      updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: true }),
+      createOtpChallenge: jest.fn().mockResolvedValue({
+        id: 'challenge-1',
+        userId: 'user-1',
+      }),
+    };
+
+    const notificationsService = {
+      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'queued' }),
+      deliverNotification: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'failed' }),
+    };
+
+    const configService = {
+      getOrThrow: jest.fn((key: string) => {
+        const values: Record<string, string> = {
+          'jwt.accessSecret': 'access',
+          'jwt.refreshSecret': 'refresh',
+        };
+        return values[key];
+      }),
+      get: jest.fn((_key: string, fallback: string) => fallback),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UsersService, useValue: usersService },
+        { provide: AuthRepository, useValue: authRepository },
+        { provide: NotificationsService, useValue: notificationsService },
+        { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: JwtService, useValue: {} },
+        { provide: ConfigService, useValue: configService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(AuthService);
+
+    await expect(
+      service.register({
+        email: 'customer@example.com',
+        password: 'password123',
+        firstName: 'Jane',
+        lastName: 'Doe',
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
 });
+

@@ -1,6 +1,8 @@
 import { ApiError, getApiBaseUrl } from './authClient';
 
-const DEFAULT_ECOMMERCE_API_BASE_URL = 'http://127.0.0.1:3001';
+const DEFAULT_ECOMMERCE_API_BASE_URL = __DEV__
+  ? 'http://127.0.0.1:3001'
+  : 'https://ecommerce.autocare-cc.com';
 const CATALOG_REQUEST_TIMEOUT_MS = 8000;
 
 const deriveEcommerceApiBaseUrl = () => {
@@ -11,6 +13,10 @@ const deriveEcommerceApiBaseUrl = () => {
   }
 
   const mainApiBaseUrl = getApiBaseUrl();
+
+  if (!__DEV__) {
+    return DEFAULT_ECOMMERCE_API_BASE_URL;
+  }
 
   try {
     const parsedBaseUrl = new URL(mainApiBaseUrl);

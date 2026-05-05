@@ -1,7 +1,9 @@
 import { Platform } from 'react-native';
 
-const defaultApiBaseUrl =
+const LOCAL_API_BASE_URL =
   Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://127.0.0.1:3000';
+const PRODUCTION_API_BASE_URL = 'https://api.autocare-cc.com';
+const defaultApiBaseUrl = __DEV__ ? LOCAL_API_BASE_URL : PRODUCTION_API_BASE_URL;
 
 const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_BASE_URL ??

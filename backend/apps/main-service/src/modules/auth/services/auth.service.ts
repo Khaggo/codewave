@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -955,7 +956,7 @@ export class AuthService {
       expiresAt,
     });
 
-    await this.notificationsService.enqueueAuthOtpDelivery({
+    const notification = await this.notificationsService.enqueueAuthOtpDelivery({
       userId: payload.userId,
       otp,
       email: payload.email,
@@ -963,6 +964,16 @@ export class AuthService {
       dedupeKey: `auth-otp-${challenge.id}`,
       sourceId: challenge.id,
     });
+
+    if (notification?.id && notification?.status === 'queued') {
+      const deliveryResult = await this.notificationsService.deliverNotification(notification.id);
+
+      if (deliveryResult?.status !== 'sent') {
+        throw new ServiceUnavailableException(
+          'OTP email could not be delivered right now. Please try again later.',
+        );
+      }
+    }
 
     return {
       enrollmentId: challenge.id,
