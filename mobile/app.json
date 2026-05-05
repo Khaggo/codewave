@@ -12,9 +12,13 @@
       "backgroundColor": "#121212"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.autocarecc.mobile",
+      "buildNumber": "1"
     },
     "android": {
+      "package": "com.autocarecc.mobile",
+      "versionCode": 1,
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "backgroundColor": "#121212",
