@@ -26,6 +26,6 @@ import { SmtpMailService } from './services/smtp-mail.service';
     NotificationsProcessor,
     SmtpMailService,
   ],
-  exports: [NotificationsRepository, NotificationsService],
+  exports: [NotificationsRepository, NotificationsService, SmtpMailService],
 })
 export class NotificationsModule {}

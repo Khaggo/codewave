@@ -61,7 +61,7 @@ export const normalizeQualityGateForReview = (qualityGate) => {
     latestOverride,
     auditJobStatus: qualityGate.auditJob?.status ?? null,
     isReleaseAllowed: qualityGate.status === 'passed' || qualityGate.status === 'overridden',
-    isReleaseBlocked: qualityGate.status === 'pending' || qualityGate.status === 'blocked',
+    isReleaseBlocked: qualityGate.status === 'pending_review' || qualityGate.status === 'blocked',
   };
 };
 
@@ -104,6 +104,40 @@ export const overrideJobOrderQualityGate = async ({ jobOrderId, reason, accessTo
       headers: buildAuthorizedHeaders(accessToken),
       body: {
         reason: normalizedReason,
+      },
+    }),
+  );
+};
+
+export const recordJobOrderQualityGateVerdict = async ({
+  jobOrderId,
+  verdict,
+  note,
+  accessToken,
+}) => {
+  const normalizedJobOrderId = trimOrUndefined(jobOrderId);
+  const normalizedVerdict = trimOrUndefined(verdict);
+  const normalizedNote = trimOrUndefined(note);
+
+  if (!normalizedJobOrderId) {
+    throw new ApiError('Load a pre-check review before recording the head-technician verdict.', 400, {
+      path: '/api/job-orders/:jobOrderId/qa/verdict',
+    });
+  }
+
+  if (!['passed', 'blocked'].includes(normalizedVerdict)) {
+    throw new ApiError('Choose either Pass or Block before recording the head-technician verdict.', 400, {
+      path: '/api/job-orders/:jobOrderId/qa/verdict',
+    });
+  }
+
+  return normalizeQualityGateForReview(
+    await request(`/api/job-orders/${normalizedJobOrderId}/qa/verdict`, {
+      method: 'PATCH',
+      headers: buildAuthorizedHeaders(accessToken),
+      body: {
+        verdict: normalizedVerdict,
+        note: normalizedNote,
       },
     }),
   );

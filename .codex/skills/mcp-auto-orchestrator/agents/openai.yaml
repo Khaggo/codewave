@@ -1,4 +1,4 @@
 interface:
   display_name: "MCP Auto Orchestrator"
-  short_description: "Bootstrap MCPs, then route work through Swagger and Serena."
-  default_prompt: "Run the MCP bootstrap first, then the Swagger-plus-Serena workflow, then continue the requested implementation work."
+  short_description: "Apply the repo MCP-first workflow, then bootstrap and route work through the right MCPs."
+  default_prompt: "Run the MCP-first token-efficiency workflow first, then bootstrap MCPs, then continue the requested codewave work with Swagger, Serena, or the smallest relevant MCP."

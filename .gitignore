@@ -1,1 +1,4 @@
 .worktrees/
+.playwright-mcp/
+railway-*.png
+ecommerce-config-path-section.html

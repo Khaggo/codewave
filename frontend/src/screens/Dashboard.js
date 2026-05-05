@@ -65,9 +65,15 @@ const adminShortcuts = [
     superAdminOnly: true,
   },
   {
+    href: '/admin/services',
+    label: 'Service Management',
+    description: 'Create booking service categories and publish customer-bookable services.',
+    icon: Wrench,
+  },
+  {
     href: '/admin/catalog',
     label: 'Catalog Admin',
-    description: 'Publish services and ecommerce catalog items for customer discovery.',
+    description: 'Manage ecommerce product catalog items separately from service offerings.',
     icon: PackageSearch,
   },
   {

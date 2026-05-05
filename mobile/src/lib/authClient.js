@@ -369,6 +369,51 @@ export const loginAccount = async (payload) =>
     body: payload,
   });
 
+export const requestForgotPasswordOtp = async ({ email }) =>
+  request('/api/auth/password/forgot/request', {
+    method: 'POST',
+    body: {
+      email,
+    },
+  });
+
+export const resetPasswordWithOtp = async ({ enrollmentId, otp, newPassword }) =>
+  request('/api/auth/password/forgot/reset', {
+    method: 'POST',
+    body: {
+      enrollmentId,
+      otp,
+      newPassword,
+    },
+  });
+
+export const requestChangePasswordOtp = async ({ currentPassword, accessToken }) =>
+  request('/api/auth/password/change/request', {
+    method: 'POST',
+    headers: buildAuthorizedHeaders(accessToken),
+    body: {
+      currentPassword,
+    },
+  });
+
+export const confirmChangePasswordWithOtp = async ({
+  enrollmentId,
+  otp,
+  currentPassword,
+  newPassword,
+  accessToken,
+}) =>
+  request('/api/auth/password/change/confirm', {
+    method: 'POST',
+    headers: buildAuthorizedHeaders(accessToken),
+    body: {
+      enrollmentId,
+      otp,
+      currentPassword,
+      newPassword,
+    },
+  });
+
 export const startDeleteAccountOtp = async ({ currentPassword, accessToken }) =>
   request('/api/auth/account/delete/start', {
     method: 'POST',

@@ -26,6 +26,11 @@ export class DailyScheduleSlotViewDto {
   @ApiProperty({
     example: 1,
   })
+  inServiceCount!: number;
+
+  @ApiProperty({
+    example: 1,
+  })
   pendingCount!: number;
 
   @ApiProperty({

@@ -1,7 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, Matches } from 'class-validator';
+import { IsEnum, IsOptional, Matches } from 'class-validator';
 
 const MONTH_PATTERN = /^\d{4}-\d{2}$/;
+export const jobOrderWorkbenchScopeValues = ['active', 'history', 'all'] as const;
+export type JobOrderWorkbenchScope = (typeof jobOrderWorkbenchScopeValues)[number];
 
 export class ListJobOrderWorkbenchQueryDto {
   @ApiPropertyOptional({
@@ -13,4 +15,13 @@ export class ListJobOrderWorkbenchQueryDto {
     message: 'month must use YYYY-MM format',
   })
   month?: string;
+
+  @ApiPropertyOptional({
+    enum: jobOrderWorkbenchScopeValues,
+    example: 'active',
+    description: 'Optional workbench scope. Active hides finalized/cancelled records by default, while history focuses on them.',
+  })
+  @IsOptional()
+  @IsEnum(jobOrderWorkbenchScopeValues)
+  scope?: JobOrderWorkbenchScope;
 }

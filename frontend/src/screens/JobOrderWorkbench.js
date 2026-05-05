@@ -34,11 +34,13 @@ import {
   createJobOrderFromBooking,
   addJobOrderPhotoEvidence,
   addJobOrderProgressEntry,
+  exportJobOrderInvoicePdf,
   finalizeJobOrder,
   getJobOrderById,
   listJobOrderWorkbenchCalendar,
   listJobOrderWorkbenchSummaries,
   recordJobOrderInvoicePayment,
+  replaceJobOrderAssignments,
   updateJobOrderStatus,
 } from '@/lib/jobOrderWorkbenchClient'
 import { listStaffAccounts } from '@/lib/authClient'
@@ -74,9 +76,21 @@ const initialStatusState = {
   message: '',
 }
 
+const initialAssignmentState = {
+  status: 'assignment_ready',
+  message: '',
+}
+
 const initialProgressState = {
   status: 'progress_ready',
   message: '',
+}
+
+const emptyPhotoDraft = {
+  file: null,
+  caption: '',
+  linkedEntityType: 'job_order',
+  linkedEntityId: '',
 }
 
 const initialPhotoState = {
@@ -108,6 +122,8 @@ const paymentMethodOptions = [
   { value: 'other', label: 'Other' },
 ]
 
+const assignmentRequiredStatuses = ['assigned', 'in_progress', 'blocked', 'ready_for_qa', 'finalized']
+
 const toDateKey = (date = new Date()) => {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -134,6 +150,57 @@ const formatDateTime = (value) => {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+const formatPesoAmount = (amountCents) => {
+  if (!Number.isFinite(amountCents)) {
+    return 'PHP 0'
+  }
+
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    maximumFractionDigits: 0,
+  }).format(Math.round(amountCents / 100))
+}
+
+const formatDateTimeInputValue = (value) => {
+  if (!value) return ''
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return ''
+  }
+
+  const offset = parsed.getTimezoneOffset() * 60 * 1000
+  return new Date(parsed.getTime() - offset).toISOString().slice(0, 16)
+}
+
+const buildSuggestedFinalizationSummary = (jobOrder) => {
+  if (!jobOrder) {
+    return ''
+  }
+
+  if (jobOrder.invoiceRecord?.summary) {
+    return jobOrder.invoiceRecord.summary
+  }
+
+  if (jobOrder.finalizationReadiness?.suggestedSummary) {
+    return jobOrder.finalizationReadiness.suggestedSummary
+  }
+
+  const completedItems = Array.isArray(jobOrder.items)
+    ? jobOrder.items.filter((item) => item?.isCompleted)
+    : []
+
+  if (completedItems.length === 0) {
+    return ''
+  }
+
+  return completedItems
+    .map((item) => item?.name)
+    .filter(Boolean)
+    .join(', ')
 }
 
 const formatStatusLabel = (value) =>
@@ -185,7 +252,9 @@ export default function JobOrderWorkbench() {
   const isTechnician = role === 'technician'
   const canUseWorkbench = canStaffReadExecutionJobOrder(role)
   const canManageHandoffs = staffJobOrderWorkbenchRoles.includes(role)
+  const canManageAssignments = ['service_adviser', 'super_admin'].includes(role)
 
+  const [workbenchScope, setWorkbenchScope] = useState('active')
   const [selectedDate, setSelectedDate] = useState(toDateKey())
   const [handoffCandidates, setHandoffCandidates] = useState([])
   const [handoffState, setHandoffState] = useState({
@@ -198,6 +267,8 @@ export default function JobOrderWorkbench() {
   const [activeJobOrder, setActiveJobOrder] = useState(null)
   const [manualJobOrderId, setManualJobOrderId] = useState('')
   const [detailState, setDetailState] = useState(initialReadState)
+  const [assignmentDraftIds, setAssignmentDraftIds] = useState([])
+  const [assignmentState, setAssignmentState] = useState(initialAssignmentState)
   const [statusDraft, setStatusDraft] = useState({
     status: 'draft',
     reason: '',
@@ -209,18 +280,15 @@ export default function JobOrderWorkbench() {
     completedItemIds: [],
   })
   const [progressState, setProgressState] = useState(initialProgressState)
-  const [photoDraft, setPhotoDraft] = useState({
-    fileName: '',
-    fileUrl: '',
-    caption: '',
-  })
+  const [photoDraft, setPhotoDraft] = useState(emptyPhotoDraft)
+  const [photoInputResetKey, setPhotoInputResetKey] = useState(0)
   const [photoState, setPhotoState] = useState(initialPhotoState)
   const [finalizeDraft, setFinalizeDraft] = useState({
     summary: '',
   })
   const [finalizeState, setFinalizeState] = useState(initialFinalizeState)
   const [paymentDraft, setPaymentDraft] = useState({
-    amountPaidCents: '',
+    amountPaid: '',
     paymentMethod: 'cash',
     reference: '',
     receivedAt: '',
@@ -266,6 +334,11 @@ export default function JobOrderWorkbench() {
     jobOrder: activeJobOrder,
     userId: user?.id,
   })
+  const activeJobOrderNeedsAssignmentRepair = Boolean(
+    activeJobOrder &&
+      assignmentRequiredStatuses.includes(activeJobOrder.status) &&
+      activeJobOrder.assignedTechnicianIds.length === 0,
+  )
   const executionPhase = getJobOrderExecutionPhase(activeJobOrder)
   const technicianOptions = useMemo(
     () =>
@@ -279,6 +352,8 @@ export default function JobOrderWorkbench() {
     [staffDirectoryState.accounts],
   )
   const selectedMonth = selectedDate.slice(0, 7)
+  const finalizationBlockers = activeJobOrder?.finalizationReadiness?.blockers ?? []
+  const finalizationSuggestedSummary = buildSuggestedFinalizationSummary(activeJobOrder)
   const monthJobOrders = useMemo(
     () => [...jobOrderSummaryState.items].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
     [jobOrderSummaryState.items],
@@ -312,6 +387,43 @@ export default function JobOrderWorkbench() {
     () => monthJobOrders.filter((jobOrder) => jobOrder.workDate === selectedDate),
     [monthJobOrders, selectedDate],
   )
+  const photoTargetOptions = useMemo(() => {
+    const options = [
+      {
+        key: 'job_order',
+        linkedEntityType: 'job_order',
+        linkedEntityId: '',
+        label: 'General job-order evidence',
+      },
+    ]
+
+    if (!activeJobOrder) {
+      return options
+    }
+
+    activeJobOrder.items.forEach((item) => {
+      options.push({
+        key: `work_item:${item.id}`,
+        linkedEntityType: 'work_item',
+        linkedEntityId: item.id,
+        label: `Work item: ${item.name}`,
+      })
+    })
+
+    activeJobOrder.progressEntries
+      .slice()
+      .reverse()
+      .forEach((entry, index) => {
+        options.push({
+          key: `progress_entry:${entry.id}`,
+          linkedEntityType: 'progress_entry',
+          linkedEntityId: entry.id,
+          label: `Progress ${index + 1}: ${entry.message?.slice(0, 48) || formatStatusLabel(entry.entryType)}`,
+        })
+      })
+
+    return options
+  }, [activeJobOrder])
 
   const loadStaffDirectory = useCallback(async () => {
     if (!user?.accessToken || !['service_adviser', 'super_admin'].includes(role)) {
@@ -359,6 +471,7 @@ export default function JobOrderWorkbench() {
       const items = await listJobOrderWorkbenchSummaries({
         accessToken: user.accessToken,
         month: selectedMonth,
+        scope: workbenchScope,
       })
 
       setJobOrderSummaryState({
@@ -373,7 +486,7 @@ export default function JobOrderWorkbench() {
         message: error?.message || 'Job-order date indicators could not be loaded.',
       })
     }
-  }, [canUseWorkbench, selectedMonth, user?.accessToken])
+  }, [canUseWorkbench, selectedMonth, user?.accessToken, workbenchScope])
 
   useEffect(() => {
     void loadJobOrderSummaries()
@@ -400,6 +513,7 @@ export default function JobOrderWorkbench() {
       const data = await listJobOrderWorkbenchCalendar({
         accessToken: user.accessToken,
         month: selectedMonth,
+        scope: workbenchScope,
       })
 
       setJobOrderCalendarState({
@@ -419,7 +533,7 @@ export default function JobOrderWorkbench() {
         message: error?.message || 'Workbench date markers could not be loaded.',
       })
     }
-  }, [canUseWorkbench, selectedMonth, user?.accessToken])
+  }, [canUseWorkbench, selectedMonth, user?.accessToken, workbenchScope])
 
   useEffect(() => {
     void loadJobOrderCalendar()
@@ -434,6 +548,16 @@ export default function JobOrderWorkbench() {
   }, [manualJobOrderId, selectedDateJobOrders])
 
   const loadBookingHandoffs = useCallback(async () => {
+    if (workbenchScope === 'history') {
+      setHandoffCandidates([])
+      setSelectedBookingId('')
+      setHandoffState({
+        status: 'handoff_empty',
+        message: 'Booking handoffs are active-work only. Switch back to Active to create a new job order.',
+      })
+      return
+    }
+
     if (!canManageHandoffs) {
       setHandoffCandidates([])
       setSelectedBookingId('')
@@ -497,7 +621,7 @@ export default function JobOrderWorkbench() {
         message: error?.message || 'Booking handoff candidates could not be loaded.',
       })
     }
-  }, [canManageHandoffs, selectedDate, user?.accessToken])
+  }, [canManageHandoffs, selectedDate, user?.accessToken, workbenchScope])
 
   useEffect(() => {
     void loadBookingHandoffs()
@@ -525,28 +649,58 @@ export default function JobOrderWorkbench() {
 
   useEffect(() => {
     if (!activeJobOrder) {
+      setAssignmentDraftIds([])
+      setAssignmentState(initialAssignmentState)
       setStatusDraft({
         status: 'draft',
         reason: '',
       })
       setStatusState(initialStatusState)
       setProgressState(initialProgressState)
+      setPhotoDraft(emptyPhotoDraft)
       setPhotoState(initialPhotoState)
+      setFinalizeDraft({
+        summary: '',
+      })
       setFinalizeState(initialFinalizeState)
+      setPaymentDraft({
+        amountPaid: '',
+        paymentMethod: 'cash',
+        reference: '',
+        receivedAt: '',
+      })
       setPaymentState(initialPaymentState)
       return
     }
 
+    setAssignmentDraftIds(activeJobOrder.assignedTechnicianIds ?? [])
+    setAssignmentState(initialAssignmentState)
     setStatusDraft({
       status: nextStatuses[0] ?? activeJobOrder.status,
       reason: '',
     })
     setStatusState(initialStatusState)
     setProgressState(initialProgressState)
+    setPhotoDraft({
+      ...emptyPhotoDraft,
+      linkedEntityType: photoTargetOptions[0]?.linkedEntityType ?? 'job_order',
+      linkedEntityId: photoTargetOptions[0]?.linkedEntityId ?? '',
+    })
     setPhotoState(initialPhotoState)
+    setFinalizeDraft({
+      summary: buildSuggestedFinalizationSummary(activeJobOrder),
+    })
     setFinalizeState(initialFinalizeState)
+    setPaymentDraft({
+      amountPaid: activeJobOrder.invoiceRecord?.amountPaidCents
+        ? String(Math.round(activeJobOrder.invoiceRecord.amountPaidCents / 100))
+        : '',
+      paymentMethod: activeJobOrder.invoiceRecord?.paymentMethod ?? 'cash',
+      reference: activeJobOrder.invoiceRecord?.paymentReference ?? '',
+      receivedAt: formatDateTimeInputValue(activeJobOrder.invoiceRecord?.paidAt),
+    })
     setPaymentState(initialPaymentState)
-  }, [activeJobOrder, nextStatuses])
+  }, [activeJobOrder, nextStatuses, photoTargetOptions])
 
   const handleCreateItemChange = (index, patch) => {
     setCreateDraft((current) => ({
@@ -680,6 +834,81 @@ export default function JobOrderWorkbench() {
     }
   }
 
+  const handleAssignmentToggle = (technicianUserId, checked) => {
+    setAssignmentDraftIds((current) => {
+      if (checked) {
+        return current.includes(technicianUserId) ? current : [...current, technicianUserId]
+      }
+
+      return current.filter((candidateId) => candidateId !== technicianUserId)
+    })
+  }
+
+  const handleSaveAssignments = async () => {
+    if (!activeJobOrder?.id) {
+      setAssignmentState({
+        status: 'assignment_job_order_not_found',
+        message: 'Load a job order before saving technician assignments.',
+      })
+      return
+    }
+
+    if (!canManageAssignments) {
+      setAssignmentState({
+        status: 'assignment_forbidden_role',
+        message: 'Only service advisers and super admins can save technician assignments.',
+      })
+      return
+    }
+
+    if (!user?.accessToken) {
+      setAssignmentState({
+        status: 'assignment_failed',
+        message: 'A valid staff session is required before saving technician assignments.',
+      })
+      return
+    }
+
+    setAssignmentState({
+      status: 'assignment_submitting',
+      message: '',
+    })
+
+    try {
+      const updatedJobOrder = await replaceJobOrderAssignments({
+        jobOrderId: activeJobOrder.id,
+        assignedTechnicianIds: assignmentDraftIds,
+        accessToken: user.accessToken,
+      })
+
+      setActiveJobOrder(updatedJobOrder)
+      setManualJobOrderId(updatedJobOrder.id)
+      void loadJobOrderSummaries()
+      setAssignmentState({
+        status: 'assignment_saved',
+        message:
+          updatedJobOrder.assignedTechnicianIds.length > 0
+            ? 'Technician assignments were saved and the live job-order detail was refreshed.'
+            : 'Assignments were cleared while the job order stayed in a non-operational state.',
+      })
+    } catch (error) {
+      let nextStatus = 'assignment_failed'
+
+      if (error instanceof ApiError && error.status === 403) {
+        nextStatus = 'assignment_forbidden_role'
+      } else if (error instanceof ApiError && error.status === 404) {
+        nextStatus = 'assignment_job_order_not_found'
+      } else if (error instanceof ApiError && error.status === 409) {
+        nextStatus = 'assignment_conflict'
+      }
+
+      setAssignmentState({
+        status: nextStatus,
+        message: error?.message || 'Technician assignments could not be saved.',
+      })
+    }
+  }
+
   const handleStatusUpdate = async () => {
     if (!activeJobOrder?.id) {
       setStatusState({
@@ -730,7 +959,10 @@ export default function JobOrderWorkbench() {
 
       setStatusState({
         status: nextStatus,
-        message: error?.message || 'Job-order status could not be updated.',
+        message:
+          error?.message === 'Assigned technicians are required before operational status changes'
+            ? 'This job order has no saved technician assignment. Assign at least one technician, then retry the status change.'
+            : error?.message || 'Job-order status could not be updated.',
       })
     }
   }
@@ -830,6 +1062,14 @@ export default function JobOrderWorkbench() {
       return
     }
 
+    if (!(photoDraft.file instanceof File)) {
+      setPhotoState({
+        status: 'photo_failed',
+        message: 'Choose an image file before uploading evidence.',
+      })
+      return
+    }
+
     setPhotoState({
       status: 'photo_submitting',
       message: '',
@@ -838,21 +1078,23 @@ export default function JobOrderWorkbench() {
     try {
       const updatedJobOrder = await addJobOrderPhotoEvidence({
         jobOrderId: activeJobOrder.id,
-        fileName: photoDraft.fileName,
-        fileUrl: photoDraft.fileUrl,
+        file: photoDraft.file,
         caption: photoDraft.caption,
+        linkedEntityType: photoDraft.linkedEntityType,
+        linkedEntityId: photoDraft.linkedEntityId,
         accessToken: user.accessToken,
       })
 
       setActiveJobOrder(updatedJobOrder)
       setPhotoDraft({
-        fileName: '',
-        fileUrl: '',
-        caption: '',
+        ...emptyPhotoDraft,
+        linkedEntityType: photoTargetOptions[0]?.linkedEntityType ?? 'job_order',
+        linkedEntityId: photoTargetOptions[0]?.linkedEntityId ?? '',
       })
+      setPhotoInputResetKey((current) => current + 1)
       setPhotoState({
         status: 'photo_saved',
-        message: 'Photo evidence attached and job-order detail refreshed.',
+        message: 'Photo evidence uploaded and job-order detail refreshed.',
       })
     } catch (error) {
       let nextStatus = 'photo_failed'
@@ -867,7 +1109,7 @@ export default function JobOrderWorkbench() {
 
       setPhotoState({
         status: nextStatus,
-        message: error?.message || 'Photo evidence could not be attached.',
+        message: error?.message || 'Photo evidence could not be uploaded.',
       })
     }
   }
@@ -906,6 +1148,10 @@ export default function JobOrderWorkbench() {
       const updatedJobOrder = await finalizeJobOrder({
         jobOrderId: activeJobOrder.id,
         summary: finalizeDraft.summary,
+        amountPaid: paymentDraft.amountPaid,
+        paymentMethod: paymentDraft.paymentMethod,
+        paymentReference: paymentDraft.reference,
+        receivedAt: paymentDraft.receivedAt,
         accessToken: user.accessToken,
       })
 
@@ -913,7 +1159,10 @@ export default function JobOrderWorkbench() {
       void loadJobOrderSummaries()
       setFinalizeState({
         status: 'finalize_saved',
-        message: `Invoice-ready record ${updatedJobOrder.invoiceRecord?.invoiceReference ?? ''} generated.`,
+        message:
+          updatedJobOrder.invoiceRecord?.paymentStatus === 'paid'
+            ? `Invoice-ready record ${updatedJobOrder.invoiceRecord?.invoiceReference ?? ''} generated and payment recorded.`
+            : `Invoice-ready record ${updatedJobOrder.invoiceRecord?.invoiceReference ?? ''} generated.`,
       })
     } catch (error) {
       let nextStatus = 'finalize_failed'
@@ -974,15 +1223,15 @@ export default function JobOrderWorkbench() {
       return
     }
 
-    setPaymentState({
-      status: 'payment_submitting',
-      message: '',
-    })
+      setPaymentState({
+        status: 'payment_submitting',
+        message: '',
+      })
 
     try {
       const updatedJobOrder = await recordJobOrderInvoicePayment({
         jobOrderId: activeJobOrder.id,
-        amountPaidCents: paymentDraft.amountPaidCents,
+        amountPaid: paymentDraft.amountPaid,
         paymentMethod: paymentDraft.paymentMethod,
         reference: paymentDraft.reference,
         receivedAt: paymentDraft.receivedAt,
@@ -1010,6 +1259,48 @@ export default function JobOrderWorkbench() {
       setPaymentState({
         status: nextStatus,
         message: error?.message || 'Invoice payment could not be recorded.',
+      })
+    }
+  }
+
+  const handleExportInvoice = async () => {
+    if (!activeJobOrder?.id || !activeJobOrder.invoiceRecord) {
+      setFinalizeState({
+        status: 'finalize_failed',
+        message: 'Finalize the job order before exporting the invoice PDF.',
+      })
+      return
+    }
+
+    if (!user?.accessToken) {
+      setFinalizeState({
+        status: 'finalize_failed',
+        message: 'A valid staff session is required before exporting invoice PDF.',
+      })
+      return
+    }
+
+    try {
+      const pdfBlob = await exportJobOrderInvoicePdf({
+        jobOrderId: activeJobOrder.id,
+        accessToken: user.accessToken,
+      })
+      const downloadUrl = URL.createObjectURL(pdfBlob)
+      const anchor = document.createElement('a')
+      anchor.href = downloadUrl
+      anchor.download = `${activeJobOrder.invoiceRecord.invoiceReference || activeJobOrder.id}.pdf`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(downloadUrl)
+      setFinalizeState({
+        status: 'finalize_saved',
+        message: 'Invoice PDF generated and downloaded.',
+      })
+    } catch (error) {
+      setFinalizeState({
+        status: 'finalize_failed',
+        message: error?.message || 'Invoice PDF could not be generated.',
       })
     }
   }
@@ -1044,21 +1335,41 @@ export default function JobOrderWorkbench() {
               : 'Move confirmed bookings into workshop execution, track progress and evidence, then finalize invoice-ready work from one guided control surface.'}
           </p>
         </div>
-        {!isTechnician ? (
-          <button
-            onClick={loadBookingHandoffs}
-            className="ops-action-secondary min-w-[148px] self-start xl:self-auto"
-          >
-            <RefreshCw size={14} />
-            Refresh
-          </button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-full border border-surface-border bg-surface-raised p-1">
+            {[
+              { key: 'active', label: 'Active' },
+              { key: 'history', label: 'History' },
+            ].map((view) => (
+              <button
+                key={view.key}
+                type="button"
+                onClick={() => setWorkbenchScope(view.key)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  workbenchScope === view.key ? 'text-white' : 'text-ink-secondary'
+                }`}
+                style={workbenchScope === view.key ? { background: '#f07c00' } : undefined}
+              >
+                {view.label}
+              </button>
+            ))}
+          </div>
+          {!isTechnician ? (
+            <button
+              onClick={loadBookingHandoffs}
+              className="ops-action-secondary min-w-[148px] self-start xl:self-auto"
+            >
+              <RefreshCw size={14} />
+              Refresh
+            </button>
+          ) : null}
+        </div>
       </section>
 
       <section className="ops-control-strip">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,200px)_minmax(0,1fr)]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
           <label className="text-xs text-ink-muted">
-            {isTechnician ? 'Assigned work date' : 'Schedule date'}
+            {workbenchScope === 'history' ? 'History date' : isTechnician ? 'Assigned work date' : 'Schedule date'}
             <input
               type="date"
               value={selectedDate}
@@ -1073,9 +1384,9 @@ export default function JobOrderWorkbench() {
               <select
                 value={manualJobOrderId}
                 onChange={(event) => setManualJobOrderId(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="">
+              className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+            >
+              <option value="">
                   {selectedDateJobOrders.length > 0
                     ? 'Choose a job order for the selected date'
                     : monthJobOrders.length > 0
@@ -1086,7 +1397,7 @@ export default function JobOrderWorkbench() {
                   <optgroup label="Selected date">
                     {selectedDateJobOrders.map((jobOrder) => (
                       <option key={jobOrder.id} value={jobOrder.id}>
-                        JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatStatusLabel(jobOrder.status)}
+                        JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatStatusLabel(jobOrder.status)} - {formatDate(jobOrder.workDate)}
                       </option>
                     ))}
                   </optgroup>
@@ -1123,7 +1434,9 @@ export default function JobOrderWorkbench() {
               <p className="sm:col-span-2 text-[11px] text-ink-muted">
                 {isTechnician
                   ? 'Pick one of your assigned job orders from the selector before updating status, progress, or evidence.'
-                  : 'Use the selector instead of pasting raw job-order IDs so this workbench stays tied to known live records.'}
+                  : workbenchScope === 'history'
+                    ? 'History mode keeps finalized and cancelled job orders out of the active workbench queue while still letting you review or load them here.'
+                    : 'Use the selector instead of pasting raw job-order IDs so this workbench stays tied to known live records.'}
               </p>
             )}
           </div>
@@ -1131,11 +1444,17 @@ export default function JobOrderWorkbench() {
           <div className="lg:col-span-2 rounded-xl border border-surface-border bg-surface-card px-4 py-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-bold text-ink-primary">Dates with job orders and booking handoff queue</p>
+                <p className="text-sm font-bold text-ink-primary">
+                  {workbenchScope === 'history'
+                    ? 'Dates with finalized and cancelled job orders'
+                    : 'Dates with job orders and booking handoff queue'}
+                </p>
                 <p className="text-xs text-ink-muted mt-1">
                   {isTechnician
                     ? 'These dates already have assigned job orders in the selected month.'
-                    : 'These dates already have job orders or booking handoff queue in the selected month.'}
+                    : workbenchScope === 'history'
+                      ? 'These dates contain history records so completed work stays out of the active workshop queue.'
+                      : 'These dates already have job orders or booking handoff queue in the selected month.'}
                 </p>
               </div>
               <span className="badge badge-gray">
@@ -1174,14 +1493,16 @@ export default function JobOrderWorkbench() {
                       <span className="block font-semibold">{formatDate(entry.date)}</span>
                       <span className="mt-1 block text-[11px] opacity-80">
                         {entry.jobOrderCount} job order{entry.jobOrderCount === 1 ? '' : 's'}
-                        {entry.bookingQueueCount > 0 ? ` / ${entry.bookingQueueCount} queue` : ''}
+                        {workbenchScope === 'active' && entry.bookingQueueCount > 0 ? ` / ${entry.bookingQueueCount} queue` : ''}
                       </span>
                     </button>
                   )
                 })
               ) : (
                 <p className="text-xs text-ink-muted">
-                  No job-order or booking-handoff dates are marked for {selectedMonth} yet.
+                  {workbenchScope === 'history'
+                    ? `No finalized or cancelled job orders are marked for ${selectedMonth} yet.`
+                    : `No job-order or booking-handoff dates are marked for ${selectedMonth} yet.`}
                 </p>
               )}
             </div>
@@ -1193,23 +1514,27 @@ export default function JobOrderWorkbench() {
         {isTechnician ? (
           <SummaryTile
             icon={ClipboardList}
-            label="Assigned Queue"
+            label={workbenchScope === 'history' ? 'Assigned History' : 'Assigned Queue'}
             value={activeJobOrder ? 'Loaded' : 'Awaiting load'}
             sub={
               activeJobOrder
                 ? `Job order ${activeJobOrder.id.slice(0, 8).toUpperCase()} is ready for technician updates`
-                : 'Choose one of your assigned job orders to begin'
+                : workbenchScope === 'history'
+                  ? 'Choose one of your finalized or cancelled assigned job orders to review'
+                  : 'Choose one of your assigned job orders to begin'
             }
           />
         ) : (
           <SummaryTile
             icon={ClipboardList}
-            label="Booking Handoff Queue"
-            value={handoffCandidates.length}
+            label={workbenchScope === 'history' ? 'Job Order History' : 'Booking Handoff Queue'}
+            value={workbenchScope === 'history' ? monthJobOrders.length : handoffCandidates.length}
             sub={
-              handoffState.status === 'handoff_empty'
-                ? 'No confirmed booking source is ready today'
-                : 'Ready for job-order handoff'
+              workbenchScope === 'history'
+                ? 'Finalized and cancelled work stays here instead of the live workshop queue.'
+                : handoffState.status === 'handoff_empty'
+                  ? 'No confirmed booking source is ready today'
+                  : 'Ready for job-order handoff'
             }
           />
         )}
@@ -1304,18 +1629,26 @@ export default function JobOrderWorkbench() {
         </div>
 
         {activeJobOrder ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] mt-4">
-            <div className="grid gap-3">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-[#f07c00]/30 bg-surface-raised px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
-                    Job Order
-                  </p>
-                  <p className="text-sm text-ink-primary mt-1">
-                    JO-{activeJobOrder.id.slice(0, 8).toUpperCase()}
-                  </p>
-                  <p className="text-xs text-ink-muted mt-2">{activeJobOrder.sourceType} source</p>
-                </div>
+          <div className="mt-4 space-y-3">
+            {activeJobOrderNeedsAssignmentRepair ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
+                This job order has no saved technician assignment. Assign at least one technician,
+                then retry the status change.
+              </div>
+            ) : null}
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+              <div className="grid gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border border-[#f07c00]/30 bg-surface-raised px-4 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                      Job Order
+                    </p>
+                    <p className="text-sm text-ink-primary mt-1">
+                      JO-{activeJobOrder.id.slice(0, 8).toUpperCase()}
+                    </p>
+                    <p className="text-xs text-ink-muted mt-2">{activeJobOrder.sourceType} source</p>
+                  </div>
                 <div className="rounded-xl border border-[#f07c00]/30 bg-surface-raised px-4 py-3">
                   <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
                     Current Status
@@ -1342,20 +1675,91 @@ export default function JobOrderWorkbench() {
                     </li>
                   ))}
                 </ul>
+                </div>
               </div>
-            </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
-                  Assignments
-                </p>
-                <p className="text-sm text-ink-primary mt-1">
-                  {activeJobOrder.assignedTechnicianIds.length > 0
-                    ? activeJobOrder.assignedTechnicianIds.join(', ')
-                    : 'No technician assigned'}
-                </p>
-              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                    Assignments
+                  </p>
+                  <p className="text-sm text-ink-primary mt-1">
+                    {activeJobOrder.assignedTechnicianIds.length > 0
+                      ? `${activeJobOrder.assignedTechnicianIds.length} technician${activeJobOrder.assignedTechnicianIds.length === 1 ? '' : 's'} assigned`
+                      : 'No technician assigned'}
+                  </p>
+                  <p className="text-xs text-ink-muted mt-2">
+                    {canManageAssignments
+                      ? 'Draft job orders may stay unassigned. Assigned and operational job orders require at least one saved technician.'
+                      : activeJobOrder.assignedTechnicianIds.join(', ') || 'Only advisers or super admins can change assignments.'}
+                  </p>
+                  {canManageAssignments ? (
+                    <div className="mt-3 space-y-3">
+                    <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
+                      {technicianOptions.length > 0 ? (
+                        technicianOptions.map((account) => {
+                          const checked = assignmentDraftIds.includes(account.id)
+
+                          return (
+                            <label
+                              key={account.id}
+                              className="flex items-start gap-3 rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) =>
+                                  handleAssignmentToggle(account.id, event.target.checked)
+                                }
+                                className="mt-1"
+                              />
+                              <span className="min-w-0">
+                                <span className="block font-semibold">
+                                  {account.displayName || account.email}
+                                </span>
+                                <span className="block text-xs text-ink-muted mt-1">
+                                  {account.roleLabel}
+                                  {account.staffCode ? ` - ${account.staffCode}` : ''}
+                                </span>
+                              </span>
+                            </label>
+                          )
+                        })
+                      ) : (
+                        <div className="rounded-lg border border-surface-border bg-surface-card px-3 py-3 text-xs text-ink-muted">
+                          No active technician accounts are available in the staff directory yet.
+                        </div>
+                      )}
+                    </div>
+
+                    {assignmentState.message ? (
+                      <div
+                        className={`rounded-xl border px-4 py-3 text-xs ${
+                          assignmentState.status === 'assignment_saved'
+                            ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                            : 'border-red-500/25 bg-red-500/10 text-red-200'
+                        }`}
+                      >
+                        {assignmentState.message}
+                      </div>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={handleSaveAssignments}
+                      disabled={assignmentState.status === 'assignment_submitting'}
+                      className="ops-action-primary w-full"
+                    >
+                      {assignmentState.status === 'assignment_submitting' ? (
+                        <RefreshCw size={14} className="animate-spin" />
+                      ) : (
+                        <ShieldCheck size={14} />
+                      )}
+                      Save Assignments
+                    </button>
+                    </div>
+                  ) : null}
+                </div>
               <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
                   Latest Progress
@@ -1395,6 +1799,7 @@ export default function JobOrderWorkbench() {
                       ? `Payment: ${activeJobOrder.invoiceRecord.paymentStatus}`
                       : 'Finalization creates the invoice-ready record.'}
                 </p>
+                </div>
               </div>
             </div>
           </div>
@@ -1674,35 +2079,57 @@ export default function JobOrderWorkbench() {
                 <div className="rounded-xl border border-surface-border bg-surface-card p-4">
                   <p className="text-sm font-bold text-ink-primary">Photo Evidence</p>
                   <p className="text-xs text-ink-muted mt-1">
-                    Add a photo link or file reference that the next reviewer can understand quickly.
+                    Upload images directly from a phone camera or desktop file picker so the next reviewer sees stored evidence instead of pasted links.
                   </p>
                   <div className="grid md:grid-cols-2 gap-3 mt-3">
                     <label className="text-xs text-ink-muted">
-                      File name
+                      Image file
                       <input
-                        value={photoDraft.fileName}
+                        key={`technician-photo-${photoInputResetKey}`}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
                         onChange={(event) =>
                           setPhotoDraft((current) => ({
                             ...current,
-                            fileName: event.target.value,
+                            file: event.target.files?.[0] ?? null,
                           }))
                         }
-                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                        placeholder="front-brake-after.jpg"
+                        className="mt-1 block w-full text-sm text-ink-primary file:mr-3 file:rounded-lg file:border-0 file:bg-surface-raised file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink-primary"
                       />
                     </label>
                     <label className="text-xs text-ink-muted">
-                      File URL
-                      <input
-                        value={photoDraft.fileUrl}
-                        onChange={(event) =>
+                      Evidence target
+                      <select
+                        value={`${photoDraft.linkedEntityType}:${photoDraft.linkedEntityId || ''}`}
+                        onChange={(event) => {
+                          const [linkedEntityType, ...rest] = event.target.value.split(':')
+                          const linkedEntityId = rest.join(':')
                           setPhotoDraft((current) => ({
                             ...current,
-                            fileUrl: event.target.value,
+                            linkedEntityType,
+                            linkedEntityId,
                           }))
-                        }
+                        }}
                         className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                        placeholder="https://files.example.com/job-orders/photo.jpg"
+                      >
+                        {photoTargetOptions.map((option) => (
+                          <option
+                            key={option.key}
+                            value={`${option.linkedEntityType}:${option.linkedEntityId || ''}`}
+                          >
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs text-ink-muted md:col-span-2">
+                      Selected file
+                      <input
+                        value={photoDraft.file?.name ?? ''}
+                        readOnly
+                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                        placeholder="No image selected yet"
                       />
                     </label>
                     <label className="text-xs text-ink-muted md:col-span-2">
@@ -1717,7 +2144,7 @@ export default function JobOrderWorkbench() {
                         }
                         rows={3}
                         className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                        placeholder="Customer-safe evidence caption."
+                        placeholder="What this image proves for the next reviewer."
                       />
                     </label>
                   </div>
@@ -1742,7 +2169,7 @@ export default function JobOrderWorkbench() {
                     ) : (
                       <FileStack size={14} />
                     )}
-                    Attach Photo Evidence
+                    Upload Photo Evidence
                   </button>
                 </div>
               </div>
@@ -2245,35 +2672,57 @@ export default function JobOrderWorkbench() {
               <div className="rounded-xl border border-surface-border bg-surface-card p-4">
                 <p className="text-sm font-bold text-ink-primary">Photo Evidence</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Add a photo link or file reference that staff can review during QA.
+                  Upload images directly from camera or desktop so QA and finalization reviewers can inspect stored evidence.
                 </p>
                 <div className="grid md:grid-cols-2 gap-3 mt-3">
                   <label className="text-xs text-ink-muted">
-                    File name
+                    Image file
                     <input
-                      value={photoDraft.fileName}
+                      key={`adviser-photo-${photoInputResetKey}`}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
                       onChange={(event) =>
                         setPhotoDraft((current) => ({
                           ...current,
-                          fileName: event.target.value,
+                          file: event.target.files?.[0] ?? null,
                         }))
                       }
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                      placeholder="front-brake-after.jpg"
+                      className="mt-1 block w-full text-sm text-ink-primary file:mr-3 file:rounded-lg file:border-0 file:bg-surface-raised file:px-3 file:py-2 file:text-sm file:font-semibold file:text-ink-primary"
                     />
                   </label>
                   <label className="text-xs text-ink-muted">
-                    File URL
-                    <input
-                      value={photoDraft.fileUrl}
-                      onChange={(event) =>
+                    Evidence target
+                    <select
+                      value={`${photoDraft.linkedEntityType}:${photoDraft.linkedEntityId || ''}`}
+                      onChange={(event) => {
+                        const [linkedEntityType, ...rest] = event.target.value.split(':')
+                        const linkedEntityId = rest.join(':')
                         setPhotoDraft((current) => ({
                           ...current,
-                          fileUrl: event.target.value,
+                          linkedEntityType,
+                          linkedEntityId,
                         }))
-                      }
+                      }}
                       className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                      placeholder="https://files.example.com/job-orders/photo.jpg"
+                    >
+                      {photoTargetOptions.map((option) => (
+                        <option
+                          key={option.key}
+                          value={`${option.linkedEntityType}:${option.linkedEntityId || ''}`}
+                        >
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs text-ink-muted md:col-span-2">
+                    Selected file
+                    <input
+                      value={photoDraft.file?.name ?? ''}
+                      readOnly
+                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      placeholder="No image selected yet"
                     />
                   </label>
                   <label className="text-xs text-ink-muted md:col-span-2">
@@ -2288,7 +2737,7 @@ export default function JobOrderWorkbench() {
                       }
                       rows={3}
                       className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                      placeholder="Customer-safe evidence caption."
+                      placeholder="What this image proves for the next reviewer."
                     />
                   </label>
                 </div>
@@ -2313,7 +2762,7 @@ export default function JobOrderWorkbench() {
                   ) : (
                     <FileStack size={14} />
                   )}
-                  Attach Photo Evidence
+                  Upload Photo Evidence
                 </button>
               </div>
             </div>
@@ -2324,13 +2773,12 @@ export default function JobOrderWorkbench() {
               <div>
                 <p className="card-title">Finalize & Payment</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Finalization creates the invoice-ready record only after backend QA and
-                  work-completion rules pass, then payment updates stay attached to that record.
+                  Finalization, payment capture, and invoice export stay on one screen so advisers can see readiness blockers before they commit the release record.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <span className="badge badge-gray">Finalize: adviser/admin</span>
-                <span className="badge badge-gray">Payment: invoice-record only</span>
+                <span className="badge badge-gray">Head-technician pass required</span>
+                <span className="badge badge-gray">Adviser/admin only</span>
               </div>
             </div>
 
@@ -2338,8 +2786,7 @@ export default function JobOrderWorkbench() {
               <div className="rounded-xl border border-surface-border bg-surface-card p-4">
                 <p className="text-sm font-bold text-ink-primary">Finalize Invoice-Ready Work</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Finalization is separate from status updates and stays blocked when QA or
-                  work-item rules fail.
+                  The backend will reject this action unless pre-check review, work completion, and payment prerequisites are all satisfied.
                 </p>
                 <label className="text-xs text-ink-muted block mt-3">
                   Finalization summary
@@ -2353,56 +2800,30 @@ export default function JobOrderWorkbench() {
                     }
                     rows={4}
                     className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                    placeholder="Summarize completed work for the invoice-ready record."
+                    placeholder="Describe completed work for the invoice-ready record."
                   />
                 </label>
-                {finalizeState.message ? (
-                  <div
-                    className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
-                      finalizeState.status === 'finalize_saved'
-                        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                        : 'border-red-500/25 bg-red-500/10 text-red-200'
-                    }`}
-                  >
-                    {finalizeState.message}
+                {!finalizationSuggestedSummary ? (
+                  <div className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
+                    No work notes found — please describe completed work before finalizing.
                   </div>
                 ) : null}
-                <button
-                  onClick={handleFinalizeJobOrder}
-                  disabled={!activeJobOrder || finalizeState.status === 'finalize_submitting'}
-                  className="ops-action-primary mt-3"
-                >
-                  {finalizeState.status === 'finalize_submitting' ? (
-                    <RefreshCw size={14} className="animate-spin" />
-                  ) : (
-                    <CheckCircle2 size={14} />
-                  )}
-                  Generate Invoice-Ready Record
-                </button>
-              </div>
-
-              <div className="rounded-xl border border-surface-border bg-surface-card p-4">
-                <p className="text-sm font-bold text-ink-primary">Record Invoice Payment</p>
-                <p className="text-xs text-ink-muted mt-1">
-                  Payment tracking belongs to the invoice-ready record and does not mutate booking
-                  truth.
-                </p>
                 <div className="grid md:grid-cols-2 gap-3 mt-3">
                   <label className="text-xs text-ink-muted">
-                    Amount paid in cents
+                    Amount received (PHP)
                     <input
                       type="number"
                       min="1"
                       step="1"
-                      value={paymentDraft.amountPaidCents}
+                      value={paymentDraft.amountPaid}
                       onChange={(event) =>
                         setPaymentDraft((current) => ({
                           ...current,
-                          amountPaidCents: event.target.value,
+                          amountPaid: event.target.value,
                         }))
                       }
                       className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                      placeholder="159900"
+                      placeholder="2500"
                     />
                   </label>
                   <label className="text-xs text-ink-muted">
@@ -2425,7 +2846,7 @@ export default function JobOrderWorkbench() {
                     </select>
                   </label>
                   <label className="text-xs text-ink-muted">
-                    Reference
+                    Payment reference
                     <input
                       value={paymentDraft.reference}
                       onChange={(event) =>
@@ -2435,7 +2856,7 @@ export default function JobOrderWorkbench() {
                         }))
                       }
                       className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                      placeholder="OR-2026-0001"
+                      placeholder="GCASH-TEST-1234"
                     />
                   </label>
                   <label className="text-xs text-ink-muted">
@@ -2453,6 +2874,113 @@ export default function JobOrderWorkbench() {
                     />
                   </label>
                 </div>
+                {finalizationBlockers.length > 0 ? (
+                  <div className="mt-3 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+                    <p className="font-semibold text-red-100">Finalization blockers</p>
+                    <ul className="mt-2 space-y-1 list-disc pl-4">
+                      {finalizationBlockers.map((blocker) => (
+                        <li key={blocker}>{blocker}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {finalizeState.message ? (
+                  <div
+                    className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
+                      finalizeState.status === 'finalize_saved'
+                        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                        : 'border-red-500/25 bg-red-500/10 text-red-200'
+                    }`}
+                  >
+                    {finalizeState.message}
+                  </div>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button
+                    onClick={handleFinalizeJobOrder}
+                    disabled={
+                      !activeJobOrder ||
+                      !canFinalizeOrPay ||
+                      Boolean(activeJobOrder.invoiceRecord) ||
+                      finalizeState.status === 'finalize_submitting' ||
+                      activeJobOrder.finalizationReadiness?.canFinalize === false
+                    }
+                    className="ops-action-primary"
+                  >
+                    {finalizeState.status === 'finalize_submitting' ? (
+                      <RefreshCw size={14} className="animate-spin" />
+                    ) : (
+                      <CheckCircle2 size={14} />
+                    )}
+                    {activeJobOrder?.invoiceRecord ? 'Invoice Already Generated' : 'Finalize & Record Payment'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRecordInvoicePayment}
+                    disabled={
+                      !activeJobOrder?.invoiceRecord ||
+                      activeJobOrder.invoiceRecord.paymentStatus === 'paid' ||
+                      paymentState.status === 'payment_submitting'
+                    }
+                    className="ops-action-secondary"
+                  >
+                    {paymentState.status === 'payment_submitting' ? (
+                      <RefreshCw size={14} className="animate-spin" />
+                    ) : (
+                      <ShieldCheck size={14} />
+                    )}
+                    Retry Payment Recording
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+                <p className="text-sm font-bold text-ink-primary">Invoice Record & Export</p>
+                <p className="text-xs text-ink-muted mt-1">
+                  Once finalization succeeds, this panel becomes the source of truth for OR/reference, totals, payment state, and printable invoice output.
+                </p>
+                <div className="grid md:grid-cols-2 gap-3 mt-3">
+                  <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Invoice reference</p>
+                    <p className="mt-2 text-sm text-ink-primary">
+                      {activeJobOrder?.invoiceRecord?.invoiceReference ?? 'Generated after finalization'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Official receipt</p>
+                    <p className="mt-2 text-sm text-ink-primary">
+                      {activeJobOrder?.invoiceRecord?.officialReceiptReference ?? 'Generated automatically'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Reservation fee deduction</p>
+                    <p className="mt-2 text-sm text-ink-primary">
+                      {formatPesoAmount(activeJobOrder?.invoiceRecord?.reservationFeeDeductionCents ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Total amount</p>
+                    <p className="mt-2 text-sm text-ink-primary">
+                      {formatPesoAmount(activeJobOrder?.invoiceRecord?.totalAmountCents ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Payment status</p>
+                    <p className="mt-2 text-sm text-ink-primary">
+                      {activeJobOrder?.invoiceRecord ? formatStatusLabel(activeJobOrder.invoiceRecord.paymentStatus) : 'Awaiting finalization'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Email delivery</p>
+                    <p className="mt-2 text-sm text-ink-primary">
+                      {activeJobOrder?.invoiceRecord?.pdfEmailSentAt
+                        ? `Sent ${formatDateTime(activeJobOrder.invoiceRecord.pdfEmailSentAt)}`
+                        : activeJobOrder?.invoiceRecord?.pdfEmailError
+                          ? 'Delivery retry needed'
+                          : 'Will send after PDF generation'}
+                    </p>
+                  </div>
+                </div>
                 {paymentState.message ? (
                   <div
                     className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
@@ -2464,18 +2992,17 @@ export default function JobOrderWorkbench() {
                     {paymentState.message}
                   </div>
                 ) : null}
-                <button
-                  onClick={handleRecordInvoicePayment}
-                  disabled={!activeJobOrder || paymentState.status === 'payment_submitting'}
-                  className="ops-action-primary mt-3"
-                >
-                  {paymentState.status === 'payment_submitting' ? (
-                    <RefreshCw size={14} className="animate-spin" />
-                  ) : (
-                    <ShieldCheck size={14} />
-                  )}
-                  Record Invoice Payment
-                </button>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={handleExportInvoice}
+                    disabled={!activeJobOrder?.invoiceRecord}
+                    className="ops-action-primary"
+                  >
+                    <FileStack size={14} />
+                    Export Invoice PDF
+                  </button>
+                </div>
               </div>
             </div>
           </div>

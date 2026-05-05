@@ -37,6 +37,7 @@ import { BOOKINGS_CLOCK } from '../../src/modules/bookings/bookings.constants';
 import { UpdateBookingStatusDto } from '../../src/modules/bookings/dto/update-booking-status.dto';
 import { BookingsRepository } from '../../src/modules/bookings/repositories/bookings.repository';
 import { bookingStatusEnum } from '../../src/modules/bookings/schemas/bookings.schema';
+import { BookingReservationPaymentGatewayService } from '../../src/modules/bookings/services/booking-reservation-payment-gateway.service';
 import { BookingsService } from '../../src/modules/bookings/services/bookings.service';
 import { ChatbotController } from '../../src/modules/chatbot/controllers/chatbot.controller';
 import { ChatbotRepository } from '../../src/modules/chatbot/repositories/chatbot.repository';
@@ -291,7 +292,40 @@ type BookingRecord = {
   timeSlotId: string;
   scheduledDate: string;
   status: BookingStatus;
+  qrCodeToken?: string | null;
+  qrCodeIssuedAt?: Date | null;
   notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type BookingPaymentPolicyRecord = {
+  id: string;
+  reservationFeeAmountCents: number;
+  currencyCode: string;
+  onlineExpiryWindowMinutes: number;
+  counterExpiryWindowMinutes: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type BookingReservationPaymentRecord = {
+  id: string;
+  bookingId: string;
+  provider: 'paymongo' | 'manual_counter';
+  status: 'pending' | 'paid' | 'failed' | 'expired' | 'refunded';
+  amountCents: number;
+  currencyCode: string;
+  providerPaymentId: string | null;
+  providerCheckoutUrl: string | null;
+  referenceNumber: string | null;
+  failureReason: string | null;
+  expiresAt: Date | null;
+  paidAt: Date | null;
+  refundedAt: Date | null;
+  confirmedByUserId: string | null;
+  refundStatus: 'not_required' | 'pending_review' | 'processing' | 'completed';
+  auditMetadata: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -882,6 +916,7 @@ const cloneBooking = (
   timeSlotsById: Map<string, TimeSlotRecord>,
   bookingServicesList: BookingServiceRecord[],
   bookingStatusHistoryList: BookingStatusHistoryRecord[],
+  reservationPaymentsByBookingId: Map<string, BookingReservationPaymentRecord>,
   user?: UserRecord | null,
   vehicle?: VehicleRecord | null,
 ) => {
@@ -900,6 +935,9 @@ const cloneBooking = (
         ...entry,
         service: { ...servicesById.get(entry.serviceId)! },
       })),
+    reservationPayment: reservationPaymentsByBookingId.get(booking.id)
+      ? { ...reservationPaymentsByBookingId.get(booking.id)! }
+      : null,
     statusHistory: bookingStatusHistoryList
       .filter((entry) => entry.bookingId === booking.id)
       .sort((left, right) => right.changedAt.getTime() - left.changedAt.getTime())
@@ -1566,6 +1604,16 @@ class InMemoryBookingsRepository {
   private readonly bookings = new Map<string, BookingRecord>();
   private readonly bookingServices: BookingServiceRecord[] = [];
   private readonly bookingStatusHistory: BookingStatusHistoryRecord[] = [];
+  private readonly reservationPayments = new Map<string, BookingReservationPaymentRecord>();
+  private paymentPolicy: BookingPaymentPolicyRecord = {
+    id: randomUUID(),
+    reservationFeeAmountCents: 1500,
+    currencyCode: 'PHP',
+    onlineExpiryWindowMinutes: 30,
+    counterExpiryWindowMinutes: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 
   async listServices() {
     return Array.from(this.services.values())
@@ -1664,7 +1712,7 @@ class InMemoryBookingsRepository {
 
   async countActiveBookingsForSlot(timeSlotId: string, scheduledDate: string, excludeBookingId?: string) {
     return Array.from(this.bookings.values()).filter((booking) => {
-      const isActiveStatus = ['pending', 'confirmed', 'rescheduled'].includes(booking.status);
+      const isActiveStatus = ['pending', 'pending_payment', 'confirmed', 'rescheduled'].includes(booking.status);
       const isExcluded = excludeBookingId ? booking.id === excludeBookingId : false;
 
       return (
@@ -1739,6 +1787,7 @@ class InMemoryBookingsRepository {
           this.timeSlots,
           this.bookingServices,
           this.bookingStatusHistory,
+          this.reservationPayments,
           this.usersRepository.peekById(booking.userId),
           this.vehiclesRepository.peekById(booking.vehicleId),
         ),
@@ -1753,7 +1802,9 @@ class InMemoryBookingsRepository {
       vehicleId: createBookingDto.vehicleId,
       timeSlotId: createBookingDto.timeSlotId,
       scheduledDate: createBookingDto.scheduledDate,
-      status: 'pending',
+      status: 'pending_payment',
+      qrCodeToken: null,
+      qrCodeIssuedAt: null,
       notes: createBookingDto.notes ?? null,
       createdAt: now,
       updatedAt: now,
@@ -1773,8 +1824,8 @@ class InMemoryBookingsRepository {
       id: randomUUID(),
       bookingId: booking.id,
       previousStatus: null,
-      nextStatus: 'pending',
-      reason: 'Booking created',
+      nextStatus: 'pending_payment',
+      reason: 'Booking created and awaiting reservation payment',
       changedByUserId: createBookingDto.userId,
       changedAt: now,
     });
@@ -1794,6 +1845,7 @@ class InMemoryBookingsRepository {
       this.timeSlots,
       this.bookingServices,
       this.bookingStatusHistory,
+      this.reservationPayments,
       this.usersRepository.peekById(booking.userId),
       this.vehiclesRepository.peekById(booking.vehicleId),
     );
@@ -1807,6 +1859,7 @@ class InMemoryBookingsRepository {
       this.timeSlots,
       this.bookingServices,
       this.bookingStatusHistory,
+      this.reservationPayments,
       booking ? this.usersRepository.peekById(booking.userId) : null,
       booking ? this.vehiclesRepository.peekById(booking.vehicleId) : null,
     );
@@ -1823,6 +1876,7 @@ class InMemoryBookingsRepository {
           this.timeSlots,
           this.bookingServices,
           this.bookingStatusHistory,
+          this.reservationPayments,
           this.usersRepository.peekById(booking.userId),
           this.vehiclesRepository.peekById(booking.vehicleId),
         ),
@@ -1840,6 +1894,7 @@ class InMemoryBookingsRepository {
           this.timeSlots,
           this.bookingServices,
           this.bookingStatusHistory,
+          this.reservationPayments,
           this.usersRepository.peekById(booking.userId),
           this.vehiclesRepository.peekById(booking.vehicleId),
         ),
@@ -1856,6 +1911,7 @@ class InMemoryBookingsRepository {
           this.timeSlots,
           this.bookingServices,
           this.bookingStatusHistory,
+          this.reservationPayments,
           this.usersRepository.peekById(booking.userId),
           this.vehiclesRepository.peekById(booking.vehicleId),
         ),
@@ -1887,6 +1943,7 @@ class InMemoryBookingsRepository {
           this.timeSlots,
           this.bookingServices,
           this.bookingStatusHistory,
+          this.reservationPayments,
           this.usersRepository.peekById(booking.userId),
           this.vehiclesRepository.peekById(booking.vehicleId),
         ),
@@ -1945,6 +2002,92 @@ class InMemoryBookingsRepository {
     });
 
     return this.findById(id);
+  }
+
+  async getOrCreatePaymentPolicy() {
+    return { ...this.paymentPolicy };
+  }
+
+  async updatePaymentPolicy(payload: {
+    reservationFeeAmountCents?: number;
+    currencyCode?: string;
+    onlineExpiryWindowMinutes?: number;
+    counterExpiryWindowMinutes?: number;
+  }) {
+    this.paymentPolicy = {
+      ...this.paymentPolicy,
+      reservationFeeAmountCents:
+        payload.reservationFeeAmountCents ?? this.paymentPolicy.reservationFeeAmountCents,
+      currencyCode: payload.currencyCode ?? this.paymentPolicy.currencyCode,
+      onlineExpiryWindowMinutes:
+        payload.onlineExpiryWindowMinutes ?? this.paymentPolicy.onlineExpiryWindowMinutes,
+      counterExpiryWindowMinutes:
+        payload.counterExpiryWindowMinutes ?? this.paymentPolicy.counterExpiryWindowMinutes,
+      updatedAt: new Date(),
+    };
+
+    return { ...this.paymentPolicy };
+  }
+
+  async createOrReplaceReservationPayment(payload: {
+    bookingId: string;
+    provider: 'paymongo' | 'manual_counter';
+    status: 'pending' | 'paid' | 'failed' | 'expired' | 'refunded';
+    amountCents: number;
+    currencyCode: string;
+    providerPaymentId?: string | null;
+    providerCheckoutUrl?: string | null;
+    referenceNumber?: string | null;
+    failureReason?: string | null;
+    expiresAt?: Date | null;
+    paidAt?: Date | null;
+    refundedAt?: Date | null;
+    confirmedByUserId?: string | null;
+    refundStatus?: 'not_required' | 'pending_review' | 'processing' | 'completed';
+    auditMetadata?: string | null;
+  }) {
+    const existing = this.reservationPayments.get(payload.bookingId);
+    const now = new Date();
+    const reservationPayment: BookingReservationPaymentRecord = {
+      id: existing?.id ?? randomUUID(),
+      bookingId: payload.bookingId,
+      provider: payload.provider,
+      status: payload.status,
+      amountCents: payload.amountCents,
+      currencyCode: payload.currencyCode,
+      providerPaymentId: payload.providerPaymentId ?? null,
+      providerCheckoutUrl: payload.providerCheckoutUrl ?? null,
+      referenceNumber: payload.referenceNumber ?? null,
+      failureReason: payload.failureReason ?? null,
+      expiresAt: payload.expiresAt ?? null,
+      paidAt: payload.paidAt ?? null,
+      refundedAt: payload.refundedAt ?? null,
+      confirmedByUserId: payload.confirmedByUserId ?? null,
+      refundStatus: payload.refundStatus ?? existing?.refundStatus ?? 'not_required',
+      auditMetadata: payload.auditMetadata ?? null,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    this.reservationPayments.set(payload.bookingId, reservationPayment);
+    return { ...reservationPayment };
+  }
+
+  async updateBookingQrCode(bookingId: string, qrCodeToken: string) {
+    const booking = this.bookings.get(bookingId);
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    const updatedBooking: BookingRecord = {
+      ...booking,
+      qrCodeToken,
+      qrCodeIssuedAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    this.bookings.set(bookingId, updatedBooking);
+    return { ...updatedBooking };
   }
 }
 
@@ -2107,6 +2250,54 @@ class InMemoryJobOrdersRepository {
     return this.findById(id);
   }
 
+  async replaceAssignments(
+    id: string,
+    payload: {
+      assignedTechnicianIds: string[];
+      status?: JobOrderStatus;
+      notes?: string | null;
+    },
+  ) {
+    const jobOrder = this.jobOrders.get(id);
+    if (!jobOrder) {
+      throw new NotFoundException('Job order not found');
+    }
+
+    for (let index = this.assignments.length - 1; index >= 0; index -= 1) {
+      if (this.assignments[index].jobOrderId === id) {
+        this.assignments.splice(index, 1);
+      }
+    }
+
+    const now = new Date();
+    payload.assignedTechnicianIds.forEach((technicianUserId) => {
+      this.assignments.push({
+        id: randomUUID(),
+        jobOrderId: id,
+        technicianUserId,
+        assignedAt: now,
+      });
+    });
+
+    this.jobOrders.set(id, {
+      ...jobOrder,
+      status: payload.status ?? jobOrder.status,
+      notes: payload.notes === undefined ? jobOrder.notes : payload.notes,
+      updatedAt: now,
+    });
+
+    return this.findById(id);
+  }
+
+  async findByStatuses(statuses: JobOrderStatus[]) {
+    return Array.from(this.jobOrders.values())
+      .filter((jobOrder) => statuses.includes(jobOrder.status))
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+      .map((jobOrder) =>
+        cloneJobOrder(jobOrder, this.items, this.assignments, this.progressEntries, this.photos, this.invoiceRecords),
+      );
+  }
+
   async addProgressEntry(id: string, payload: AddJobOrderProgressDto, technicianUserId: string) {
     const jobOrder = this.jobOrders.get(id);
     if (!jobOrder) {
@@ -2261,7 +2452,7 @@ class InMemoryQualityGatesRepository {
     if (existing) {
       const updatedGate: QualityGateRecord = {
         ...existing,
-        status: 'pending',
+        status: 'pending_review',
         riskScore: 0,
         blockingReason: null,
         auditJob: { ...auditJob },
@@ -2283,7 +2474,7 @@ class InMemoryQualityGatesRepository {
     const createdGate: QualityGateRecord = {
       id: randomUUID(),
       jobOrderId,
-      status: 'pending',
+      status: 'pending_review',
       riskScore: 0,
       blockingReason: null,
       auditJob: { ...auditJob },
@@ -4361,6 +4552,18 @@ export async function createMainServiceTestApp(): Promise<{
       { provide: AuthRepository, useValue: authRepository },
       { provide: VehiclesRepository, useValue: vehiclesRepository },
       { provide: BookingsRepository, useValue: bookingsRepository },
+      {
+        provide: BookingReservationPaymentGatewayService,
+        useValue: {
+          createReservationPayment: async () => ({
+            provider: 'paymongo',
+            status: 'pending',
+            providerPaymentId: 'test-payment',
+            checkoutUrl: 'https://example.test/paymongo/checkout',
+            failureReason: null,
+          }),
+        },
+      },
       { provide: BOOKINGS_CLOCK, useValue: bookingClock },
       { provide: JobOrdersRepository, useValue: jobOrdersRepository },
       { provide: BackJobsRepository, useValue: backJobsRepository },

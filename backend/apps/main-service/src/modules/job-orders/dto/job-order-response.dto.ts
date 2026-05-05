@@ -8,6 +8,49 @@ import { JobOrderItemResponseDto } from './job-order-item-response.dto';
 import { JobOrderPhotoResponseDto } from './job-order-photo-response.dto';
 import { JobOrderProgressEntryResponseDto } from './job-order-progress-entry-response.dto';
 
+class JobOrderFinalizationReadinessDto {
+  @ApiProperty({
+    example: true,
+  })
+  canFinalize!: boolean;
+
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    example: ['Head-technician verdict is missing.'],
+  })
+  blockers!: string[];
+
+  @ApiPropertyOptional({
+    example: 'Oil changed, filter replaced, and final inspection passed.',
+  })
+  suggestedSummary?: string | null;
+}
+
+class JobOrderHeadTechnicianVerdictDto {
+  @ApiProperty({
+    enum: ['pending', 'passed', 'blocked'],
+    example: 'passed',
+  })
+  verdict!: 'pending' | 'passed' | 'blocked';
+
+  @ApiPropertyOptional({
+    example: 'Physical inspection matched the completed work.',
+  })
+  note?: string | null;
+
+  @ApiPropertyOptional({
+    example: '7f0c0000-1111-2222-3333-444444444444',
+  })
+  reviewerUserId?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-05-05T10:30:00.000Z',
+    format: 'date-time',
+  })
+  reviewedAt?: string | null;
+}
+
 export class JobOrderResponseDto {
   @ApiProperty({
     example: '7bc8926d-8eb7-4c97-85ab-4597a58e1f43',
@@ -107,4 +150,14 @@ export class JobOrderResponseDto {
     type: () => JobOrderInvoiceRecordResponseDto,
   })
   invoiceRecord?: JobOrderInvoiceRecordResponseDto | null;
+
+  @ApiPropertyOptional({
+    type: () => JobOrderHeadTechnicianVerdictDto,
+  })
+  headTechnicianVerdict?: JobOrderHeadTechnicianVerdictDto | null;
+
+  @ApiPropertyOptional({
+    type: () => JobOrderFinalizationReadinessDto,
+  })
+  finalizationReadiness?: JobOrderFinalizationReadinessDto | null;
 }

@@ -33,6 +33,49 @@ export class JobOrderQualityGateResponseDto {
   blockingReason?: string | null;
 
   @ApiProperty({
+    enum: ['pending', 'completed', 'unavailable'],
+    example: 'completed',
+  })
+  preCheckStatus!: 'pending' | 'completed' | 'unavailable';
+
+  @ApiPropertyOptional({
+    example: {
+      completedWorkItemCount: 3,
+      totalWorkItemCount: 3,
+      attachedPhotoCount: 4,
+      evidenceGapCount: 1,
+      semanticMatchScore: 82,
+      evidenceGaps: ['No completion inspection linked yet.'],
+      inspectionDiscrepancies: [],
+      automatedRecommendation: 'ready_for_review',
+      infrastructureState: 'available',
+    },
+  })
+  preCheckSummary?: Record<string, unknown> | null;
+
+  @ApiProperty({
+    enum: ['pending', 'passed', 'blocked'],
+    example: 'passed',
+  })
+  reviewerVerdict!: 'pending' | 'passed' | 'blocked';
+
+  @ApiPropertyOptional({
+    example: 'Physical inspection matched the work and the customer concern.',
+  })
+  reviewerNote?: string | null;
+
+  @ApiPropertyOptional({
+    example: '7f0c0000-1111-2222-3333-444444444444',
+  })
+  headTechnicianUserId?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-05-05T10:31:00.000Z',
+    format: 'date-time',
+  })
+  reviewedAt?: string | null;
+
+  @ApiProperty({
     example: '2026-05-06T08:00:00.000Z',
     format: 'date-time',
   })

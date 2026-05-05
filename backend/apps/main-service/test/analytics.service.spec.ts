@@ -304,8 +304,15 @@ describe('AnalyticsService', () => {
     );
     expect(result).toEqual(
       expect.objectContaining({
-        id: 'refresh-job-1',
-        status: 'completed',
+        refreshJob: expect.objectContaining({
+          id: 'refresh-job-1',
+          status: 'completed',
+        }),
+        sectionTimestamps: expect.objectContaining({
+          dashboard: null,
+          invoice_aging: null,
+          audit_trail: null,
+        }),
       }),
     );
   });

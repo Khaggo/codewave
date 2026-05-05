@@ -3,10 +3,13 @@ import type { ContractRouteStatus, RouteContract } from '../shared';
 export type BookingStatus =
   | 'pending'
   | 'confirmed'
+  | 'in_service'
   | 'declined'
   | 'rescheduled'
   | 'completed'
   | 'cancelled';
+
+export type DailyScheduleScope = 'active' | 'history' | 'all';
 
 export interface CreateBookingRequest {
   userId: string;
@@ -32,6 +35,7 @@ export interface DailyScheduleQuery {
   scheduledDate: string;
   timeSlotId?: string;
   status?: BookingStatus;
+  scope?: DailyScheduleScope;
 }
 
 export interface QueueCurrentQuery {

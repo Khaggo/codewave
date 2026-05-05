@@ -8,18 +8,49 @@ const trimOrUndefined = (value) => {
 };
 
 const request = async (path, options = {}) => {
-  const { body, headers, ...rest } = options;
+  const { body, headers, responseType = 'json', ...rest } = options;
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...rest,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(headers ?? {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
+    headers: isFormData
+      ? {
+          ...(headers ?? {}),
+        }
+      : {
+          'Content-Type': 'application/json',
+          ...(headers ?? {}),
+        },
+    body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
   });
 
+  if (responseType === 'blob') {
+    if (!response.ok) {
+      const rawText = await response.text();
+      let data = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        data = null;
+      }
+
+      const message =
+        data?.message && typeof data.message === 'string'
+          ? data.message
+          : `Request failed with status ${response.status}`;
+
+      throw new ApiError(message, response.status, data);
+    }
+
+    return response.blob();
+  }
+
   const rawText = await response.text();
-  const data = rawText ? JSON.parse(rawText) : null;
+  let data = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = null;
+  }
 
   if (!response.ok) {
     const message =
@@ -79,11 +110,24 @@ export const normalizeJobOrderWorkbenchSummary = (jobOrder) => ({
   updatedAt: jobOrder?.updatedAt ?? null,
 });
 
-export const listJobOrderWorkbenchSummaries = async ({ accessToken, month }) => {
+export const getJobOrderAssetUrl = (path) => {
+  const normalizedPath = trimOrUndefined(path);
+  if (!normalizedPath) {
+    return '';
+  }
+
+  return new URL(normalizedPath, `${API_BASE_URL}/`).toString();
+};
+
+export const listJobOrderWorkbenchSummaries = async ({ accessToken, month, scope }) => {
   const params = new URLSearchParams();
   const normalizedMonth = trimOrUndefined(month);
   if (normalizedMonth) {
     params.set('month', normalizedMonth);
+  }
+  const normalizedScope = trimOrUndefined(scope);
+  if (normalizedScope) {
+    params.set('scope', normalizedScope);
   }
 
   const path = params.size ? `/api/job-orders/workbench-summaries?${params.toString()}` : '/api/job-orders/workbench-summaries';
@@ -95,11 +139,15 @@ export const listJobOrderWorkbenchSummaries = async ({ accessToken, month }) => 
   return Array.isArray(summaries) ? summaries.map((jobOrder) => normalizeJobOrderWorkbenchSummary(jobOrder)) : [];
 };
 
-export const listJobOrderWorkbenchCalendar = async ({ accessToken, month }) => {
+export const listJobOrderWorkbenchCalendar = async ({ accessToken, month, scope }) => {
   const params = new URLSearchParams();
   const normalizedMonth = trimOrUndefined(month);
   if (normalizedMonth) {
     params.set('month', normalizedMonth);
+  }
+  const normalizedScope = trimOrUndefined(scope);
+  if (normalizedScope) {
+    params.set('scope', normalizedScope);
   }
 
   const path = params.size ? `/api/job-orders/workbench-calendar?${params.toString()}` : '/api/job-orders/workbench-calendar';
@@ -210,6 +258,30 @@ export const getJobOrderById = async ({ jobOrderId, accessToken }) => {
   );
 };
 
+export const replaceJobOrderAssignments = async ({
+  jobOrderId,
+  assignedTechnicianIds,
+  accessToken,
+}) => {
+  if (!jobOrderId) {
+    throw new ApiError('Load a job order before saving technician assignments.', 400, {
+      path: '/api/job-orders/:id/assignments',
+    });
+  }
+
+  return normalizeJobOrderForWorkbench(
+    await request(`/api/job-orders/${jobOrderId}/assignments`, {
+      method: 'PATCH',
+      headers: buildAuthorizedHeaders(accessToken),
+      body: {
+        assignedTechnicianIds: Array.isArray(assignedTechnicianIds)
+          ? [...new Set(assignedTechnicianIds.filter(Boolean))]
+          : [],
+      },
+    }),
+  );
+};
+
 export const updateJobOrderStatus = async ({
   jobOrderId,
   status,
@@ -265,26 +337,44 @@ export const addJobOrderProgressEntry = async ({
 
 export const addJobOrderPhotoEvidence = async ({
   jobOrderId,
-  fileName,
-  fileUrl,
+  file,
   caption,
+  linkedEntityType,
+  linkedEntityId,
   accessToken,
 }) => {
   if (!jobOrderId) {
-    throw new ApiError('Load a job order before attaching photo evidence.', 400, {
-      path: '/api/job-orders/:id/photos',
+    throw new ApiError('Load a job order before uploading photo evidence.', 400, {
+      path: '/api/job-orders/:id/photos/upload',
     });
   }
 
+  if (!(file instanceof File) || file.size < 1) {
+    throw new ApiError('Choose an image file before uploading photo evidence.', 400, {
+      path: '/api/job-orders/:id/photos/upload',
+    });
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  const normalizedCaption = trimOrUndefined(caption);
+  if (normalizedCaption) {
+    formData.append('caption', normalizedCaption);
+  }
+  const normalizedLinkedEntityType = trimOrUndefined(linkedEntityType);
+  if (normalizedLinkedEntityType) {
+    formData.append('linkedEntityType', normalizedLinkedEntityType);
+  }
+  const normalizedLinkedEntityId = trimOrUndefined(linkedEntityId);
+  if (normalizedLinkedEntityId) {
+    formData.append('linkedEntityId', normalizedLinkedEntityId);
+  }
+
   return normalizeJobOrderForWorkbench(
-    await request(`/api/job-orders/${jobOrderId}/photos`, {
+    await request(`/api/job-orders/${jobOrderId}/photos/upload`, {
       method: 'POST',
       headers: buildAuthorizedHeaders(accessToken),
-      body: {
-        fileName: String(fileName ?? '').trim(),
-        fileUrl: String(fileUrl ?? '').trim(),
-        caption: trimOrUndefined(caption),
-      },
+      body: formData,
     }),
   );
 };
@@ -292,6 +382,10 @@ export const addJobOrderPhotoEvidence = async ({
 export const finalizeJobOrder = async ({
   jobOrderId,
   summary,
+  amountPaid,
+  paymentMethod,
+  paymentReference,
+  receivedAt,
   accessToken,
 }) => {
   if (!jobOrderId) {
@@ -306,14 +400,32 @@ export const finalizeJobOrder = async ({
       headers: buildAuthorizedHeaders(accessToken),
       body: {
         summary: trimOrUndefined(summary),
+        amountPaid: Number.isInteger(Number(amountPaid)) && Number(amountPaid) > 0 ? Number(amountPaid) : undefined,
+        paymentMethod: trimOrUndefined(paymentMethod),
+        paymentReference: trimOrUndefined(paymentReference),
+        receivedAt: trimOrUndefined(receivedAt) ? new Date(receivedAt).toISOString() : undefined,
       },
     }),
   );
 };
 
+export const exportJobOrderInvoicePdf = async ({ jobOrderId, accessToken }) => {
+  if (!jobOrderId) {
+    throw new ApiError('Load a finalized job order before exporting the invoice PDF.', 400, {
+      path: '/api/job-orders/:id/invoice/pdf',
+    });
+  }
+
+  return request(`/api/job-orders/${jobOrderId}/invoice/pdf`, {
+    method: 'GET',
+    headers: buildAuthorizedHeaders(accessToken),
+    responseType: 'blob',
+  });
+};
+
 export const recordJobOrderInvoicePayment = async ({
   jobOrderId,
-  amountPaidCents,
+  amountPaid,
   paymentMethod,
   reference,
   receivedAt,
@@ -325,11 +437,11 @@ export const recordJobOrderInvoicePayment = async ({
     });
   }
 
-  const normalizedAmount = Number(amountPaidCents);
+  const normalizedAmount = Number(amountPaid);
   const normalizedReceivedAt = trimOrUndefined(receivedAt);
 
   if (!Number.isInteger(normalizedAmount) || normalizedAmount < 1) {
-    throw new ApiError('Enter a positive payment amount in cents.', 400, {
+    throw new ApiError('Enter a positive payment amount in pesos.', 400, {
       path: '/api/job-orders/:id/invoice/payments',
     });
   }
@@ -339,7 +451,7 @@ export const recordJobOrderInvoicePayment = async ({
       method: 'POST',
       headers: buildAuthorizedHeaders(accessToken),
       body: {
-        amountPaidCents: normalizedAmount,
+        amountPaidCents: normalizedAmount * 100,
         paymentMethod,
         reference: trimOrUndefined(reference),
         receivedAt: normalizedReceivedAt ? new Date(normalizedReceivedAt).toISOString() : undefined,

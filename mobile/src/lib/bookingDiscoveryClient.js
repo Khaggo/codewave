@@ -739,6 +739,32 @@ export const getBookingById = async ({ bookingId, accessToken }) => {
   });
 };
 
+export const getBookingReservationPayment = async ({ bookingId, accessToken }) => {
+  if (!bookingId) {
+    throw new ApiError('Select a booking before loading its reservation payment.', 400, {
+      path: '/api/bookings/:id/reservation-payment',
+    });
+  }
+
+  return request(`/api/bookings/${bookingId}/reservation-payment`, {
+    method: 'GET',
+    headers: buildAuthHeaders(accessToken),
+  });
+};
+
+export const retryBookingReservationPayment = async ({ bookingId, accessToken }) => {
+  if (!bookingId) {
+    throw new ApiError('Select a booking before retrying its reservation payment.', 400, {
+      path: '/api/bookings/:id/reservation-payment/retry',
+    });
+  }
+
+  return request(`/api/bookings/${bookingId}/reservation-payment/retry`, {
+    method: 'POST',
+    headers: buildAuthHeaders(accessToken),
+  });
+};
+
 export const listCustomerBookings = async ({ userId, accessToken }) => {
   if (!userId) {
     throw new ApiError(
@@ -752,6 +778,25 @@ export const listCustomerBookings = async ({ userId, accessToken }) => {
 
   return asArray(
     await request(`/api/users/${userId}/bookings`, {
+      method: 'GET',
+      headers: buildAuthHeaders(accessToken),
+    }),
+  );
+};
+
+export const listCustomerServiceHistory = async ({ userId, accessToken }) => {
+  if (!userId) {
+    throw new ApiError(
+      'You need an active customer session before service history can load.',
+      401,
+      {
+        path: '/api/job-orders/users/:id/service-history',
+      },
+    );
+  }
+
+  return asArray(
+    await request(`/api/job-orders/users/${userId}/service-history`, {
       method: 'GET',
       headers: buildAuthHeaders(accessToken),
     }),

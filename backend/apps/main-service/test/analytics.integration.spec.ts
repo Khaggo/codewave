@@ -82,10 +82,11 @@ describe('AnalyticsController integration', () => {
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-ANL-001',
         });
       expect(confirmBookingResponse.status).toBe(200);
 
@@ -451,10 +452,11 @@ describe('AnalyticsController integration', () => {
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-ANL-002',
         });
       expect(confirmBookingResponse.status).toBe(200);
 

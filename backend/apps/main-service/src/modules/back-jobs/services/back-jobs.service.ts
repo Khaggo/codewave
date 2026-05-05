@@ -80,6 +80,9 @@ export class BackJobsService {
   async updateStatus(id: string, payload: UpdateBackJobStatusDto, actor: BackJobActor) {
     await this.assertStaffReviewer(actor.userId);
     const backJob = await this.backJobsRepository.findById(id);
+    const linkedReworkJobOrder = backJob.reworkJobOrderId
+      ? await this.jobOrdersRepository.findById(backJob.reworkJobOrderId)
+      : null;
 
     if (backJob.status === payload.status) {
       throw new BadRequestException('Back job is already in the requested status');
@@ -109,6 +112,16 @@ export class BackJobsService {
 
     if (payload.status === 'resolved' && !backJob.reworkJobOrderId) {
       throw new ConflictException('Resolved back jobs must link to a rework job order');
+    }
+
+    if (
+      ['resolved', 'closed'].includes(payload.status) &&
+      linkedReworkJobOrder &&
+      linkedReworkJobOrder.status !== 'finalized'
+    ) {
+      throw new ConflictException(
+        'Linked rework job orders must be finalized before the back-job can be resolved or closed',
+      );
     }
 
     const updatedBackJob = await this.backJobsRepository.updateStatus(id, payload);

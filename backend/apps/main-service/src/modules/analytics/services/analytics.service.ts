@@ -34,10 +34,19 @@ type AnalyticsSourceState = {
   qualityGateOverrides: Awaited<ReturnType<QualityGatesRepository['listOverridesForAnalytics']>>;
 };
 
+type AnalyticsRefreshResult = {
+  refreshJob: Awaited<ReturnType<AnalyticsRepository['markRefreshJobCompleted']>>;
+  sectionTimestamps: Partial<Record<SnapshotType, string | null>>;
+};
+
+const ANALYTICS_STALE_WINDOW_MS = 15 * 60 * 1000;
+
 const SNAPSHOT_TYPES = [...analyticsSnapshotTypeEnum.enumValues];
 
 @Injectable()
 export class AnalyticsService {
+  private snapshotRefreshInFlight: Promise<AnalyticsRefreshResult> | null = null;
+
   constructor(
     private readonly analyticsRepository: AnalyticsRepository,
     private readonly usersService: UsersService,
@@ -87,11 +96,19 @@ export class AnalyticsService {
     return snapshot.payload;
   }
 
+  async triggerManualRefresh(actor: AnalyticsActor) {
+    await this.assertAnalyticsActor(actor);
+    return this.refreshSnapshotsOnce({
+      requestedByUserId: actor.userId,
+      triggerSource: 'manual_refresh',
+    });
+  }
+
   async refreshAnalyticsSnapshot(payload?: {
     snapshotTypes?: SnapshotType[];
     requestedByUserId?: string | null;
     triggerSource?: 'bootstrap_read' | 'manual_refresh' | 'integration_refresh';
-  }) {
+  }): Promise<AnalyticsRefreshResult> {
     const snapshotTypes = payload?.snapshotTypes?.length ? payload.snapshotTypes : SNAPSHOT_TYPES;
     const refreshJob = await this.analyticsRepository.createRefreshJob({
       snapshotTypes,
@@ -112,7 +129,15 @@ export class AnalyticsService {
         });
       }
 
-      return this.analyticsRepository.markRefreshJobCompleted(refreshJob.id, sourceCounts);
+      const completedRefreshJob = await this.analyticsRepository.markRefreshJobCompleted(
+        refreshJob.id,
+        sourceCounts,
+      );
+
+      return {
+        refreshJob: completedRefreshJob,
+        sectionTimestamps: await this.buildSectionTimestamps(snapshotTypes),
+      };
     } catch (error) {
       await this.analyticsRepository.markRefreshJobFailed(
         refreshJob.id,
@@ -124,14 +149,14 @@ export class AnalyticsService {
 
   private async ensureSnapshot(snapshotType: SnapshotType, requestedByUserId?: string | null) {
     const existingSnapshot = await this.analyticsRepository.findSnapshotByType(snapshotType);
-    if (existingSnapshot) {
+    if (existingSnapshot && !this.isSnapshotStale(existingSnapshot.generatedAt)) {
       return existingSnapshot;
     }
 
-    await this.refreshAnalyticsSnapshot({
-      snapshotTypes: [snapshotType],
+    await this.refreshSnapshotsOnce({
+      snapshotTypes: existingSnapshot ? SNAPSHOT_TYPES : [snapshotType],
       requestedByUserId: requestedByUserId ?? null,
-      triggerSource: 'bootstrap_read',
+      triggerSource: existingSnapshot ? 'integration_refresh' : 'bootstrap_read',
     });
 
     const refreshedSnapshot = await this.analyticsRepository.findSnapshotByType(snapshotType);
@@ -140,6 +165,44 @@ export class AnalyticsService {
     }
 
     return refreshedSnapshot;
+  }
+
+  private isSnapshotStale(generatedAt: Date | string | null | undefined) {
+    if (!generatedAt) {
+      return true;
+    }
+
+    const snapshotTime = new Date(generatedAt).getTime();
+    if (Number.isNaN(snapshotTime)) {
+      return true;
+    }
+
+    return Date.now() - snapshotTime > ANALYTICS_STALE_WINDOW_MS;
+  }
+
+  private async refreshSnapshotsOnce(payload?: {
+    snapshotTypes?: SnapshotType[];
+    requestedByUserId?: string | null;
+    triggerSource?: 'bootstrap_read' | 'manual_refresh' | 'integration_refresh';
+  }) {
+    if (!this.snapshotRefreshInFlight) {
+      this.snapshotRefreshInFlight = this.refreshAnalyticsSnapshot(payload).finally(() => {
+        this.snapshotRefreshInFlight = null;
+      });
+    }
+
+    return this.snapshotRefreshInFlight;
+  }
+
+  private async buildSectionTimestamps(snapshotTypes: SnapshotType[]) {
+    const entries = await Promise.all(
+      snapshotTypes.map(async (snapshotType) => {
+        const snapshot = await this.analyticsRepository.findSnapshotByType(snapshotType);
+        return [snapshotType, snapshot?.generatedAt?.toISOString?.() ?? null] as const;
+      }),
+    );
+
+    return Object.fromEntries(entries);
   }
 
   private async loadSourceState(): Promise<AnalyticsSourceState> {

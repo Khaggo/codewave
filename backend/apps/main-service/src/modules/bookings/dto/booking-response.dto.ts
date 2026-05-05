@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 import { bookingStatusEnum } from '../schemas/bookings.schema';
 
+import { BookingReservationPaymentResponseDto } from './booking-reservation-payment-response.dto';
 import { BookingServiceResponseDto } from './booking-service-response.dto';
 import { BookingStatusHistoryResponseDto } from './booking-status-history-response.dto';
 import { TimeSlotResponseDto } from './time-slot-response.dto';
@@ -93,4 +94,9 @@ export class BookingResponseDto {
     isArray: true,
   })
   statusHistory?: BookingStatusHistoryResponseDto[];
+
+  @ApiPropertyOptional({
+    type: () => BookingReservationPaymentResponseDto,
+  })
+  reservationPayment?: BookingReservationPaymentResponseDto | null;
 }

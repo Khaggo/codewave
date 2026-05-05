@@ -4,16 +4,18 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AuthFrame from '../components/AuthFrame';
 import PasswordChecklist from '../components/PasswordChecklist';
 import PasswordField from '../components/PasswordField';
+import { ApiError, resetPasswordWithOtp } from '../lib/authClient';
 import { colors, radius } from '../theme';
 import { validateResetPasswordForm } from '../utils/validation';
 
-export default function ResetPassword({ navigation, route, onResetPassword }) {
+export default function ResetPassword({ navigation, route }) {
   const [form, setForm] = useState({
     newPassword: '',
     confirmPassword: '',
   });
   const [focusedField, setFocusedField] = useState('');
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
   const shouldShowPasswordChecklist =
     focusedField === 'newPassword' || form.newPassword.length > 0 || Boolean(errors.newPassword);
 
@@ -30,7 +32,7 @@ export default function ResetPassword({ navigation, route, onResetPassword }) {
     }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const nextErrors = validateResetPasswordForm(form);
 
     if (Object.keys(nextErrors).length > 0) {
@@ -38,17 +40,43 @@ export default function ResetPassword({ navigation, route, onResetPassword }) {
       return;
     }
 
-    onResetPassword(form.newPassword);
-    Alert.alert('Password Updated', 'You can now log in with your new password.');
-    navigation.reset({
-      index: 0,
-      routes: [
-        {
-          name: 'Login',
-          params: { prefilledEmail: route.params?.email },
-        },
-      ],
-    });
+    if (!route.params?.enrollmentId || !route.params?.otp) {
+      Alert.alert(
+        'Password Reset Expired',
+        'The password reset verification is missing. Start again and request a fresh code.',
+      );
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      await resetPasswordWithOtp({
+        enrollmentId: route.params.enrollmentId,
+        otp: route.params.otp,
+        newPassword: form.newPassword,
+      });
+
+      Alert.alert('Password Updated', 'You can now log in with your new password.');
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'Login',
+            params: { prefilledEmail: route.params?.email },
+          },
+        ],
+      });
+    } catch (requestError) {
+      Alert.alert(
+        'Password Reset Failed',
+        requestError instanceof ApiError
+          ? requestError.message
+          : 'Unable to reset your password right now. Please try again.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -86,9 +114,14 @@ export default function ResetPassword({ navigation, route, onResetPassword }) {
         textContentType="password"
       />
 
-      <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit} activeOpacity={0.88}>
+      <TouchableOpacity
+        style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]}
+        onPress={() => void handleSubmit()}
+        activeOpacity={0.88}
+        disabled={submitting}
+      >
         <View style={styles.primaryButtonContent}>
-          <Text style={styles.primaryButtonText}>Save Password</Text>
+          <Text style={styles.primaryButtonText}>{submitting ? 'Saving...' : 'Save Password'}</Text>
           <MaterialCommunityIcons name="arrow-right" size={18} color={colors.onPrimary} />
         </View>
       </TouchableOpacity>
@@ -108,6 +141,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.34,
     shadowRadius: 24,
     elevation: 5,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.7,
   },
   primaryButtonContent: {
     flexDirection: 'row',

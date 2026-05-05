@@ -17,10 +17,14 @@ import { AutocareEventBusService } from '@shared/events/autocare-event-bus.servi
 
 import { GoogleSignupStartDto } from '../dto/google-signup-start.dto';
 import { DeleteAccountDto } from '../dto/delete-account.dto';
+import { ConfirmChangePasswordWithOtpDto } from '../dto/confirm-change-password-with-otp.dto';
 import { LoginDto } from '../dto/login.dto';
+import { RequestChangePasswordOtpDto } from '../dto/request-change-password-otp.dto';
+import { RequestPasswordResetOtpDto } from '../dto/request-password-reset-otp.dto';
 import { CreateStaffAccountDto } from '../dto/create-staff-account.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
+import { ResetPasswordWithOtpDto } from '../dto/reset-password-with-otp.dto';
 import { UpdateStaffAccountStatusDto } from '../dto/update-staff-account-status.dto';
 import { VerifyEmailOtpDto } from '../dto/verify-email-otp.dto';
 import { AuthRepository } from '../repositories/auth.repository';
@@ -33,12 +37,13 @@ type TokenPayload = {
   type: 'access' | 'refresh';
 };
 
-type StaffAccountType = 'staff' | 'mechanic' | 'technician' | 'admin';
+type StaffAccountType = 'staff' | 'mechanic' | 'technician' | 'head_technician' | 'admin';
 
 const staffAccountTypeEmailSegments: Record<StaffAccountType, string> = {
   staff: 'staff',
   mechanic: 'mechanic',
   technician: 'technician',
+  head_technician: 'headtech',
   admin: 'admin',
 };
 
@@ -46,12 +51,14 @@ const staffAccountTypeCodePrefixes: Record<StaffAccountType, string> = {
   staff: 'STA',
   mechanic: 'MEC',
   technician: 'TEC',
+  head_technician: 'HTC',
   admin: 'ADM',
 };
 
 const roleFallbackAccountTypes: Record<string, StaffAccountType> = {
   service_adviser: 'staff',
   technician: 'technician',
+  head_technician: 'head_technician',
   super_admin: 'admin',
 };
 
@@ -380,6 +387,123 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
+  async requestForgotPasswordOtp(payload: RequestPasswordResetOtpDto) {
+    const normalizedEmail = payload.email.trim().toLowerCase();
+    const user = await this.usersService.findByEmail(normalizedEmail);
+    if (!user || !user.isActive) {
+      throw new NotFoundException('Account not found');
+    }
+
+    if (user.role !== 'customer') {
+      throw new BadRequestException('Only customer accounts can reset passwords through this flow');
+    }
+
+    const account = await this.authRepository.findAccountByUserId(user.id);
+    if (!account || !account.isActive) {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    return this.createOtpEnrollment({
+      userId: user.id,
+      email: user.email,
+      purpose: 'forgot_password',
+      activationContext: 'forgot_password',
+      status: 'pending_reset_verification',
+    });
+  }
+
+  async resetPasswordWithOtp(payload: ResetPasswordWithOtpDto) {
+    const challenge = await this.verifyOtpChallenge(payload.enrollmentId, payload.otp, 'forgot_password');
+    const user = await this.usersService.findById(challenge.userId);
+    if (!user || !user.isActive) {
+      throw new NotFoundException('User not found');
+    }
+
+    const account = await this.authRepository.findAccountByUserId(user.id);
+    if (!account || !account.isActive) {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    const passwordHash = await bcrypt.hash(payload.newPassword, 10);
+    await this.authRepository.updatePasswordHash(user.id, passwordHash);
+    await this.authRepository.revokeActiveRefreshTokens(user.id);
+
+    return {
+      status: 'password_reset',
+      message: 'Password updated successfully. Please sign in with your new password.',
+    };
+  }
+
+  async requestChangePasswordOtp(
+    payload: RequestChangePasswordOtpDto,
+    actor: { userId: string; email: string; role: string },
+  ) {
+    const user = await this.usersService.findById(actor.userId);
+    if (!user || !user.isActive) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role !== 'customer') {
+      throw new BadRequestException('Only customer accounts can change passwords through this flow');
+    }
+
+    const account = await this.authRepository.findAccountByUserId(user.id);
+    if (!account || !account.isActive) {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    const isPasswordValid = await bcrypt.compare(payload.currentPassword, account.passwordHash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    return this.createOtpEnrollment({
+      userId: user.id,
+      email: user.email,
+      purpose: 'change_password',
+      activationContext: 'change_password',
+      status: 'pending_change_verification',
+    });
+  }
+
+  async confirmChangePasswordWithOtp(
+    payload: ConfirmChangePasswordWithOtpDto,
+    actor: { userId: string; email: string; role: string },
+  ) {
+    const challenge = await this.verifyOtpChallenge(payload.enrollmentId, payload.otp, 'change_password');
+    if (challenge.userId !== actor.userId) {
+      throw new UnauthorizedException('Password change verification does not belong to the authenticated user');
+    }
+
+    const user = await this.usersService.findById(actor.userId);
+    if (!user || !user.isActive) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role !== 'customer') {
+      throw new BadRequestException('Only customer accounts can change passwords through this flow');
+    }
+
+    const account = await this.authRepository.findAccountByUserId(user.id);
+    if (!account || !account.isActive) {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(payload.currentPassword, account.passwordHash);
+    if (!isCurrentPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const passwordHash = await bcrypt.hash(payload.newPassword, 10);
+    await this.authRepository.updatePasswordHash(user.id, passwordHash);
+    await this.authRepository.revokeActiveRefreshTokens(user.id);
+
+    return {
+      status: 'password_changed',
+      message: 'Password updated successfully.',
+    };
+  }
+
   async startDeleteOwnAccount(
     payload: DeleteAccountDto,
     actor: { userId: string; email: string; role: string },
@@ -439,7 +563,7 @@ export class AuthService {
       actorUserId: actor.userId,
       actorRole: 'super_admin',
       targetUserId: user.id,
-      targetRole: user.role as 'technician' | 'service_adviser' | 'super_admin',
+      targetRole: user.role as 'technician' | 'head_technician' | 'service_adviser' | 'super_admin',
       targetEmail: user.email,
       targetStaffCode: user.staffCode,
       previousIsActive: null,
@@ -452,7 +576,7 @@ export class AuthService {
       actorUserId: actor.userId,
       actorRole: 'super_admin',
       targetUserId: user.id,
-      targetRole: user.role as 'technician' | 'service_adviser' | 'super_admin',
+      targetRole: user.role as 'technician' | 'head_technician' | 'service_adviser' | 'super_admin',
       targetEmail: user.email,
       targetStaffCode: user.staffCode,
       reason: null,
@@ -578,6 +702,7 @@ export class AuthService {
 
     if (staffCode.startsWith('MEC-')) return 'mechanic';
     if (staffCode.startsWith('TEC-')) return 'technician';
+    if (staffCode.startsWith('HTC-')) return 'head_technician';
     if (staffCode.startsWith('ADM-')) return 'admin';
     if (staffCode.startsWith('STA-') || staffCode.startsWith('SA-')) return 'staff';
 
@@ -601,6 +726,8 @@ export class AuthService {
         ? 'Admin'
         : accountType === 'mechanic'
           ? 'Mechanic'
+          : accountType === 'head_technician'
+            ? 'Head Technician'
           : accountType === 'technician'
             ? 'Technician'
             : 'Staff';
@@ -641,7 +768,7 @@ export class AuthService {
       actorUserId: actor.userId,
       actorRole: 'super_admin',
       targetUserId: user.id,
-      targetRole: user.role as 'technician' | 'service_adviser' | 'super_admin',
+      targetRole: user.role as 'technician' | 'head_technician' | 'service_adviser' | 'super_admin',
       targetEmail: user.email,
       targetStaffCode: user.staffCode,
       previousIsActive,
@@ -654,7 +781,7 @@ export class AuthService {
       actorUserId: actor.userId,
       actorRole: 'super_admin',
       targetUserId: user.id,
-      targetRole: user.role as 'technician' | 'service_adviser' | 'super_admin',
+      targetRole: user.role as 'technician' | 'head_technician' | 'service_adviser' | 'super_admin',
       targetEmail: user.email,
       targetStaffCode: user.staffCode,
       previousIsActive,
@@ -717,6 +844,47 @@ export class AuthService {
     };
   }
 
+  private async verifyOtpChallenge(
+    enrollmentId: string,
+    otp: string,
+    purpose:
+      | 'customer_signup'
+      | 'staff_activation'
+      | 'account_delete'
+      | 'forgot_password'
+      | 'change_password',
+  ) {
+    const challenge = await this.authRepository.findOtpChallengeById(enrollmentId);
+    if (!challenge) {
+      throw new NotFoundException('OTP enrollment not found');
+    }
+
+    if (challenge.purpose !== purpose) {
+      throw new BadRequestException(`OTP purpose does not match ${purpose.replace(/_/g, ' ')}`);
+    }
+
+    if (challenge.consumedAt) {
+      throw new ConflictException('OTP has already been used');
+    }
+
+    if (challenge.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('OTP has expired');
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, challenge.otpHash);
+    if (!isOtpValid) {
+      await this.authRepository.incrementOtpAttempts(
+        challenge.id,
+        (challenge.attempts ?? 0) + 1,
+      );
+      throw new BadRequestException('Invalid OTP');
+    }
+
+    await this.authRepository.consumeOtpChallenge(challenge.id);
+
+    return challenge;
+  }
+
   private async issueTokens(user: { id: string; email: string; role: string; profile?: unknown }) {
     const accessPayload: TokenPayload = {
       sub: user.id,
@@ -757,9 +925,23 @@ export class AuthService {
   private async createOtpEnrollment(payload: {
     userId: string;
     email: string;
-    purpose: 'customer_signup' | 'staff_activation' | 'account_delete';
-    activationContext: 'customer_signup' | 'staff_activation' | 'account_delete';
-    status: 'pending_activation' | 'pending_delete_verification';
+    purpose:
+      | 'customer_signup'
+      | 'staff_activation'
+      | 'account_delete'
+      | 'forgot_password'
+      | 'change_password';
+    activationContext:
+      | 'customer_signup'
+      | 'staff_activation'
+      | 'account_delete'
+      | 'forgot_password'
+      | 'change_password';
+    status:
+      | 'pending_activation'
+      | 'pending_delete_verification'
+      | 'pending_reset_verification'
+      | 'pending_change_verification';
   }) {
     const otp = this.generateOtp();
     const otpHash = await bcrypt.hash(otp, 10);

@@ -10,6 +10,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -19,8 +20,11 @@ import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 
 import { BookingAvailabilityQueryDto } from '../dto/booking-availability-query.dto';
+import { BookingPaymentPolicyResponseDto } from '../dto/booking-payment-policy-response.dto';
+import { BookingReservationPaymentResponseDto } from '../dto/booking-reservation-payment-response.dto';
 import { BookingAvailabilityResponseDto } from '../dto/booking-availability-response.dto';
 import { BookingResponseDto } from '../dto/booking-response.dto';
+import { ConfirmBookingReservationPaymentDto } from '../dto/confirm-booking-reservation-payment.dto';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { CreateServiceCategoryDto } from '../dto/create-service-category.dto';
 import { CreateServiceDto } from '../dto/create-service.dto';
@@ -33,6 +37,7 @@ import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { ServiceCategoryResponseDto } from '../dto/service-category-response.dto';
 import { ServiceResponseDto } from '../dto/service-response.dto';
 import { TimeSlotResponseDto } from '../dto/time-slot-response.dto';
+import { UpdateBookingPaymentPolicyDto } from '../dto/update-booking-payment-policy.dto';
 import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
 import { BookingsService } from '../services/bookings.service';
@@ -221,11 +226,90 @@ export class BookingsController {
     return this.bookingsService.create(createBookingDto);
   }
 
+  @Get('bookings/:id/reservation-payment')
+  @ApiOperation({ summary: 'Read the reservation-fee payment state for a booking.' })
+  @ApiOkResponse({
+    description: 'Current reservation payment state for the target booking.',
+    type: BookingReservationPaymentResponseDto,
+  })
+  getReservationPayment(@Param('id') id: string) {
+    return this.bookingsService.getReservationPayment(id);
+  }
+
+  @Post('bookings/:id/reservation-payment/retry')
+  @ApiOperation({ summary: 'Retry the online reservation-fee payment session for a pending booking.' })
+  @ApiOkResponse({
+    description: 'The booking with refreshed reservation-payment state.',
+    type: BookingResponseDto,
+  })
+  retryReservationPayment(@Param('id') id: string) {
+    return this.bookingsService.retryReservationPayment(id);
+  }
+
+  @Patch('bookings/:id/reservation-payment/confirm')
+  @ApiOperation({ summary: 'Confirm a booking reservation-fee payment, including manual counter fallback.' })
+  @ApiOkResponse({
+    description: 'The booking after reservation payment confirmation and QR issuance.',
+    type: BookingResponseDto,
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  confirmReservationPayment(
+    @Param('id') id: string,
+    @Body() payload: ConfirmBookingReservationPaymentDto,
+    @Req() request: Request,
+  ) {
+    return this.bookingsService.confirmReservationPayment(
+      id,
+      payload,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Get('admin/booking-payment-policy')
+  @ApiOperation({ summary: 'Read the admin-configured booking reservation-payment policy.' })
+  @ApiOkResponse({
+    description: 'Current booking reservation-payment policy.',
+    type: BookingPaymentPolicyResponseDto,
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  getBookingPaymentPolicy(@Req() request: Request) {
+    return this.bookingsService.getPaymentPolicy((request.user as { userId: string }).userId);
+  }
+
+  @Patch('admin/booking-payment-policy')
+  @ApiOperation({ summary: 'Update the admin-configured booking reservation-payment policy.' })
+  @ApiOkResponse({
+    description: 'Updated booking reservation-payment policy.',
+    type: BookingPaymentPolicyResponseDto,
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  updateBookingPaymentPolicy(
+    @Body() payload: UpdateBookingPaymentPolicyDto,
+    @Req() request: Request,
+  ) {
+    return this.bookingsService.updatePaymentPolicy(
+      payload,
+      (request.user as { userId: string }).userId,
+    );
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('service_adviser', 'super_admin')
   @Get('bookings/daily-schedule')
   @ApiOperation({ summary: 'Read the daily booking schedule for service-adviser operations.' })
   @ApiBearerAuth('access-token')
+  @ApiQuery({
+    name: 'scope',
+    required: false,
+    description: 'Optional schedule scope. Defaults to active; use history for completed, declined, and cancelled records.',
+    enum: ['active', 'history', 'all'],
+  })
   @ApiOkResponse({
     description: 'Grouped schedule view for the requested date.',
     type: DailyScheduleResponseDto,
@@ -325,8 +409,11 @@ export class BookingsController {
     return this.bookingsService.getQueueCurrent(query);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
   @Get('users/:id/bookings')
   @ApiOperation({ summary: 'List bookings created under a specific user.' })
+  @ApiBearerAuth('access-token')
   @ApiParam({
     name: 'id',
     description: 'User identifier.',
@@ -337,9 +424,14 @@ export class BookingsController {
     type: BookingResponseDto,
     isArray: true,
   })
+  @ApiForbiddenResponse({ description: 'Customers can only access their own bookings.' })
   @ApiNotFoundResponse({ description: 'User not found.' })
-  findByUserId(@Param('id') id: string) {
-    return this.bookingsService.findByUserId(id);
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  findByUserId(@Param('id') id: string, @Req() request: Request) {
+    return this.bookingsService.findByUserId(
+      id,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

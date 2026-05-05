@@ -48,6 +48,13 @@ export const jobOrderInvoicePaymentMethodEnum = pgEnum('job_order_invoice_paymen
   'other',
 ]);
 
+export const jobOrderPhotoLinkTypeEnum = pgEnum('job_order_photo_link_type', [
+  'job_order',
+  'progress_entry',
+  'work_item',
+  'qa_review',
+]);
+
 export const jobOrders = pgTable('job_orders', {
   id: uuid('id').defaultRandom().primaryKey(),
   sourceType: jobOrderSourceTypeEnum('source_type').notNull(),
@@ -84,6 +91,7 @@ export const jobOrderItems = pgTable('job_order_items', {
   name: varchar('name', { length: 160 }).notNull(),
   description: text('description'),
   estimatedHours: integer('estimated_hours'),
+  requiresPhotoEvidence: boolean('requires_photo_evidence').notNull().default(true),
   isCompleted: boolean('is_completed').notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -124,6 +132,10 @@ export const jobOrderProgressLogs = pgTable('job_order_progress_logs', {
     .$type<string[]>()
     .notNull()
     .default(sql`'[]'::jsonb`),
+  attachedPhotoIds: jsonb('attached_photo_ids')
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -135,9 +147,15 @@ export const jobOrderPhotos = pgTable('job_order_photos', {
   takenByUserId: uuid('taken_by_user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'restrict' }),
+  linkedEntityType: jobOrderPhotoLinkTypeEnum('linked_entity_type').notNull().default('job_order'),
+  linkedEntityId: uuid('linked_entity_id'),
+  storageKey: varchar('storage_key', { length: 255 }).notNull(),
+  mimeType: varchar('mime_type', { length: 120 }).notNull().default('image/jpeg'),
+  fileSizeBytes: integer('file_size_bytes').notNull().default(0),
   fileName: varchar('file_name', { length: 255 }).notNull(),
   fileUrl: text('file_url').notNull(),
   caption: text('caption'),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -165,12 +183,22 @@ export const jobOrderInvoiceRecords = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
     paymentStatus: jobOrderInvoicePaymentStatusEnum('payment_status').notNull().default('pending_payment'),
+    currencyCode: varchar('currency_code', { length: 8 }).notNull().default('PHP'),
+    subtotalAmountCents: integer('subtotal_amount_cents').notNull().default(0),
+    laborAmountCents: integer('labor_amount_cents').notNull().default(0),
+    partsAmountCents: integer('parts_amount_cents').notNull().default(0),
+    reservationFeeDeductionCents: integer('reservation_fee_deduction_cents').notNull().default(0),
+    totalAmountCents: integer('total_amount_cents').notNull().default(0),
     amountPaidCents: integer('amount_paid_cents'),
     paymentMethod: jobOrderInvoicePaymentMethodEnum('payment_method'),
     paymentReference: varchar('payment_reference', { length: 120 }),
+    officialReceiptReference: varchar('official_receipt_reference', { length: 40 }).notNull(),
     paidAt: timestamp('paid_at', { withTimezone: true }),
     recordedByUserId: uuid('recorded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     summary: text('summary'),
+    pdfGeneratedAt: timestamp('pdf_generated_at', { withTimezone: true }),
+    pdfEmailSentAt: timestamp('pdf_email_sent_at', { withTimezone: true }),
+    pdfEmailError: text('pdf_email_error'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

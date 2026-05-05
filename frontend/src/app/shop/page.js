@@ -6,7 +6,7 @@ export const metadata = { title: 'Shop & Inventory' }
 
 export default function ShopPage() {
   if (!isEcommerceEnabled()) {
-    return <EcommerceUnavailableCard title="Shop & Inventory is offline on the cheapest deployment" />
+    return <EcommerceUnavailableCard title="Shop & Inventory is waiting for the ecommerce runtime" />
   }
 
   return (

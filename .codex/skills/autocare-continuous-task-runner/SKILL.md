@@ -20,12 +20,13 @@ Continue AUTOCARE repo work by default. Make reasonable assumptions, execute saf
 
 ## Default Skill Chain
 
-1. Load `autocare-agent-system-bootstrap` for build-order task selection and role handoffs.
-2. Load `port-aware-dev-runtime` before starting, stopping, or debugging backend, frontend, Expo, Metro, or Node processes.
-3. Load `swagger-serena-first` for backend route, DTO, controller, OpenAPI, or client API integration work.
-4. Load `backend-web-mobile-integration` when a change crosses backend, web, and mobile.
-5. Load `backend-contract-shapes` and `frontend-data-shapes` when request/response/session shapes change.
-6. Load `backend-testing-workflow` and `frontend-testing-workflow` before choosing verification commands.
+1. Load `mcp-first-token-efficiency` so Serena or another relevant MCP is attempted before broad local reads.
+2. Load `autocare-agent-system-bootstrap` for build-order task selection and role handoffs.
+3. Load `port-aware-dev-runtime` before starting, stopping, or debugging backend, frontend, Expo, Metro, or Node processes.
+4. Load `swagger-serena-first` for backend route, DTO, controller, OpenAPI, or client API integration work.
+5. Load `backend-web-mobile-integration` when a change crosses backend, web, and mobile.
+6. Load `backend-contract-shapes` and `frontend-data-shapes` when request/response/session shapes change.
+7. Load `backend-testing-workflow` and `frontend-testing-workflow` before choosing verification commands.
 
 ## Approval Discipline
 

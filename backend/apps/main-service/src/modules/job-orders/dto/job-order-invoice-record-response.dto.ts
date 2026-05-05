@@ -57,6 +57,36 @@ export class JobOrderInvoiceRecordResponseDto {
   })
   paymentStatus!: 'pending_payment' | 'paid';
 
+  @ApiProperty({
+    example: 'PHP',
+  })
+  currencyCode!: string;
+
+  @ApiProperty({
+    example: 250000,
+  })
+  subtotalAmountCents!: number;
+
+  @ApiProperty({
+    example: 180000,
+  })
+  laborAmountCents!: number;
+
+  @ApiProperty({
+    example: 70000,
+  })
+  partsAmountCents!: number;
+
+  @ApiProperty({
+    example: 50000,
+  })
+  reservationFeeDeductionCents!: number;
+
+  @ApiProperty({
+    example: 200000,
+  })
+  totalAmountCents!: number;
+
   @ApiPropertyOptional({
     example: 159900,
     nullable: true,
@@ -72,6 +102,12 @@ export class JobOrderInvoiceRecordResponseDto {
 
   @ApiPropertyOptional({
     example: 'OR-2026-0001',
+    nullable: false,
+  })
+  officialReceiptReference!: string;
+
+  @ApiPropertyOptional({
+    example: 'GCASH-TEST-1234',
     nullable: true,
   })
   paymentReference!: string | null;
@@ -93,6 +129,23 @@ export class JobOrderInvoiceRecordResponseDto {
     example: 'All planned work items completed and ready for invoice generation.',
   })
   summary?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-05-05T10:30:00.000Z',
+    format: 'date-time',
+  })
+  pdfGeneratedAt?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-05-05T10:31:00.000Z',
+    format: 'date-time',
+  })
+  pdfEmailSentAt?: string | null;
+
+  @ApiPropertyOptional({
+    example: null,
+  })
+  pdfEmailError?: string | null;
 
   @ApiProperty({
     example: '2026-04-13T12:30:00.000Z',

@@ -49,6 +49,19 @@ export class AuthRepository extends BaseRepository {
     return account ?? null;
   }
 
+  async updatePasswordHash(userId: string, passwordHash: string) {
+    const [account] = await this.db
+      .update(authAccounts)
+      .set({
+        passwordHash,
+        updatedAt: new Date(),
+      })
+      .where(eq(authAccounts.userId, userId))
+      .returning();
+
+    return account ?? null;
+  }
+
   async findAccountWithUserByEmail(email: string) {
     const account = await this.db
       .select()
@@ -130,7 +143,12 @@ export class AuthRepository extends BaseRepository {
 
   async createOtpChallenge(payload: {
     userId: string;
-    purpose: 'customer_signup' | 'staff_activation' | 'account_delete';
+    purpose:
+      | 'customer_signup'
+      | 'staff_activation'
+      | 'account_delete'
+      | 'forgot_password'
+      | 'change_password';
     email: string;
     otpHash: string;
     expiresAt: Date;
@@ -184,7 +202,7 @@ export class AuthRepository extends BaseRepository {
     actorUserId: string;
     actorRole: 'super_admin';
     targetUserId: string;
-    targetRole: 'technician' | 'service_adviser' | 'super_admin';
+    targetRole: 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
     targetEmail: string;
     targetStaffCode?: string | null;
     previousIsActive?: boolean | null;

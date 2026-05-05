@@ -112,6 +112,7 @@ export default function BookingsCalendarView({
   groupedBookingsByDate,
   loading,
   error,
+  scope = 'active',
   selectedDate,
   onSelectDate,
   onPreviousMonth,
@@ -150,7 +151,9 @@ export default function BookingsCalendarView({
           <div>
             <p className="text-lg font-black text-ink-primary">{formatMonthLabel(monthDate)}</p>
             <p className="mt-1 text-xs text-ink-muted">
-              Monthly bookings view synced to the same live schedule reads as the daily schedule tab.
+              {scope === 'history'
+                ? 'Monthly history view for completed, declined, and cancelled booking records.'
+                : 'Monthly bookings view synced to the same live schedule reads as the daily schedule tab.'}
             </p>
           </div>
 

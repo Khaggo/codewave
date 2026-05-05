@@ -12,16 +12,23 @@ import {
   qualityGateFindingGateEnum,
   QualityGateFindingProvenance,
   qualityGateFindingSeverityEnum,
+  QualityPreCheckSummary,
   qualityGateOverrides,
+  qualityGateReviewerVerdictEnum,
+  qualityPreCheckStatusEnum,
   qualityGateStatusEnum,
 } from '../schemas/quality-gates.schema';
 
 type QualityGateStatus = (typeof qualityGateStatusEnum.enumValues)[number];
 type QualityGateFindingGate = (typeof qualityGateFindingGateEnum.enumValues)[number];
 type QualityGateFindingSeverity = (typeof qualityGateFindingSeverityEnum.enumValues)[number];
+type QualityPreCheckStatus = (typeof qualityPreCheckStatusEnum.enumValues)[number];
+type QualityGateReviewerVerdict = (typeof qualityGateReviewerVerdictEnum.enumValues)[number];
 
 type CompleteAuditInput = {
   status: QualityGateStatus;
+  preCheckStatus: QualityPreCheckStatus;
+  preCheckSummary: QualityPreCheckSummary | null;
   riskScore: number;
   blockingReason?: string | null;
   auditJob: AiWorkerJobMetadata;
@@ -36,8 +43,14 @@ type CompleteAuditInput = {
 
 type CreateOverrideInput = {
   actorUserId: string;
-  actorRole: 'technician' | 'service_adviser' | 'super_admin';
+  actorRole: 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
   reason: string;
+};
+
+type RecordReviewerVerdictInput = {
+  reviewerUserId: string;
+  reviewerVerdict: Exclude<QualityGateReviewerVerdict, 'pending'>;
+  reviewerNote?: string | null;
 };
 
 @Injectable()
@@ -105,7 +118,12 @@ export class QualityGatesRepository extends BaseRepository {
       await this.db
         .update(jobOrderQualityGates)
         .set({
-          status: 'pending',
+          status: 'pending_review',
+          preCheckStatus: 'pending',
+          preCheckSummary: null,
+          reviewerVerdict: 'pending',
+          reviewerNote: null,
+          reviewedAt: null,
           riskScore: 0,
           blockingReason: null,
           auditJob,
@@ -122,7 +140,11 @@ export class QualityGatesRepository extends BaseRepository {
       .insert(jobOrderQualityGates)
       .values({
         jobOrderId,
-        status: 'pending',
+        status: 'pending_review',
+        preCheckStatus: 'pending',
+        preCheckSummary: null,
+        reviewerVerdict: 'pending',
+        reviewerNote: null,
         riskScore: 0,
         blockingReason: null,
         auditJob,
@@ -183,6 +205,8 @@ export class QualityGatesRepository extends BaseRepository {
       .update(jobOrderQualityGates)
       .set({
         status: payload.status,
+        preCheckStatus: payload.preCheckStatus,
+        preCheckSummary: payload.preCheckSummary,
         riskScore: payload.riskScore,
         blockingReason: payload.blockingReason ?? null,
         auditJob: payload.auditJob,
@@ -214,6 +238,9 @@ export class QualityGatesRepository extends BaseRepository {
         .update(jobOrderQualityGates)
         .set({
           status: 'overridden',
+          reviewerVerdict: 'passed',
+          reviewerNote: payload.reason,
+          reviewedAt: now,
           updatedAt: now,
         })
         .where(eq(jobOrderQualityGates.id, gate.id));
@@ -229,5 +256,43 @@ export class QualityGatesRepository extends BaseRepository {
         qualityGate: true,
       },
     });
+  }
+
+  async assignHeadTechnician(jobOrderId: string, headTechnicianUserId: string | null) {
+    const gate = await this.findOptionalByJobOrderId(jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    await this.db
+      .update(jobOrderQualityGates)
+      .set({
+        headTechnicianUserId,
+        updatedAt: new Date(),
+      })
+      .where(eq(jobOrderQualityGates.id, gate.id));
+
+    return this.findByJobOrderId(jobOrderId);
+  }
+
+  async recordReviewerVerdict(jobOrderId: string, payload: RecordReviewerVerdictInput) {
+    const gate = await this.findOptionalByJobOrderId(jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    await this.db
+      .update(jobOrderQualityGates)
+      .set({
+        status: payload.reviewerVerdict === 'passed' ? 'passed' : 'blocked',
+        reviewerVerdict: payload.reviewerVerdict,
+        reviewerNote: payload.reviewerNote ?? null,
+        reviewedAt: new Date(),
+        headTechnicianUserId: payload.reviewerUserId,
+        updatedAt: new Date(),
+      })
+      .where(eq(jobOrderQualityGates.id, gate.id));
+
+    return this.findByJobOrderId(jobOrderId);
   }
 }

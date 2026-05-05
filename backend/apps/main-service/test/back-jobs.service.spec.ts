@@ -211,6 +211,75 @@ describe('BackJobsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('blocks resolving or closing a back-job until the linked rework job order is finalized', async () => {
+    const backJobsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'back-job-1',
+        status: 'in_progress',
+        vehicleId: 'vehicle-1',
+        customerUserId: 'customer-1',
+        returnInspectionId: 'inspection-1',
+        reworkJobOrderId: 'job-order-rework-1',
+        findings: [{ id: 'finding-1' }],
+      }),
+      updateStatus: jest.fn(),
+    };
+
+    const jobOrdersRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'job-order-rework-1',
+        status: 'ready_for_qa',
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        BackJobsService,
+        { provide: BackJobsRepository, useValue: backJobsRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        {
+          provide: InspectionsRepository,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        { provide: JobOrdersRepository, useValue: jobOrdersRepository },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(BackJobsService);
+
+    await expect(
+      service.updateStatus(
+        'back-job-1',
+        {
+          status: 'resolved',
+        },
+        {
+          userId: 'adviser-1',
+          role: 'service_adviser',
+        },
+      ),
+    ).rejects.toThrow('Linked rework job orders must be finalized before the back-job can be resolved or closed');
+
+    expect(backJobsRepository.updateStatus).not.toHaveBeenCalled();
+  });
+
   it('emits a customer-visible notification trigger after staff changes back-job status', async () => {
     const notificationsService = {
       applyTrigger: jest.fn().mockResolvedValue({ triggerName: 'back_job.status_changed' }),

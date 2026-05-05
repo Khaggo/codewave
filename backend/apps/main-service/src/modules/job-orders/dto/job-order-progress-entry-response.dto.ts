@@ -36,6 +36,13 @@ export class JobOrderProgressEntryResponseDto {
   })
   completedItemIds?: string[];
 
+  @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    example: ['985a8d3f-a4db-4197-8720-fd23676d4344'],
+  })
+  attachedPhotoIds?: string[];
+
   @ApiProperty({
     example: '2026-04-13T10:00:00.000Z',
     format: 'date-time',

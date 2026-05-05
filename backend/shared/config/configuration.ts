@@ -23,7 +23,7 @@ export type AppConfig = {
     password?: string;
   };
   rabbitmq: {
-    url: string;
+    url?: string;
     queue: string;
   };
   google: {
@@ -36,6 +36,10 @@ export type AppConfig = {
     user?: string;
     pass?: string;
     from: string;
+  };
+  payments: {
+    paymongoPublicKey?: string;
+    paymongoSecretKey?: string;
   };
 };
 
@@ -109,7 +113,7 @@ export default (): AppConfig => {
         redisPasswordFromUrl,
     },
     rabbitmq: {
-      url: process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672',
+      url: process.env.RABBITMQ_URL?.trim() || undefined,
       queue: process.env.RABBITMQ_QUEUE ?? 'autocare_events',
     },
     google: {
@@ -122,6 +126,10 @@ export default (): AppConfig => {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
       from: process.env.SMTP_FROM ?? 'AUTOCARE <no-reply@example.com>',
+    },
+    payments: {
+      paymongoPublicKey: process.env.PAYMONGO_PUBLIC_KEY,
+      paymongoSecretKey: process.env.PAYMONGO_SECRET_KEY,
     },
   };
 };

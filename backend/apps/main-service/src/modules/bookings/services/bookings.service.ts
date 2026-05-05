@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
@@ -24,17 +25,20 @@ import {
   bookingAvailabilitySlotStatusValues,
 } from '../bookings.constants';
 import { BookingAvailabilityQueryDto } from '../dto/booking-availability-query.dto';
+import { ConfirmBookingReservationPaymentDto } from '../dto/confirm-booking-reservation-payment.dto';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { CreateServiceCategoryDto } from '../dto/create-service-category.dto';
 import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
-import { DailyScheduleQueryDto } from '../dto/daily-schedule-query.dto';
+import { DailyScheduleQueryDto, type DailyScheduleScope } from '../dto/daily-schedule-query.dto';
 import { QueueCurrentQueryDto } from '../dto/queue-current-query.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
+import { UpdateBookingPaymentPolicyDto } from '../dto/update-booking-payment-policy.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
 import { BookingsRepository } from '../repositories/bookings.repository';
 import { bookingStatusEnum } from '../schemas/bookings.schema';
+import { BookingReservationPaymentGatewayService } from './booking-reservation-payment-gateway.service';
 
 type BookingStatus = (typeof bookingStatusEnum.enumValues)[number];
 type UpdateBookingStatusCommand = UpdateBookingStatusDto & {
@@ -46,12 +50,17 @@ type RescheduleBookingCommand = RescheduleBookingDto & {
 
 const allowedStatusTransitions: Record<BookingStatus, BookingStatus[]> = {
   pending: ['confirmed', 'declined', 'cancelled', 'rescheduled'],
-  confirmed: ['completed', 'cancelled', 'rescheduled'],
+  pending_payment: ['cancelled'],
+  confirmed: ['in_service', 'cancelled', 'rescheduled'],
+  in_service: ['completed', 'cancelled'],
   declined: [],
   rescheduled: ['confirmed', 'cancelled'],
   completed: [],
   cancelled: [],
 };
+
+const activeScheduleStatuses: BookingStatus[] = ['pending', 'pending_payment', 'confirmed', 'in_service', 'rescheduled'];
+const historyScheduleStatuses: BookingStatus[] = ['completed', 'declined', 'cancelled'];
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -108,6 +117,7 @@ export class BookingsService {
     private readonly bookingsRepository: BookingsRepository,
     private readonly usersService: UsersService,
     private readonly vehiclesRepository: VehiclesRepository,
+    private readonly bookingReservationPaymentGateway: BookingReservationPaymentGatewayService,
     @Optional() @Inject(BOOKINGS_CLOCK) private readonly bookingsClock?: BookingsClock,
     @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
@@ -295,13 +305,18 @@ export class BookingsService {
   }
 
   async create(createBookingDto: CreateBookingDto) {
-    await this.assertUserExists(createBookingDto.userId);
+    const user = await this.assertUserExists(createBookingDto.userId);
     await this.assertVehicleOwnership(createBookingDto.userId, createBookingDto.vehicleId);
     await this.assertServicesExist(createBookingDto.serviceIds);
     await this.assertTimeSlotAvailability(createBookingDto.timeSlotId, createBookingDto.scheduledDate);
 
     const booking = await this.bookingsRepository.create(createBookingDto);
-    return this.toBookingView(booking);
+    await this.issueOrRefreshReservationPayment(booking, {
+      customerName: this.getCustomerDisplayName(user),
+      customerEmail: user.email,
+    });
+
+    return this.toBookingView(await this.bookingsRepository.findById(booking.id));
   }
 
   async findById(id: string) {
@@ -309,8 +324,18 @@ export class BookingsService {
     return this.toBookingView(booking);
   }
 
-  async findByUserId(userId: string) {
-    await this.assertUserExists(userId);
+  async findByUserId(userId: string, actor: { userId: string; role: string }) {
+    const targetUser = await this.assertUserExists(userId);
+    const actorUser = await this.assertUserExists(actor.userId);
+
+    if (actorUser.role === 'customer' && actorUser.id !== targetUser.id) {
+      throw new ForbiddenException('Customers can only access their own bookings');
+    }
+
+    if (!['customer', 'service_adviser', 'super_admin'].includes(actorUser.role)) {
+      throw new ForbiddenException('Only customers, service advisers, or super admins can access bookings');
+    }
+
     const bookings = await this.bookingsRepository.findByUserId(userId);
     return bookings.map((booking) => this.toBookingView(booking));
   }
@@ -323,7 +348,7 @@ export class BookingsService {
 
   async updateStatus(id: string, payload: UpdateBookingStatusDto, actorUserId: string) {
     await this.assertStaffActor(actorUserId);
-    const booking = await this.bookingsRepository.findById(id);
+    const booking = await this.assertFreshBookingState(id);
 
     if (booking.status === payload.status) {
       throw new BadRequestException('Booking is already in the requested status');
@@ -345,7 +370,7 @@ export class BookingsService {
 
   async reschedule(id: string, payload: RescheduleBookingDto, actorUserId: string) {
     await this.assertStaffActor(actorUserId);
-    const booking = await this.bookingsRepository.findById(id);
+    const booking = await this.assertFreshBookingState(id);
 
     if (!allowedStatusTransitions[booking.status].includes('rescheduled')) {
       throw new ConflictException(`Cannot reschedule a booking in ${booking.status} status`);
@@ -363,7 +388,7 @@ export class BookingsService {
   }
 
   async getDailySchedule(query: DailyScheduleQueryDto) {
-    const statuses = query.status ? [query.status] : undefined;
+    const statuses = this.resolveDailyScheduleStatuses(query.status, query.scope);
     const [slots, scheduleBookings] = await Promise.all([
       this.bookingsRepository.listTimeSlots(),
       this.bookingsRepository.findByScheduledDate(query.scheduledDate, {
@@ -388,6 +413,7 @@ export class BookingsService {
           label: slot.label,
           totalCapacity: slot.capacity,
           confirmedCount: slotBookings.filter((booking) => booking.status === 'confirmed').length,
+          inServiceCount: slotBookings.filter((booking) => booking.status === 'in_service').length,
           pendingCount: slotBookings.filter((booking) => booking.status === 'pending').length,
           rescheduledCount: slotBookings.filter((booking) => booking.status === 'rescheduled').length,
           bookings: slotBookings.map((booking) => this.toBookingView(booking)),
@@ -560,6 +586,141 @@ export class BookingsService {
     return this.bookingsClock?.now() ?? new Date();
   }
 
+  private async assertFreshBookingState(bookingId: string) {
+    const booking = await this.bookingsRepository.findById(bookingId);
+    const reservationPayment = booking.reservationPayment;
+
+    if (
+      booking.status === 'pending_payment' &&
+      reservationPayment?.status === 'pending' &&
+      reservationPayment.expiresAt &&
+      new Date(reservationPayment.expiresAt).getTime() <= this.getCurrentDate().getTime()
+    ) {
+      await this.bookingsRepository.createOrReplaceReservationPayment({
+        bookingId,
+        provider: reservationPayment.provider,
+        status: 'expired',
+        amountCents: reservationPayment.amountCents,
+        currencyCode: reservationPayment.currencyCode,
+        providerPaymentId: reservationPayment.providerPaymentId ?? null,
+        providerCheckoutUrl: reservationPayment.providerCheckoutUrl ?? null,
+        referenceNumber: reservationPayment.referenceNumber ?? null,
+        failureReason: 'Reservation payment window expired before confirmation.',
+        expiresAt: reservationPayment.expiresAt ? new Date(reservationPayment.expiresAt) : null,
+        refundStatus: reservationPayment.refundStatus,
+        auditMetadata: reservationPayment.auditMetadata ?? null,
+      });
+
+      await this.bookingsRepository.updateStatus(bookingId, {
+        status: 'cancelled',
+        reason: 'Reservation payment window expired',
+        changedByUserId: null,
+      });
+      return this.bookingsRepository.findById(bookingId);
+    }
+
+    return booking;
+  }
+
+  async getPaymentPolicy(actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+    return this.bookingsRepository.getOrCreatePaymentPolicy();
+  }
+
+  async updatePaymentPolicy(payload: UpdateBookingPaymentPolicyDto, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+    return this.bookingsRepository.updatePaymentPolicy(payload);
+  }
+
+  async getReservationPayment(bookingId: string) {
+    const booking = await this.assertFreshBookingState(bookingId);
+    return booking.reservationPayment ?? null;
+  }
+
+  async retryReservationPayment(bookingId: string) {
+    const booking = await this.assertFreshBookingState(bookingId);
+    if (booking.status !== 'pending_payment') {
+      throw new ConflictException('Reservation payment retry is only available while the booking is awaiting payment');
+    }
+
+    const user = await this.assertUserExists(booking.userId);
+    await this.issueOrRefreshReservationPayment(booking, {
+      customerName: this.getCustomerDisplayName(user),
+      customerEmail: user.email,
+    });
+
+    return this.toBookingView(await this.bookingsRepository.findById(bookingId));
+  }
+
+  async confirmReservationPayment(
+    bookingId: string,
+    payload: ConfirmBookingReservationPaymentDto,
+    actor?: { userId: string; role: string } | null,
+  ) {
+    const booking = await this.assertFreshBookingState(bookingId);
+    if (!['pending_payment', 'confirmed'].includes(booking.status)) {
+      throw new ConflictException('Reservation payment can only be confirmed while the booking is awaiting confirmation');
+    }
+
+    const paymentPolicy = await this.bookingsRepository.getOrCreatePaymentPolicy();
+    const paymentRecord = booking.reservationPayment;
+    if (!paymentRecord) {
+      throw new NotFoundException('Booking reservation payment record not found');
+    }
+
+    if (payload.provider === 'manual_counter' && !actor) {
+      throw new ForbiddenException('Manual counter confirmation requires a staff actor');
+    }
+
+    await this.bookingsRepository.createOrReplaceReservationPayment({
+      bookingId,
+      provider: payload.provider,
+      status: 'paid',
+      amountCents: paymentRecord.amountCents,
+      currencyCode: paymentRecord.currencyCode,
+      providerPaymentId: payload.providerPaymentId ?? paymentRecord.providerPaymentId ?? null,
+      providerCheckoutUrl: paymentRecord.providerCheckoutUrl ?? null,
+      referenceNumber: payload.referenceNumber ?? paymentRecord.referenceNumber ?? null,
+      paidAt: this.getCurrentDate(),
+      expiresAt: paymentRecord.expiresAt ? new Date(paymentRecord.expiresAt) : null,
+      confirmedByUserId: actor?.userId ?? null,
+      refundStatus: 'not_required',
+      auditMetadata:
+        payload.provider === 'manual_counter'
+          ? `Manual counter confirmation by ${actor?.userId ?? 'unknown'} at ${this.getCurrentDate().toISOString()}`
+          : paymentRecord.auditMetadata ?? null,
+    });
+
+    if (booking.status !== 'confirmed') {
+      await this.bookingsRepository.updateStatus(bookingId, {
+        status: 'confirmed',
+        reason: 'Reservation fee confirmed',
+        changedByUserId: actor?.userId ?? null,
+      });
+      await this.bookingsRepository.updateBookingQrCode(bookingId, randomUUID());
+    }
+
+    const updatedBooking = await this.bookingsRepository.findById(bookingId);
+    await this.scheduleBookingReminderFromWorkflow(updatedBooking);
+    return this.toBookingView(updatedBooking);
+  }
+
+  private resolveDailyScheduleStatuses(status?: BookingStatus, scope?: DailyScheduleScope) {
+    if (status) {
+      return [status];
+    }
+
+    if (scope === 'history') {
+      return historyScheduleStatuses;
+    }
+
+    if (scope === 'all') {
+      return undefined;
+    }
+
+    return activeScheduleStatuses;
+  }
+
   private async scheduleBookingReminderFromWorkflow(booking: any) {
     if (!this.notificationsService || !['confirmed', 'rescheduled'].includes(booking?.status)) {
       return;
@@ -603,6 +764,7 @@ export class BookingsService {
       customerEmail: booking?.user?.email ?? null,
       vehicleDisplayName: this.getVehicleDisplayName(booking?.vehicle),
       plateNumber: booking?.vehicle?.plateNumber ?? null,
+      reservationPayment: booking?.reservationPayment ?? null,
     };
   }
 
@@ -635,5 +797,61 @@ export class BookingsService {
     }
 
     return user;
+  }
+
+  private async issueOrRefreshReservationPayment(
+    booking: any,
+    customer: { customerName: string | null; customerEmail: string | null },
+  ) {
+    const paymentPolicy = await this.bookingsRepository.getOrCreatePaymentPolicy();
+    const expiresAt = new Date(
+      this.getCurrentDate().getTime() + Math.max(paymentPolicy.onlineExpiryWindowMinutes, 0) * 60 * 1000,
+    );
+
+    const paymentSession = await this.bookingReservationPaymentGateway.createReservationPayment({
+      bookingId: booking.id,
+      amountCents: paymentPolicy.reservationFeeAmountCents,
+      currencyCode: paymentPolicy.currencyCode,
+      customerName: customer.customerName ?? 'AUTOCARE Customer',
+      customerEmail: customer.customerEmail ?? '',
+    });
+
+    await this.bookingsRepository.createOrReplaceReservationPayment({
+      bookingId: booking.id,
+      provider: paymentSession.provider,
+      status: paymentSession.status,
+      amountCents: paymentPolicy.reservationFeeAmountCents,
+      currencyCode: paymentPolicy.currencyCode,
+      providerPaymentId: paymentSession.providerPaymentId,
+      providerCheckoutUrl: paymentSession.checkoutUrl,
+      failureReason: paymentSession.failureReason,
+      expiresAt,
+      refundStatus: 'not_required',
+      auditMetadata: paymentSession.failureReason
+        ? `Gateway fallback at ${this.getCurrentDate().toISOString()}: ${paymentSession.failureReason}`
+        : null,
+    });
+
+    if (this.notificationsService && customer.customerEmail) {
+      const title =
+        paymentSession.status === 'pending'
+          ? 'Reservation payment required'
+          : 'Reservation payment needs manual follow-up';
+      const message =
+        paymentSession.status === 'pending'
+          ? `Your AUTOCARE booking is waiting for reservation-fee payment. Complete it before ${expiresAt.toISOString()}.`
+          : `Your AUTOCARE booking payment could not start automatically. ${paymentSession.failureReason}`;
+
+      await this.notificationsService.enqueueNotification({
+        userId: booking.userId,
+        category: 'booking_payment',
+        channel: 'email',
+        sourceType: 'booking_payment',
+        sourceId: booking.id,
+        title,
+        message,
+        dedupeKey: `notification:booking_payment:${booking.id}:${paymentSession.status}:${expiresAt.toISOString()}`,
+      });
+    }
   }
 }

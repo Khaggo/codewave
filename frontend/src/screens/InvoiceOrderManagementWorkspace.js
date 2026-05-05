@@ -86,6 +86,26 @@ const shortId = (value) => {
   return normalizedValue ? normalizedValue.slice(0, 8).toUpperCase() : 'NONE'
 }
 
+const getInvoicePdfStateLabel = (serviceInvoice) => {
+  if (!serviceInvoice) {
+    return 'Awaiting invoice'
+  }
+
+  if (serviceInvoice.pdfEmailError) {
+    return 'Email retry needed'
+  }
+
+  if (serviceInvoice.pdfEmailSentAt) {
+    return 'PDF emailed'
+  }
+
+  if (serviceInvoice.pdfGeneratedAt) {
+    return 'PDF generated'
+  }
+
+  return 'Generation pending'
+}
+
 const getLoadMessageToneClass = (status) => {
   if (status === 'invoice_order_loaded') {
     return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
@@ -319,11 +339,12 @@ export default function InvoiceOrderManagementWorkspace() {
       listJobOrderWorkbenchSummaries({
         accessToken: user.accessToken,
         month: new Date().toISOString().slice(0, 7),
+        scope: 'history',
       }),
       listAdminCustomers(user.accessToken),
     ])
       .then(([jobOrders, customers]) => {
-        setJobOrderOptions(jobOrders)
+        setJobOrderOptions(jobOrders.filter((jobOrder) => ['finalized', 'cancelled'].includes(jobOrder.status)))
         setCustomerOptions(customers)
       })
       .catch(() => {
@@ -530,7 +551,7 @@ export default function InvoiceOrderManagementWorkspace() {
               onChange={(event) => setJobOrderId(event.target.value)}
               className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
             >
-              <option value="">Choose a job order</option>
+              <option value="">Choose a finalized job order</option>
               {jobOrderOptions.map((jobOrder) => (
                 <option key={jobOrder.id} value={jobOrder.id}>
                   JO-{jobOrder.id.slice(0, 8).toUpperCase()} / {formatLabel(jobOrder.status)} / {jobOrder.workDate ?? 'No date'}
@@ -619,7 +640,7 @@ export default function InvoiceOrderManagementWorkspace() {
           value={servicePaymentStateValue}
           sub={
             serviceInvoice
-              ? `${formatInvoiceOrderCurrency(serviceInvoice.amountPaidCents)} recorded on ${formatDateTime(serviceInvoice.paidAt)}`
+              ? `${formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)} due after ${formatInvoiceOrderCurrency(serviceInvoice.reservationFeeDeductionCents)} reservation deduction`
               : 'Service payment stays in the Job Order Workbench.'
           }
         />
@@ -772,14 +793,35 @@ export default function InvoiceOrderManagementWorkspace() {
                     </div>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <DetailTile label="Subtotal Before Deduction" value={formatInvoiceOrderCurrency(serviceInvoice.subtotalAmountCents)} />
+                      <DetailTile
+                        label="Reservation Fee Deduction"
+                        value={formatInvoiceOrderCurrency(serviceInvoice.reservationFeeDeductionCents)}
+                      />
+                      <DetailTile label="Invoice Total" value={formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)} />
                       <DetailTile label="Amount Recorded" value={formatInvoiceOrderCurrency(serviceInvoice.amountPaidCents)} />
                       <DetailTile label="Payment Method" value={formatLabel(serviceInvoice.paymentMethod, 'Not recorded')} />
                       <DetailTile label="Paid At" value={formatDateTime(serviceInvoice.paidAt)} />
+                      <DetailTile label="Official Receipt" value={serviceInvoice.officialReceiptReference ?? 'Generated on finalization'} />
                       <DetailTile label="Finalized By" value={serviceInvoice.finalizedByUserId} breakAll />
+                      <DetailTile label="PDF Delivery" value={getInvoicePdfStateLabel(serviceInvoice)} />
                     </div>
 
+                    {serviceInvoice.summary ? (
+                      <div className="mt-4 rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Invoice summary</p>
+                        <p className="mt-2 text-sm leading-6 text-ink-secondary">{serviceInvoice.summary}</p>
+                      </div>
+                    ) : null}
+
+                    {serviceInvoice.pdfEmailError ? (
+                      <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+                        PDF delivery issue: {serviceInvoice.pdfEmailError}
+                      </div>
+                    ) : null}
+
                     <p className="mt-4 text-sm leading-6 text-ink-muted">
-                      Service invoice payment can be recorded from the Job Order Workbench only after invoice-ready finalization.
+                      Service invoice payment stays owned by the Job Order Workbench. This finance surface is read-only and now reflects the reservation-fee deduction, official receipt, and PDF/email trail from finalization.
                     </p>
                   </div>
                 ) : (
@@ -907,7 +949,7 @@ export default function InvoiceOrderManagementWorkspace() {
                 <p className="text-sm font-bold text-ink-primary">Service payment record</p>
                 <p className="mt-2 text-sm leading-6 text-ink-muted">
                   {serviceInvoice
-                    ? `${formatInvoiceOrderCurrency(serviceInvoice.amountPaidCents)} via ${formatLabel(serviceInvoice.paymentMethod, 'unrecorded method')} on ${formatDateTime(serviceInvoice.paidAt)}.`
+                    ? `${formatInvoiceOrderCurrency(serviceInvoice.amountPaidCents)} recorded against ${formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)} total after a ${formatInvoiceOrderCurrency(serviceInvoice.reservationFeeDeductionCents)} reservation-fee deduction. OR ${serviceInvoice.officialReceiptReference} is ${serviceInvoice.pdfEmailSentAt ? 'already emailed to the customer.' : 'still waiting for PDF/email delivery.'}`
                     : 'Service payment recording still happens in the Job Order Workbench after finalization.'}
                 </p>
               </div>

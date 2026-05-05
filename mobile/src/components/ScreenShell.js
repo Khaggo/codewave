@@ -48,9 +48,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     ...Platform.select({
       web: {
-        height: '100vh',
         minHeight: '100vh',
-        overflow: 'hidden',
+        overflowY: 'auto',
         overflowX: 'hidden',
       },
     }),
@@ -61,9 +60,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     ...Platform.select({
       web: {
-        height: '100%',
-        minHeight: '100vh',
-        overflow: 'hidden',
+        minHeight: '100%',
+        overflowY: 'visible',
         overflowX: 'hidden',
       },
     }),
@@ -73,8 +71,7 @@ const styles = StyleSheet.create({
     minHeight: 0,
     ...Platform.select({
       web: {
-        height: '100vh',
-        maxHeight: '100vh',
+        minHeight: '100%',
         overflowY: 'auto',
         overflowX: 'hidden',
       },

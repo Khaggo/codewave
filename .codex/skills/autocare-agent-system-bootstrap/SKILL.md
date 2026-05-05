@@ -11,17 +11,18 @@ Prepare the existing AUTOCARE agent system for the next build-order task. Bootst
 
 ## Activation Flow
 
-1. Load `mcp-session-bootstrap` first and verify MCP readiness. Run a full MCP sweep only when the user explicitly asks for it.
-2. For API-sensitive work, load `swagger-serena-first`, activate Serena for `codewave`, check onboarding, and warm Swagger at `http://127.0.0.1:3000/docs-json`.
-3. Before starting, stopping, or debugging backend/web/Expo runtimes, load `port-aware-dev-runtime` and check active listeners first.
-4. Read `docs/architecture/tasks/README.md`, resolve the next task from the active queue, then read only the target task file and directly referenced source-of-truth docs.
-5. Select supporting repo skills based on the task surface:
+1. Load `mcp-first-token-efficiency` so Serena or another relevant MCP is attempted before broad local reads.
+2. Load `mcp-session-bootstrap` and verify MCP readiness. Run a full MCP sweep only when the user explicitly asks for it.
+3. For API-sensitive work, load `swagger-serena-first`, activate Serena for `codewave`, check onboarding, and warm Swagger at `http://127.0.0.1:3000/docs-json`.
+4. Before starting, stopping, or debugging backend/web/Expo runtimes, load `port-aware-dev-runtime` and check active listeners first.
+5. Read `docs/architecture/tasks/README.md`, resolve the next task from the active queue, then read only the target task file and directly referenced source-of-truth docs.
+6. Select supporting repo skills based on the task surface:
    - backend/API contracts: `backend-contract-shapes`
    - backend validation: `backend-testing-workflow`
    - cross-surface auth, booking, vehicle, profile, admin, or mobile integration: `backend-web-mobile-integration`
    - web/mobile request, response, state, and screen shapes: `frontend-data-shapes`
    - web/mobile verification: `frontend-testing-workflow`
-6. Produce a short execution brief before implementation: task ID, status, source docs loaded, API contract status, selected skills, role handoffs, and validation plan.
+7. Produce a short execution brief before implementation: task ID, status, source docs loaded, API contract status, selected skills, role handoffs, and validation plan.
 
 ## Role Handoffs
 

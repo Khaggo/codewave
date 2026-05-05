@@ -36,8 +36,10 @@ const STAFF_BOOKING_ROLES = new Set(['service_adviser', 'super_admin'])
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'All states' },
+  { value: 'pending_payment', label: 'Awaiting Reservation Fee' },
   { value: 'pending', label: 'Pending' },
   { value: 'confirmed', label: 'Confirmed' },
+  { value: 'in_service', label: 'Workshop Handoff' },
   { value: 'rescheduled', label: 'Rescheduled' },
   { value: 'declined', label: 'Declined' },
   { value: 'completed', label: 'Completed' },
@@ -45,8 +47,10 @@ const STATUS_OPTIONS = [
 ]
 
 const STATUS_META = {
+  pending_payment: { label: 'Awaiting Reservation Fee', cls: 'badge-orange' },
   pending: { label: 'Pending', cls: 'badge-orange' },
   confirmed: { label: 'Confirmed', cls: 'badge-green' },
+  in_service: { label: 'Workshop Handoff', cls: 'badge-blue' },
   rescheduled: { label: 'Rescheduled', cls: 'badge-blue' },
   declined: { label: 'Declined', cls: 'badge-gray' },
   completed: { label: 'Completed', cls: 'badge-gray' },
@@ -81,6 +85,18 @@ const initialSlotForm = {
 const UPCOMING_SCHEDULE_DAYS = 31
 
 const STAFF_ACTIONS_BY_STATUS = {
+  pending_payment: [
+    {
+      status: 'cancelled',
+      label: 'Cancel Hold',
+      icon: XCircle,
+      className: 'booking-status-action-danger',
+      reason: 'Cancelled unpaid reservation hold from booking operations.',
+      requiresConfirmation: true,
+      confirmMessage: 'Are you sure you want to cancel this unpaid reservation hold?',
+      confirmLabel: 'Cancel reservation hold',
+    },
+  ],
   pending: [
     {
       status: 'confirmed',
@@ -112,11 +128,11 @@ const STAFF_ACTIONS_BY_STATUS = {
   ],
   confirmed: [
     {
-      status: 'completed',
-      label: 'Mark Complete',
+      status: 'in_service',
+      label: 'Send To Workshop',
       icon: CheckCircle2,
       className: 'booking-status-action-primary',
-      reason: 'Completed by staff from admin appointments.',
+      reason: 'Handed off to workshop execution from booking operations.',
     },
     {
       status: 'cancelled',
@@ -145,6 +161,18 @@ const STAFF_ACTIONS_BY_STATUS = {
       reason: 'Cancelled by staff from admin appointments.',
       requiresConfirmation: true,
       confirmMessage: 'Are you sure you want to cancel this booking?',
+      confirmLabel: 'Cancel booking',
+    },
+  ],
+  in_service: [
+    {
+      status: 'cancelled',
+      label: 'Cancel',
+      icon: XCircle,
+      className: 'booking-status-action-danger',
+      reason: 'Cancelled by staff after workshop handoff.',
+      requiresConfirmation: true,
+      confirmMessage: 'Are you sure you want to cancel this workshop-handoff booking?',
       confirmLabel: 'Cancel booking',
     },
   ],
@@ -205,6 +233,33 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function formatPesoFromCents(amountCents) {
+  const amount = Number(amountCents ?? 0) / 100
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(amount) ? amount : 0)
+}
+
+function getReservationPaymentStatusLabel(payment) {
+  switch (payment?.status) {
+    case 'paid':
+      return 'Paid'
+    case 'failed':
+      return 'Payment failed'
+    case 'cancelled':
+      return 'Payment cancelled'
+    case 'refunded':
+      return 'Refund review'
+    case 'expired':
+      return 'Hold expired'
+    default:
+      return 'Awaiting payment'
+  }
 }
 
 function formatClockLabel(value) {
@@ -380,19 +435,29 @@ function summarizeSchedule(schedule) {
       return {
         totalBookings: summary.totalBookings + slotTotal,
         totalCapacity: summary.totalCapacity + (slot.totalCapacity ?? 0),
+        pendingPaymentCount:
+          summary.pendingPaymentCount +
+          (slot.bookings ?? []).filter((booking) => booking.status === 'pending_payment').length,
         pendingCount: summary.pendingCount + (slot.pendingCount ?? 0),
         confirmedCount: summary.confirmedCount + (slot.confirmedCount ?? 0),
+        inServiceCount: summary.inServiceCount + (slot.inServiceCount ?? 0),
         rescheduledCount: summary.rescheduledCount + (slot.rescheduledCount ?? 0),
       }
     },
     {
       totalBookings: 0,
       totalCapacity: 0,
+      pendingPaymentCount: 0,
       pendingCount: 0,
       confirmedCount: 0,
+      inServiceCount: 0,
       rescheduledCount: 0,
     },
   )
+}
+
+function resolveScheduleScope(statusFilter, scheduleScope) {
+  return statusFilter === 'all' ? scheduleScope : undefined
 }
 
 function getScheduleBookingTotal(schedule) {
@@ -693,7 +758,12 @@ function LoadingRows() {
 
 function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId }) {
   const bookings = slot.bookings ?? []
-  const activeCount = (slot.pendingCount ?? 0) + (slot.confirmedCount ?? 0) + (slot.rescheduledCount ?? 0)
+  const paymentHoldCount = bookings.filter((booking) => booking.status === 'pending_payment').length
+  const activeCount =
+    paymentHoldCount +
+    (slot.pendingCount ?? 0) +
+    (slot.confirmedCount ?? 0) +
+    (slot.rescheduledCount ?? 0)
   const capacity = slot.totalCapacity ?? 0
   const utilization = capacity > 0 ? Math.min(100, Math.round((activeCount / capacity) * 100)) : 0
   const isHighPressure = capacity > 0 && activeCount >= capacity
@@ -716,6 +786,7 @@ function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId 
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5 text-[11px] shrink-0">
+            <span className="badge badge-orange">{paymentHoldCount} awaiting fee</span>
             <span className="badge badge-orange">{slot.pendingCount ?? 0} pending</span>
             <span className="badge badge-green">{slot.confirmedCount ?? 0} confirmed</span>
             <span className="badge badge-blue">{slot.rescheduledCount ?? 0} rescheduled</span>
@@ -770,6 +841,44 @@ function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId 
                   <p className="text-xs text-ink-muted mt-3">
                     <span className="font-semibold text-ink-secondary">Notes:</span> {booking.notes}
                   </p>
+                ) : null}
+
+                {booking.reservationPayment ? (
+                  <div className="mt-3 rounded-2xl border border-surface-border bg-surface p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-ink-secondary">Reservation fee</p>
+                      <span className="badge badge-orange">
+                        {getReservationPaymentStatusLabel(booking.reservationPayment)}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-xs text-ink-muted sm:grid-cols-2">
+                      <p>
+                        <span className="font-semibold text-ink-secondary">Amount:</span>{' '}
+                        {formatPesoFromCents(booking.reservationPayment.amountCents)}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-ink-secondary">Expires:</span>{' '}
+                        {booking.reservationPayment.expiresAt
+                          ? formatDateTime(booking.reservationPayment.expiresAt)
+                          : 'No expiry recorded'}
+                      </p>
+                      <p className="sm:col-span-2">
+                        <span className="font-semibold text-ink-secondary">Reference:</span>{' '}
+                        {booking.reservationPayment.referenceNumber || 'Generated after payment confirmation'}
+                      </p>
+                    </div>
+                    {booking.reservationPayment.failureReason ? (
+                      <p className="mt-2 text-xs text-rose-300">{booking.reservationPayment.failureReason}</p>
+                    ) : booking.status === 'pending_payment' ? (
+                      <p className="mt-2 text-xs text-amber-200">
+                        Slot capacity stays on hold until the reservation fee is paid or the payment window expires.
+                      </p>
+                    ) : booking.reservationPayment.status === 'paid' ? (
+                      <p className="mt-2 text-xs text-emerald-300">
+                        Reservation fee is secured and should be deducted from the final invoice total.
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
 
                 {booking.jobOrderId ? (
@@ -892,6 +1001,7 @@ export default function BookingsList() {
   const hasAutoSelectedUpcomingDate = useRef(false)
   const selectedDateRef = useRef(toDateKey())
   const [tab, setTab] = useState('schedule')
+  const [scheduleScope, setScheduleScope] = useState('active')
   const [selectedDate, setSelectedDate] = useState(() => toDateKey())
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()))
   const [statusFilter, setStatusFilter] = useState('all')
@@ -990,6 +1100,7 @@ export default function BookingsList() {
         {
           ...scheduleQuery,
           status: statusFilter === 'all' ? undefined : statusFilter,
+          scope: resolveScheduleScope(statusFilter, scheduleScope),
         },
         user.accessToken,
       ),
@@ -1024,7 +1135,7 @@ export default function BookingsList() {
         ...buildErrorState(queueResult.reason, 'Current queue could not be loaded.'),
       }))
     }
-  }, [canReadBookingOperations, selectedDate, statusFilter, timeSlotFilter, user?.accessToken])
+  }, [canReadBookingOperations, scheduleScope, selectedDate, statusFilter, timeSlotFilter, user?.accessToken])
 
   useEffect(() => {
     void loadStaffBookingReads()
@@ -1315,6 +1426,7 @@ export default function BookingsList() {
         getDailySchedule(
           {
             scheduledDate: dateKey,
+            scope: 'active',
           },
           user.accessToken,
         ),
@@ -1385,6 +1497,7 @@ export default function BookingsList() {
     const dateKeys = buildMonthDateWindow(activeMonth)
     const sharedQuery = {
       status: statusFilter === 'all' ? undefined : statusFilter,
+      scope: resolveScheduleScope(statusFilter, scheduleScope),
       timeSlotId: timeSlotFilter === 'all' ? undefined : timeSlotFilter,
     }
 
@@ -1420,6 +1533,7 @@ export default function BookingsList() {
           totalBookings: summary.totalBookings,
           pendingCount: summary.pendingCount,
           confirmedCount: summary.confirmedCount,
+          inServiceCount: summary.inServiceCount,
           rescheduledCount: summary.rescheduledCount,
           bookings: flattenScheduleBookings(data),
         }
@@ -1443,7 +1557,7 @@ export default function BookingsList() {
         ? 'Some days could not be loaded for this month. The visible days are still usable.'
         : '',
     })
-  }, [calendarMonth, canReadBookingOperations, statusFilter, timeSlotFilter, user?.accessToken])
+  }, [calendarMonth, canReadBookingOperations, scheduleScope, statusFilter, timeSlotFilter, user?.accessToken])
 
   useEffect(() => {
     if (tab !== 'calendar') {
@@ -1532,6 +1646,8 @@ export default function BookingsList() {
         message:
           action.status === 'confirmed'
             ? 'Booking accepted. It should now appear in the current queue for this date.'
+            : action.status === 'in_service'
+              ? 'Booking handed off to workshop. It will stay active until the linked job order is finalized.'
             : `Booking moved to ${getStatusMeta(action.status).label.toLowerCase()}.`,
       })
 
@@ -1574,7 +1690,7 @@ export default function BookingsList() {
 
   const scheduleSummary = useMemo(() => summarizeSchedule(scheduleState.data), [scheduleState.data])
   const bookedScheduleDates = useMemo(
-    () => scheduleWindowState.dates.filter((date) => date.pendingCount > 0),
+    () => scheduleWindowState.dates.filter((date) => date.totalBookings > 0),
     [scheduleWindowState.dates],
   )
   const calendarBookingsByDate = useMemo(
@@ -1644,7 +1760,7 @@ export default function BookingsList() {
       </section>
 
       <section className="booking-control-strip">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <label className="block">
             <span className="label">Schedule date</span>
             <input
@@ -1670,6 +1786,31 @@ export default function BookingsList() {
               ))}
             </select>
           </label>
+          <div className="block">
+            <span className="label">Schedule view</span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[
+                { key: 'active', label: 'Active' },
+                { key: 'history', label: 'History' },
+              ].map((view) => (
+                <button
+                  key={view.key}
+                  type="button"
+                  onClick={() => setScheduleScope(view.key)}
+                  className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                    scheduleScope === view.key ? 'text-white' : 'text-ink-secondary'
+                  }`}
+                  style={
+                    scheduleScope === view.key
+                      ? { background: '#f07c00' }
+                      : { background: 'rgba(240,124,0,0.08)' }
+                  }
+                >
+                  {view.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <label className="block">
             <span className="label">Slot filter</span>
             <select
@@ -1688,7 +1829,7 @@ export default function BookingsList() {
         </div>
       </section>
 
-      {bookedScheduleDates.length > 0 ? (
+      {scheduleScope === 'active' && bookedScheduleDates.length > 0 ? (
         <div
           className="flex flex-col md:flex-row md:items-center gap-3 rounded-lg border px-4 py-2.5"
           style={{ background: 'rgba(240,124,0,0.06)', borderColor: 'rgba(240,124,0,0.25)' }}
@@ -1723,7 +1864,7 @@ export default function BookingsList() {
             })}
           </div>
         </div>
-      ) : scheduleWindowState.status === 'loading' ? (
+      ) : scheduleScope === 'active' && scheduleWindowState.status === 'loading' ? (
         <div className="text-xs text-ink-muted px-1">Scanning the next month for customer-created bookings...</div>
       ) : null}
 
@@ -1771,15 +1912,19 @@ export default function BookingsList() {
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <SummaryTile
                   icon={CalendarDays}
-                  label="Scheduled Date"
+                  label={scheduleScope === 'history' ? 'History Date' : 'Scheduled Date'}
                   value={formatDate(scheduleState.data?.scheduledDate ?? selectedDate)}
-                  sub={statusFilter === 'all' ? 'All booking states shown' : `${getStatusMeta(statusFilter).label} filter active`}
+                  sub={
+                    statusFilter === 'all'
+                      ? `${scheduleScope === 'history' ? 'History' : 'Active'} booking records shown`
+                      : `${getStatusMeta(statusFilter).label} filter active`
+                  }
                 />
                 <SummaryTile
                   icon={Users}
                   label="Schedule Bookings"
                   value={scheduleSummary.totalBookings}
-                  sub={`${scheduleSummary.pendingCount} pending / ${scheduleSummary.confirmedCount} confirmed`}
+                  sub={`${scheduleSummary.pendingPaymentCount} awaiting fee / ${scheduleSummary.pendingCount} pending / ${scheduleSummary.confirmedCount} confirmed / ${scheduleSummary.inServiceCount} workshop`}
                 />
                 <SummaryTile
                   icon={Gauge}
@@ -1791,7 +1936,7 @@ export default function BookingsList() {
                   icon={ListChecks}
                   label="Queue Count"
                   value={queueCount}
-                  sub="Queue remains derived, not appointment truth"
+                  sub={scheduleScope === 'history' ? 'Queue stays active-only even in history view' : 'Queue remains derived, not appointment truth'}
                 />
               </div>
 
@@ -1856,6 +2001,7 @@ export default function BookingsList() {
           groupedBookingsByDate={calendarBookingsByDate}
           loading={isLoadingCalendar}
           error={calendarState.error}
+          scope={scheduleScope}
           selectedDate={selectedDate}
           onSelectDate={handleSelectedDateChange}
           onPreviousMonth={() =>

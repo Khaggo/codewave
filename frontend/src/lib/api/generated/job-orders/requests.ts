@@ -32,6 +32,10 @@ export interface UpdateJobOrderStatusRequest {
   reason?: string;
 }
 
+export interface ReplaceJobOrderAssignmentsRequest {
+  assignedTechnicianIds: string[];
+}
+
 export interface AddJobOrderProgressRequest {
   entryType: 'note' | 'work_started' | 'work_completed' | 'issue_found';
   message: string;
@@ -70,6 +74,13 @@ export const jobOrdersRoutes: Record<string, RouteContract> = {
     path: '/api/job-orders/:id',
     status: 'live',
     source: 'swagger',
+  },
+  replaceJobOrderAssignments: {
+    method: 'PATCH',
+    path: '/api/job-orders/:id/assignments',
+    status: 'live',
+    source: 'swagger',
+    notes: 'Live route. Service advisers and super admins replace the saved technician assignment set.',
   },
   updateJobOrderStatus: {
     method: 'PATCH',

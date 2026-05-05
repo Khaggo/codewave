@@ -22,6 +22,7 @@ import VehicleLifecycleScreen from './src/screens/VehicleLifecycleScreen';
 import {
   ApiError,
   buildMobileAccountProfile,
+  confirmChangePasswordWithOtp,
   customerMobileGuardMessages,
   createCustomerVehicle,
   getCustomerMobileSessionAccessState,
@@ -126,25 +127,11 @@ function CompleteOnboardingScreen(props) {
 }
 
 function ForgotPasswordEmailScreen(props) {
-  const { registeredAccount } = useAppSessionContext();
-
-  return <ForgotPasswordEmail {...props} registeredAccount={registeredAccount} />;
+  return <ForgotPasswordEmail {...props} />;
 }
 
 function ResetPasswordScreen(props) {
-  const { syncAccount } = useAppSessionContext();
-
-  return (
-    <ResetPassword
-      {...props}
-      onResetPassword={(newPassword) => {
-        syncAccount((currentAccount) => ({
-          ...currentAccount,
-          password: newPassword,
-        }));
-      }}
-    />
-  );
+  return <ResetPassword {...props} />;
 }
 
 function MenuScreen(props) {
@@ -265,12 +252,6 @@ function ChangePasswordScreen(props) {
     <ChangePassword
       {...props}
       account={currentAccount}
-      onChangePassword={(newPassword) => {
-        syncAccount((currentAccount) => ({
-          ...currentAccount,
-          password: newPassword,
-        }));
-      }}
     />
   );
 }
@@ -431,14 +412,14 @@ export default function App() {
     html.style.minHeight = '100%';
     html.style.width = '100%';
     html.style.backgroundColor = colors.background;
-    html.style.overflow = 'hidden';
+    html.style.overflow = 'auto';
     html.style.overflowX = 'hidden';
     body.style.minHeight = '100%';
     body.style.height = '100%';
     body.style.width = '100%';
     body.style.margin = '0';
     body.style.backgroundColor = colors.background;
-    body.style.overflow = 'hidden';
+    body.style.overflow = 'auto';
     body.style.overflowX = 'hidden';
 
     if (root) {
@@ -446,7 +427,7 @@ export default function App() {
       root.style.minHeight = '100%';
       root.style.width = '100%';
       root.style.backgroundColor = colors.background;
-      root.style.overflow = 'hidden';
+      root.style.overflow = 'auto';
       root.style.overflowX = 'hidden';
     }
 
@@ -588,6 +569,7 @@ export default function App() {
       licensePlate: draftAccount?.licensePlate,
       vehicleMake: draftAccount?.vehicleMake,
       vehicleModel: draftAccount?.vehicleModel,
+      color: draftAccount?.vehicleColor,
       vehicleYear: draftAccount?.vehicleYear,
       accessToken,
     });
@@ -613,6 +595,7 @@ export default function App() {
         licensePlate: vehicle?.plateNumber ?? draftAccount?.licensePlate,
         vehicleMake: vehicle?.make ?? draftAccount?.vehicleMake,
         vehicleModel: vehicle?.model ?? draftAccount?.vehicleModel,
+        vehicleColor: vehicle?.color ?? draftAccount?.vehicleColor,
         vehicleYear: vehicle?.year ?? draftAccount?.vehicleYear,
       },
     );
@@ -776,10 +759,48 @@ export default function App() {
 
   const handleOtpVerified = async (otpParams) => {
     if (otpParams?.otpPurpose === 'passwordChange' && otpParams?.pendingPassword) {
-      syncAccount((currentAccount) => ({
-        ...currentAccount,
-        password: otpParams.pendingPassword,
-      }));
+      const currentAccount = activeAccount ?? registeredAccount;
+      const accessToken = currentAccount?.accessToken;
+
+      if (!accessToken) {
+        return {
+          status: 'error',
+          title: 'Password Change Failed',
+          message: 'Your session expired before we could finish the password change. Please sign in again and retry.',
+        };
+      }
+
+      if (!otpParams?.enrollmentId || !otpParams?.otp || !otpParams?.currentPassword) {
+        return {
+          status: 'error',
+          title: 'Password Change Failed',
+          message: 'The password change verification session is incomplete. Start the change-password flow again and use the new email code.',
+        };
+      }
+
+      try {
+        await confirmChangePasswordWithOtp({
+          enrollmentId: otpParams.enrollmentId,
+          otp: otpParams.otp,
+          currentPassword: otpParams.currentPassword,
+          newPassword: otpParams.pendingPassword,
+          accessToken,
+        });
+
+        syncAccount((currentSessionAccount) => ({
+          ...currentSessionAccount,
+          password: otpParams.pendingPassword,
+        }));
+      } catch (error) {
+        return {
+          status: 'error',
+          title: 'Password Change Failed',
+          message:
+            error instanceof Error && error.message
+              ? error.message
+              : 'We could not update your password right now. Please try again.',
+        };
+      }
 
       return {
         status: 'success',

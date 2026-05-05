@@ -36,6 +36,19 @@ const buildAuthorizedHeaders = (accessToken) =>
       }
     : undefined;
 
+export const refreshAdminAnalyticsSnapshot = async ({ accessToken }) => {
+  if (!accessToken) {
+    throw new ApiError('Sign in as staff before rebuilding admin analytics.', 401, {
+      path: '/api/analytics/refresh',
+    });
+  }
+
+  return request('/api/analytics/refresh', {
+    method: 'POST',
+    headers: buildAuthorizedHeaders(accessToken),
+  });
+};
+
 const formatDateTime = (value) => {
   if (!value) {
     return 'Not available';

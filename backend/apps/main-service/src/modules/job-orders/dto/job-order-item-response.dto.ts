@@ -27,6 +27,11 @@ export class JobOrderItemResponseDto {
   estimatedHours?: number | null;
 
   @ApiProperty({
+    example: true,
+  })
+  requiresPhotoEvidence!: boolean;
+
+  @ApiProperty({
     example: false,
   })
   isCompleted!: boolean;

@@ -37,8 +37,6 @@ Create two Railway services from this repository for the cheapest setup.
   - `DATABASE_URL`
   - `JWT_ACCESS_SECRET`
   - `JWT_REFRESH_SECRET`
-  - `RABBITMQ_URL`
-  - `RABBITMQ_QUEUE`
   - `REDIS_URL` or `REDIS_HOST` and `REDIS_PORT`
   - `CORS_ORIGINS=https://autocare-cc.com`
 - Fastest setup:
@@ -105,3 +103,4 @@ Only set these when the feature is actually in use:
 - The backend now respects Railway's injected `PORT`.
 - The backend now accepts Railway Redis variables from either `REDIS_URL` or the standard `REDISHOST` / `REDISPORT` / `REDISUSER` / `REDISPASSWORD` values documented by Railway.
 - The ecommerce service can share the same Postgres and Redis backing services as the main API.
+- RabbitMQ is optional for the cheapest Railway deploy; when it is omitted, event publishing stays in-process only until you add RabbitMQ later.

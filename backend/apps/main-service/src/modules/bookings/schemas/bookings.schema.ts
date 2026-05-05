@@ -17,11 +17,34 @@ import { vehicles } from '@main-modules/vehicles/schemas/vehicles.schema';
 
 export const bookingStatusEnum = pgEnum('booking_status', [
   'pending',
+  'pending_payment',
   'confirmed',
+  'in_service',
   'declined',
   'rescheduled',
   'completed',
   'cancelled',
+]);
+
+export const bookingReservationPaymentProviderEnum = pgEnum('booking_reservation_payment_provider', [
+  'paymongo',
+  'manual_counter',
+]);
+
+export const bookingReservationPaymentStatusEnum = pgEnum('booking_reservation_payment_status', [
+  'pending',
+  'paid',
+  'failed',
+  'expired',
+  'cancelled',
+  'refunded',
+]);
+
+export const bookingReservationRefundStatusEnum = pgEnum('booking_reservation_refund_status', [
+  'not_required',
+  'pending_review',
+  'processing',
+  'completed',
 ]);
 
 export const serviceCategories = pgTable('service_categories', {
@@ -68,11 +91,53 @@ export const bookings = pgTable('bookings', {
     .notNull()
     .references(() => timeSlots.id, { onDelete: 'restrict' }),
   scheduledDate: date('scheduled_date', { mode: 'string' }).notNull(),
-  status: bookingStatusEnum('status').notNull().default('pending'),
+  status: bookingStatusEnum('status').notNull().default('pending_payment'),
   notes: text('notes'),
+  qrCodeToken: varchar('qr_code_token', { length: 120 }),
+  qrCodeIssuedAt: timestamp('qr_code_issued_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const bookingPaymentPolicies = pgTable('booking_payment_policies', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  reservationFeeAmountCents: integer('reservation_fee_amount_cents').notNull().default(50000),
+  currencyCode: varchar('currency_code', { length: 8 }).notNull().default('PHP'),
+  onlineExpiryWindowMinutes: integer('online_expiry_window_minutes').notNull().default(30),
+  counterExpiryWindowMinutes: integer('counter_expiry_window_minutes').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const bookingReservationPayments = pgTable(
+  'booking_reservation_payments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    bookingId: uuid('booking_id')
+      .notNull()
+      .references(() => bookings.id, { onDelete: 'cascade' }),
+    provider: bookingReservationPaymentProviderEnum('provider').notNull().default('paymongo'),
+    status: bookingReservationPaymentStatusEnum('status').notNull().default('pending'),
+    refundStatus: bookingReservationRefundStatusEnum('refund_status').notNull().default('not_required'),
+    amountCents: integer('amount_cents').notNull(),
+    currencyCode: varchar('currency_code', { length: 8 }).notNull().default('PHP'),
+    providerPaymentId: varchar('provider_payment_id', { length: 255 }),
+    providerCheckoutUrl: text('provider_checkout_url'),
+    referenceNumber: varchar('reference_number', { length: 120 }),
+    failureReason: text('failure_reason'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    refundedAt: timestamp('refunded_at', { withTimezone: true }),
+    confirmedByUserId: uuid('confirmed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    auditMetadata: text('audit_metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    bookingReservationPaymentUnique: uniqueIndex('booking_reservation_payments_booking_id_idx').on(table.bookingId),
+  }),
+);
 
 export const bookingServices = pgTable(
   'booking_services',
@@ -137,6 +202,10 @@ export const bookingsRelations = relations(bookings, ({ one, many }) => ({
   }),
   requestedServices: many(bookingServices),
   statusHistory: many(bookingStatusHistory),
+  reservationPayment: one(bookingReservationPayments, {
+    fields: [bookings.id],
+    references: [bookingReservationPayments.bookingId],
+  }),
 }));
 
 export const bookingServicesRelations = relations(bookingServices, ({ one }) => ({
@@ -157,6 +226,19 @@ export const bookingStatusHistoryRelations = relations(bookingStatusHistory, ({ 
   }),
   changedByUser: one(users, {
     fields: [bookingStatusHistory.changedByUserId],
+    references: [users.id],
+  }),
+}));
+
+export const bookingPaymentPoliciesRelations = relations(bookingPaymentPolicies, () => ({}));
+
+export const bookingReservationPaymentsRelations = relations(bookingReservationPayments, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [bookingReservationPayments.bookingId],
+    references: [bookings.id],
+  }),
+  confirmedByUser: one(users, {
+    fields: [bookingReservationPayments.confirmedByUserId],
     references: [users.id],
   }),
 }));
