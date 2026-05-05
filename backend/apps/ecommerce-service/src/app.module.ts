@@ -6,6 +6,7 @@ import { validateEnv } from '@shared/config/env.validation';
 import { DatabaseModule } from '@shared/db/database.module';
 import { EventsModule } from '@shared/events/events.module';
 import { QueueModule } from '@shared/queue/queue.module';
+import { AuthModule } from '@ecommerce-modules/auth/auth.module';
 import { CartModule } from '@ecommerce-modules/cart/cart.module';
 import { CatalogModule } from '@ecommerce-modules/catalog/catalog.module';
 import { InventoryModule } from '@ecommerce-modules/inventory/inventory.module';
@@ -25,6 +26,7 @@ import { HealthController } from './health.controller';
     DatabaseModule,
     QueueModule,
     EventsModule,
+    AuthModule,
     CatalogModule,
     InventoryModule,
     CartModule,

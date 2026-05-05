@@ -128,7 +128,7 @@ export default function ProfileInformation() {
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Email policy</p>
-            <p className="text-sm text-ink-secondary mt-1">Admin email stays read-only in this prototype.</p>
+            <p className="text-sm text-ink-secondary mt-1">Admin email stays read-only in the current staff workspace.</p>
           </div>
         </div>
 

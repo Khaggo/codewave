@@ -44,7 +44,6 @@ import {
 import {
   buildDigitalGarageSnapshot,
   createEmptyCustomerDigitalGarageSnapshot,
-  digitalGarageUnsupportedActions,
   loadCustomerDigitalGarageSnapshot,
 } from '../lib/digitalGarageClient';
 import {
@@ -1115,16 +1114,6 @@ function PasswordFieldRow({
         </TouchableOpacity>
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
-    </View>
-  );
-}
-
-function ComingSoonView({ label }) {
-  return (
-    <View style={styles.comingSoonWrap}>
-      <MaterialCommunityIcons name="clock-outline" size={38} color={colors.primary} />
-      <Text style={styles.comingSoonTitle}>{label}</Text>
-      <Text style={styles.comingSoonSubtitle}>Coming Soon</Text>
     </View>
   );
 }
@@ -4310,7 +4299,7 @@ export default function Dashboard({
 
   const handleSelectProfileImage = () => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
-      Alert.alert('Profile Photo', 'Gallery upload is available on web for this prototype.');
+      Alert.alert('Profile Photo', 'Gallery upload is available on web in the current build.');
       return;
     }
 
@@ -4440,6 +4429,7 @@ export default function Dashboard({
         enrollmentId: enrollment?.enrollmentId,
         otpExpiresAt: enrollment?.otpExpiresAt,
         otpPurpose: 'deleteAccount',
+        currentPassword: deletePassword,
       });
     } catch (error) {
       const message =
@@ -5312,7 +5302,7 @@ export default function Dashboard({
           {storeOrderHistoryState.status === 'error' && !storeOrderHistoryState.orders.length ? (
             <View style={styles.checkoutStateCard}>
               <MaterialCommunityIcons name="receipt-text-remove-outline" size={30} color="#FFB86B" />
-              <Text style={styles.checkoutStateTitle}>Order history unavailable</Text>
+              <Text style={styles.checkoutStateTitle}>Order history failed to load</Text>
               <Text style={styles.checkoutStateText}>
                 {storeOrderHistoryState.errorMessage || 'We could not load your order history right now.'}
               </Text>
@@ -5376,7 +5366,7 @@ export default function Dashboard({
           selectedStoreOrderId ? (
             <View style={styles.checkoutStateCard}>
               <MaterialCommunityIcons name="alert-circle-outline" size={28} color="#FF8B8B" />
-              <Text style={styles.checkoutStateTitle}>Tracking unavailable</Text>
+              <Text style={styles.checkoutStateTitle}>Tracking failed to load</Text>
               <Text style={styles.checkoutStateText}>
                 {storeOrderTrackingState.errorMessage || 'We could not load the selected order right now.'}
               </Text>
@@ -6126,7 +6116,7 @@ export default function Dashboard({
           ) : bookingHistory.status === 'error' ? (
             <BookingDiscoveryStatePanel
               icon="alert-circle-outline"
-              title="History unavailable"
+              title="Booking history failed to load"
               message={bookingHistory.errorMessage || 'Unable to load booking history right now.'}
               actionLabel="Retry"
               onAction={handleRefreshBookingHistory}
@@ -6401,7 +6391,7 @@ export default function Dashboard({
 
       {loyaltyState.errorMessage ? (
         <View style={styles.infoPanel}>
-          <Text style={styles.infoPanelTitle}>Rewards unavailable</Text>
+          <Text style={styles.infoPanelTitle}>Rewards failed to refresh</Text>
           <Text style={styles.infoPanelText}>{loyaltyState.errorMessage}</Text>
         </View>
       ) : null}
@@ -6766,19 +6756,6 @@ export default function Dashboard({
         ))}
       </View>
 
-      <View style={styles.homePmsCard}>
-        <View style={styles.homePmsIconWrap}>
-          <MaterialCommunityIcons name="clock-outline" size={20} color={colors.primary} />
-        </View>
-        <View style={styles.homePmsCopy}>
-          <Text style={styles.homePmsTitle}>Next PMS Due</Text>
-          <Text style={styles.homePmsSubtitle}>In 2,750 km or by May 2026</Text>
-        </View>
-        <TouchableOpacity style={styles.homePmsButton} onPress={() => navigateToBooking('book')} activeOpacity={0.86}>
-          <Text style={styles.homePmsButtonText}>Book</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={styles.homeSectionHeader}>
         <Text style={styles.homeSectionLabel}>Recent Services</Text>
         <TouchableOpacity style={styles.homeViewAllButton} onPress={navigateToTimeline} activeOpacity={0.86}>
@@ -6845,7 +6822,7 @@ export default function Dashboard({
         return (
           <TimelineStateCard
             icon="lock-outline"
-            title="Digital Garage unavailable"
+            title="Garage access denied"
             message={digitalGarageState.errorMessage || 'Sign in again before opening your vehicle garage.'}
           />
         );
@@ -6951,7 +6928,7 @@ export default function Dashboard({
         return (
           <TimelineStateCard
             icon="lock-outline"
-            title="Lifecycle history unavailable"
+            title="Timeline access denied"
             message={vehicleLifecycleState.errorMessage}
           />
         );
@@ -7051,24 +7028,6 @@ export default function Dashboard({
         </View>
 
         {renderGarageVehicleState()}
-
-        <View style={styles.garagePlannedActionsCard}>
-          <Text style={styles.garagePlannedTitle}>Coming garage tools</Text>
-          <Text style={styles.garagePlannedText}>
-            These controls stay disabled until staff approve the next vehicle-management workflow.
-          </Text>
-          {digitalGarageUnsupportedActions.map((action) => (
-            <View key={action.key} style={styles.garagePlannedRow}>
-              <View style={styles.garagePlannedRowCopy}>
-                <Text style={styles.garagePlannedActionLabel}>{action.label}</Text>
-                <Text style={styles.garagePlannedRoute}>Not available in this demo build</Text>
-              </View>
-              <View style={styles.garagePlannedPill}>
-                <Text style={styles.garagePlannedPillText}>Planned</Text>
-              </View>
-            </View>
-          ))}
-        </View>
 
         <View style={styles.garageRouteCard}>
           <Text style={styles.garagePlannedTitle}>Garage workflow</Text>
@@ -11864,23 +11823,6 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 14,
     lineHeight: 22,
-  },
-  comingSoonWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  comingSoonTitle: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-    marginTop: 14,
-    marginBottom: 6,
-  },
-  comingSoonSubtitle: {
-    color: colors.mutedText,
-    fontSize: 16,
   },
   notificationsPanel: {
     position: 'absolute',

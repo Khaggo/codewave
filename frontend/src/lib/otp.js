@@ -1,4 +1,3 @@
-export const MOCK_OTP = '123456'
 export const RESEND_SECONDS = 60
 
 const OTP_CONTENT = {

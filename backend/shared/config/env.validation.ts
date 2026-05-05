@@ -26,13 +26,20 @@ export const validateEnv = (config: EnvRecord): EnvRecord => {
     );
   }
 
-  const paymongoKeys = ['PAYMONGO_PUBLIC_KEY', 'PAYMONGO_SECRET_KEY'] as const;
+  const paymongoKeys = [
+    'PAYMONGO_PUBLIC_KEY',
+    'PAYMONGO_SECRET_KEY',
+    'PAYMONGO_WEBHOOK_SECRET',
+    'PAYMONGO_CHECKOUT_SUCCESS_URL',
+    'PAYMONGO_CHECKOUT_CANCEL_URL',
+  ] as const;
   const hasAnyPaymongoValue = paymongoKeys.some((key) => Boolean(config[key]));
-  const missingPaymongoKeys = paymongoKeys.filter((key) => !config[key]);
-  if (hasAnyPaymongoValue && missingPaymongoKeys.length > 0) {
-    throw new Error(
-      `Missing required PayMongo environment variables: ${missingPaymongoKeys.join(', ')}`,
-    );
+  if (hasAnyPaymongoValue && !config.PAYMONGO_SECRET_KEY) {
+    throw new Error('Missing required PayMongo environment variable: PAYMONGO_SECRET_KEY');
+  }
+
+  if (config.PAYMONGO_WEBHOOK_SECRET && !config.PAYMONGO_SECRET_KEY) {
+    throw new Error('PAYMONGO_WEBHOOK_SECRET requires PAYMONGO_SECRET_KEY to be configured');
   }
 
   return config;

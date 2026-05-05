@@ -30,9 +30,7 @@ import { useUser } from '@/lib/userContext'
 import {
   canStaffReadInvoiceOrderManagement,
   getStaffInvoiceOrderLoadState,
-  staffInvoiceOrderActionRoutes,
   staffInvoiceOrderPaymentCopy,
-  staffInvoiceOrderSurfaceRules,
 } from '@/lib/api/generated/invoice-orders/staff-web-invoice-order-management'
 
 const LOAD_STATE_LABELS = {
@@ -281,11 +279,6 @@ export default function InvoiceOrderManagementWorkspace() {
     snapshot: null,
   })
 
-  const allSurfaceRoutes = useMemo(
-    () => staffInvoiceOrderSurfaceRules.flatMap((surface) => surface.routes),
-    [],
-  )
-
   const loadInvoiceAging = useCallback(async () => {
     if (!user?.accessToken || !canRead) {
       return
@@ -469,6 +462,7 @@ export default function InvoiceOrderManagementWorkspace() {
   const ecommerceOrder = ecommerceState.order ?? null
   const ecommerceInvoice = ecommerceState.invoice ?? null
   const paymentEntries = ecommerceInvoice?.paymentEntries ?? []
+  const hasFinanceDetail = Boolean(jobOrderState.jobOrder || ecommerceOrder || serviceInvoice || ecommerceInvoice)
   const ecommerceLoadLabel = LOAD_STATE_LABELS[ecommerceState.status] ?? 'Order Lookup'
   const jobOrderLoadLabel = LOAD_STATE_LABELS[jobOrderState.status] ?? 'Service Invoice Lookup'
   const agingLoadLabel = LOAD_STATE_LABELS[agingState.status] ?? 'Invoice Aging'
@@ -657,7 +651,8 @@ export default function InvoiceOrderManagementWorkspace() {
       </section>
 
       <section className="space-y-5">
-        <div className="ops-panel">
+        {(serviceInvoice || ecommerceInvoice || ecommerceOrder) ? (
+          <div className="ops-panel">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="card-title">Financial Snapshot</p>
@@ -751,9 +746,11 @@ export default function InvoiceOrderManagementWorkspace() {
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        ) : null}
 
-        <div className="grid gap-5 xl:grid-cols-2">
+        {hasFinanceDetail ? (
+          <div className="grid gap-5 xl:grid-cols-2">
           <div className="ops-panel">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -838,15 +835,7 @@ export default function InvoiceOrderManagementWorkspace() {
                   Open Job Order Workbench
                 </PortalLink>
               </div>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
-                <Wrench size={24} className="mx-auto text-ink-muted" />
-                <p className="mt-3 text-sm font-bold text-ink-primary">Load a job order from the control strip</p>
-                <p className="mt-2 text-xs leading-6 text-ink-muted">
-                  This panel stays focused on finalized service billing detail and does not create placeholder queue data.
-                </p>
-              </div>
-            )}
+            ) : null}
           </div>
 
           <div className="ops-panel">
@@ -916,18 +905,16 @@ export default function InvoiceOrderManagementWorkspace() {
                   />
                 ) : null}
               </div>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
-                <ShoppingBag size={24} className="mx-auto text-ink-muted" />
-                <p className="mt-3 text-sm font-bold text-ink-primary">Known-order lookup only</p>
-                <p className="mt-2 text-xs leading-6 text-ink-muted">
-                  Paste a known ecommerce order id to load live order and invoice detail. If there is no id yet,
-                  this panel stays empty instead of showing placeholder queue data.
-                </p>
-              </div>
-            )}
+            ) : null}
           </div>
-        </div>
+          </div>
+        ) : (
+          <InfoPanel
+            icon={ReceiptText}
+            title="Load a finalized job order or known ecommerce order"
+            body="This page now stays focused on real billing detail only. Load a finalized job order or a known ecommerce order from the control strip to inspect records here."
+          />
+        )}
 
         <div className="ops-panel">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -972,41 +959,6 @@ export default function InvoiceOrderManagementWorkspace() {
           </div>
         </div>
 
-        <div className="ops-panel">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="card-title">Action Routes / Surface Rules</p>
-              <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Make the current finance surface boundaries explicit so staff can see what is live here versus
-                what remains owned by job-order or ecommerce-specific workspaces.
-              </p>
-            </div>
-            <span className="badge badge-blue">{allSurfaceRoutes.length} linked routes</span>
-          </div>
-
-          <div className="mt-4 space-y-5">
-            <RouteLedger routes={allSurfaceRoutes} />
-            <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-              <p className="text-sm font-bold text-ink-primary">Actions intentionally not duplicated here</p>
-              <p className="mt-2 text-sm leading-6 text-ink-muted">
-                Service payment remains in the Job Order Workbench. Ecommerce order status, cancel, invoice
-                payment entry, and invoice status actions are handled by their owner workspaces while this hub
-                stays read-only until a dedicated staff ecommerce queue is built.
-              </p>
-              <div className="mt-4">
-                <RouteLedger
-                  routes={[
-                    staffInvoiceOrderActionRoutes.serviceInvoicePayment,
-                    staffInvoiceOrderActionRoutes.ecommerceOrderStatus,
-                    staffInvoiceOrderActionRoutes.ecommerceOrderCancel,
-                    staffInvoiceOrderActionRoutes.ecommerceInvoicePaymentEntry,
-                    staffInvoiceOrderActionRoutes.ecommerceInvoiceStatus,
-                  ]}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
       </section>
     </div>
   )

@@ -58,9 +58,9 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     key: 'vehicle-records',
     href: '/vehicles',
     label: 'Vehicle Records',
-    visibleTo: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['service_adviser', 'super_admin'],
     group: 'Customer Records',
-    notes: 'All staff roles may view operational vehicle context needed for assigned work and service coordination.',
+    notes: 'Vehicle-record administration is backed by the adviser/admin customer directory in this phase.',
   },
   {
     key: 'bookings',
@@ -94,14 +94,6 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     visibleTo: ['service_adviser', 'super_admin'],
     group: 'Customer Records',
     notes: 'Staff can review customer profile and vehicle context without exposing customer self-service flows on web.',
-  },
-  {
-    key: 'service-timeline',
-    href: '/timeline',
-    label: 'Service Timeline',
-    visibleTo: ['service_adviser', 'super_admin'],
-    group: 'Customer Records',
-    notes: 'Reviewed customer-safe timeline visibility remains adviser/admin owned in this phase.',
   },
   {
     key: 'insurance',

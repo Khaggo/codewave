@@ -155,7 +155,7 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
         onChangeText={() => null}
         placeholder=""
         editable={false}
-        helperText="Username is fixed in this prototype."
+        helperText="Username is fixed for this account."
       />
 
       <FormField

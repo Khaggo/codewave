@@ -294,6 +294,18 @@ export class BookingsRepository extends BaseRepository {
     });
   }
 
+  async findByReservationProviderPaymentId(providerPaymentId: string) {
+    const reservationPayment = await this.db.query.bookingReservationPayments.findFirst({
+      where: eq(bookingReservationPayments.providerPaymentId, providerPaymentId),
+    });
+
+    if (!reservationPayment) {
+      return null;
+    }
+
+    return this.findOptionalById(reservationPayment.bookingId);
+  }
+
   async findByUserId(userId: string) {
     return this.db.query.bookings.findMany({
       where: eq(bookings.userId, userId),

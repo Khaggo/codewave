@@ -27,6 +27,7 @@ import {
   createCustomerVehicle,
   getCustomerMobileSessionAccessState,
   loginAccount,
+  requestChangePasswordOtp,
   registerAccount,
   startDeleteAccountOtp,
   updateCustomerProfile,
@@ -102,11 +103,12 @@ function LoginScreen(props) {
 }
 
 function OtpScreen(props) {
-  const { handleVerifyRegistrationOtp, handleOtpVerified } = useAppSessionContext();
+  const { handleVerifyRegistrationOtp, handleOtpVerified, handleResendOtp } = useAppSessionContext();
 
   return (
     <OTPScreen
       {...props}
+      onResend={handleResendOtp}
       onVerifyRegistrationOtp={handleVerifyRegistrationOtp}
       onVerified={handleOtpVerified}
     />
@@ -549,6 +551,57 @@ export default function App() {
     });
   };
 
+  const handleResendOtp = async (otpParams) => {
+    const currentAccount = activeAccount ?? registeredAccount;
+    const accessToken = currentAccount?.accessToken;
+
+    if (otpParams?.otpPurpose === 'passwordChange') {
+      if (!accessToken) {
+        throw new Error('Your session expired before we could resend the password change code. Please sign in again and retry.');
+      }
+
+      if (!otpParams?.currentPassword) {
+        throw new Error('We no longer have your current-password confirmation. Restart the password change flow to request a new code.');
+      }
+
+      const enrollment = await requestChangePasswordOtp({
+        currentPassword: otpParams.currentPassword,
+        accessToken,
+      });
+
+      return {
+        email: currentAccount?.email ?? otpParams?.email ?? null,
+        maskedEmail: enrollment.maskedEmail,
+        enrollmentId: enrollment.enrollmentId,
+        otpExpiresAt: enrollment.otpExpiresAt ?? null,
+      };
+    }
+
+    if (otpParams?.otpPurpose === 'deleteAccount') {
+      if (!accessToken) {
+        throw new Error('Your session expired before we could resend the delete-account code. Please sign in again and retry.');
+      }
+
+      if (!otpParams?.currentPassword) {
+        throw new Error('We no longer have your password confirmation. Restart account deletion to request a new code.');
+      }
+
+      const enrollment = await startDeleteAccountOtp({
+        currentPassword: otpParams.currentPassword,
+        accessToken,
+      });
+
+      return {
+        email: currentAccount?.email ?? otpParams?.email ?? null,
+        maskedEmail: enrollment.maskedEmail,
+        enrollmentId: enrollment.enrollmentId,
+        otpExpiresAt: enrollment.otpExpiresAt ?? null,
+      };
+    }
+
+    throw new Error('Resend is not available for this verification flow yet.');
+  };
+
   const persistCustomerOnboarding = async ({ session, draftAccount, existingAccount, password }) => {
     const userId = session?.user?.id ?? existingAccount?.userId;
     const accessToken = session?.accessToken ?? existingAccount?.accessToken;
@@ -877,6 +930,7 @@ export default function App() {
     clearCustomerSession,
     handleDeleteAccount,
     handleStartDeleteAccountOtp,
+    handleResendOtp,
     handleRegisterRequest,
     handleVerifyRegistrationOtp,
     handleLoginRequest,
