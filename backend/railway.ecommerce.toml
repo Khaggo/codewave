@@ -1,0 +1,13 @@
+[build]
+builder = "RAILPACK"
+buildCommand = "npm run build:ecommerce"
+watchPatterns = [
+  "/backend/**",
+]
+
+[deploy]
+startCommand = "npm run start:ecommerce"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

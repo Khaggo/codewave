@@ -6,9 +6,13 @@ This branch is prepared for the lower-cost Railway rollout:
 - `api.autocare-cc.com` -> `backend/` main service
 - ecommerce stays undeployed for now
 
+If you decide to enable ecommerce later:
+
+- `ecommerce.autocare-cc.com` -> `backend/` ecommerce service
+
 ## Railway Service Setup
 
-Create two Railway services from this repository.
+Create two Railway services from this repository for the cheapest setup.
 
 ### Web service
 
@@ -42,13 +46,29 @@ Create two Railway services from this repository.
   - use the Raw Editor
   - paste the contents of `backend/.env.railway`
 
+### Ecommerce service
+
+- Root directory: `/backend`
+- Config-as-code path: `/backend/railway.ecommerce.toml`
+- Domain: `ecommerce.autocare-cc.com`
+- Required variables:
+  - `DATABASE_URL`
+  - `JWT_ACCESS_SECRET`
+  - `JWT_REFRESH_SECRET`
+  - `REDIS_URL` or `REDIS_HOST` and `REDIS_PORT`
+  - `CORS_ORIGINS=https://autocare-cc.com,https://api.autocare-cc.com`
+- Fastest setup:
+  - open the Variables tab for the ecommerce service
+  - use the Raw Editor
+  - paste the contents of `backend/.env.railway.ecommerce.example`
+
 ## Managed Railway Resources
 
 The main API currently expects these backing services:
 
 - PostgreSQL
 - Redis
-- RabbitMQ
+- RabbitMQ optional on the cheapest deploy
 
 Use Railway-managed resources and wire their variables into the API service.
 
@@ -56,7 +76,7 @@ The checked-in `backend/.env.railway.example` uses Railway reference variables a
 
 - `Postgres`
 - `Redis`
-- `RabbitMQ`
+- `RabbitMQ` when enabled
 
 If your Railway canvas uses different service names, change those namespaces before pasting.
 
@@ -76,6 +96,7 @@ Only set these when the feature is actually in use:
 
 - web: `/health`
 - api: `/api/health`
+- ecommerce: `/api/health`
 
 ## Notes
 
@@ -83,3 +104,4 @@ Only set these when the feature is actually in use:
 - The frontend already disables ecommerce-only surfaces when `NEXT_PUBLIC_ECOMMERCE_API_BASE_URL` is empty.
 - The backend now respects Railway's injected `PORT`.
 - The backend now accepts Railway Redis variables from either `REDIS_URL` or the standard `REDISHOST` / `REDISPORT` / `REDISUSER` / `REDISPASSWORD` values documented by Railway.
+- The ecommerce service can share the same Postgres and Redis backing services as the main API.
