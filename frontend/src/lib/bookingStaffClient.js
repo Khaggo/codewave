@@ -1,4 +1,5 @@
 import { ApiError } from './authClient';
+import { normalizeOptionalScopeQuery } from './apiScopeCompatibility.mjs';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 
@@ -87,9 +88,14 @@ const request = async (path, { accessToken, body, method = 'GET', query } = {}) 
 };
 
 export const getDailySchedule = async (query, accessToken) => {
+  const normalizedQuery = {
+    ...query,
+    scope: normalizeOptionalScopeQuery(query?.scope),
+  };
+
   const schedule = await request('/api/bookings/daily-schedule', {
     accessToken,
-    query,
+    query: normalizedQuery,
   });
 
   return {

@@ -1,4 +1,5 @@
 import { ApiError } from './authClient';
+import { normalizeOptionalScopeQuery } from './apiScopeCompatibility.mjs';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 
@@ -125,7 +126,7 @@ export const listJobOrderWorkbenchSummaries = async ({ accessToken, month, scope
   if (normalizedMonth) {
     params.set('month', normalizedMonth);
   }
-  const normalizedScope = trimOrUndefined(scope);
+  const normalizedScope = normalizeOptionalScopeQuery(scope);
   if (normalizedScope) {
     params.set('scope', normalizedScope);
   }
@@ -145,7 +146,7 @@ export const listJobOrderWorkbenchCalendar = async ({ accessToken, month, scope 
   if (normalizedMonth) {
     params.set('month', normalizedMonth);
   }
-  const normalizedScope = trimOrUndefined(scope);
+  const normalizedScope = normalizeOptionalScopeQuery(scope);
   if (normalizedScope) {
     params.set('scope', normalizedScope);
   }
