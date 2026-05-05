@@ -40,6 +40,9 @@ export type AppConfig = {
   payments: {
     paymongoPublicKey?: string;
     paymongoSecretKey?: string;
+    paymongoWebhookSecret?: string;
+    paymongoCheckoutSuccessUrl?: string;
+    paymongoCheckoutCancelUrl?: string;
   };
 };
 
@@ -130,6 +133,9 @@ export default (): AppConfig => {
     payments: {
       paymongoPublicKey: process.env.PAYMONGO_PUBLIC_KEY,
       paymongoSecretKey: process.env.PAYMONGO_SECRET_KEY,
+      paymongoWebhookSecret: process.env.PAYMONGO_WEBHOOK_SECRET,
+      paymongoCheckoutSuccessUrl: process.env.PAYMONGO_CHECKOUT_SUCCESS_URL,
+      paymongoCheckoutCancelUrl: process.env.PAYMONGO_CHECKOUT_CANCEL_URL,
     },
   };
 };

@@ -1,10 +1,15 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 
 import { CreateInvoicePaymentEntryDto } from '../dto/create-invoice-payment-entry.dto';
 import { UpdateInvoiceStatusDto } from '../dto/update-invoice-status.dto';
 import { InvoicePaymentsRepository } from '../repositories/invoice-payments.repository';
+
+type ActorContext = {
+  userId: string;
+  role: string;
+};
 
 @Injectable()
 export class InvoicePaymentsService {
@@ -23,19 +28,27 @@ export class InvoicePaymentsService {
     return this.invoicePaymentsRepository.createInvoice(payload);
   }
 
-  async findInvoiceById(invoiceId: string) {
+  async findInvoiceById(invoiceId: string, actor?: ActorContext) {
     const invoice = await this.invoicePaymentsRepository.findInvoiceById(invoiceId);
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
     }
 
+    if (actor) {
+      this.assertCustomerScope(invoice.customerUserId, actor);
+    }
+
     return this.hydrateInvoice(invoice);
   }
 
-  async findInvoiceByOrderId(orderId: string) {
+  async findInvoiceByOrderId(orderId: string, actor?: ActorContext) {
     const invoice = await this.invoicePaymentsRepository.findInvoiceByOrderId(orderId);
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
+    }
+
+    if (actor) {
+      this.assertCustomerScope(invoice.customerUserId, actor);
     }
 
     return this.hydrateInvoice(invoice);
@@ -239,5 +252,11 @@ export class InvoicePaymentsService {
       bucket: 'overdue_31_plus' as const,
       daysPastDue,
     };
+  }
+
+  private assertCustomerScope(customerUserId: string, actor: ActorContext) {
+    if (actor.role === 'customer' && actor.userId !== customerUserId) {
+      throw new ForbiddenException('Customers can only access their own ecommerce invoices.');
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
@@ -6,6 +6,8 @@ import { InvoicePaymentsRepository } from '@ecommerce-modules/invoice-payments/r
 import { InvoicePaymentsService } from '@ecommerce-modules/invoice-payments/services/invoice-payments.service';
 
 describe('InvoicePaymentsService', () => {
+  const customerActor = { userId: '55555555-5555-4555-8555-555555555555', role: 'customer' };
+
   it('records payment entries and derives partial then paid invoice states', async () => {
     const eventBus = {
       publish: jest.fn(),
@@ -113,5 +115,27 @@ describe('InvoicePaymentsService', () => {
         reason: 'Attempted void after collecting payment.',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('blocks customers from loading another customer invoice by order id', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InvoicePaymentsService,
+        InvoicePaymentsRepository,
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InvoicePaymentsService);
+
+    const invoice = await service.createInvoiceForOrder({
+      orderId: '77777777-7777-4777-8777-777777777777',
+      customerUserId: 'customer-2',
+      totalCents: 120000,
+    });
+
+    await expect(service.findInvoiceByOrderId(invoice.orderId, customerActor)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 });

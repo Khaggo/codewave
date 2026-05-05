@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import {
   ApiBadRequestResponse,
@@ -264,6 +264,30 @@ export class BookingsController {
       id,
       payload,
       request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post('payments/paymongo/webhook')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Receive PayMongo checkout-session webhook events for booking reservation fees.' })
+  @ApiOkResponse({
+    description: 'The PayMongo event was acknowledged.',
+    schema: {
+      example: {
+        received: true,
+        ignored: false,
+        eventType: 'checkout_session.payment.paid',
+        bookingId: 'b520dba5-5bfb-4d34-a931-70bd811f7725',
+      },
+    },
+  })
+  handlePaymongoWebhook(
+    @Req() request: Request & { rawBody?: Buffer },
+    @Headers('paymongo-signature') signatureHeader?: string,
+  ) {
+    return this.bookingsService.handlePaymongoWebhook(
+      request.rawBody ?? Buffer.from(JSON.stringify(request.body ?? {})),
+      signatureHeader,
     );
   }
 

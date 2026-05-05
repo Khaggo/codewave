@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { CatalogRepository } from '@ecommerce-modules/catalog/repositories/catalog.repository';
 
@@ -31,6 +31,11 @@ type HydratedCart = {
   updatedAt: Date;
 };
 
+type ActorContext = {
+  userId: string;
+  role: string;
+};
+
 @Injectable()
 export class CartService {
   constructor(
@@ -38,12 +43,14 @@ export class CartService {
     private readonly catalogRepository: CatalogRepository,
   ) {}
 
-  async getCart(customerUserId: string) {
+  async getCart(customerUserId: string, actor: ActorContext) {
+    this.assertCustomerScope(customerUserId, actor);
     const cart = await this.cartRepository.getOrCreateActiveCart(customerUserId);
     return this.hydrateCart(cart.id);
   }
 
-  async addItem(payload: AddCartItemDto) {
+  async addItem(payload: AddCartItemDto, actor: ActorContext) {
+    this.assertCustomerScope(payload.customerUserId, actor);
     const product = await this.requireActiveProduct(payload.productId);
     const cart = await this.cartRepository.getOrCreateActiveCart(payload.customerUserId);
     const existingItem = await this.cartRepository.findItemByCartAndProduct(cart.id, payload.productId);
@@ -61,7 +68,8 @@ export class CartService {
     return this.hydrateCart(cart.id);
   }
 
-  async updateItem(itemId: string, payload: UpdateCartItemDto) {
+  async updateItem(itemId: string, payload: UpdateCartItemDto, actor: ActorContext) {
+    this.assertCustomerScope(payload.customerUserId, actor);
     const cart = await this.cartRepository.getOrCreateActiveCart(payload.customerUserId);
     const existingItem = await this.cartRepository.findItemById(itemId);
     if (!existingItem || existingItem.cartId !== cart.id) {
@@ -73,7 +81,8 @@ export class CartService {
     return this.hydrateCart(cart.id);
   }
 
-  async removeItem(itemId: string, customerUserId: string) {
+  async removeItem(itemId: string, customerUserId: string, actor: ActorContext) {
+    this.assertCustomerScope(customerUserId, actor);
     const cart = await this.cartRepository.getOrCreateActiveCart(customerUserId);
     const existingItem = await this.cartRepository.findItemById(itemId);
     if (!existingItem || existingItem.cartId !== cart.id) {
@@ -84,7 +93,8 @@ export class CartService {
     return this.hydrateCart(cart.id);
   }
 
-  async getCheckoutPreview(customerUserId: string) {
+  async getCheckoutPreview(customerUserId: string, actor: ActorContext) {
+    this.assertCustomerScope(customerUserId, actor);
     const cart = await this.cartRepository.getOrCreateActiveCart(customerUserId);
     const hydratedCart = await this.hydrateCart(cart.id);
 
@@ -166,5 +176,11 @@ export class CartService {
     }
 
     return product;
+  }
+
+  private assertCustomerScope(customerUserId: string, actor: ActorContext) {
+    if (actor.role === 'customer' && actor.userId !== customerUserId) {
+      throw new ForbiddenException('Customers can only access their own ecommerce cart.');
+    }
   }
 }

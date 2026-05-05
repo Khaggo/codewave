@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import { CatalogRepository } from '@ecommerce-modules/catalog/repositories/catalog.repository';
@@ -6,6 +6,8 @@ import { CartRepository } from '@ecommerce-modules/cart/repositories/cart.reposi
 import { CartService } from '@ecommerce-modules/cart/services/cart.service';
 
 describe('CartService', () => {
+  const customerActor = { userId: 'customer-1', role: 'customer' };
+
   it('merges duplicate product adds into one cart item with an increased quantity', async () => {
     const cartRepository = {
       getOrCreateActiveCart: jest.fn().mockResolvedValue({
@@ -64,11 +66,14 @@ describe('CartService', () => {
 
     const service = moduleRef.get(CartService);
 
-    const result = await service.addItem({
-      customerUserId: 'customer-1',
-      productId: 'product-1',
-      quantity: 2,
-    });
+    const result = await service.addItem(
+      {
+        customerUserId: 'customer-1',
+        productId: 'product-1',
+        quantity: 2,
+      },
+      customerActor,
+    );
 
     expect(cartRepository.updateItemQuantity).toHaveBeenCalledWith('item-1', 3);
     expect(result.totalQuantity).toBe(3);
@@ -124,6 +129,30 @@ describe('CartService', () => {
 
     const service = moduleRef.get(CartService);
 
-    await expect(service.getCheckoutPreview('customer-1')).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.getCheckoutPreview('customer-1', customerActor)).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('blocks customers from reading or mutating another customer cart', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        CartService,
+        {
+          provide: CartRepository,
+          useValue: {
+            getOrCreateActiveCart: jest.fn(),
+          },
+        },
+        {
+          provide: CatalogRepository,
+          useValue: {
+            findProductById: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(CartService);
+
+    await expect(service.getCart('customer-2', customerActor)).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

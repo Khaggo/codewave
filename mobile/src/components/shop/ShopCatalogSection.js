@@ -254,7 +254,7 @@ export default function ShopCatalogSection({
       {showServiceErrorState ? (
         <View style={styles.stateCard}>
           <MaterialCommunityIcons name="server-network-off" size={34} color="#FFB86B" />
-          <Text style={styles.stateTitle}>Catalog service unavailable</Text>
+          <Text style={styles.stateTitle}>Catalog failed to load</Text>
           <Text style={styles.stateText}>
             {errorMessage || 'We could not reach the store catalog right now. Check the connection and try refreshing again.'}
           </Text>

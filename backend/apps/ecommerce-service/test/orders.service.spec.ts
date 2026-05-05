@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
@@ -8,6 +8,8 @@ import { OrdersRepository } from '@ecommerce-modules/orders/repositories/orders.
 import { OrdersService } from '@ecommerce-modules/orders/services/orders.service';
 
 describe('OrdersService', () => {
+  const customerActor = { userId: 'customer-1', role: 'customer' };
+
   it('creates an invoice-backed order from the active cart and clears the cart afterwards', async () => {
     const cartService = {
       getCheckoutPreview: jest.fn().mockResolvedValue({
@@ -123,16 +125,19 @@ describe('OrdersService', () => {
 
     const service = moduleRef.get(OrdersService);
 
-    const result = await service.checkoutInvoice({
-      customerUserId: 'customer-1',
-      billingAddress: {
-        recipientName: 'Juan Dela Cruz',
-        email: 'juan@example.com',
-        addressLine1: '123 Service Street',
-        city: 'Makati',
-        province: 'Metro Manila',
+    const result = await service.checkoutInvoice(
+      {
+        customerUserId: 'customer-1',
+        billingAddress: {
+          recipientName: 'Juan Dela Cruz',
+          email: 'juan@example.com',
+          addressLine1: '123 Service Street',
+          city: 'Makati',
+          province: 'Metro Manila',
+        },
       },
-    });
+      customerActor,
+    );
 
     expect(ordersRepository.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -144,6 +149,8 @@ describe('OrdersService', () => {
       orderId: 'order-1',
       customerUserId: 'customer-1',
       totalCents: 189900,
+      productIds: ['product-1'],
+      productCategoryIds: [],
     });
     expect(cartService.clearActiveCart).toHaveBeenCalledWith('customer-1');
     expect(eventBus.publish).toHaveBeenNthCalledWith(1, 'order.created', {
@@ -260,6 +267,8 @@ describe('OrdersService', () => {
   });
 
   it('rejects invalid order transitions', async () => {
+    const staffActor = { userId: 'staff-1', role: 'service_adviser' };
+
     const moduleRef = await Test.createTestingModule({
       providers: [
         OrdersService,
@@ -269,6 +278,7 @@ describe('OrdersService', () => {
           useValue: {
             findOrderById: jest.fn().mockResolvedValue({
               id: 'order-1',
+              customerUserId: 'customer-1',
               status: 'fulfilled',
             }),
           },
@@ -281,9 +291,56 @@ describe('OrdersService', () => {
     const service = moduleRef.get(OrdersService);
 
     await expect(
-      service.cancelOrder('order-1', {
-        reason: 'Attempted late cancellation.',
-      }),
+      service.cancelOrder(
+        'order-1',
+        {
+          reason: 'Attempted late cancellation.',
+        },
+        staffActor,
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('blocks a customer from loading or cancelling another customer order', async () => {
+    const ordersRepository = {
+      findOrderById: jest.fn().mockResolvedValue({
+        id: 'order-1',
+        customerUserId: 'customer-2',
+        status: 'invoice_pending',
+        invoiceId: null,
+        orderNumber: 'ORD-2026-0002',
+        checkoutMode: 'invoice',
+        subtotalCents: 189900,
+        notes: null,
+        items: [],
+        addresses: [],
+        statusHistory: [],
+        createdAt: new Date('2026-05-14T05:00:00.000Z'),
+        updatedAt: new Date('2026-05-14T05:00:00.000Z'),
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        OrdersService,
+        { provide: CartService, useValue: {} },
+        { provide: OrdersRepository, useValue: ordersRepository },
+        { provide: InvoicePaymentsService, useValue: {} },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(OrdersService);
+
+    await expect(service.getOrderById('order-1', customerActor)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.cancelOrder(
+        'order-1',
+        {
+          reason: 'Not my order.',
+        },
+        customerActor,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { CartService } from '@ecommerce-modules/cart/services/cart.service';
@@ -10,6 +10,11 @@ import { OrderHistoryQueryDto } from '../dto/order-history-query.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
 import { OrdersRepository } from '../repositories/orders.repository';
 
+type ActorContext = {
+  userId: string;
+  role: string;
+};
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -19,8 +24,9 @@ export class OrdersService {
     private readonly eventBus: AutocareEventBusService,
   ) {}
 
-  async checkoutInvoice(payload: CheckoutInvoiceDto) {
-    const preview = await this.cartService.getCheckoutPreview(payload.customerUserId);
+  async checkoutInvoice(payload: CheckoutInvoiceDto, actor: ActorContext) {
+    this.assertCustomerScope(payload.customerUserId, actor);
+    const preview = await this.cartService.getCheckoutPreview(payload.customerUserId, actor);
     if (preview.items.length === 0) {
       throw new ConflictException('Cart is empty');
     }
@@ -82,10 +88,14 @@ export class OrdersService {
     return this.getOrderById(order.id);
   }
 
-  async getOrderById(orderId: string) {
+  async getOrderById(orderId: string, actor?: ActorContext) {
     const order = await this.ordersRepository.findOrderById(orderId);
     if (!order) {
       throw new NotFoundException('Order not found');
+    }
+
+    if (actor) {
+      this.assertOrderScope(order.customerUserId, actor);
     }
 
     const invoice = order.invoiceId ? await this.invoicePaymentsService.findInvoiceById(order.invoiceId) : null;
@@ -104,11 +114,12 @@ export class OrdersService {
     };
   }
 
-  async listOrdersByUserId(customerUserId: string, filters?: OrderHistoryQueryDto) {
+  async listOrdersByUserId(customerUserId: string, actor: ActorContext, filters?: OrderHistoryQueryDto) {
+    this.assertCustomerScope(customerUserId, actor);
     const orders = await this.ordersRepository.listOrdersByCustomerUserId(customerUserId, {
       status: filters?.status,
     });
-    const hydratedOrders = await Promise.all(orders.map((order) => this.getOrderById(order.id)));
+    const hydratedOrders = await Promise.all(orders.map((order) => this.getOrderById(order.id, actor)));
 
     if (filters?.invoiceStatus) {
       return hydratedOrders.filter((order) => order.invoice?.status === filters.invoiceStatus);
@@ -136,11 +147,13 @@ export class OrdersService {
     return this.getOrderById(orderId);
   }
 
-  async cancelOrder(orderId: string, payload: CancelOrderDto) {
+  async cancelOrder(orderId: string, payload: CancelOrderDto, actor: ActorContext) {
     const order = await this.ordersRepository.findOrderById(orderId);
     if (!order) {
       throw new NotFoundException('Order not found');
     }
+
+    this.assertOrderScope(order.customerUserId, actor);
 
     if (!this.canTransition(order.status, 'cancelled')) {
       throw new ConflictException('The order can no longer be cancelled');
@@ -152,7 +165,7 @@ export class OrdersService {
       transitionType: 'cancel',
     });
 
-    return this.getOrderById(orderId);
+    return this.getOrderById(orderId, actor);
   }
 
   private canTransition(
@@ -171,5 +184,15 @@ export class OrdersService {
     }
 
     return allowedTransitions[currentStatus].includes(nextStatus);
+  }
+
+  private assertCustomerScope(customerUserId: string, actor: ActorContext) {
+    if (actor.role === 'customer' && actor.userId !== customerUserId) {
+      throw new ForbiddenException('Customers can only access their own ecommerce orders.');
+    }
+  }
+
+  private assertOrderScope(customerUserId: string, actor: ActorContext) {
+    this.assertCustomerScope(customerUserId, actor);
   }
 }

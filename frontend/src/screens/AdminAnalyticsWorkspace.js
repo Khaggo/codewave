@@ -1,6 +1,4 @@
 'use client'
-
-import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
@@ -12,7 +10,6 @@ import {
   Clock3,
   Database,
   FileClock,
-  FileSearch,
   History,
   LoaderCircle,
   ReceiptText,
@@ -34,28 +31,12 @@ import {
   adminAnalyticsTabs,
   analyticsDerivedStateLabel,
   analyticsFreshnessExpectation,
-  analyticsFutureApiGaps,
   canStaffReadAnalytics,
   createAdminAnalyticsSnapshot,
   getAdminAnalyticsLoadState,
   getAnalyticsFreshnessTone,
   getLoadedAdminAnalyticsSectionCount,
 } from '@/lib/api/generated/analytics/staff-web-dashboard'
-
-const SummaryVerificationWorkspace = dynamic(
-  () => import('@/screens/SummaryVerificationWorkspace.js'),
-  {
-    loading: () => (
-      <div className="card px-5 py-10 text-center">
-        <LoaderCircle size={28} className="mx-auto mb-3 animate-spin text-brand-orange" />
-        <p className="text-sm font-bold text-ink-primary">Loading Summary Review</p>
-        <p className="text-xs text-ink-muted mt-2">
-          Pulling the existing lifecycle-summary verification workspace into this shared admin hub.
-        </p>
-      </div>
-    ),
-  },
-)
 
 const TAB_ICONS = {
   overview: BarChart3,
@@ -64,7 +45,6 @@ const TAB_ICONS = {
   loyalty: Award,
   invoiceAging: ReceiptText,
   auditTrail: History,
-  summaryReview: FileSearch,
 }
 
 const FRESHNESS_META = {
@@ -344,6 +324,10 @@ export default function AdminAnalyticsWorkspace() {
     () => Object.entries(errors).filter(([, value]) => Boolean(value)),
     [errors],
   )
+  const visibleTabs = useMemo(
+    () => adminAnalyticsTabs.filter((item) => item.key !== 'summaryReview'),
+    [],
+  )
   const isBusy = requestState === 'loading' || requestState === 'refreshing'
   const snapshotStatusMeta = useMemo(() => {
     if (requestState === 'refreshing') {
@@ -543,11 +527,11 @@ export default function AdminAnalyticsWorkspace() {
               Operational Read Models
             </p>
             <h1 className="mt-3 text-3xl font-bold text-ink-primary">
-              Admin Analytics & Summary Review
+              Admin Analytics
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
-              This hub keeps analytics read-only and derived, while still preserving the existing
-              layman-summary verification workspace behind the same adviser/admin page.
+              This hub keeps analytics read-only and derived so staff can inspect the real
+              snapshot without mixing reporting with unrelated review placeholders.
             </p>
           </div>
 
@@ -610,18 +594,8 @@ export default function AdminAnalyticsWorkspace() {
         />
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {analyticsFutureApiGaps.map((gap) => (
-          <InfoPanel
-            key={gap}
-            title="Future Enhancement"
-            body={gap}
-          />
-        ))}
-      </div>
-
       <div className="flex gap-1 p-1 bg-surface-card border border-surface-border rounded-xl w-fit flex-wrap">
-        {adminAnalyticsTabs.map((item) => {
+        {visibleTabs.map((item) => {
           const Icon = TAB_ICONS[item.key]
           const active = item.key === tab
 
@@ -1138,7 +1112,6 @@ export default function AdminAnalyticsWorkspace() {
         </div>
       ) : null}
 
-      {tab === 'summaryReview' ? <SummaryVerificationWorkspace /> : null}
     </div>
   )
 }

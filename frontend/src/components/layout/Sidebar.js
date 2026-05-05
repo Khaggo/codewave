@@ -42,7 +42,6 @@ const ICON_BY_PATH = {
   '/admin/invoices': ReceiptText,
   '/admin/customers': Users,
   '/backjobs': Wrench,
-  '/timeline': ClipboardList,
   '/insurance': ShieldCheck,
   '/loyalty': Award,
   '/shop': ShoppingBag,
@@ -56,11 +55,11 @@ const ICON_BY_PATH = {
 }
 
 const LABEL_BY_KEY = {
-  bookings: '1. Booking Schedule',
-  'digital-intake-inspections': '2. Intake Inspection',
-  'job-orders-admin': '3. Job Orders',
-  'qa-audit': '4. QA Audit',
-  'invoice-order-management': '5. Invoices & Orders',
+  bookings: 'Booking Schedule',
+  'digital-intake-inspections': 'Intake Inspection',
+  'job-orders-admin': 'Job Orders',
+  'qa-audit': 'QA Audit',
+  'invoice-order-management': 'Invoices & Orders',
   'summary-review': 'Analytics & Summaries',
   'user-admin': 'Staff Accounts',
 }

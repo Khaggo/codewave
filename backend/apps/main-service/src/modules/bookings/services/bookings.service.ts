@@ -349,13 +349,14 @@ export class BookingsService {
   async updateStatus(id: string, payload: UpdateBookingStatusDto, actorUserId: string) {
     await this.assertStaffActor(actorUserId);
     const booking = await this.assertFreshBookingState(id);
+    const currentStatus = booking.status as BookingStatus;
 
-    if (booking.status === payload.status) {
+    if (currentStatus === payload.status) {
       throw new BadRequestException('Booking is already in the requested status');
     }
 
-    if (!allowedStatusTransitions[booking.status].includes(payload.status)) {
-      throw new ConflictException(`Cannot transition booking from ${booking.status} to ${payload.status}`);
+    if (!allowedStatusTransitions[currentStatus].includes(payload.status)) {
+      throw new ConflictException(`Cannot transition booking from ${currentStatus} to ${payload.status}`);
     }
 
     const command: UpdateBookingStatusCommand = {
@@ -371,9 +372,10 @@ export class BookingsService {
   async reschedule(id: string, payload: RescheduleBookingDto, actorUserId: string) {
     await this.assertStaffActor(actorUserId);
     const booking = await this.assertFreshBookingState(id);
+    const currentStatus = booking.status as BookingStatus;
 
-    if (!allowedStatusTransitions[booking.status].includes('rescheduled')) {
-      throw new ConflictException(`Cannot reschedule a booking in ${booking.status} status`);
+    if (!allowedStatusTransitions[currentStatus].includes('rescheduled')) {
+      throw new ConflictException(`Cannot reschedule a booking in ${currentStatus} status`);
     }
 
     await this.assertTimeSlotAvailability(payload.timeSlotId, payload.scheduledDate, booking.id);
@@ -587,36 +589,26 @@ export class BookingsService {
   }
 
   private async assertFreshBookingState(bookingId: string) {
-    const booking = await this.bookingsRepository.findById(bookingId);
+    let booking = await this.bookingsRepository.findById(bookingId);
     const reservationPayment = booking.reservationPayment;
 
     if (
       booking.status === 'pending_payment' &&
       reservationPayment?.status === 'pending' &&
-      reservationPayment.expiresAt &&
-      new Date(reservationPayment.expiresAt).getTime() <= this.getCurrentDate().getTime()
+      reservationPayment.provider === 'paymongo' &&
+      reservationPayment.providerPaymentId
     ) {
-      await this.bookingsRepository.createOrReplaceReservationPayment({
-        bookingId,
-        provider: reservationPayment.provider,
-        status: 'expired',
-        amountCents: reservationPayment.amountCents,
-        currencyCode: reservationPayment.currencyCode,
-        providerPaymentId: reservationPayment.providerPaymentId ?? null,
-        providerCheckoutUrl: reservationPayment.providerCheckoutUrl ?? null,
-        referenceNumber: reservationPayment.referenceNumber ?? null,
-        failureReason: 'Reservation payment window expired before confirmation.',
-        expiresAt: reservationPayment.expiresAt ? new Date(reservationPayment.expiresAt) : null,
-        refundStatus: reservationPayment.refundStatus,
-        auditMetadata: reservationPayment.auditMetadata ?? null,
-      });
+      booking = await this.reconcilePaymongoReservationPayment(booking);
+    }
 
-      await this.bookingsRepository.updateStatus(bookingId, {
-        status: 'cancelled',
-        reason: 'Reservation payment window expired',
-        changedByUserId: null,
-      });
-      return this.bookingsRepository.findById(bookingId);
+    const refreshedReservationPayment = booking.reservationPayment;
+    if (
+      booking.status === 'pending_payment' &&
+      refreshedReservationPayment?.status === 'pending' &&
+      refreshedReservationPayment.expiresAt &&
+      new Date(refreshedReservationPayment.expiresAt).getTime() <= this.getCurrentDate().getTime()
+    ) {
+      return this.expireReservationPaymentWindow(booking, 'Reservation payment window expired before confirmation.');
     }
 
     return booking;
@@ -662,7 +654,6 @@ export class BookingsService {
       throw new ConflictException('Reservation payment can only be confirmed while the booking is awaiting confirmation');
     }
 
-    const paymentPolicy = await this.bookingsRepository.getOrCreatePaymentPolicy();
     const paymentRecord = booking.reservationPayment;
     if (!paymentRecord) {
       throw new NotFoundException('Booking reservation payment record not found');
@@ -672,37 +663,65 @@ export class BookingsService {
       throw new ForbiddenException('Manual counter confirmation requires a staff actor');
     }
 
-    await this.bookingsRepository.createOrReplaceReservationPayment({
-      bookingId,
+    const updatedBooking = await this.applyReservationPaymentConfirmation(booking, {
       provider: payload.provider,
-      status: 'paid',
-      amountCents: paymentRecord.amountCents,
-      currencyCode: paymentRecord.currencyCode,
       providerPaymentId: payload.providerPaymentId ?? paymentRecord.providerPaymentId ?? null,
-      providerCheckoutUrl: paymentRecord.providerCheckoutUrl ?? null,
       referenceNumber: payload.referenceNumber ?? paymentRecord.referenceNumber ?? null,
       paidAt: this.getCurrentDate(),
-      expiresAt: paymentRecord.expiresAt ? new Date(paymentRecord.expiresAt) : null,
-      confirmedByUserId: actor?.userId ?? null,
-      refundStatus: 'not_required',
+      actorUserId: actor?.userId ?? null,
       auditMetadata:
         payload.provider === 'manual_counter'
           ? `Manual counter confirmation by ${actor?.userId ?? 'unknown'} at ${this.getCurrentDate().toISOString()}`
           : paymentRecord.auditMetadata ?? null,
     });
 
-    if (booking.status !== 'confirmed') {
-      await this.bookingsRepository.updateStatus(bookingId, {
-        status: 'confirmed',
-        reason: 'Reservation fee confirmed',
-        changedByUserId: actor?.userId ?? null,
-      });
-      await this.bookingsRepository.updateBookingQrCode(bookingId, randomUUID());
+    return this.toBookingView(updatedBooking);
+  }
+
+  async handlePaymongoWebhook(rawPayload: Buffer | string, signatureHeader?: string | null) {
+    const event = this.bookingReservationPaymentGateway.parseReservationPaymentWebhook(
+      rawPayload,
+      signatureHeader,
+    );
+
+    if (event.eventType !== 'checkout_session.payment.paid' || event.status !== 'paid') {
+      return {
+        received: true,
+        ignored: true,
+        eventType: event.eventType,
+      };
     }
 
-    const updatedBooking = await this.bookingsRepository.findById(bookingId);
-    await this.scheduleBookingReminderFromWorkflow(updatedBooking);
-    return this.toBookingView(updatedBooking);
+    const booking =
+      (event.bookingId ? await this.bookingsRepository.findOptionalById(event.bookingId) : null) ??
+      (event.providerPaymentId
+        ? await this.bookingsRepository.findByReservationProviderPaymentId(event.providerPaymentId)
+        : null);
+
+    if (!booking || !['pending_payment', 'confirmed'].includes(booking.status)) {
+      return {
+        received: true,
+        ignored: true,
+        eventType: event.eventType,
+        bookingId: event.bookingId,
+      };
+    }
+
+    await this.applyReservationPaymentConfirmation(booking, {
+      provider: 'paymongo',
+      providerPaymentId: event.providerPaymentId,
+      referenceNumber: event.referenceNumber,
+      paidAt: event.paidAt ?? this.getCurrentDate(),
+      actorUserId: null,
+      auditMetadata: `Verified by PayMongo webhook at ${this.getCurrentDate().toISOString()}`,
+    });
+
+    return {
+      received: true,
+      ignored: false,
+      eventType: event.eventType,
+      bookingId: booking.id,
+    };
   }
 
   private resolveDailyScheduleStatuses(status?: BookingStatus, scope?: DailyScheduleScope) {
@@ -819,7 +838,7 @@ export class BookingsService {
     await this.bookingsRepository.createOrReplaceReservationPayment({
       bookingId: booking.id,
       provider: paymentSession.provider,
-      status: paymentSession.status,
+      status: paymentSession.status === 'unavailable' ? 'failed' : paymentSession.status,
       amountCents: paymentPolicy.reservationFeeAmountCents,
       currencyCode: paymentPolicy.currencyCode,
       providerPaymentId: paymentSession.providerPaymentId,
@@ -853,5 +872,149 @@ export class BookingsService {
         dedupeKey: `notification:booking_payment:${booking.id}:${paymentSession.status}:${expiresAt.toISOString()}`,
       });
     }
+  }
+
+  private async reconcilePaymongoReservationPayment(booking: any) {
+    const reservationPayment = booking.reservationPayment;
+    if (
+      booking.status !== 'pending_payment' ||
+      reservationPayment?.provider !== 'paymongo' ||
+      reservationPayment.status !== 'pending' ||
+      !reservationPayment.providerPaymentId
+    ) {
+      return booking;
+    }
+
+    const remotePayment = await this.bookingReservationPaymentGateway.retrieveReservationPayment(
+      reservationPayment.providerPaymentId,
+    );
+
+    if (remotePayment.status === 'paid') {
+      return this.applyReservationPaymentConfirmation(booking, {
+        provider: 'paymongo',
+        providerPaymentId: remotePayment.providerPaymentId,
+        referenceNumber: remotePayment.referenceNumber,
+        paidAt: remotePayment.paidAt ?? this.getCurrentDate(),
+        actorUserId: null,
+        auditMetadata: `Verified by PayMongo checkout-session sync at ${this.getCurrentDate().toISOString()}`,
+      });
+    }
+
+    if (remotePayment.status === 'expired') {
+      return this.expireReservationPaymentWindow(
+        booking,
+        remotePayment.failureReason ?? 'The PayMongo checkout session expired before payment was completed.',
+      );
+    }
+
+    if (remotePayment.status === 'failed') {
+      await this.bookingsRepository.createOrReplaceReservationPayment({
+        bookingId: booking.id,
+        provider: 'paymongo',
+        status: 'failed',
+        amountCents: reservationPayment.amountCents,
+        currencyCode: reservationPayment.currencyCode,
+        providerPaymentId: remotePayment.providerPaymentId ?? reservationPayment.providerPaymentId ?? null,
+        providerCheckoutUrl: remotePayment.checkoutUrl ?? reservationPayment.providerCheckoutUrl ?? null,
+        referenceNumber: remotePayment.referenceNumber ?? reservationPayment.referenceNumber ?? null,
+        failureReason: remotePayment.failureReason,
+        expiresAt: reservationPayment.expiresAt ? new Date(reservationPayment.expiresAt) : null,
+        refundStatus: reservationPayment.refundStatus,
+        auditMetadata: reservationPayment.auditMetadata ?? null,
+      });
+
+      return this.bookingsRepository.findById(booking.id);
+    }
+
+    return booking;
+  }
+
+  private async expireReservationPaymentWindow(booking: any, failureReason: string) {
+    const reservationPayment = booking.reservationPayment;
+    if (!reservationPayment) {
+      return booking;
+    }
+
+    await this.bookingsRepository.createOrReplaceReservationPayment({
+      bookingId: booking.id,
+      provider: reservationPayment.provider,
+      status: 'expired',
+      amountCents: reservationPayment.amountCents,
+      currencyCode: reservationPayment.currencyCode,
+      providerPaymentId: reservationPayment.providerPaymentId ?? null,
+      providerCheckoutUrl: reservationPayment.providerCheckoutUrl ?? null,
+      referenceNumber: reservationPayment.referenceNumber ?? null,
+      failureReason,
+      expiresAt: reservationPayment.expiresAt ? new Date(reservationPayment.expiresAt) : null,
+      refundStatus: reservationPayment.refundStatus,
+      auditMetadata: reservationPayment.auditMetadata ?? null,
+    });
+
+    await this.bookingsRepository.updateStatus(booking.id, {
+      status: 'cancelled',
+      reason: 'Reservation payment window expired',
+      changedByUserId: null,
+    });
+
+    return this.bookingsRepository.findById(booking.id);
+  }
+
+  private async applyReservationPaymentConfirmation(
+    booking: any,
+    payload: {
+      provider: 'paymongo' | 'manual_counter';
+      providerPaymentId?: string | null;
+      referenceNumber?: string | null;
+      paidAt?: Date | null;
+      actorUserId?: string | null;
+      auditMetadata?: string | null;
+    },
+  ) {
+    const paymentRecord = booking.reservationPayment;
+    if (!paymentRecord) {
+      throw new NotFoundException('Booking reservation payment record not found');
+    }
+
+    if (
+      paymentRecord.status === 'paid' &&
+      booking.status === 'confirmed' &&
+      (payload.providerPaymentId ?? paymentRecord.providerPaymentId ?? null) ===
+        (paymentRecord.providerPaymentId ?? null)
+    ) {
+      return booking;
+    }
+
+    await this.bookingsRepository.createOrReplaceReservationPayment({
+      bookingId: booking.id,
+      provider: payload.provider,
+      status: 'paid',
+      amountCents: paymentRecord.amountCents,
+      currencyCode: paymentRecord.currencyCode,
+      providerPaymentId: payload.providerPaymentId ?? paymentRecord.providerPaymentId ?? null,
+      providerCheckoutUrl: paymentRecord.providerCheckoutUrl ?? null,
+      referenceNumber: payload.referenceNumber ?? paymentRecord.referenceNumber ?? null,
+      paidAt: payload.paidAt ?? this.getCurrentDate(),
+      expiresAt: paymentRecord.expiresAt ? new Date(paymentRecord.expiresAt) : null,
+      confirmedByUserId: payload.actorUserId ?? null,
+      refundStatus: 'not_required',
+      auditMetadata: payload.auditMetadata ?? paymentRecord.auditMetadata ?? null,
+    });
+
+    const shouldIssueQrCode = booking.status !== 'confirmed';
+    if (shouldIssueQrCode) {
+      await this.bookingsRepository.updateStatus(booking.id, {
+        status: 'confirmed',
+        reason: 'Reservation fee confirmed',
+        changedByUserId: payload.actorUserId ?? null,
+      });
+      await this.bookingsRepository.updateBookingQrCode(booking.id, randomUUID());
+    }
+
+    const updatedBooking = await this.bookingsRepository.findById(booking.id);
+    if (shouldIssueQrCode) {
+      await this.scheduleBookingReminderFromWorkflow(updatedBooking);
+    }
+
+    return updatedBooking;
   }
 }

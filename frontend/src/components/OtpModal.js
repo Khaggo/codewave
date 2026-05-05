@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ShieldCheck, Mail, Loader2, TriangleAlert } from 'lucide-react'
 import OtpInput from './OtpInput.jsx'
-import { getOtpContent, maskEmail, MOCK_OTP, RESEND_SECONDS } from '@/lib/otp'
+import { getOtpContent, maskEmail, RESEND_SECONDS } from '@/lib/otp'
 
 export default function OtpModal({
   isOpen,
   onClose,
   onVerify,
+  onResend,
   onInvalidCode,
   email,
   purpose = 'login',
@@ -67,14 +68,12 @@ export default function OtpModal({
     setError('')
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      if (code === MOCK_OTP) {
-        await Promise.resolve(onVerify?.())
+      if (typeof onVerify === 'function') {
+        await Promise.resolve(onVerify(code))
         return
       }
 
-      const message = texts.invalidMessage
+      const message = 'This verification flow is not connected yet.'
       if (isMountedRef.current) {
         setError(message)
         onInvalidCode?.(message)
@@ -84,11 +83,15 @@ export default function OtpModal({
         setLoading(false)
       }
     }
-  }, [code, onInvalidCode, onVerify, texts.invalidMessage])
+  }, [code, onInvalidCode, onVerify])
 
-  const handleResend = useCallback(() => {
+  const handleResend = useCallback(async () => {
     if (resendTimeoutRef.current) {
       clearTimeout(resendTimeoutRef.current)
+    }
+
+    if (typeof onResend === 'function') {
+      await Promise.resolve(onResend())
     }
 
     setResendTimer(RESEND_SECONDS)
@@ -101,7 +104,7 @@ export default function OtpModal({
       }
       resendTimeoutRef.current = null
     }, 2000)
-  }, [])
+  }, [onResend])
 
   return (
     <AnimatePresence>
@@ -157,10 +160,10 @@ export default function OtpModal({
               className="rounded-xl px-4 py-3 mb-5"
               style={{ background: 'rgba(240,124,0,0.06)', border: '1px solid rgba(240,124,0,0.15)' }}
             >
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: '#f07c00' }}>
-                Prototype Code
+              <p className="text-sm font-semibold text-ink-primary">Enter the latest 6-digit code from your email.</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                This modal no longer shows or accepts a hardcoded fallback code.
               </p>
-              <p className="text-2xl font-black tracking-[6px] text-ink-primary">123456</p>
             </div>
 
             {error && (
