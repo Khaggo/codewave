@@ -49,18 +49,44 @@ export type AppConfig = {
   };
 };
 
+const toDefinedString = (value: string | undefined): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const coalesceString = (...values: Array<string | undefined>): string | undefined => {
+  for (const value of values) {
+    const normalized = toDefinedString(value);
+    if (normalized !== undefined) {
+      return normalized;
+    }
+  }
+
+  return undefined;
+};
+
 const toNumber = (value: string | undefined, fallback: number): number => {
-  const parsed = Number(value);
+  const normalized = toDefinedString(value);
+  if (normalized === undefined) {
+    return fallback;
+  }
+
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
 const parseUrlOrNull = (value: string | undefined): URL | null => {
-  if (!value) {
+  const normalized = toDefinedString(value);
+  if (!normalized) {
     return null;
   }
 
   try {
-    return new URL(value);
+    return new URL(normalized);
   } catch {
     return null;
   }
@@ -80,16 +106,16 @@ const toStringArray = (value: string | undefined, fallback: string[]): string[] 
 };
 
 export default (): AppConfig => {
-  const redisUrl = parseUrlOrNull(process.env.REDIS_URL);
+  const redisUrl = parseUrlOrNull(coalesceString(process.env.REDIS_URL));
   const redisPasswordFromUrl = redisUrl?.password ? decodeURIComponent(redisUrl.password) : undefined;
   const redisUsernameFromUrl = redisUrl?.username ? decodeURIComponent(redisUrl.username) : undefined;
 
   return {
-    env: process.env.NODE_ENV ?? 'development',
+    env: coalesceString(process.env.NODE_ENV) ?? 'development',
     ports: {
       // Railway injects PORT for each running service, so prefer it when present.
-      mainService: toNumber(process.env.PORT ?? process.env.MAIN_SERVICE_PORT, 3000),
-      ecommerceService: toNumber(process.env.PORT ?? process.env.ECOMMERCE_SERVICE_PORT, 3001),
+      mainService: toNumber(coalesceString(process.env.PORT, process.env.MAIN_SERVICE_PORT), 3000),
+      ecommerceService: toNumber(coalesceString(process.env.PORT, process.env.ECOMMERCE_SERVICE_PORT), 3001),
     },
     cors: {
       origins: toStringArray(process.env.CORS_ORIGINS, [
@@ -98,50 +124,48 @@ export default (): AppConfig => {
       ]),
     },
     database: {
-      url: process.env.DATABASE_URL ?? 'postgresql://admin:root@localhost:5433/codewave',
+      url: coalesceString(process.env.DATABASE_URL) ?? 'postgresql://admin:root@localhost:5433/codewave',
     },
     jwt: {
-      accessSecret: process.env.JWT_ACCESS_SECRET ?? 'change-me-access',
-      refreshSecret: process.env.JWT_REFRESH_SECRET ?? 'change-me-refresh',
-      accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? '15m',
-      refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
+      accessSecret: coalesceString(process.env.JWT_ACCESS_SECRET) ?? 'change-me-access',
+      refreshSecret: coalesceString(process.env.JWT_REFRESH_SECRET) ?? 'change-me-refresh',
+      accessExpiresIn: coalesceString(process.env.JWT_ACCESS_EXPIRES_IN) ?? '15m',
+      refreshExpiresIn: coalesceString(process.env.JWT_REFRESH_EXPIRES_IN) ?? '7d',
     },
     redis: {
-      host: process.env.REDIS_HOST ?? process.env.REDISHOST ?? redisUrl?.hostname ?? 'localhost',
-      port: toNumber(process.env.REDIS_PORT ?? process.env.REDISPORT ?? redisUrl?.port, 6379),
+      host: coalesceString(process.env.REDIS_HOST, process.env.REDISHOST, redisUrl?.hostname) ?? 'localhost',
+      port: toNumber(coalesceString(process.env.REDIS_PORT, process.env.REDISPORT, redisUrl?.port), 6379),
       username:
-        process.env.REDIS_USERNAME ??
-        process.env.REDISUSER ??
+        coalesceString(process.env.REDIS_USERNAME, process.env.REDISUSER) ??
         redisUsernameFromUrl,
       password:
-        process.env.REDIS_PASSWORD ??
-        process.env.REDISPASSWORD ??
+        coalesceString(process.env.REDIS_PASSWORD, process.env.REDISPASSWORD) ??
         redisPasswordFromUrl,
     },
     rabbitmq: {
-      url: process.env.RABBITMQ_URL?.trim() || undefined,
-      queue: process.env.RABBITMQ_QUEUE ?? 'autocare_events',
+      url: coalesceString(process.env.RABBITMQ_URL),
+      queue: coalesceString(process.env.RABBITMQ_QUEUE) ?? 'autocare_events',
     },
     google: {
-      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientId: coalesceString(process.env.GOOGLE_CLIENT_ID),
     },
     mail: {
-      host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
-      port: toNumber(process.env.SMTP_PORT, 465),
-      secure: (process.env.SMTP_SECURE ?? 'true').toLowerCase() !== 'false',
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-      from: process.env.SMTP_FROM ?? 'AUTOCARE <no-reply@example.com>',
-      connectionTimeoutMs: toNumber(process.env.SMTP_CONNECTION_TIMEOUT_MS, 10000),
-      greetingTimeoutMs: toNumber(process.env.SMTP_GREETING_TIMEOUT_MS, 10000),
-      socketTimeoutMs: toNumber(process.env.SMTP_SOCKET_TIMEOUT_MS, 15000),
+      host: coalesceString(process.env.SMTP_HOST) ?? 'smtp.gmail.com',
+      port: toNumber(coalesceString(process.env.SMTP_PORT), 465),
+      secure: (coalesceString(process.env.SMTP_SECURE) ?? 'true').toLowerCase() !== 'false',
+      user: coalesceString(process.env.SMTP_USER),
+      pass: coalesceString(process.env.SMTP_PASS),
+      from: coalesceString(process.env.SMTP_FROM) ?? 'AUTOCARE <no-reply@example.com>',
+      connectionTimeoutMs: toNumber(coalesceString(process.env.SMTP_CONNECTION_TIMEOUT_MS), 10000),
+      greetingTimeoutMs: toNumber(coalesceString(process.env.SMTP_GREETING_TIMEOUT_MS), 10000),
+      socketTimeoutMs: toNumber(coalesceString(process.env.SMTP_SOCKET_TIMEOUT_MS), 15000),
     },
     payments: {
-      paymongoPublicKey: process.env.PAYMONGO_PUBLIC_KEY,
-      paymongoSecretKey: process.env.PAYMONGO_SECRET_KEY,
-      paymongoWebhookSecret: process.env.PAYMONGO_WEBHOOK_SECRET,
-      paymongoCheckoutSuccessUrl: process.env.PAYMONGO_CHECKOUT_SUCCESS_URL,
-      paymongoCheckoutCancelUrl: process.env.PAYMONGO_CHECKOUT_CANCEL_URL,
+      paymongoPublicKey: coalesceString(process.env.PAYMONGO_PUBLIC_KEY),
+      paymongoSecretKey: coalesceString(process.env.PAYMONGO_SECRET_KEY),
+      paymongoWebhookSecret: coalesceString(process.env.PAYMONGO_WEBHOOK_SECRET),
+      paymongoCheckoutSuccessUrl: coalesceString(process.env.PAYMONGO_CHECKOUT_SUCCESS_URL),
+      paymongoCheckoutCancelUrl: coalesceString(process.env.PAYMONGO_CHECKOUT_CANCEL_URL),
     },
   };
 };
