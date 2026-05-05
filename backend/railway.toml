@@ -1,12 +1,12 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "npm run build:main"
+buildCommand = "if [ \"$PORT\" = \"3001\" ]; then npm run build:ecommerce; else npm run build:main; fi"
 watchPatterns = [
   "/backend/**",
 ]
 
 [deploy]
-startCommand = "npm run start:main"
+startCommand = "if [ \"$PORT\" = \"3001\" ]; then npm run start:ecommerce; else npm run start:main; fi"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
