@@ -129,6 +129,14 @@ export class NotificationsService {
       scheduledFor: payload.scheduledFor ?? null,
     });
 
+    // Auth OTP delivery is executed inline by the auth flow immediately after
+    // this notification record is created. Skipping Bull enqueue here keeps
+    // customer sign-up and password recovery working even when Redis-backed
+    // background workers are unavailable in production.
+    if (payload.category === 'auth_otp' && !payload.scheduledFor) {
+      return notification;
+    }
+
     await this.notificationsQueue.add(
       'deliver-notification',
       {
