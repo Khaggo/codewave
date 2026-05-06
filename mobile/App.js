@@ -26,6 +26,7 @@ import {
   customerMobileGuardMessages,
   createCustomerVehicle,
   getCustomerMobileSessionAccessState,
+  isAuthSessionResponse,
   loginAccount,
   requestChangePasswordOtp,
   registerAccount,
@@ -655,7 +656,7 @@ export default function App() {
   };
 
   const handleRegisterRequest = async (draftAccount) => {
-    const enrollment = await registerAccount({
+    const registrationResult = await registerAccount({
       email: draftAccount.email,
       password: draftAccount.password,
       firstName: draftAccount.firstName,
@@ -667,7 +668,57 @@ export default function App() {
     setPendingOnboardingCompletion(null);
     setActiveAccount(null);
 
-    return enrollment;
+    if (!isAuthSessionResponse(registrationResult)) {
+      return {
+        mode: 'otp',
+        enrollment: registrationResult,
+      };
+    }
+
+    const verifiedAccount = mergeAccountWithOnboarding(
+      buildMobileAccountProfile({
+        session: registrationResult,
+        password: draftAccount.password,
+        draftAccount,
+        existingAccount: registeredAccount,
+      }),
+      draftAccount,
+    );
+    const verifiedAccessState = getCustomerMobileSessionAccessState(verifiedAccount);
+
+    if (verifiedAccessState !== 'customer_session_active') {
+      throw new ApiError(
+        customerMobileGuardMessages[verifiedAccessState] ??
+          customerMobileGuardMessages.staff_session_blocked,
+        verifiedAccessState === 'unauthorized_session' ? 401 : 403,
+        {
+          reason: verifiedAccessState,
+          surface: 'customer-mobile',
+        },
+      );
+    }
+
+    rememberKnownAccount(verifiedAccount);
+    setActiveAccount(verifiedAccount);
+
+    const completedAccount = await persistCustomerOnboarding({
+      session: registrationResult,
+      draftAccount,
+      existingAccount: verifiedAccount,
+      password: draftAccount.password,
+    });
+
+    rememberKnownAccount(completedAccount);
+    setActiveAccount(completedAccount);
+    setPendingAccount(null);
+    setPendingOnboardingCompletion(null);
+
+    return {
+      mode: 'session',
+      account: completedAccount,
+      nextRoute: 'Menu',
+      resetStack: true,
+    };
   };
 
   const handleVerifyRegistrationOtp = async ({ enrollmentId, otp, accountDraft }) => {

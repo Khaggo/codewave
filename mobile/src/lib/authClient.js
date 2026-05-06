@@ -20,6 +20,9 @@ export class ApiError extends Error {
   }
 }
 
+export const isAuthSessionResponse = (value) =>
+  Boolean(value?.accessToken && value?.refreshToken && value?.user?.id);
+
 const normalizeEmail = (value) => String(value ?? '').trim().toLowerCase();
 
 const trimOrUndefined = (value) => {

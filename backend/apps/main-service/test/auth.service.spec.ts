@@ -96,6 +96,102 @@ describe('AuthService', () => {
     );
   });
 
+  it('bypasses customer registration OTP when the temporary flag is enabled', async () => {
+    const usersService = {
+      findByEmail: jest.fn().mockResolvedValue(null),
+      findById: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+        isActive: true,
+        profile: {
+          firstName: 'Jane',
+          lastName: 'Doe',
+        },
+      }),
+      create: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+        profile: {
+          firstName: 'Jane',
+          lastName: 'Doe',
+        },
+      }),
+      setActivationStatus: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const authRepository = {
+      createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
+      updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: true }),
+      storeRefreshToken: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const jwtService = {
+      signAsync: jest
+        .fn()
+        .mockResolvedValueOnce('access-token')
+        .mockResolvedValueOnce('refresh-token'),
+    };
+
+    const configService = {
+      getOrThrow: jest.fn((key: string) => {
+        const values: Record<string, string> = {
+          'jwt.accessSecret': 'access',
+          'jwt.refreshSecret': 'refresh',
+        };
+        return values[key];
+      }),
+      get: jest.fn((key: string, fallback: string | boolean) => {
+        if (key === 'auth.bypassCustomerRegistrationOtp') {
+          return true;
+        }
+
+        return fallback;
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UsersService, useValue: usersService },
+        { provide: AuthRepository, useValue: authRepository },
+        {
+          provide: NotificationsService,
+          useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() },
+        },
+        { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: JwtService, useValue: jwtService },
+        { provide: ConfigService, useValue: configService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(AuthService);
+
+    const result = await service.register({
+      email: 'customer@example.com',
+      password: 'password123',
+      firstName: 'Jane',
+      lastName: 'Doe',
+    });
+
+    expect(usersService.setActivationStatus).toHaveBeenCalledWith('user-1', true);
+    expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('user-1', true);
+    expect(authRepository.storeRefreshToken).toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        user: expect.objectContaining({
+          id: 'user-1',
+          email: 'customer@example.com',
+          role: 'customer',
+        }),
+      }),
+    );
+  });
+
   it('rejects duplicate registration email', async () => {
     const usersService = {
       findByEmail: jest.fn().mockResolvedValue({

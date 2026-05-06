@@ -1,5 +1,8 @@
 export type AppConfig = {
   env: string;
+  auth: {
+    bypassCustomerRegistrationOtp: boolean;
+  };
   ports: {
     mainService: number;
     ecommerceService: number;
@@ -106,12 +109,22 @@ const toStringArray = (value: string | undefined, fallback: string[]): string[] 
 };
 
 export default (): AppConfig => {
+  const env = coalesceString(process.env.NODE_ENV) ?? 'development';
   const redisUrl = parseUrlOrNull(coalesceString(process.env.REDIS_URL));
   const redisPasswordFromUrl = redisUrl?.password ? decodeURIComponent(redisUrl.password) : undefined;
   const redisUsernameFromUrl = redisUrl?.username ? decodeURIComponent(redisUrl.username) : undefined;
+  const defaultRegistrationOtpBypass = env.toLowerCase() === 'production' ? 'true' : 'false';
 
   return {
-    env: coalesceString(process.env.NODE_ENV) ?? 'development',
+    env,
+    auth: {
+      // Temporary production safety valve while SMTP delivery is unavailable.
+      bypassCustomerRegistrationOtp:
+        (
+          coalesceString(process.env.AUTH_BYPASS_CUSTOMER_REGISTRATION_OTP) ??
+          defaultRegistrationOtpBypass
+        ).toLowerCase() === 'true',
+    },
     ports: {
       // Railway injects PORT for each running service, so prefer it when present.
       mainService: toNumber(coalesceString(process.env.PORT, process.env.MAIN_SERVICE_PORT), 3000),
