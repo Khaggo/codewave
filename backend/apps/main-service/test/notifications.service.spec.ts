@@ -92,6 +92,92 @@ describe('NotificationsService', () => {
     expect(result.status).toBe('queued');
   });
 
+  it('marks notifications failed when the queue is unavailable instead of throwing', async () => {
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+        isActive: true,
+      }),
+    };
+
+    const notificationsRepository = {
+      findNotificationByDedupeKey: jest.fn().mockResolvedValue(null),
+      getOrCreatePreferences: jest.fn().mockResolvedValue({
+        id: 'pref-1',
+        userId: 'user-1',
+        emailEnabled: true,
+        bookingRemindersEnabled: true,
+        insuranceUpdatesEnabled: true,
+        invoiceRemindersEnabled: true,
+        serviceFollowUpEnabled: true,
+      }),
+      createNotification: jest.fn().mockResolvedValue({
+        id: 'notification-queue-failed',
+        userId: 'user-1',
+        category: 'booking_payment',
+        channel: 'email',
+        sourceType: 'booking_payment',
+        sourceId: 'booking-1',
+        title: 'Reservation payment required',
+        message: 'Complete your reservation fee payment.',
+        status: 'queued',
+        dedupeKey: 'notification:booking_payment:booking-1:pending',
+        scheduledFor: null,
+        deliveredAt: null,
+        attempts: [],
+      }),
+      createDeliveryAttempt: jest.fn().mockResolvedValue({ id: 'attempt-1' }),
+      updateNotificationStatus: jest.fn().mockResolvedValue({
+        id: 'notification-queue-failed',
+        status: 'failed',
+        deliveredAt: null,
+      }),
+    };
+
+    const notificationsQueue = {
+      add: jest.fn().mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:6379')),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        NotificationsService,
+        NotificationTriggerPlannerService,
+        { provide: NotificationsRepository, useValue: notificationsRepository },
+        { provide: UsersService, useValue: usersService },
+        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(NotificationsService);
+
+    const result = await service.enqueueNotification({
+      userId: 'user-1',
+      category: 'booking_payment',
+      channel: 'email',
+      sourceType: 'booking_payment',
+      sourceId: 'booking-1',
+      title: 'Reservation payment required',
+      message: 'Complete your reservation fee payment.',
+      dedupeKey: 'notification:booking_payment:booking-1:pending',
+    });
+
+    expect(notificationsQueue.add).toHaveBeenCalled();
+    expect(notificationsRepository.createDeliveryAttempt).toHaveBeenCalledWith({
+      notificationId: 'notification-queue-failed',
+      attemptNumber: 1,
+      status: 'failed',
+      errorMessage: 'connect ECONNREFUSED 127.0.0.1:6379',
+    });
+    expect(notificationsRepository.updateNotificationStatus).toHaveBeenCalledWith(
+      'notification-queue-failed',
+      { status: 'failed' },
+    );
+    expect(result.status).toBe('failed');
+  });
+
   it('keeps reminder scheduling idempotent when the same dedupe key is reused', async () => {
     const notificationsRepository = {
       findReminderRuleByDedupeKey: jest.fn().mockResolvedValue({
