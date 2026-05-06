@@ -19,6 +19,7 @@ import {
   Users,
 } from 'lucide-react'
 import {
+  confirmReservationPayment,
   createTimeSlotDefinition,
   deleteTimeSlotDefinition,
   getCurrentQueue,
@@ -86,6 +87,15 @@ const UPCOMING_SCHEDULE_DAYS = 31
 
 const STAFF_ACTIONS_BY_STATUS = {
   pending_payment: [
+    {
+      kind: 'confirm_reservation_payment',
+      label: 'Accept Counter Payment',
+      icon: CheckCircle2,
+      className: 'booking-status-action-primary',
+      confirmMessage:
+        'Confirm this reservation fee manually and release the booking into the confirmed queue?',
+      confirmLabel: 'Confirm reservation payment',
+    },
     {
       status: 'cancelled',
       label: 'Cancel Hold',
@@ -1611,7 +1621,7 @@ export default function BookingsList() {
   }
 
   async function submitBookingStatusAction(booking, action) {
-    if (!booking?.id || !action?.status) {
+    if (!booking?.id || (!action?.status && action?.kind !== 'confirm_reservation_payment')) {
       return
     }
 
@@ -1631,20 +1641,33 @@ export default function BookingsList() {
     })
 
     try {
-      await updateBookingStatus(
-        {
-          bookingId: booking.id,
-          status: action.status,
-          reason: action.reason,
-        },
-        user.accessToken,
-      )
+      if (action.kind === 'confirm_reservation_payment') {
+        await confirmReservationPayment(
+          {
+            bookingId: booking.id,
+            provider: 'manual_counter',
+            referenceNumber: booking?.reservationPayment?.referenceNumber ?? undefined,
+          },
+          user.accessToken,
+        )
+      } else {
+        await updateBookingStatus(
+          {
+            bookingId: booking.id,
+            status: action.status,
+            reason: action.reason,
+          },
+          user.accessToken,
+        )
+      }
 
       setActionState({
         status: 'success',
         busyBookingId: '',
         message:
-          action.status === 'confirmed'
+          action.kind === 'confirm_reservation_payment'
+            ? 'Reservation fee confirmed manually. The booking should now move into the confirmed queue.'
+            : action.status === 'confirmed'
             ? 'Booking accepted. It should now appear in the current queue for this date.'
             : action.status === 'in_service'
               ? 'Booking handed off to workshop. It will stay active until the linked job order is finalized.'

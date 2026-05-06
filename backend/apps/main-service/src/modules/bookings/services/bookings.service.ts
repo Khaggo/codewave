@@ -311,10 +311,15 @@ export class BookingsService {
     await this.assertTimeSlotAvailability(createBookingDto.timeSlotId, createBookingDto.scheduledDate);
 
     const booking = await this.bookingsRepository.create(createBookingDto);
-    await this.issueOrRefreshReservationPayment(booking, {
-      customerName: this.getCustomerDisplayName(user),
-      customerEmail: user.email,
-    });
+
+    try {
+      await this.issueOrRefreshReservationPayment(booking, {
+        customerName: this.getCustomerDisplayName(user),
+        customerEmail: user.email,
+      });
+    } catch {
+      // Keep the booking visible to customers/staff even when reservation-payment follow-up fails.
+    }
 
     return this.toBookingView(await this.bookingsRepository.findById(booking.id));
   }

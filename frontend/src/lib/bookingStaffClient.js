@@ -193,6 +193,27 @@ export const updateBookingStatus = ({ bookingId, status, reason }, accessToken) 
   }).then((booking) => normalizeStaffBooking(booking));
 };
 
+export const confirmReservationPayment = (
+  { bookingId, provider = 'manual_counter', providerPaymentId, referenceNumber },
+  accessToken,
+) => {
+  if (!bookingId) {
+    throw new ApiError('Select a booking before confirming its reservation payment.', 400, {
+      path: '/api/bookings/:id/reservation-payment/confirm',
+    });
+  }
+
+  return request(`/api/bookings/${bookingId}/reservation-payment/confirm`, {
+    method: 'PATCH',
+    accessToken,
+    body: {
+      provider,
+      providerPaymentId,
+      referenceNumber,
+    },
+  }).then((booking) => normalizeStaffBooking(booking));
+};
+
 export const confirmBooking = ({ bookingId, reason }, accessToken) =>
   updateBookingStatus(
     {
