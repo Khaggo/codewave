@@ -356,6 +356,22 @@ export class NotificationsService {
         deliveredAt: new Date(),
       });
     } catch (error) {
+      console.error('Notification delivery failed', {
+        notificationId,
+        userId: notification.userId,
+        channel: notification.channel,
+        category: notification.category,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorCode:
+          typeof error === 'object' && error !== null && 'code' in error
+            ? String((error as { code?: unknown }).code)
+            : undefined,
+        errorResponse:
+          typeof error === 'object' && error !== null && 'response' in error
+            ? String((error as { response?: unknown }).response)
+            : undefined,
+      });
+
       await this.notificationsRepository.createDeliveryAttempt({
         notificationId,
         attemptNumber,
