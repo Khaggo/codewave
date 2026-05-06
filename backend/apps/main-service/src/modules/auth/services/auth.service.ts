@@ -69,7 +69,6 @@ export class AuthService {
   private readonly refreshSecret: string;
   private readonly accessExpiresIn: string;
   private readonly refreshExpiresIn: string;
-  private readonly bypassCustomerRegistrationOtp: boolean;
 
   constructor(
     private readonly authRepository: AuthRepository,
@@ -84,10 +83,6 @@ export class AuthService {
     this.refreshSecret = configService.getOrThrow<string>('jwt.refreshSecret');
     this.accessExpiresIn = configService.get<string>('jwt.accessExpiresIn', '15m');
     this.refreshExpiresIn = configService.get<string>('jwt.refreshExpiresIn', '7d');
-    this.bypassCustomerRegistrationOtp = configService.get<boolean>(
-      'auth.bypassCustomerRegistrationOtp',
-      false,
-    );
   }
 
   async startGoogleSignup(payload: GoogleSignupStartDto) {
@@ -300,26 +295,15 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(registerDto.password, 10);
     await this.authRepository.createAccount(user.id, passwordHash);
-    const shouldBypassOtp = this.bypassCustomerRegistrationOtp;
-    await this.usersService.setActivationStatus(user.id, shouldBypassOtp);
-    await this.authRepository.updateAccountStatus(user.id, shouldBypassOtp);
+    await this.usersService.setActivationStatus(user.id, true);
+    await this.authRepository.updateAccountStatus(user.id, true);
 
-    if (shouldBypassOtp) {
-      const activatedUser = await this.usersService.findById(user.id);
-      if (!activatedUser) {
-        throw new NotFoundException('User not found');
-      }
-
-      return this.issueTokens(activatedUser);
+    const activatedUser = await this.usersService.findById(user.id);
+    if (!activatedUser) {
+      throw new NotFoundException('User not found');
     }
 
-    return this.createOtpEnrollment({
-      userId: user.id,
-      email: user.email,
-      purpose: 'customer_signup',
-      activationContext: 'customer_signup',
-      status: 'pending_activation',
-    });
+    return this.issueTokens(activatedUser);
   }
 
   async login(loginDto: LoginDto, ipAddress?: string) {

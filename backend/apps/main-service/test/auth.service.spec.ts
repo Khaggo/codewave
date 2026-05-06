@@ -12,186 +12,97 @@ import { NotificationsService } from '@main-modules/notifications/services/notif
 import { UsersService } from '@main-modules/users/services/users.service';
 
 describe('AuthService', () => {
-  it('starts customer registration and sends an OTP instead of issuing tokens immediately', async () => {
-    const usersService = {
-      findByEmail: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockResolvedValue({
-        id: 'user-1',
-        email: 'customer@example.com',
-        role: 'customer',
-        profile: {
-          firstName: 'Jane',
-          lastName: 'Doe',
-        },
-      }),
-      setActivationStatus: jest.fn().mockResolvedValue(undefined),
-    };
-
-    const authRepository = {
-      createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
-      updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: true }),
-      createOtpChallenge: jest.fn().mockResolvedValue({
-        id: 'challenge-1',
-        userId: 'user-1',
-      }),
-    };
-
-    const notificationsService = {
-      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'queued' }),
-      deliverNotification: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'sent' }),
-    };
-
-    const configService = {
-      getOrThrow: jest.fn((key: string) => {
-        const values: Record<string, string> = {
-          'jwt.accessSecret': 'access',
-          'jwt.refreshSecret': 'refresh',
-        };
-        return values[key];
-      }),
-      get: jest.fn((_key: string, fallback: string) => fallback),
-    };
-
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        AuthService,
-        { provide: UsersService, useValue: usersService },
-        { provide: AuthRepository, useValue: authRepository },
-        { provide: NotificationsService, useValue: notificationsService },
-        { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
-        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
-        { provide: JwtService, useValue: {} },
-        { provide: ConfigService, useValue: configService },
-      ],
-    }).compile();
-
-    const service = moduleRef.get(AuthService);
-
-    const result = await service.register({
+  it('registers a customer and immediately issues a session token', async () => {
+  const usersService = {
+    findByEmail: jest.fn().mockResolvedValue(null),
+    findById: jest.fn().mockResolvedValue({
+      id: 'user-1',
       email: 'customer@example.com',
-      password: 'password123',
-      firstName: 'Jane',
-      lastName: 'Doe',
-    });
+      role: 'customer',
+      isActive: true,
+      profile: {
+        firstName: 'Jane',
+        lastName: 'Doe',
+      },
+    }),
+    create: jest.fn().mockResolvedValue({
+      id: 'user-1',
+      email: 'customer@example.com',
+      role: 'customer',
+      profile: {
+        firstName: 'Jane',
+        lastName: 'Doe',
+      },
+    }),
+    setActivationStatus: jest.fn().mockResolvedValue(undefined),
+  };
 
-    expect(usersService.create).toHaveBeenCalled();
-    expect(authRepository.createAccount).toHaveBeenCalled();
-    expect(usersService.setActivationStatus).toHaveBeenCalledWith('user-1', false);
-    expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('user-1', false);
-    expect(authRepository.createOtpChallenge).toHaveBeenCalled();
-    expect(notificationsService.enqueueAuthOtpDelivery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 'user-1',
-        email: 'customer@example.com',
-        activationContext: 'customer_signup',
-      }),
-    );
-    expect(notificationsService.deliverNotification).toHaveBeenCalledWith('notification-1');
-    expect(result).toEqual(
-      expect.objectContaining({
-        enrollmentId: 'challenge-1',
-        userId: 'user-1',
-        status: 'pending_activation',
-      }),
-    );
+  const authRepository = {
+    createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
+    updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: true }),
+    storeRefreshToken: jest.fn().mockResolvedValue(undefined),
+  };
+
+  const jwtService = {
+    signAsync: jest
+      .fn()
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token'),
+  };
+
+  const configService = {
+    getOrThrow: jest.fn((key: string) => {
+      const values: Record<string, string> = {
+        'jwt.accessSecret': 'access',
+        'jwt.refreshSecret': 'refresh',
+      };
+      return values[key];
+    }),
+    get: jest.fn((_key: string, fallback: string) => fallback),
+  };
+
+  const moduleRef = await Test.createTestingModule({
+    providers: [
+      AuthService,
+      { provide: UsersService, useValue: usersService },
+      { provide: AuthRepository, useValue: authRepository },
+      {
+        provide: NotificationsService,
+        useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() },
+      },
+      { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+      { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+      { provide: JwtService, useValue: jwtService },
+      { provide: ConfigService, useValue: configService },
+    ],
+  }).compile();
+
+  const service = moduleRef.get(AuthService);
+
+  const result = await service.register({
+    email: 'customer@example.com',
+    password: 'password123',
+    firstName: 'Jane',
+    lastName: 'Doe',
   });
 
-  it('bypasses customer registration OTP when the temporary flag is enabled', async () => {
-    const usersService = {
-      findByEmail: jest.fn().mockResolvedValue(null),
-      findById: jest.fn().mockResolvedValue({
+  expect(usersService.create).toHaveBeenCalled();
+  expect(authRepository.createAccount).toHaveBeenCalled();
+  expect(usersService.setActivationStatus).toHaveBeenCalledWith('user-1', true);
+  expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('user-1', true);
+  expect(authRepository.storeRefreshToken).toHaveBeenCalled();
+  expect(result).toEqual(
+    expect.objectContaining({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: expect.objectContaining({
         id: 'user-1',
         email: 'customer@example.com',
         role: 'customer',
-        isActive: true,
-        profile: {
-          firstName: 'Jane',
-          lastName: 'Doe',
-        },
       }),
-      create: jest.fn().mockResolvedValue({
-        id: 'user-1',
-        email: 'customer@example.com',
-        role: 'customer',
-        profile: {
-          firstName: 'Jane',
-          lastName: 'Doe',
-        },
-      }),
-      setActivationStatus: jest.fn().mockResolvedValue(undefined),
-    };
-
-    const authRepository = {
-      createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
-      updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: true }),
-      storeRefreshToken: jest.fn().mockResolvedValue(undefined),
-    };
-
-    const jwtService = {
-      signAsync: jest
-        .fn()
-        .mockResolvedValueOnce('access-token')
-        .mockResolvedValueOnce('refresh-token'),
-    };
-
-    const configService = {
-      getOrThrow: jest.fn((key: string) => {
-        const values: Record<string, string> = {
-          'jwt.accessSecret': 'access',
-          'jwt.refreshSecret': 'refresh',
-        };
-        return values[key];
-      }),
-      get: jest.fn((key: string, fallback: string | boolean) => {
-        if (key === 'auth.bypassCustomerRegistrationOtp') {
-          return true;
-        }
-
-        return fallback;
-      }),
-    };
-
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        AuthService,
-        { provide: UsersService, useValue: usersService },
-        { provide: AuthRepository, useValue: authRepository },
-        {
-          provide: NotificationsService,
-          useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() },
-        },
-        { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
-        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
-        { provide: JwtService, useValue: jwtService },
-        { provide: ConfigService, useValue: configService },
-      ],
-    }).compile();
-
-    const service = moduleRef.get(AuthService);
-
-    const result = await service.register({
-      email: 'customer@example.com',
-      password: 'password123',
-      firstName: 'Jane',
-      lastName: 'Doe',
-    });
-
-    expect(usersService.setActivationStatus).toHaveBeenCalledWith('user-1', true);
-    expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('user-1', true);
-    expect(authRepository.storeRefreshToken).toHaveBeenCalled();
-    expect(result).toEqual(
-      expect.objectContaining({
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-        user: expect.objectContaining({
-          id: 'user-1',
-          email: 'customer@example.com',
-          role: 'customer',
-        }),
-      }),
-    );
-  });
-
+    }),
+  );
+});
   it('rejects duplicate registration email', async () => {
     const usersService = {
       findByEmail: jest.fn().mockResolvedValue({
@@ -796,9 +707,19 @@ describe('AuthService', () => {
     });
   });
 
-  it('surfaces OTP delivery failures during registration instead of silently succeeding', async () => {
+  it('does not attempt OTP delivery during customer registration', async () => {
     const usersService = {
       findByEmail: jest.fn().mockResolvedValue(null),
+      findById: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+        isActive: true,
+        profile: {
+          firstName: 'Jane',
+          lastName: 'Doe',
+        },
+      }),
       create: jest.fn().mockResolvedValue({
         id: 'user-1',
         email: 'customer@example.com',
@@ -814,15 +735,19 @@ describe('AuthService', () => {
     const authRepository = {
       createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
       updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: true }),
-      createOtpChallenge: jest.fn().mockResolvedValue({
-        id: 'challenge-1',
-        userId: 'user-1',
-      }),
+      storeRefreshToken: jest.fn().mockResolvedValue(undefined),
     };
 
     const notificationsService = {
-      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'queued' }),
-      deliverNotification: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'failed' }),
+      enqueueAuthOtpDelivery: jest.fn(),
+      deliverNotification: jest.fn(),
+    };
+
+    const jwtService = {
+      signAsync: jest
+        .fn()
+        .mockResolvedValueOnce('access-token')
+        .mockResolvedValueOnce('refresh-token'),
     };
 
     const configService = {
@@ -844,21 +769,31 @@ describe('AuthService', () => {
         { provide: NotificationsService, useValue: notificationsService },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
         { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
-        { provide: JwtService, useValue: {} },
+        { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
       ],
     }).compile();
 
     const service = moduleRef.get(AuthService);
 
-    await expect(
-      service.register({
-        email: 'customer@example.com',
-        password: 'password123',
-        firstName: 'Jane',
-        lastName: 'Doe',
+    const result = await service.register({
+      email: 'customer@example.com',
+      password: 'password123',
+      firstName: 'Jane',
+      lastName: 'Doe',
+    });
+
+    expect(notificationsService.enqueueAuthOtpDelivery).not.toHaveBeenCalled();
+    expect(notificationsService.deliverNotification).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
       }),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    );
   });
 });
+
+
+
 
