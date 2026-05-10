@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -32,6 +32,8 @@ import { useToast } from '@/components/Toast'
 import { useUser } from '@/lib/userContext'
 import BookingActionConfirmModal from './BookingActionConfirmModal'
 import BookingsCalendarView from './BookingsCalendarView'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import PageHeader from '@/components/ui/PageHeader'
 
 const STAFF_BOOKING_ROLES = new Set(['service_adviser', 'super_admin'])
 
@@ -511,18 +513,15 @@ function BlockingState({ state, onRetry }) {
 
 function SummaryTile({ icon: Icon, label, value, sub }) {
   return (
-    <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
+    <div className="card p-5">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
-        <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-          style={{ background: 'rgba(240, 124, 0, 0.14)', color: '#f07c00' }}
-        >
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-orange/10 text-brand-orange">
           <Icon size={14} />
         </div>
       </div>
-      <p className="text-3xl font-black tracking-tight tabular-nums text-ink-primary mt-3">{value}</p>
-      {sub ? <p className="text-[11px] text-ink-muted mt-1.5">{sub}</p> : null}
+      <p className="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">{value}</p>
+      {sub ? <p className="mt-2 text-sm leading-6 text-ink-secondary">{sub}</p> : null}
     </div>
   )
 }
@@ -546,204 +545,235 @@ function SlotDefinitionsPanel({
 }) {
   if (status === 'loading' && slots.length === 0) {
     return (
-      <div className="card p-4 text-xs text-ink-muted">
+      <div className="card p-4 text-sm text-ink-muted">
         Loading live slot definitions from the backend...
       </div>
     )
   }
 
   return (
-    <div className="card p-4">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
+    <div className="card p-5">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="card-title">Slot Definitions</p>
-          <p className="text-xs text-ink-muted mt-1">
-            Manage the appointment windows customers can choose from the mobile booking flow.
+          <p className="mt-1 text-sm leading-6 text-ink-secondary">
+            Manage the appointment windows customers can select from the booking flow.
           </p>
         </div>
-        {error ? <span className="badge badge-orange">Using last loaded definitions</span> : null}
+        <div className="flex items-center gap-2">
+          <span className="badge badge-gray">{slots.length} configured</span>
+          {error ? <span className="badge badge-orange">Showing last loaded data</span> : null}
+        </div>
       </div>
 
-      <form onSubmit={onCreate} className="booking-slot-create-form">
-        <label className="text-xs text-ink-muted md:col-span-2">
-          New slot label
-          <input
-            value={form.label}
-            onChange={(event) => onFormChange({ label: event.target.value })}
-            placeholder="e.g. Early Morning Express"
-            className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-          />
-        </label>
-        <label className="text-xs text-ink-muted">
-          Start
-          <input
-            type="time"
-            value={form.startTime}
-            onChange={(event) => onFormChange({ startTime: event.target.value })}
-            className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-          />
-        </label>
-        <label className="text-xs text-ink-muted">
-          End
-          <input
-            type="time"
-            value={form.endTime}
-            onChange={(event) => onFormChange({ endTime: event.target.value })}
-            className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-          />
-        </label>
-        <label className="text-xs text-ink-muted">
-          Capacity
-          <input
-            type="number"
-            min="1"
-            max="99"
-            value={form.capacity}
-            onChange={(event) => onFormChange({ capacity: event.target.value })}
-            className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={mutationState.status === 'submitting'}
-          className="booking-slot-create-action"
-        >
-          {mutationState.status === 'submitting' && mutationState.target === 'create' ? (
-            <RefreshCw size={14} className="animate-spin" />
-          ) : (
-            <Clock size={14} />
-          )}
-          Add Slot
-        </button>
-      </form>
+      <div className="mt-5 grid gap-5 2xl:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
+          <div>
+            <p className="text-sm font-semibold text-ink-primary">Add slot</p>
+            <p className="mt-1 text-sm leading-6 text-ink-secondary">
+              Keep slot setup compact so staff can update availability without leaving the page.
+            </p>
+          </div>
 
-      {mutationState.message ? (
-        <div
-          className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
-            mutationState.status === 'error'
-              ? 'border-red-500/25 bg-red-500/10 text-red-200'
-              : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-          }`}
-        >
-          {mutationState.message}
-        </div>
-      ) : null}
+          <form onSubmit={onCreate} className="mt-4 space-y-3">
+            <label className="block">
+              <span className="label">Slot label</span>
+              <input
+                value={form.label}
+                onChange={(event) => onFormChange({ label: event.target.value })}
+                placeholder="e.g. Early Morning Express"
+                className="input"
+              />
+            </label>
 
-      {slots.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-surface-border bg-surface-panel px-4 py-3 text-xs text-ink-muted mt-4">
-          {error || 'No time-slot definitions are available yet. Create the first slot here or seed slots before customers can book.'}
-        </div>
-      ) : null}
-
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-4">
-        {slots.map((slot) => {
-          const isEditing = editingSlotId === slot.timeSlotId
-          const isBusy = mutationState.status === 'submitting' && mutationState.target === slot.timeSlotId
-
-          return (
-            <div key={slot.timeSlotId} className="booking-slot-card">
-              {isEditing ? (
-                <div className="space-y-3">
-                  <label className="text-xs text-ink-muted">
-                    Label
-                    <input
-                      value={editForm.label}
-                      onChange={(event) => onEditFormChange({ label: event.target.value })}
-                      className="input mt-1 !py-2"
-                    />
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-xs text-ink-muted">
-                      Start
-                      <input
-                        type="time"
-                        value={editForm.startTime}
-                        onChange={(event) => onEditFormChange({ startTime: event.target.value })}
-                        className="input mt-1 !py-2"
-                      />
-                    </label>
-                    <label className="text-xs text-ink-muted">
-                      End
-                      <input
-                        type="time"
-                        value={editForm.endTime}
-                        onChange={(event) => onEditFormChange({ endTime: event.target.value })}
-                        className="input mt-1 !py-2"
-                      />
-                    </label>
-                  </div>
-                  <label className="text-xs text-ink-muted">
-                    Capacity
-                    <input
-                      type="number"
-                      min="1"
-                      max="99"
-                      value={editForm.capacity}
-                      onChange={(event) => onEditFormChange({ capacity: event.target.value })}
-                      className="input mt-1 !py-2"
-                    />
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" className="btn-primary !px-3 !py-2 !text-xs" onClick={() => onSaveEdit(slot)} disabled={isBusy}>
-                      {isBusy ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
-                      Save
-                    </button>
-                    <button type="button" className="btn-ghost !px-3 !py-2 !text-xs" onClick={onCancelEdit} disabled={isBusy}>
-                      <X size={13} />
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="booking-slot-card-header">
-                    <div className="min-w-0">
-                      <p className="truncate text-base font-bold text-ink-primary">{slot.label}</p>
-                      <p className="mt-1 text-sm text-ink-secondary">
-                        {formatTimeSlotWindow(slot) || 'Time window unavailable'}
-                      </p>
-                    </div>
-                    <span className={`badge ${slot.isActive === false ? 'badge-gray' : 'badge-green'}`}>
-                      {slot.isActive === false ? 'Inactive' : 'Active'}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-xs text-ink-muted">
-                    Capacity {slot.capacity ?? 'unset'} booking{slot.capacity === 1 ? '' : 's'} per date.
-                  </p>
-                  <div className="booking-slot-card-actions">
-                    <button
-                      type="button"
-                      disabled={mutationState.status === 'submitting'}
-                      onClick={() => onStartEdit(slot)}
-                      className="booking-slot-action-secondary"
-                    >
-                      <Edit3 size={13} />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      disabled={mutationState.status === 'submitting'}
-                      onClick={() => onToggleActive(slot)}
-                      className={slot.isActive === false ? 'booking-slot-action-primary' : 'booking-slot-action-secondary'}
-                    >
-                      {isBusy ? <RefreshCw size={13} className="animate-spin" /> : null}
-                      {slot.isActive === false ? 'Activate' : 'Pause'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={mutationState.status === 'submitting'}
-                      onClick={() => onDelete(slot)}
-                      className="booking-slot-action-danger"
-                    >
-                      {isBusy ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                      Delete Slot
-                    </button>
-                  </div>
-                </>
-              )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="label">Start time</span>
+                <input
+                  type="time"
+                  value={form.startTime}
+                  onChange={(event) => onFormChange({ startTime: event.target.value })}
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="label">End time</span>
+                <input
+                  type="time"
+                  value={form.endTime}
+                  onChange={(event) => onFormChange({ endTime: event.target.value })}
+                  className="input"
+                />
+              </label>
             </div>
-          )
-        })}
+
+            <label className="block">
+              <span className="label">Capacity</span>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                value={form.capacity}
+                onChange={(event) => onFormChange({ capacity: event.target.value })}
+                className="input"
+              />
+            </label>
+
+            <button type="submit" disabled={mutationState.status === 'submitting'} className="btn-primary w-full">
+              {mutationState.status === 'submitting' && mutationState.target === 'create' ? (
+                <RefreshCw size={14} className="animate-spin" />
+              ) : (
+                <Clock size={14} />
+              )}
+              Add slot
+            </button>
+          </form>
+        </div>
+
+        <div className="rounded-2xl border border-surface-border bg-surface-card">
+          {mutationState.message ? (
+            <div
+              className={`mx-4 mt-4 ${
+                mutationState.status === 'error'
+                  ? 'status-message status-message-danger'
+                  : 'status-message status-message-success'
+              }`}
+            >
+              {mutationState.message}
+            </div>
+          ) : null}
+
+          {slots.length === 0 ? (
+            <div className="p-4">
+              <div className="empty-panel">
+                <p className="text-sm font-semibold text-ink-primary">No slot definitions yet</p>
+                <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                  {error || 'Create the first booking slot here so customers can choose a valid appointment window.'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="divide-y divide-surface-border">
+              {slots.map((slot) => {
+                const isEditing = editingSlotId === slot.timeSlotId
+                const isBusy = mutationState.status === 'submitting' && mutationState.target === slot.timeSlotId
+
+                return (
+                  <div key={slot.timeSlotId} className="px-4 py-4">
+                    {isEditing ? (
+                      <div className="space-y-3 rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-ink-primary">Edit slot</p>
+                          <span className="badge badge-gray">{slot.label}</span>
+                        </div>
+
+                        <label className="block">
+                          <span className="label">Slot label</span>
+                          <input
+                            value={editForm.label}
+                            onChange={(event) => onEditFormChange({ label: event.target.value })}
+                            className="input"
+                          />
+                        </label>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="label">Start time</span>
+                            <input
+                              type="time"
+                              value={editForm.startTime}
+                              onChange={(event) => onEditFormChange({ startTime: event.target.value })}
+                              className="input"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="label">End time</span>
+                            <input
+                              type="time"
+                              value={editForm.endTime}
+                              onChange={(event) => onEditFormChange({ endTime: event.target.value })}
+                              className="input"
+                            />
+                          </label>
+                        </div>
+
+                        <label className="block sm:max-w-[180px]">
+                          <span className="label">Capacity</span>
+                          <input
+                            type="number"
+                            min="1"
+                            max="99"
+                            value={editForm.capacity}
+                            onChange={(event) => onEditFormChange({ capacity: event.target.value })}
+                            className="input"
+                          />
+                        </label>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" className="btn-primary" onClick={() => onSaveEdit(slot)} disabled={isBusy}>
+                            {isBusy ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
+                            Save changes
+                          </button>
+                          <button type="button" className="btn-ghost" onClick={onCancelEdit} disabled={isBusy}>
+                            <X size={13} />
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-ink-primary">{slot.label}</p>
+                            <span className={`badge ${slot.isActive === false ? 'badge-gray' : 'badge-green'}`}>
+                              {slot.isActive === false ? 'Paused' : 'Active'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-ink-secondary">
+                            {formatTimeSlotWindow(slot) || 'Time window unavailable'}
+                          </p>
+                          <p className="mt-1 text-sm text-ink-muted">
+                            Capacity {slot.capacity ?? 'unset'} booking{slot.capacity === 1 ? '' : 's'} per day
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 lg:justify-end">
+                          <button
+                            type="button"
+                            disabled={mutationState.status === 'submitting'}
+                            onClick={() => onStartEdit(slot)}
+                            className="btn-ghost min-h-10 px-3"
+                          >
+                            <Edit3 size={13} />
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            disabled={mutationState.status === 'submitting'}
+                            onClick={() => onToggleActive(slot)}
+                            className={slot.isActive === false ? 'btn-primary min-h-10 px-3' : 'btn-ghost min-h-10 px-3'}
+                          >
+                            {isBusy ? <RefreshCw size={13} className="animate-spin" /> : null}
+                            {slot.isActive === false ? 'Activate' : 'Pause'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={mutationState.status === 'submitting'}
+                            onClick={() => onDelete(slot)}
+                            className="btn-danger min-h-10 px-3"
+                          >
+                            {isBusy ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -754,10 +784,10 @@ function LoadingRows() {
     <div className="space-y-3">
       {Array.from({ length: 3 }).map((_, index) => (
         <div key={index} className="card p-5">
-          <div className="h-4 w-36 bg-surface-raised rounded animate-pulse" />
-          <div className="grid md:grid-cols-3 gap-3 mt-5">
+          <div className="h-4 w-36 animate-pulse rounded bg-surface-raised" />
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
             {Array.from({ length: 3 }).map((__, itemIndex) => (
-              <div key={itemIndex} className="h-16 bg-surface-raised rounded-xl animate-pulse" />
+              <div key={itemIndex} className="h-16 animate-pulse rounded-2xl bg-surface-raised" />
             ))}
           </div>
         </div>
@@ -780,22 +810,27 @@ function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId 
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-surface-border">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+      <div className="border-b border-surface-border px-5 py-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-bold text-ink-primary">{slot.label}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-base font-semibold text-ink-primary">{slot.label}</p>
+              <span className={`badge ${slot.isActive === false ? 'badge-gray' : 'badge-green'}`}>
+                {slot.isActive === false ? 'Paused' : 'Active'}
+              </span>
+            </div>
             {formatTimeSlotWindow(slot) ? (
-              <p className="text-xs text-ink-secondary mt-1">{formatTimeSlotWindow(slot)}</p>
+              <p className="mt-1 text-sm text-ink-secondary">{formatTimeSlotWindow(slot)}</p>
             ) : null}
-            <p className="text-[11px] text-ink-muted mt-0.5">
-              {bookings.length} booking{bookings.length === 1 ? '' : 's'} · {capacity} capacity ·{' '}
-              <span className="tabular-nums" style={{ color: isHighPressure ? '#ef4444' : '#f07c00' }}>
+            <p className="mt-1 text-sm text-ink-muted">
+              {bookings.length} booking{bookings.length === 1 ? '' : 's'} • {capacity} capacity •{' '}
+              <span className="tabular-nums" style={{ color: isHighPressure ? '#ef4444' : 'rgb(var(--brand-orange))' }}>
                 {utilization}%
               </span>
-              {isHighPressure ? ' · high-pressure' : ''}
+              {isHighPressure ? ' • full' : ''}
             </p>
           </div>
-          <div className="flex flex-wrap gap-1.5 text-[11px] shrink-0">
+          <div className="flex shrink-0 flex-wrap gap-1.5 text-[11px]">
             <span className="badge badge-orange">{paymentHoldCount} awaiting fee</span>
             <span className="badge badge-orange">{slot.pendingCount ?? 0} pending</span>
             <span className="badge badge-green">{slot.confirmedCount ?? 0} confirmed</span>
@@ -807,7 +842,7 @@ function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId 
             className="h-full rounded-full transition-all duration-300"
             style={{
               width: `${utilization}%`,
-              background: isHighPressure ? '#ef4444' : 'linear-gradient(90deg, #f07c00, #c9951a)',
+              background: isHighPressure ? '#ef4444' : 'rgb(var(--brand-orange))',
             }}
           />
         </div>
@@ -827,7 +862,7 @@ function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId 
             return (
               <div key={booking.id} className="px-5 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <p className="font-mono text-[11px] font-bold tracking-wide" style={{ color: '#f07c00' }}>
+                  <p className="font-mono text-[11px] font-bold tracking-wide text-brand-orange">
                     {formatBookingReference(booking.id)}
                   </p>
                   <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -839,11 +874,11 @@ function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId 
                 <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
                   <p className="text-xs text-ink-muted truncate">
                     {getCustomerLabel(booking)}
-                    {booking.customerEmail && booking.customerEmail !== getCustomerLabel(booking) ? ` · ${booking.customerEmail}` : ''}
+                    {booking.customerEmail && booking.customerEmail !== getCustomerLabel(booking) ? ` • ${booking.customerEmail}` : ''}
                   </p>
                   <p className="text-xs text-ink-muted truncate">
                     {getVehicleLabel(booking)}
-                    {booking.plateNumber && booking.plateNumber !== getVehicleLabel(booking) ? ` · Plate ${booking.plateNumber}` : ''}
+                    {booking.plateNumber && booking.plateNumber !== getVehicleLabel(booking) ? ` • Plate ${booking.plateNumber}` : ''}
                   </p>
                 </div>
 
@@ -854,7 +889,7 @@ function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId 
                 ) : null}
 
                 {booking.reservationPayment ? (
-                  <div className="mt-3 rounded-2xl border border-surface-border bg-surface p-3">
+                  <div className="mt-3 rounded-2xl border border-surface-border bg-surface-raised/70 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-xs font-semibold text-ink-secondary">Reservation fee</p>
                       <span className="badge badge-orange">
@@ -950,51 +985,51 @@ function QueueTable({ queue }) {
   }
 
   return (
-    <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-surface-border">
+    <div className="table-surface">
+      <div className="border-b border-surface-border px-5 py-4">
         <p className="card-title">Current Queue</p>
-        <p className="text-xs text-ink-muted mt-0.5">
+        <p className="mt-1 text-sm leading-6 text-ink-secondary">
           Derived from confirmed and rescheduled bookings. Generated {formatDateTime(queue.generatedAt)}.
         </p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[760px]">
+      <div className="table-scroll">
+        <table className="data-table min-w-[760px]">
           <thead>
-            <tr className="text-left text-xs text-ink-muted border-b border-surface-border bg-surface-raised">
-              <th className="px-5 py-3.5 font-semibold">Position</th>
-              <th className="px-5 py-3.5 font-semibold">Customer</th>
-              <th className="px-5 py-3.5 font-semibold">Vehicle</th>
-              <th className="px-5 py-3.5 font-semibold">Slot</th>
-              <th className="px-5 py-3.5 font-semibold">Date</th>
-              <th className="px-5 py-3.5 font-semibold">Status</th>
+            <tr>
+              <th>Position</th>
+              <th>Customer</th>
+              <th>Vehicle</th>
+              <th>Slot</th>
+              <th>Date</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={`${item.queuePosition}-${item.bookingId}`} className="border-b border-surface-border last:border-b-0">
-                <td className="px-5 py-4">
-                  <span className="inline-flex w-8 h-8 rounded-full items-center justify-center text-xs font-black bg-surface-raised text-ink-primary">
+              <tr key={`${item.queuePosition}-${item.bookingId}`}>
+                <td>
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-raised text-xs font-black text-ink-primary">
                     {item.queuePosition}
                   </span>
                 </td>
-                <td className="px-5 py-4">
-                  <p className="font-mono text-xs font-bold" style={{ color: '#f07c00' }}>
+                <td>
+                  <p className="font-mono text-xs font-bold text-brand-orange">
                     {formatBookingReference(item.bookingId)}
                   </p>
-                  <p className="text-[11px] text-ink-secondary mt-1">{getCustomerLabel(item)}</p>
+                  <p className="mt-1 text-[11px] text-ink-secondary">{getCustomerLabel(item)}</p>
                   {item.customerEmail && item.customerEmail !== getCustomerLabel(item) ? (
-                    <p className="text-[11px] text-ink-muted mt-1">{item.customerEmail}</p>
+                    <p className="mt-1 text-[11px] text-ink-muted">{item.customerEmail}</p>
                   ) : null}
                 </td>
-                <td className="px-5 py-4 text-xs text-ink-secondary">
+                <td className="text-xs text-ink-secondary">
                   <p>{getVehicleLabel(item)}</p>
                   {item.plateNumber && item.plateNumber !== getVehicleLabel(item) ? (
-                    <p className="text-[11px] text-ink-muted mt-1">Plate {item.plateNumber}</p>
+                    <p className="mt-1 text-[11px] text-ink-muted">Plate {item.plateNumber}</p>
                   ) : null}
                 </td>
-                <td className="px-5 py-4 text-xs text-ink-secondary">{item.timeSlotLabel}</td>
-                <td className="px-5 py-4 text-xs text-ink-secondary">{formatDate(item.scheduledDate)}</td>
-                <td className="px-5 py-4">
+                <td className="text-xs text-ink-secondary">{item.timeSlotLabel}</td>
+                <td className="text-xs text-ink-secondary">{formatDate(item.scheduledDate)}</td>
+                <td>
                   <StatusBadge status={item.status} />
                 </td>
               </tr>
@@ -1036,6 +1071,7 @@ export default function BookingsList() {
     message: '',
   })
   const [pendingAction, setPendingAction] = useState(null)
+  const [pendingSlotDelete, setPendingSlotDelete] = useState(null)
   const { toast } = useToast()
 
   const canReadBookingOperations = STAFF_BOOKING_ROLES.has(user?.role)
@@ -1377,7 +1413,7 @@ export default function BookingsList() {
     }
   }
 
-  async function handleDeleteSlotDefinition(slot) {
+  function handleDeleteSlotDefinition(slot) {
     if (!slot?.timeSlotId || !user?.accessToken || !canReadBookingOperations) {
       setSlotMutationState({
         status: 'error',
@@ -1387,11 +1423,16 @@ export default function BookingsList() {
       return
     }
 
-    const confirmed =
-      typeof window === 'undefined' ||
-      window.confirm(`Delete ${slot.label}? This archives the slot and preserves historical bookings.`)
+    setPendingSlotDelete(slot)
+  }
 
-    if (!confirmed) return
+  async function confirmDeleteSlotDefinition() {
+    const slot = pendingSlotDelete
+
+    if (!slot?.timeSlotId || !user?.accessToken || !canReadBookingOperations) {
+      setPendingSlotDelete(null)
+      return
+    }
 
     setSlotMutationState({
       status: 'submitting',
@@ -1402,6 +1443,7 @@ export default function BookingsList() {
     try {
       await deleteTimeSlotDefinition(slot.timeSlotId, user.accessToken)
       setEditingSlotId('')
+      setPendingSlotDelete(null)
       setSlotMutationState({
         status: 'success',
         target: '',
@@ -1409,6 +1451,7 @@ export default function BookingsList() {
       })
       await refreshBookingOperations()
     } catch (error) {
+      setPendingSlotDelete(null)
       setSlotMutationState({
         status: 'error',
         target: slot.timeSlotId,
@@ -1763,27 +1806,24 @@ export default function BookingsList() {
 
   return (
     <div className="booking-page-shell">
-      <section className="booking-page-header">
-        <div className="space-y-2">
-          <p className="booking-page-kicker">Staff Booking Operations</p>
-          <h1 className="booking-page-title">Schedule, Queue &amp; Booking Handling</h1>
-          <p className="booking-page-copy">
-            Service advisers and super admins can review customer-created bookings, adjust slot operations, and manage
-            queue flow from one consistent control surface.
-          </p>
-        </div>
-        <button
-          onClick={refreshBookingOperations}
-          disabled={isRefreshingOperations}
-          className="btn-ghost min-h-11 min-w-[148px] self-start xl:self-auto"
-        >
-          <RefreshCw size={14} className={isRefreshingOperations ? 'animate-spin' : ''} />
-          Refresh
-        </button>
-      </section>
+      <PageHeader
+        eyebrow="Staff Booking Operations"
+        title="Booking Schedule"
+        description="Review customer bookings, manage slot availability, and keep the active queue moving from one operations workspace."
+        actions={
+          <button
+            onClick={refreshBookingOperations}
+            disabled={isRefreshingOperations}
+            className="btn-ghost min-h-11 min-w-[148px]"
+          >
+            <RefreshCw size={14} className={isRefreshingOperations ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        }
+      />
 
       <section className="booking-control-strip">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_minmax(0,1fr)] xl:items-end">
           <label className="block">
             <span className="label">Schedule date</span>
             <input
@@ -1825,8 +1865,8 @@ export default function BookingsList() {
                   }`}
                   style={
                     scheduleScope === view.key
-                      ? { background: '#f07c00' }
-                      : { background: 'rgba(240,124,0,0.08)' }
+                      ? { background: 'rgb(var(--brand-orange))' }
+                      : { background: 'rgb(var(--brand-orange) / 0.08)' }
                   }
                 >
                   {view.label}
@@ -1854,14 +1894,14 @@ export default function BookingsList() {
 
       {scheduleScope === 'active' && bookedScheduleDates.length > 0 ? (
         <div
-          className="flex flex-col md:flex-row md:items-center gap-3 rounded-lg border px-4 py-2.5"
-          style={{ background: 'rgba(240,124,0,0.06)', borderColor: 'rgba(240,124,0,0.25)' }}
+          className="toolbar-surface flex flex-col gap-3 md:flex-row md:items-center"
+          style={{ backgroundColor: 'rgb(var(--brand-orange) / 0.04)', borderColor: 'rgb(var(--brand-orange) / 0.18)' }}
         >
-          <div className="flex items-center gap-2.5 shrink-0">
-            <BellRing size={16} style={{ color: '#f07c00' }} />
+          <div className="flex shrink-0 items-center gap-2.5">
+            <BellRing size={16} className="text-brand-orange" />
             <p className="text-xs font-semibold text-ink-primary">
               Pending customer bookings
-              <span className="text-ink-muted font-normal"> — pick a date to review</span>
+              <span className="font-normal text-ink-muted"> — choose a date to review</span>
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5 md:ml-auto">
@@ -1876,11 +1916,11 @@ export default function BookingsList() {
                   }`}
                   style={
                     isActive
-                      ? { background: '#f07c00', color: '#fff' }
-                      : { background: 'rgba(240,124,0,0.12)', color: '#f07c00' }
+                      ? { background: 'rgb(var(--brand-orange))', color: '#fff' }
+                      : { background: 'rgb(var(--brand-orange) / 0.12)', color: 'rgb(var(--brand-orange))' }
                   }
                 >
-                  {formatDate(date.dateKey)} · {date.totalBookings}
+                  {formatDate(date.dateKey)} • {date.totalBookings}
                   {date.pendingCount ? `/${date.pendingCount} pending` : ''}
                 </button>
               )
@@ -1964,19 +2004,13 @@ export default function BookingsList() {
               </div>
 
               {actionState.message ? (
-                <div
-                  className={`rounded-xl border px-4 py-3 text-xs ${
-                    actionState.status === 'error'
-                      ? 'border-red-500/25 bg-red-500/10 text-red-200'
-                      : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                  }`}
-                >
+                <div className={actionState.status === 'error' ? 'status-message status-message-danger' : 'status-message status-message-success'}>
                   {actionState.message}
                 </div>
               ) : null}
 
               {scheduleState.error ? (
-                <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+                <div className="status-message status-message-danger">
                   {scheduleState.error}
                 </div>
               ) : null}
@@ -2065,7 +2099,7 @@ export default function BookingsList() {
               </div>
 
               {queueState.error ? (
-                <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+                <div className="status-message status-message-danger">
                   {queueState.error}
                 </div>
               ) : null}
@@ -2085,6 +2119,23 @@ export default function BookingsList() {
         onCancel={handlePendingActionCancel}
         onConfirm={handlePendingActionConfirm}
       />
+
+      <ConfirmDialog
+        visible={Boolean(pendingSlotDelete)}
+        title="Delete slot definition"
+        message={
+          pendingSlotDelete
+            ? `Delete ${pendingSlotDelete.label}? This removes it from future booking choices while preserving historical records.`
+            : ''
+        }
+        confirmLabel="Delete slot"
+        cancelLabel="Keep slot"
+        tone="danger"
+        submitting={slotMutationState.status === 'submitting' && slotMutationState.target === pendingSlotDelete?.timeSlotId}
+        onCancel={() => setPendingSlotDelete(null)}
+        onConfirm={confirmDeleteSlotDefinition}
+      />
     </div>
   )
 }
+

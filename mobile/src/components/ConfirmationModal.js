@@ -9,19 +9,34 @@ export default function ConfirmationModal({
   cancelLabel = 'Cancel',
   onCancel,
   onConfirm,
+  tone = 'primary',
 }) {
+  const isDanger = tone === 'danger';
+  const confirmBg = isDanger ? colors.danger : colors.primary;
+
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onCancel}>
       <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
         <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
+          {message ? <Text style={styles.message}>{message}</Text> : null}
 
           <View style={styles.actions}>
-            <Pressable style={styles.cancelButton} onPress={onCancel}>
+            <Pressable
+              style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.85 }]}
+              onPress={onCancel}
+            >
               <Text style={styles.cancelButtonText}>{cancelLabel}</Text>
             </Pressable>
-            <Pressable style={styles.confirmButton} onPress={onConfirm}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.confirmButton,
+                { backgroundColor: confirmBg },
+                pressed && { opacity: 0.9 },
+              ]}
+              onPress={onConfirm}
+            >
               <Text style={styles.confirmButtonText}>{confirmLabel}</Text>
             </Pressable>
           </View>
@@ -34,7 +49,7 @@ export default function ConfirmationModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.78)',
+    backgroundColor: colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -42,23 +57,28 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 460,
-    backgroundColor: '#171717',
-    borderRadius: radius.large,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(255, 140, 0, 0.28)',
+    borderColor: colors.border,
     padding: 24,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.36,
+    shadowRadius: 24,
+    elevation: 8,
   },
   title: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '800',
-    marginBottom: 12,
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 8,
   },
   message: {
-    color: '#D4D4D4',
-    fontSize: 15,
-    lineHeight: 24,
-    marginBottom: 24,
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 20,
   },
   actions: {
     flexDirection: 'row',
@@ -66,28 +86,27 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#242424',
-    borderRadius: radius.medium,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: 14,
+    borderColor: colors.border,
+    paddingVertical: 12,
   },
   cancelButtonText: {
-    color: '#E5E5E5',
+    color: colors.text,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '600',
     textAlign: 'center',
   },
   confirmButton: {
     flex: 1,
-    backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    paddingVertical: 14,
+    borderRadius: radius.md,
+    paddingVertical: 12,
   },
   confirmButtonText: {
-    color: '#1A0E00',
+    color: colors.onPrimary,
     fontSize: 14,
-    fontWeight: '900',
+    fontWeight: '700',
     textAlign: 'center',
   },
 });

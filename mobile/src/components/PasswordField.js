@@ -31,7 +31,7 @@ const PasswordField = forwardRef(function PasswordField({
       style={[styles.container, containerStyle]}
       importantForAutofill={importantForAutofill}
     >
-      <Text style={styles.label}>{label}</Text>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
 
       <View
         style={[
@@ -76,6 +76,7 @@ const PasswordField = forwardRef(function PasswordField({
           style={styles.toggleButton}
           onPress={() => setIsVisible((currentValue) => !currentValue)}
           disabled={!editable}
+          hitSlop={8}
         >
           <MaterialCommunityIcons
             name={isVisible ? 'eye-off-outline' : 'eye-outline'}
@@ -95,42 +96,42 @@ export default PasswordField;
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
     color: colors.labelText,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1.8,
-    marginBottom: 10,
+    letterSpacing: 1.2,
+    marginBottom: 6,
     textTransform: 'uppercase',
   },
   inputWrap: {
-    minHeight: 58,
+    minHeight: 48,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.medium,
+    borderRadius: radius.md,
     backgroundColor: colors.input,
-    paddingLeft: 16,
-    paddingRight: 12,
+    paddingLeft: 14,
+    paddingRight: 10,
     flexDirection: 'row',
     alignItems: 'center',
   },
   leadingIcon: {
-    marginRight: 10,
+    marginRight: 8,
   },
   input: {
     flex: 1,
     color: colors.text,
-    fontSize: 16,
-    paddingVertical: 16,
+    fontSize: 14,
+    paddingVertical: 12,
   },
   inputFocused: {
     borderColor: colors.primary,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
     elevation: 2,
   },
   inputReadonly: {
@@ -144,20 +145,21 @@ const styles = StyleSheet.create({
   },
   toggleButton: {
     alignItems: 'center',
-    paddingLeft: 10,
+    paddingLeft: 8,
+    paddingHorizontal: 6,
     minHeight: 36,
     justifyContent: 'center',
   },
   errorText: {
     color: colors.danger,
     fontSize: 12,
-    marginTop: 8,
-    lineHeight: 18,
+    marginTop: 6,
+    lineHeight: 16,
   },
   helperText: {
     color: colors.mutedText,
     fontSize: 12,
-    marginTop: 8,
-    lineHeight: 18,
+    marginTop: 6,
+    lineHeight: 16,
   },
 });

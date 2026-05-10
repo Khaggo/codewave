@@ -13,6 +13,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 
+import PageHeader from '@/components/ui/PageHeader'
 import PortalLink from '@/components/PortalLink'
 import { useToast } from '@/components/Toast.jsx'
 import { ApiError } from '@/lib/authClient'
@@ -33,6 +34,7 @@ import {
   getQualityGateReleaseState,
   getReviewNeededQualityGateFindings,
 } from '@/lib/api/generated/quality-gates/staff-web-qa-review'
+import { getGroupedQualityFindings } from './qaAuditView.mjs'
 
 const initialQaState = {
   status: 'qa_ready',
@@ -71,39 +73,6 @@ const releaseSummaryByState = {
     toneClass: 'border-surface-border bg-surface-raised text-ink-muted',
   },
 }
-
-const findingSeverityPriority = {
-  critical: 0,
-  warning: 1,
-  info: 2,
-}
-
-const findingGroupDefinitions = [
-  {
-    key: 'critical',
-    title: 'Blocking Findings',
-    badgeClass: 'badge-red',
-    matches: (finding) => finding.severity === 'critical',
-  },
-  {
-    key: 'warning',
-    title: 'Review Needed',
-    badgeClass: 'badge-orange',
-    matches: (finding) => finding.severity === 'warning',
-  },
-  {
-    key: 'info',
-    title: 'Informational Findings',
-    badgeClass: 'badge-gray',
-    matches: (finding) => finding.severity === 'info',
-  },
-  {
-    key: 'other',
-    title: 'Additional Findings',
-    badgeClass: 'badge-gray',
-    matches: (finding) => !Object.hasOwn(findingSeverityPriority, finding.severity ?? ''),
-  },
-]
 
 function formatLabel(value) {
   return String(value ?? '')
@@ -153,60 +122,15 @@ function getReleaseCopy(state) {
   return 'Awaiting pre-check load before release decision'
 }
 
-function getFindingSortPriority(finding) {
-  const severity = finding?.severity ?? ''
-  return Object.hasOwn(findingSeverityPriority, severity)
-    ? findingSeverityPriority[severity]
-    : findingGroupDefinitions.length
-}
-
-function sortQualityFindings(findings) {
-  return [...findings].sort((left, right) => {
-    const severityDelta = getFindingSortPriority(left) - getFindingSortPriority(right)
-    if (severityDelta !== 0) return severityDelta
-
-    const riskDelta = (getFindingRiskContribution(right) ?? -1) - (getFindingRiskContribution(left) ?? -1)
-    if (riskDelta !== 0) return riskDelta
-
-    const createdAtDelta = String(right.createdAt ?? '').localeCompare(String(left.createdAt ?? ''))
-    if (createdAtDelta !== 0) return createdAtDelta
-
-    return `${left.gate}:${left.code}`.localeCompare(`${right.gate}:${right.code}`)
-  })
-}
-
-function getGroupedQualityFindings(findings) {
-  const sortedFindings = sortQualityFindings(findings)
-  const groupedFindingIds = new Set()
-
-  return findingGroupDefinitions
-    .map((group) => {
-      const items = sortedFindings.filter((finding) => {
-        if (groupedFindingIds.has(finding.id) || !group.matches(finding)) {
-          return false
-        }
-
-        groupedFindingIds.add(finding.id)
-        return true
-      })
-
-      return {
-        ...group,
-        items,
-      }
-    })
-    .filter((group) => group.items.length > 0)
-}
-
 function StatCard({ icon: Icon, label, value, toneClass }) {
   return (
     <div className="card p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-ink-muted">{label}</p>
-          <p className="mt-3 text-3xl font-bold text-ink-primary">{value}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
+          <p className="mt-3 text-3xl font-semibold text-ink-primary">{value}</p>
         </div>
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${toneClass}`}>
+        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${toneClass}`}>
           <Icon size={20} />
         </div>
       </div>
@@ -216,10 +140,10 @@ function StatCard({ icon: Icon, label, value, toneClass }) {
 
 function EmptyPanelState({ title, copy }) {
   return (
-    <div className="rounded-2xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
+    <div className="empty-panel">
       <ShieldCheck size={28} className="mx-auto text-ink-muted" />
-      <p className="mt-3 text-sm font-bold text-ink-primary">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-ink-muted">{copy}</p>
+      <p className="mt-3 text-sm font-semibold text-ink-primary">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-ink-secondary">{copy}</p>
     </div>
   )
 }
@@ -229,25 +153,19 @@ function StatusMessage({ state }) {
 
   const toneClass =
     state.status === 'qa_loaded'
-      ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+      ? 'status-message status-message-success'
       : state.status === 'qa_unavailable'
-        ? 'border-amber-500/25 bg-amber-500/10 text-amber-100'
-        : 'border-red-500/25 bg-red-500/10 text-red-200'
+        ? 'status-message status-message-warning'
+        : 'status-message status-message-danger'
 
-  return <div className={`rounded-xl border px-4 py-3 text-sm ${toneClass}`}>{state.message}</div>
+  return <div className={toneClass}>{state.message}</div>
 }
 
 function OverrideMessage({ state }) {
   if (!state.message) return null
 
   return (
-    <div
-      className={`rounded-xl border px-4 py-3 text-sm ${
-        state.status === 'override_saved'
-          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-          : 'border-red-500/25 bg-red-500/10 text-red-200'
-      }`}
-    >
+    <div className={state.status === 'override_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}>
       {state.message}
     </div>
   )
@@ -996,24 +914,22 @@ export default function QAAuditWorkspace() {
 
   return (
     <div className="ops-page-shell">
-      <section className="ops-page-header">
-        <div className="space-y-2">
-          <p className="ops-page-kicker">Quality Governance</p>
-          <h1 className="ops-page-title">QA Review Workspace</h1>
-          <p className="ops-page-copy">
-            Review automated pre-check summaries, let the head technician record the final pass or block verdict, and keep overrides auditable when a super admin must intervene.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={loadQualityGate}
-          disabled={qaState.status === 'qa_loading'}
-          className="ops-action-secondary min-w-[148px] self-start disabled:cursor-not-allowed disabled:opacity-60 xl:self-auto"
-        >
-          <RefreshCw size={14} className={qaState.status === 'qa_loading' ? 'animate-spin' : undefined} />
-          Refresh
-        </button>
-      </section>
+      <PageHeader
+        eyebrow="Quality Governance"
+        title="QA Review Workspace"
+        description="Review automated pre-check summaries, let the head technician record the final pass or block verdict, and keep overrides auditable when a super admin must intervene."
+        actions={(
+          <button
+            type="button"
+            onClick={loadQualityGate}
+            disabled={qaState.status === 'qa_loading'}
+            className="ops-action-secondary min-w-[148px] self-start disabled:cursor-not-allowed disabled:opacity-60 xl:self-auto"
+          >
+            <RefreshCw size={14} className={qaState.status === 'qa_loading' ? 'animate-spin' : undefined} />
+            Refresh
+          </button>
+        )}
+      />
 
       <section className="ops-control-strip">
         <form
@@ -1023,12 +939,12 @@ export default function QAAuditWorkspace() {
             loadQualityGate()
           }}
         >
-          <label className="text-xs text-ink-muted">
-            Job-order selector
+          <label>
+            <span className="label">Job-order selector</span>
             <select
               value={jobOrderId}
               onChange={(event) => setJobOrderId(event.target.value)}
-              className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="select"
             >
               <option value="">Choose a job order for pre-check review</option>
               {jobOrderOptions.map((jobOrder) => (
@@ -1069,9 +985,9 @@ export default function QAAuditWorkspace() {
           toneClass={
             qualityGate
               ? qualityGate.status === 'blocked'
-                ? 'border-red-500/15 bg-red-500/10 text-red-400'
-                : 'border-emerald-500/15 bg-emerald-500/10 text-emerald-400'
-              : 'border-surface-border bg-surface-raised text-ink-muted'
+                ? 'bg-red-500/10 text-red-400'
+                : 'bg-emerald-500/10 text-emerald-400'
+              : 'bg-surface-raised text-ink-muted'
           }
         />
         <StatCard
@@ -1081,9 +997,9 @@ export default function QAAuditWorkspace() {
           toneClass={
             qualityGate
               ? qualityGate.riskScore >= 60
-                ? 'border-red-500/15 bg-red-500/10 text-red-400'
-                : 'border-brand-orange/15 bg-brand-orange/10 text-brand-orange'
-              : 'border-surface-border bg-surface-raised text-ink-muted'
+                ? 'bg-red-500/10 text-red-400'
+                : 'bg-brand-orange/10 text-brand-orange'
+              : 'bg-surface-raised text-ink-muted'
           }
         />
         <StatCard
@@ -1092,8 +1008,8 @@ export default function QAAuditWorkspace() {
           value={blockingFindings.length}
           toneClass={
             qualityGate
-              ? 'border-amber-500/15 bg-amber-500/10 text-amber-300'
-              : 'border-surface-border bg-surface-raised text-ink-muted'
+              ? 'bg-amber-500/10 text-amber-300'
+              : 'bg-surface-raised text-ink-muted'
           }
         />
         <StatCard

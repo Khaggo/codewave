@@ -1,11 +1,11 @@
 import {
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 
 export default function ScreenShell({
@@ -14,9 +14,10 @@ export default function ScreenShell({
   keyboardVerticalOffset = 12,
   showsVerticalScrollIndicator = false,
   scrollEnabled = true,
+  edges = ['top', 'bottom', 'left', 'right'],
 }) {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={edges}>
       <View style={styles.screen}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -48,8 +49,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     ...Platform.select({
       web: {
+        height: '100vh',
         minHeight: '100vh',
-        overflowY: 'auto',
+        overflow: 'hidden',
         overflowX: 'hidden',
       },
     }),
@@ -60,8 +62,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     ...Platform.select({
       web: {
-        minHeight: '100%',
-        overflowY: 'visible',
+        height: '100%',
+        minHeight: '100vh',
+        overflow: 'hidden',
         overflowX: 'hidden',
       },
     }),
@@ -71,7 +74,8 @@ const styles = StyleSheet.create({
     minHeight: 0,
     ...Platform.select({
       web: {
-        minHeight: '100%',
+        height: '100vh',
+        maxHeight: '100vh',
         overflowY: 'auto',
         overflowX: 'hidden',
       },

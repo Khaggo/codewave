@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 
 import { useToast } from '@/components/Toast.jsx'
+import PageHeader from '@/components/ui/PageHeader'
 import { ApiError } from '@/lib/authClient'
 import { useUser } from '@/lib/userContext'
 import {
@@ -62,14 +63,14 @@ const LOAD_STATE_LABELS = {
 
 function StatCard({ icon: Icon, label, value, sub, toneClass }) {
   return (
-    <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
+    <div className="card p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
-          <p className="mt-3 text-3xl font-black tracking-tight tabular-nums text-ink-primary">{value}</p>
-          {sub ? <p className="mt-1.5 text-[11px] text-ink-muted">{sub}</p> : null}
+          <p className="mt-3 text-3xl font-semibold tracking-tight tabular-nums text-ink-primary">{value}</p>
+          {sub ? <p className="mt-1.5 text-[11px] text-ink-secondary">{sub}</p> : null}
         </div>
-        <div className={`flex h-8 w-8 items-center justify-center rounded-lg border ${toneClass}`}>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${toneClass}`}>
           <Icon size={14} />
         </div>
       </div>
@@ -78,19 +79,19 @@ function StatCard({ icon: Icon, label, value, sub, toneClass }) {
 }
 
 function InfoPanel({ icon: Icon = Database, title, body, tone = 'info' }) {
-  const iconTone =
+  const className =
     tone === 'warning'
-      ? 'border-red-500/20 bg-red-500/10 text-red-400'
-      : 'border-brand-orange/15 bg-brand-orange/10 text-brand-orange'
+      ? 'status-message status-message-warning'
+      : 'status-message status-message-warning'
 
   return (
-    <div className="card flex gap-3 p-4">
-      <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border ${iconTone}`}>
+    <div className={`flex gap-3 ${className}`}>
+      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-orange/10 text-brand-orange">
         <Icon size={16} />
       </div>
       <div>
-        <p className="text-sm font-bold text-ink-primary">{title}</p>
-        <p className="mt-1 text-sm leading-6 text-ink-muted">{body}</p>
+        <p className="text-sm font-semibold text-ink-primary">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-ink-secondary">{body}</p>
       </div>
     </div>
   )
@@ -390,23 +391,17 @@ export default function InventoryWorkspace() {
 
   return (
     <div className="ops-page-shell">
-      <motion.section
+      <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.28, ease: 'easeOut' }}
-        className="space-y-4"
       >
-        <div className="ops-page-header">
-          <div className="space-y-2">
-            <p className="ops-page-kicker">Inventory Operations</p>
-            <h1 className="ops-page-title">Product Visibility And Inventory Readiness</h1>
-            <p className="ops-page-copy">
-              Review live catalog visibility, inspect product metadata, and keep planned stock behavior clearly separated
-              from the current read-only inventory surface.
-            </p>
-          </div>
-        </div>
-      </motion.section>
+        <PageHeader
+          eyebrow="Inventory Operations"
+          title="Product Visibility And Inventory Readiness"
+          description="Review live catalog visibility, inspect product metadata, and keep planned stock behavior clearly separated from the current read-only inventory surface."
+        />
+      </motion.div>
 
       {requestState === 'inventory_loading' && snapshot.products.length === 0 ? (
         <InfoPanel
@@ -505,37 +500,37 @@ export default function InventoryWorkspace() {
           }
         >
           {snapshot.products.length === 0 ? (
-            <div className="flex min-h-[180px] flex-col items-center justify-center rounded-3xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
+            <div className="empty-panel min-h-[180px]">
               <Package size={22} className="mx-auto text-ink-muted" />
-              <p className="mt-3 text-sm font-bold text-ink-primary">No live product records yet</p>
-              <p className="mt-1 max-w-md text-xs text-ink-muted">
+              <p className="mt-3 text-sm font-semibold text-ink-primary">No live product records yet</p>
+              <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
                 The catalog returned zero products, so stock states remain documented in the planned glossary below.
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[920px] text-sm" aria-label="Inventory visibility table">
+            <div className="table-scroll">
+              <table className="data-table min-w-[920px]" aria-label="Inventory visibility table">
                 <thead>
-                  <tr className="border-b border-surface-border bg-surface-raised text-left text-xs text-ink-muted">
-                    <th className="px-5 py-3.5 font-semibold">Product</th>
-                    <th className="px-5 py-3.5 font-semibold">SKU</th>
-                    <th className="px-5 py-3.5 font-semibold">Category</th>
-                    <th className="px-5 py-3.5 font-semibold">Price</th>
-                    <th className="px-5 py-3.5 font-semibold">Visibility</th>
-                    <th className="px-5 py-3.5 font-semibold">Stock Readiness</th>
-                    <th className="px-5 py-3.5 font-semibold">Updated</th>
+                  <tr>
+                    <th>Product</th>
+                    <th>SKU</th>
+                    <th>Category</th>
+                    <th>Price</th>
+                    <th>Visibility</th>
+                    <th>Stock Readiness</th>
+                    <th>Updated</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-surface-border">
+                <tbody>
                   {snapshot.products.map((product) => {
                     const isSelected = product.id === selectedProductId
 
                     return (
                       <tr
                         key={product.id}
-                        className={isSelected ? 'bg-brand-orange/8' : 'transition-colors hover:bg-surface-hover'}
+                        className={isSelected ? 'bg-brand-orange/8' : undefined}
                       >
-                        <td className="px-5 py-4">
+                        <td>
                           <button
                             type="button"
                             className="flex items-center gap-3 text-left"
@@ -550,22 +545,22 @@ export default function InventoryWorkspace() {
                             </div>
                           </button>
                         </td>
-                        <td className="px-5 py-4">
+                        <td>
                           <span className="rounded-lg bg-brand-orange/10 px-2 py-1 font-mono text-xs font-bold text-brand-orange">
                             {product.sku}
                           </span>
                         </td>
-                        <td className="px-5 py-4 text-ink-secondary">{product.categoryLabel}</td>
-                        <td className="px-5 py-4 font-semibold text-ink-primary">{product.priceLabel}</td>
-                        <td className="px-5 py-4">
+                        <td className="text-ink-secondary">{product.categoryLabel}</td>
+                        <td className="font-semibold text-ink-primary">{product.priceLabel}</td>
+                        <td>
                           <span className={`badge ${product.visibilityLabel === 'Published' ? 'badge-green' : 'badge-gray'}`}>
                             {product.visibilityLabel}
                           </span>
                         </td>
-                        <td className="px-5 py-4">
+                        <td>
                           <RouteBadge status={product.stockRouteStatus} />
                         </td>
-                        <td className="px-5 py-4 text-ink-secondary">{new Date(product.updatedAt).toLocaleDateString('en-PH', {
+                        <td className="text-ink-secondary">{new Date(product.updatedAt).toLocaleDateString('en-PH', {
                           month: 'short',
                           day: 'numeric',
                           year: 'numeric',
@@ -585,17 +580,17 @@ export default function InventoryWorkspace() {
             description="Select a product to refresh its current catalog metadata without guessing stock quantities."
           >
             {!selectedProduct ? (
-              <div className="flex min-h-[180px] flex-col items-center justify-center rounded-3xl border border-dashed border-surface-border bg-surface-raised px-5 py-10 text-center">
+              <div className="empty-panel min-h-[180px]">
                 <Eye size={22} className="mx-auto text-ink-muted" />
-                <p className="mt-3 text-sm font-bold text-ink-primary">Select a product</p>
-                <p className="mt-1 max-w-md text-xs text-ink-muted">
+                <p className="mt-3 text-sm font-semibold text-ink-primary">Select a product</p>
+                <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
                   Choose any live product row to inspect its current catalog metadata.
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
                 {detailState.status === 'detail_loading' ? (
-                  <div className="rounded-3xl border border-surface-border bg-surface-raised px-4 py-4 text-sm text-ink-muted">
+                  <div className="status-message status-message-warning">
                     Refreshing live product detail...
                   </div>
                 ) : null}

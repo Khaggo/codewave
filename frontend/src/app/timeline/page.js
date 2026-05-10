@@ -1,32 +1,26 @@
 import PortalLink from '@/components/PortalLink'
+import PageHeader from '@/components/ui/PageHeader'
+import { getStaffRedirectLinks } from '@/components/runtimeSurfaceView.mjs'
 
 export const metadata = { title: 'Service Timeline' }
 
 export default function TimelinePage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
-      <div className="card p-6">
-        <span className="badge badge-green">Customer mobile feature</span>
-        <h1 className="mt-4 text-2xl font-extrabold text-ink-primary">Vehicle lifecycle is handled in the mobile garage</h1>
-        <p className="mt-2 text-sm leading-6 text-ink-secondary">
-          This staff web page no longer displays sample vehicle timelines. Customer-safe lifecycle history now belongs
-          in the mobile Garage flow, while staff can continue work through job orders, QA, and invoice pages.
-        </p>
-      </div>
+    <div className="mx-auto max-w-3xl ops-page-shell">
+      <PageHeader
+        eyebrow="Vehicle Lifecycle"
+        title="Vehicle Lifecycle Is Handled In The Mobile Garage"
+        description="Customer-safe lifecycle history now belongs in the mobile Garage flow, while staff continue work through job orders, QA, and invoice surfaces."
+        meta={<span className="badge badge-green">Customer mobile feature</span>}
+      />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <PortalLink href="/admin/job-orders" className="card p-5 transition hover:bg-surface-hover">
-          <p className="text-sm font-bold text-ink-primary">Job Orders</p>
-          <p className="mt-1 text-xs leading-5 text-ink-muted">Update workshop progress.</p>
-        </PortalLink>
-        <PortalLink href="/admin/qa-audit" className="card p-5 transition hover:bg-surface-hover">
-          <p className="text-sm font-bold text-ink-primary">QA Audit</p>
-          <p className="mt-1 text-xs leading-5 text-ink-muted">Review release readiness.</p>
-        </PortalLink>
-        <PortalLink href="/admin/invoices" className="card p-5 transition hover:bg-surface-hover">
-          <p className="text-sm font-bold text-ink-primary">Invoices</p>
-          <p className="mt-1 text-xs leading-5 text-ink-muted">Finalize customer billing.</p>
-        </PortalLink>
+        {getStaffRedirectLinks('timeline').map((item) => (
+          <PortalLink key={item.href} href={item.href} className="card p-5 transition hover:bg-surface-hover">
+            <p className="text-sm font-bold text-ink-primary">{item.title}</p>
+            <p className="mt-1 text-xs leading-5 text-ink-muted">{item.copy}</p>
+          </PortalLink>
+        ))}
       </div>
     </div>
   )

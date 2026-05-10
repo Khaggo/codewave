@@ -44,6 +44,7 @@ import {
   updateJobOrderStatus,
 } from '@/lib/jobOrderWorkbenchClient'
 import { listStaffAccounts } from '@/lib/authClient'
+import PageHeader from '@/components/ui/PageHeader'
 
 const STATUS_META = {
   draft: { label: 'Draft', cls: 'badge-gray' },
@@ -221,14 +222,11 @@ function SummaryTile({ icon: Icon, label, value, sub }) {
     <div className="card p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs text-ink-muted">{label}</p>
-          <p className="text-2xl font-black text-ink-primary mt-1">{value}</p>
-          {sub ? <p className="text-[11px] text-ink-muted mt-1">{sub}</p> : null}
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
+          <p className="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">{value}</p>
+          {sub ? <p className="mt-1 text-xs leading-5 text-ink-secondary">{sub}</p> : null}
         </div>
-        <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-          style={{ background: 'rgba(240, 124, 0, 0.14)', color: '#f07c00' }}
-        >
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
           <Icon size={18} />
         </div>
       </div>
@@ -238,10 +236,10 @@ function SummaryTile({ icon: Icon, label, value, sub }) {
 
 function BlockingState({ title, copy }) {
   return (
-    <div className="card px-5 py-10 text-center">
-      <ShieldAlert size={34} className="mx-auto mb-3" style={{ color: '#f07c00' }} />
-      <p className="text-sm font-bold text-ink-primary">{title}</p>
-      <p className="text-xs text-ink-muted mt-2 max-w-lg mx-auto">{copy}</p>
+    <div className="empty-panel">
+      <ShieldAlert size={34} className="mx-auto text-brand-orange" />
+      <p className="mt-3 text-sm font-semibold text-ink-primary">{title}</p>
+      <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-ink-secondary">{copy}</p>
     </div>
   )
 }
@@ -1305,12 +1303,51 @@ export default function JobOrderWorkbench() {
     }
   }
 
-  const detailStateClassName =
+  const getMessageClassName = (tone) =>
+    tone === 'success'
+      ? 'status-message status-message-success'
+      : tone === 'danger'
+        ? 'status-message status-message-danger'
+        : 'status-message status-message-warning'
+
+  const detailStateClassName = getMessageClassName(
     detailState.status === 'detail_loading'
-      ? 'border-surface-border bg-surface-raised text-ink-primary'
+      ? 'neutral'
       : detailState.status === 'detail_loaded'
-        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-        : 'border-red-500/25 bg-red-500/10 text-red-200'
+        ? 'success'
+        : 'danger',
+  )
+  const calendarStateClassName = getMessageClassName(
+    jobOrderCalendarState.status === 'error' || jobOrderSummaryState.status === 'error'
+      ? 'danger'
+      : 'neutral',
+  )
+  const handoffStateClassName = getMessageClassName(
+    handoffState.status === 'handoff_load_failed' || handoffState.status === 'handoff_forbidden_role'
+      ? 'danger'
+      : 'success',
+  )
+  const createStateClassName = getMessageClassName(
+    createState.status === 'create_saved' ? 'success' : 'danger',
+  )
+  const assignmentStateClassName = getMessageClassName(
+    assignmentState.status === 'assignment_saved' ? 'success' : 'danger',
+  )
+  const statusStateClassName = getMessageClassName(
+    statusState.status === 'status_update_saved' ? 'success' : 'danger',
+  )
+  const progressStateClassName = getMessageClassName(
+    progressState.status === 'progress_saved' ? 'success' : 'danger',
+  )
+  const photoStateClassName = getMessageClassName(
+    photoState.status === 'photo_saved' ? 'success' : 'danger',
+  )
+  const finalizeStateClassName = getMessageClassName(
+    finalizeState.status === 'finalize_saved' ? 'success' : 'danger',
+  )
+  const paymentStateClassName = getMessageClassName(
+    paymentState.status === 'payment_saved' ? 'success' : 'danger',
+  )
 
   if (!canUseWorkbench) {
     return (
@@ -1325,68 +1362,76 @@ export default function JobOrderWorkbench() {
 
   return (
     <div className="ops-page-shell">
-      <section className="ops-page-header">
-        <div className="space-y-2">
-          <p className="ops-page-kicker">Workshop Operations</p>
-          <h1 className="ops-page-title">Job Order Workbench</h1>
-          <p className="ops-page-copy">
-            {isTechnician
-              ? 'Load your assigned job order, update execution status, add workshop progress, and attach evidence from one technician-focused control surface.'
-              : 'Move confirmed bookings into workshop execution, track progress and evidence, then finalize invoice-ready work from one guided control surface.'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-full border border-surface-border bg-surface-raised p-1">
-            {[
-              { key: 'active', label: 'Active' },
-              { key: 'history', label: 'History' },
-            ].map((view) => (
+      <PageHeader
+        eyebrow="Workshop Operations"
+        title="Job Order Workbench"
+        description={
+          isTechnician
+            ? 'Load your assigned job order, update execution status, add workshop progress, and attach evidence from one technician-focused control surface.'
+            : 'Move confirmed bookings into workshop execution, track progress and evidence, then finalize invoice-ready work from one guided control surface.'
+        }
+        meta={(
+          <>
+            <span className="badge badge-gray">{formatDate(selectedDate)}</span>
+            <span className={`badge ${workbenchScope === 'history' ? 'badge-blue' : 'badge-orange'}`}>
+              {workbenchScope === 'history' ? 'History view' : 'Active view'}
+            </span>
+          </>
+        )}
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="booking-segmented-control">
+              {[
+                { key: 'active', label: 'Active' },
+                { key: 'history', label: 'History' },
+              ].map((view) => (
+                <button
+                  key={view.key}
+                  type="button"
+                  onClick={() => setWorkbenchScope(view.key)}
+                  className={`booking-tab-button ${workbenchScope === view.key ? 'booking-tab-button-active' : ''}`}
+                >
+                  {view.label}
+                </button>
+              ))}
+            </div>
+            {!isTechnician ? (
               <button
-                key={view.key}
                 type="button"
-                onClick={() => setWorkbenchScope(view.key)}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  workbenchScope === view.key ? 'text-white' : 'text-ink-secondary'
-                }`}
-                style={workbenchScope === view.key ? { background: '#f07c00' } : undefined}
+                onClick={loadBookingHandoffs}
+                className="ops-action-secondary min-w-[148px] self-start xl:self-auto"
               >
-                {view.label}
+                <RefreshCw size={14} />
+                Refresh
               </button>
-            ))}
+            ) : null}
           </div>
-          {!isTechnician ? (
-            <button
-              onClick={loadBookingHandoffs}
-              className="ops-action-secondary min-w-[148px] self-start xl:self-auto"
-            >
-              <RefreshCw size={14} />
-              Refresh
-            </button>
-          ) : null}
-        </div>
-      </section>
+        )}
+      />
 
       <section className="ops-control-strip">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
-          <label className="text-xs text-ink-muted">
-            {workbenchScope === 'history' ? 'History date' : isTechnician ? 'Assigned work date' : 'Schedule date'}
+          <label>
+            <span className="label">
+              {workbenchScope === 'history' ? 'History date' : isTechnician ? 'Assigned work date' : 'Schedule date'}
+            </span>
             <input
               type="date"
               value={selectedDate}
               onChange={(event) => setSelectedDate(event.target.value || toDateKey())}
-              className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="input"
             />
           </label>
 
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <label className="text-xs text-ink-muted">
-              {isTechnician ? 'Assigned job order' : 'Job-order lookup'}
+            <label>
+              <span className="label">{isTechnician ? 'Assigned job order' : 'Job-order lookup'}</span>
               <select
                 value={manualJobOrderId}
                 onChange={(event) => setManualJobOrderId(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-            >
-              <option value="">
+                className="select"
+              >
+                <option value="">
                   {selectedDateJobOrders.length > 0
                     ? 'Choose a job order for the selected date'
                     : monthJobOrders.length > 0
@@ -1425,11 +1470,7 @@ export default function JobOrderWorkbench() {
             </button>
 
             {detailState.message ? (
-              <div
-                className={`sm:col-span-2 rounded-xl border px-4 py-3 text-xs ${detailStateClassName}`}
-              >
-                {detailState.message}
-              </div>
+              <div className={`sm:col-span-2 ${detailStateClassName}`}>{detailState.message}</div>
             ) : (
               <p className="sm:col-span-2 text-[11px] text-ink-muted">
                 {isTechnician
@@ -1444,12 +1485,12 @@ export default function JobOrderWorkbench() {
           <div className="lg:col-span-2 rounded-xl border border-surface-border bg-surface-card px-4 py-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-bold text-ink-primary">
+                <p className="text-sm font-semibold text-ink-primary">
                   {workbenchScope === 'history'
                     ? 'Dates with finalized and cancelled job orders'
                     : 'Dates with job orders and booking handoff queue'}
                 </p>
-                <p className="text-xs text-ink-muted mt-1">
+                <p className="mt-1 text-sm text-ink-secondary">
                   {isTechnician
                     ? 'These dates already have assigned job orders in the selected month.'
                     : workbenchScope === 'history'
@@ -1463,13 +1504,7 @@ export default function JobOrderWorkbench() {
             </div>
 
             {(jobOrderCalendarState.message || jobOrderSummaryState.message) ? (
-              <div
-                className={`mt-3 rounded-xl border px-4 py-3 text-xs ${
-                  jobOrderCalendarState.status === 'error' || jobOrderSummaryState.status === 'error'
-                    ? 'border-red-500/25 bg-red-500/10 text-red-200'
-                    : 'border-surface-border bg-surface-raised text-ink-muted'
-                }`}
-              >
+              <div className={`mt-3 ${calendarStateClassName}`}>
                 {jobOrderCalendarState.message || jobOrderSummaryState.message}
               </div>
             ) : null}
@@ -1486,8 +1521,8 @@ export default function JobOrderWorkbench() {
                       onClick={() => setSelectedDate(entry.date)}
                       className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
                         isSelectedDate
-                          ? 'border-[#f07c00] bg-[#f07c00]/10 text-white'
-                          : 'border-surface-border bg-surface-raised text-ink-secondary hover:border-[#f07c00]/50 hover:text-ink-primary'
+                          ? 'border-brand-orange bg-brand-orange/10 text-ink-primary'
+                          : 'border-surface-border bg-surface-raised text-ink-secondary hover:border-brand-orange/40 hover:text-ink-primary'
                       }`}
                     >
                       <span className="block font-semibold">{formatDate(entry.date)}</span>
@@ -1606,13 +1641,11 @@ export default function JobOrderWorkbench() {
         />
       </section>
 
-      <section
-        className="ops-panel border-[#f07c00]/35 bg-[linear-gradient(180deg,rgba(240,124,0,0.14),rgba(15,23,42,0.94))] shadow-[0_24px_60px_rgba(15,23,42,0.28)]"
-      >
+      <section className="ops-panel">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="card-title">Active Job Order</p>
-            <p className="text-xs text-ink-muted mt-1">
+            <p className="mt-1 text-sm leading-6 text-ink-secondary">
               {isTechnician
                 ? 'The loaded technician assignment stays pinned above your controls so status, progress, and workshop evidence remain in view while you work.'
                 : 'The live workshop surface stays pinned above intake so status, assignments, evidence, and invoice readiness remain the primary context after a load or creation event.'}
@@ -1631,7 +1664,7 @@ export default function JobOrderWorkbench() {
         {activeJobOrder ? (
           <div className="mt-4 space-y-3">
             {activeJobOrderNeedsAssignmentRepair ? (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
+              <div className="status-message status-message-warning">
                 This job order has no saved technician assignment. Assign at least one technician,
                 then retry the status change.
               </div>
@@ -1640,7 +1673,7 @@ export default function JobOrderWorkbench() {
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
               <div className="grid gap-3">
                 <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-xl border border-[#f07c00]/30 bg-surface-raised px-4 py-3">
+                  <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
                     <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
                       Job Order
                     </p>
@@ -1649,7 +1682,7 @@ export default function JobOrderWorkbench() {
                     </p>
                     <p className="text-xs text-ink-muted mt-2">{activeJobOrder.sourceType} source</p>
                   </div>
-                <div className="rounded-xl border border-[#f07c00]/30 bg-surface-raised px-4 py-3">
+                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
                   <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
                     Current Status
                   </p>
@@ -1662,7 +1695,7 @@ export default function JobOrderWorkbench() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-[#f07c00]/30 bg-surface-raised px-4 py-3">
+              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
                   Work Items
                 </p>
@@ -1732,17 +1765,7 @@ export default function JobOrderWorkbench() {
                       )}
                     </div>
 
-                    {assignmentState.message ? (
-                      <div
-                        className={`rounded-xl border px-4 py-3 text-xs ${
-                          assignmentState.status === 'assignment_saved'
-                            ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                            : 'border-red-500/25 bg-red-500/10 text-red-200'
-                        }`}
-                      >
-                        {assignmentState.message}
-                      </div>
-                    ) : null}
+                    {assignmentState.message ? <div className={assignmentStateClassName}>{assignmentState.message}</div> : null}
 
                     <button
                       type="button"
@@ -1804,10 +1827,10 @@ export default function JobOrderWorkbench() {
             </div>
           </div>
         ) : (
-          <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-10 text-center mt-4">
+          <div className="empty-panel mt-4">
             <AlertTriangle size={28} className="mx-auto text-ink-dim mb-3" />
-            <p className="text-sm font-bold text-ink-primary">No job order loaded yet</p>
-            <p className="text-xs text-ink-muted mt-2">
+            <p className="text-sm font-semibold text-ink-primary">No job order loaded yet</p>
+            <p className="mt-2 text-sm leading-6 text-ink-secondary">
               {isTechnician
                 ? 'Choose one of your assigned job orders to start technician execution updates.'
                 : 'Create a job order from confirmed booking handoff or choose an existing job order from the selector.'}
@@ -1873,7 +1896,7 @@ export default function JobOrderWorkbench() {
                         status: event.target.value,
                       }))
                     }
-                    className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                    className="mt-1 select"
                     disabled={!activeJobOrder || nextStatuses.length === 0}
                   >
                     {nextStatuses.length > 0 ? (
@@ -1911,23 +1934,13 @@ export default function JobOrderWorkbench() {
                       }))
                     }
                     rows={3}
-                    className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                    className="mt-1 textarea"
                     placeholder="Optional workshop reason for the selected transition."
                   />
                 </label>
               </div>
 
-              {statusState.message ? (
-                <div
-                  className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
-                    statusState.status === 'status_update_saved'
-                      ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                      : 'border-red-500/25 bg-red-500/10 text-red-200'
-                  }`}
-                >
-                  {statusState.message}
-                </div>
-              ) : null}
+              {statusState.message ? <div className={`mt-4 ${statusStateClassName}`}>{statusState.message}</div> : null}
 
               <div className="flex flex-wrap gap-2 mt-4">
                 <button
@@ -1983,7 +1996,7 @@ export default function JobOrderWorkbench() {
                             entryType: event.target.value,
                           }))
                         }
-                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                        className="mt-1 select"
                       >
                         {progressEntryTypeOptions.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -2046,22 +2059,12 @@ export default function JobOrderWorkbench() {
                           }))
                         }
                         rows={3}
-                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                        className="mt-1 textarea"
                         placeholder="Describe the work performed or issue found."
                       />
                     </label>
                   </div>
-                  {progressState.message ? (
-                    <div
-                      className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
-                        progressState.status === 'progress_saved'
-                          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                          : 'border-red-500/25 bg-red-500/10 text-red-200'
-                      }`}
-                    >
-                      {progressState.message}
-                    </div>
-                  ) : null}
+                  {progressState.message ? <div className={`mt-3 ${progressStateClassName}`}>{progressState.message}</div> : null}
                   <button
                     onClick={handleAddProgressEntry}
                     disabled={!activeJobOrder || progressState.status === 'progress_submitting'}
@@ -2111,7 +2114,7 @@ export default function JobOrderWorkbench() {
                             linkedEntityId,
                           }))
                         }}
-                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                        className="mt-1 select"
                       >
                         {photoTargetOptions.map((option) => (
                           <option
@@ -2128,7 +2131,7 @@ export default function JobOrderWorkbench() {
                       <input
                         value={photoDraft.file?.name ?? ''}
                         readOnly
-                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                        className="mt-1 input"
                         placeholder="No image selected yet"
                       />
                     </label>
@@ -2143,22 +2146,12 @@ export default function JobOrderWorkbench() {
                           }))
                         }
                         rows={3}
-                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                        className="mt-1 textarea"
                         placeholder="What this image proves for the next reviewer."
                       />
                     </label>
                   </div>
-                  {photoState.message ? (
-                    <div
-                      className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
-                        photoState.status === 'photo_saved'
-                          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                          : 'border-red-500/25 bg-red-500/10 text-red-200'
-                      }`}
-                    >
-                      {photoState.message}
-                    </div>
-                  ) : null}
+                  {photoState.message ? <div className={`mt-3 ${photoStateClassName}`}>{photoState.message}</div> : null}
                   <button
                     onClick={handleAddPhotoEvidence}
                     disabled={!activeJobOrder || photoState.status === 'photo_submitting'}
@@ -2192,23 +2185,14 @@ export default function JobOrderWorkbench() {
             </div>
 
             {handoffState.message ? (
-              <div
-                className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
-                  handoffState.status === 'handoff_load_failed' ||
-                  handoffState.status === 'handoff_forbidden_role'
-                    ? 'border-red-500/25 bg-red-500/10 text-red-200'
-                    : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                }`}
-              >
-                {handoffState.message}
-              </div>
+              <div className={`mt-4 ${handoffStateClassName}`}>{handoffState.message}</div>
             ) : null}
 
             <div className="space-y-3 mt-4">
               {handoffCandidates.length === 0 ? (
-                <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-8 text-center">
-                  <p className="text-sm font-bold text-ink-primary">No confirmed handoffs for this date</p>
-                  <p className="text-xs text-ink-muted mt-2">
+                <div className="empty-panel">
+                  <p className="text-sm font-semibold text-ink-primary">No confirmed handoffs for this date</p>
+                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
                     Booking handoff remains schedule-derived. Only confirmed bookings can move into
                     job-order creation.
                   </p>
@@ -2222,13 +2206,13 @@ export default function JobOrderWorkbench() {
                       onClick={() => setSelectedBookingId(candidate.bookingId)}
                       className={`w-full text-left rounded-xl border px-4 py-4 transition ${
                         isSelected
-                          ? 'border-[#f07c00] bg-[#f07c00]/10'
-                          : 'border-surface-border bg-surface-card hover:border-[#f07c00]/60'
+                          ? 'border-brand-orange/45 bg-brand-orange/10'
+                          : 'border-surface-border bg-surface-card hover:border-brand-orange/35'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-xs font-mono font-bold" style={{ color: '#f07c00' }}>
+                          <p className="font-mono text-xs font-bold tracking-wide text-brand-orange">
                             BK-{candidate.bookingId.slice(0, 8).toUpperCase()}
                           </p>
                           <p className="text-sm font-semibold text-ink-primary mt-1">
@@ -2285,10 +2269,10 @@ export default function JobOrderWorkbench() {
             </div>
 
             {!selectedCandidate ? (
-              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-10 text-center mt-4">
+              <div className="empty-panel mt-4">
                 <AlertTriangle size={28} className="mx-auto text-ink-dim mb-3" />
-                <p className="text-sm font-bold text-ink-primary">Select a confirmed booking handoff first</p>
-                <p className="text-xs text-ink-muted mt-2">
+                <p className="text-sm font-semibold text-ink-primary">Select a confirmed booking handoff first</p>
+                <p className="mt-2 text-sm leading-6 text-ink-secondary">
                   The workbench only creates job orders from confirmed booking intake in this slice.
                 </p>
               </div>
@@ -2331,7 +2315,7 @@ export default function JobOrderWorkbench() {
                             onChange={(event) =>
                               handleCreateItemChange(index, { name: event.target.value })
                             }
-                            className="w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                            className="input"
                             placeholder="Work item name"
                           />
                           <input
@@ -2347,7 +2331,7 @@ export default function JobOrderWorkbench() {
                                     : Math.max(1, Math.ceil(Number(event.target.value))),
                               })
                             }
-                            className="w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                            className="input"
                             placeholder="Whole hours"
                           />
                         </div>
@@ -2357,7 +2341,7 @@ export default function JobOrderWorkbench() {
                             handleCreateItemChange(index, { description: event.target.value })
                           }
                           rows={2}
-                          className="mt-3 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                          className="mt-3 textarea"
                           placeholder="Optional work-item description"
                         />
                       </div>
@@ -2375,7 +2359,7 @@ export default function JobOrderWorkbench() {
                         assignedTechnicianId: event.target.value,
                       }))
                     }
-                    className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                    className="mt-1 select"
                   >
                     <option value="">Create as draft - assign later</option>
                     {technicianOptions.map((account) => (
@@ -2407,22 +2391,12 @@ export default function JobOrderWorkbench() {
                       }))
                     }
                     rows={3}
-                    className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                    className="mt-1 textarea"
                     placeholder="Add workshop notes carried into the job order."
                   />
                 </label>
 
-                {createState.message ? (
-                  <div
-                    className={`rounded-xl border px-4 py-3 text-xs ${
-                      createState.status === 'create_saved'
-                        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                        : 'border-red-500/25 bg-red-500/10 text-red-200'
-                    }`}
-                  >
-                    {createState.message}
-                  </div>
-                ) : null}
+                {createState.message ? <div className={createStateClassName}>{createState.message}</div> : null}
 
                 <button
                   onClick={handleCreateJobOrder}
@@ -2465,7 +2439,7 @@ export default function JobOrderWorkbench() {
                       status: event.target.value,
                     }))
                   }
-                  className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="mt-1 select"
                   disabled={!activeJobOrder || nextStatuses.length === 0}
                 >
                   {nextStatuses.length > 0 ? (
@@ -2504,23 +2478,13 @@ export default function JobOrderWorkbench() {
                     }))
                   }
                   rows={3}
-                  className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="mt-1 textarea"
                   placeholder="Optional reason for the selected transition."
                 />
               </label>
             </div>
 
-            {statusState.message ? (
-              <div
-                className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
-                  statusState.status === 'status_update_saved'
-                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                    : 'border-red-500/25 bg-red-500/10 text-red-200'
-                }`}
-              >
-                {statusState.message}
-              </div>
-            ) : null}
+            {statusState.message ? <div className={`mt-4 ${statusStateClassName}`}>{statusState.message}</div> : null}
 
             <div className="flex flex-wrap gap-2 mt-4">
               <button
@@ -2576,7 +2540,7 @@ export default function JobOrderWorkbench() {
                           entryType: event.target.value,
                         }))
                       }
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      className="mt-1 select"
                     >
                       {progressEntryTypeOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -2639,22 +2603,12 @@ export default function JobOrderWorkbench() {
                         }))
                       }
                       rows={3}
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      className="mt-1 textarea"
                       placeholder="Describe the work performed or issue found."
                     />
                   </label>
                 </div>
-                {progressState.message ? (
-                  <div
-                    className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
-                      progressState.status === 'progress_saved'
-                        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                        : 'border-red-500/25 bg-red-500/10 text-red-200'
-                    }`}
-                  >
-                    {progressState.message}
-                  </div>
-                ) : null}
+                {progressState.message ? <div className={`mt-3 ${progressStateClassName}`}>{progressState.message}</div> : null}
                 <button
                   onClick={handleAddProgressEntry}
                   disabled={!activeJobOrder || progressState.status === 'progress_submitting'}
@@ -2704,7 +2658,7 @@ export default function JobOrderWorkbench() {
                           linkedEntityId,
                         }))
                       }}
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      className="mt-1 select"
                     >
                       {photoTargetOptions.map((option) => (
                         <option
@@ -2721,7 +2675,7 @@ export default function JobOrderWorkbench() {
                     <input
                       value={photoDraft.file?.name ?? ''}
                       readOnly
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      className="mt-1 input"
                       placeholder="No image selected yet"
                     />
                   </label>
@@ -2736,22 +2690,12 @@ export default function JobOrderWorkbench() {
                         }))
                       }
                       rows={3}
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      className="mt-1 textarea"
                       placeholder="What this image proves for the next reviewer."
                     />
                   </label>
                 </div>
-                {photoState.message ? (
-                  <div
-                    className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
-                      photoState.status === 'photo_saved'
-                        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                        : 'border-red-500/25 bg-red-500/10 text-red-200'
-                    }`}
-                  >
-                    {photoState.message}
-                  </div>
-                ) : null}
+                {photoState.message ? <div className={`mt-3 ${photoStateClassName}`}>{photoState.message}</div> : null}
                 <button
                   onClick={handleAddPhotoEvidence}
                   disabled={!activeJobOrder || photoState.status === 'photo_submitting'}
@@ -2799,7 +2743,7 @@ export default function JobOrderWorkbench() {
                       }))
                     }
                     rows={4}
-                    className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                    className="mt-1 textarea"
                     placeholder="Describe completed work for the invoice-ready record."
                   />
                 </label>
@@ -2822,7 +2766,7 @@ export default function JobOrderWorkbench() {
                           amountPaid: event.target.value,
                         }))
                       }
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      className="mt-1 input"
                       placeholder="2500"
                     />
                   </label>
@@ -2836,7 +2780,7 @@ export default function JobOrderWorkbench() {
                           paymentMethod: event.target.value,
                         }))
                       }
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      className="mt-1 select"
                     >
                       {paymentMethodOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -2855,7 +2799,7 @@ export default function JobOrderWorkbench() {
                           reference: event.target.value,
                         }))
                       }
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      className="mt-1 input"
                       placeholder="GCASH-TEST-1234"
                     />
                   </label>
@@ -2870,12 +2814,12 @@ export default function JobOrderWorkbench() {
                           receivedAt: event.target.value,
                         }))
                       }
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      className="mt-1 input"
                     />
                   </label>
                 </div>
                 {finalizationBlockers.length > 0 ? (
-                  <div className="mt-3 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+                  <div className="status-message status-message-danger mt-3">
                     <p className="font-semibold text-red-100">Finalization blockers</p>
                     <ul className="mt-2 space-y-1 list-disc pl-4">
                       {finalizationBlockers.map((blocker) => (
@@ -2884,17 +2828,7 @@ export default function JobOrderWorkbench() {
                     </ul>
                   </div>
                 ) : null}
-                {finalizeState.message ? (
-                  <div
-                    className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
-                      finalizeState.status === 'finalize_saved'
-                        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                        : 'border-red-500/25 bg-red-500/10 text-red-200'
-                    }`}
-                  >
-                    {finalizeState.message}
-                  </div>
-                ) : null}
+                {finalizeState.message ? <div className={`mt-3 ${finalizeStateClassName}`}>{finalizeState.message}</div> : null}
                 <div className="mt-3 flex flex-wrap gap-3">
                   <button
                     onClick={handleFinalizeJobOrder}
@@ -2981,17 +2915,7 @@ export default function JobOrderWorkbench() {
                     </p>
                   </div>
                 </div>
-                {paymentState.message ? (
-                  <div
-                    className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
-                      paymentState.status === 'payment_saved'
-                        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                        : 'border-red-500/25 bg-red-500/10 text-red-200'
-                    }`}
-                  >
-                    {paymentState.message}
-                  </div>
-                ) : null}
+                {paymentState.message ? <div className={`mt-3 ${paymentStateClassName}`}>{paymentState.message}</div> : null}
                 <div className="mt-3 flex flex-wrap gap-3">
                   <button
                     type="button"

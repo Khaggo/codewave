@@ -13,6 +13,7 @@ import {
   Wrench,
 } from 'lucide-react'
 
+import PageHeader from '@/components/ui/PageHeader'
 import { ApiError, listAdminCustomers, listStaffAccounts } from '@/lib/authClient'
 import {
   createBackJobCase,
@@ -35,6 +36,7 @@ import {
   getBackJobValidationState,
   isBackJobCustomerSafe,
 } from '@/lib/api/generated/back-jobs/staff-web-back-jobs'
+import { getBackJobCounts, splitCommaSeparatedIds, upsertBackJob } from './backJobsView.mjs'
 
 const STATUS_META = {
   reported: { label: 'Reported', cls: 'badge-red' },
@@ -87,12 +89,6 @@ const findingCategoryOptions = [
   { value: 'customer_report', label: 'Customer Report' },
 ]
 
-const splitCommaSeparatedIds = (value) =>
-  String(value ?? '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-
 const formatDateTime = (value) => {
   if (!value) return 'Not recorded'
 
@@ -102,14 +98,6 @@ const formatDateTime = (value) => {
   }
 
   return date.toLocaleString()
-}
-
-const upsertBackJob = (items, backJob) => {
-  if (!backJob) return items
-  const exists = items.some((item) => item.id === backJob.id)
-  return exists
-    ? items.map((item) => (item.id === backJob.id ? backJob : item))
-    : [backJob, ...items]
 }
 
 function StatCard({ icon: Icon, label, value, toneClass }) {
@@ -129,7 +117,7 @@ function StatCard({ icon: Icon, label, value, toneClass }) {
 function BackJobDetail({ backJob }) {
   if (!backJob) {
     return (
-      <div className="card p-5 text-sm text-ink-muted">
+      <div className="empty-panel text-sm text-ink-muted">
         Load a vehicle list, create a case, or search by back-job id to inspect live detail.
       </div>
     )
@@ -268,12 +256,7 @@ export default function BackJobsContent() {
 
   const counts = useMemo(() => {
     const source = activeBackJob ? upsertBackJob(backJobs, activeBackJob) : backJobs
-    return {
-      total: source.length,
-      reported: source.filter((item) => item.status === 'reported').length,
-      approved: source.filter((item) => item.status === 'approved_for_rework').length,
-      unresolved: source.filter((item) => !['resolved', 'closed', 'rejected'].includes(item.status)).length,
-    }
+    return getBackJobCounts(source)
   }, [activeBackJob, backJobs])
 
   const allowedStatusTargets = getAllowedBackJobStatusTargets(activeBackJob?.status)
@@ -609,7 +592,7 @@ export default function BackJobsContent() {
 
   if (!canManage) {
     return (
-      <div className="card p-6">
+      <div className="empty-panel text-left">
         <div className="flex items-center gap-3">
           <ShieldCheck size={20} className="text-red-400" />
           <div>
@@ -624,20 +607,18 @@ export default function BackJobsContent() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="card relative overflow-hidden p-5 md:p-6">
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-72 bg-gradient-to-l from-brand-orange/10 to-transparent" />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand-orange">Live Back-Jobs</p>
-            <h1 className="mt-3 text-3xl font-bold text-ink-primary">Review And Rework Workbench</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
-              Create return cases, validate inspection-backed findings, update review status, and create linked rework job orders without leaking staff-only review state to customer surfaces.
-            </p>
-          </div>
-          <span className="badge badge-gray">{backJobReviewContractSources.length} source contracts</span>
-        </div>
-      </section>
+    <div className="ops-page-shell">
+      <PageHeader
+        eyebrow="Live Back-Jobs"
+        title="Review And Rework Workbench"
+        description="Create return cases, validate inspection-backed findings, update review status, and create linked rework job orders without leaking staff-only review state to customer surfaces."
+        meta={
+          <>
+            <span className="badge badge-gray">{backJobReviewContractSources.length} source contracts</span>
+            <span className="badge badge-gray">{counts.total} loaded cases</span>
+          </>
+        }
+      />
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard icon={ClipboardList} label="Loaded Cases" value={counts.total} toneClass="border-surface-border bg-surface-raised text-brand-orange" />
@@ -646,7 +627,7 @@ export default function BackJobsContent() {
         <StatCard icon={CheckCircle2} label="Unresolved" value={counts.unresolved} toneClass="border-emerald-500/15 bg-emerald-500/10 text-emerald-400" />
       </section>
 
-      <section className="card p-5">
+      <section className="toolbar-surface">
         <div className="grid gap-4 lg:grid-cols-2">
           <form
             className="rounded-2xl border border-surface-border bg-surface-raised p-4"
@@ -657,7 +638,7 @@ export default function BackJobsContent() {
           >
             <p className="text-sm font-bold text-ink-primary">Load Vehicle Back-Jobs</p>
             <p className="mt-1 text-xs text-ink-muted">Choose a customer vehicle to review the return cases tied to that vehicle.</p>
-            <label className="mt-3 block text-xs text-ink-muted">
+            <label className="label mt-3">
               Customer
               <select
                 value={selectedCustomerUserId}
@@ -665,7 +646,7 @@ export default function BackJobsContent() {
                   setSelectedCustomerUserId(event.target.value)
                   setVehicleId('')
                 }}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="">Choose customer</option>
                 {customers.map((customer) => (
@@ -675,12 +656,12 @@ export default function BackJobsContent() {
                 ))}
               </select>
             </label>
-            <label className="mt-3 block text-xs text-ink-muted">
+            <label className="label mt-3">
               Vehicle
               <select
                 value={vehicleId}
                 onChange={(event) => setVehicleId(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="">Choose vehicle</option>
                 {selectedCustomerVehicles.map((vehicle) => (
@@ -705,12 +686,12 @@ export default function BackJobsContent() {
           >
             <p className="text-sm font-bold text-ink-primary">Load Case Detail</p>
             <p className="mt-1 text-xs text-ink-muted">Choose one loaded case when staff need to review specific back-job detail.</p>
-            <label className="mt-3 block text-xs text-ink-muted">
+            <label className="label mt-3">
               Back-job
               <select
                 value={backJobId}
                 onChange={(event) => setBackJobId(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="">Choose loaded case</option>
                 {backJobs.map((backJob) => (
@@ -729,10 +710,10 @@ export default function BackJobsContent() {
 
         {loadState.message ? (
           <div
-            className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+            className={`mt-4 ${
               ['back_jobs_loaded', 'back_jobs_empty'].includes(loadState.status)
-                ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                : 'border-red-500/25 bg-red-500/10 text-red-200'
+                ? 'status-message status-message-success'
+                : 'status-message status-message-danger'
             }`}
           >
             {loadState.message}
@@ -741,36 +722,36 @@ export default function BackJobsContent() {
       </section>
 
       {backJobs.length > 0 ? (
-        <section className="card overflow-hidden">
+        <section className="table-surface">
           <div className="border-b border-surface-border bg-surface-raised px-5 py-4">
             <p className="text-sm font-bold text-ink-primary">Loaded Vehicle Cases</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
+          <div className="table-scroll">
+            <table className="data-table min-w-[820px]">
               <thead>
-                <tr className="border-b border-surface-border text-left text-xs text-ink-muted">
-                  <th className="px-5 py-3 font-semibold">Back-Job</th>
-                  <th className="px-5 py-3 font-semibold">Original Job</th>
-                  <th className="px-5 py-3 font-semibold">Complaint</th>
-                  <th className="px-5 py-3 font-semibold">Status</th>
-                  <th className="px-5 py-3 font-semibold">Visibility</th>
-                  <th className="px-5 py-3 font-semibold">Action</th>
+                <tr>
+                  <th>Back-Job</th>
+                  <th>Original Job</th>
+                  <th>Complaint</th>
+                  <th>Status</th>
+                  <th>Visibility</th>
+                  <th>Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-surface-border">
+              <tbody>
                 {backJobs.map((backJob) => {
                   const statusMeta = STATUS_META[backJob.status] ?? STATUS_META.reported
                   const visibility = getBackJobCustomerVisibility(backJob.status)
                   return (
-                    <tr key={backJob.id} className="transition-colors hover:bg-surface-hover">
-                      <td className="px-5 py-3 font-mono text-xs text-brand-orange">{backJob.id}</td>
-                      <td className="px-5 py-3 font-mono text-xs text-ink-secondary">{backJob.originalJobOrderId}</td>
-                      <td className="px-5 py-3 text-ink-secondary">
+                    <tr key={backJob.id}>
+                      <td className="font-mono text-xs text-brand-orange">{backJob.id}</td>
+                      <td className="font-mono text-xs text-ink-secondary">{backJob.originalJobOrderId}</td>
+                      <td>
                         <p className="max-w-[260px] truncate">{backJob.complaint}</p>
                       </td>
-                      <td className="px-5 py-3"><span className={`badge ${statusMeta.cls}`}>{statusMeta.label}</span></td>
-                      <td className="px-5 py-3"><span className="badge badge-gray">{visibilityCopy[visibility]}</span></td>
-                      <td className="px-5 py-3">
+                      <td><span className={`badge ${statusMeta.cls}`}>{statusMeta.label}</span></td>
+                      <td><span className="badge badge-gray">{visibilityCopy[visibility]}</span></td>
+                      <td>
                         <button type="button" className="btn-ghost py-1.5 text-xs" onClick={() => syncActiveBackJob(backJob)}>
                           Review
                         </button>
@@ -796,7 +777,7 @@ export default function BackJobsContent() {
             <Plus size={18} className="text-brand-orange" />
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Customer
               <select
                 value={createDraft.customerUserId}
@@ -810,7 +791,7 @@ export default function BackJobsContent() {
                     returnInspectionId: '',
                   }))
                 }
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="">Choose customer</option>
                 {customers.map((customer) => (
@@ -820,7 +801,7 @@ export default function BackJobsContent() {
                 ))}
               </select>
             </label>
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Vehicle
               <select
                 value={createDraft.vehicleId}
@@ -833,7 +814,7 @@ export default function BackJobsContent() {
                     returnInspectionId: '',
                   }))
                 }
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="">Choose vehicle</option>
                 {(customers.find((customer) => customer.id === createDraft.customerUserId)?.vehicles ?? []).map((vehicle) => (
@@ -843,12 +824,12 @@ export default function BackJobsContent() {
                 ))}
               </select>
             </label>
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Original job order
               <select
                 value={createDraft.originalJobOrderId}
                 onChange={(event) => setCreateDraft((current) => ({ ...current, originalJobOrderId: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="">Choose finalized job order</option>
                 {vehicleJobOrders
@@ -860,12 +841,12 @@ export default function BackJobsContent() {
                   ))}
               </select>
             </label>
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Original booking
               <select
                 value={createDraft.originalBookingId}
                 onChange={(event) => setCreateDraft((current) => ({ ...current, originalBookingId: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="">No booking reference</option>
                 {vehicleBookings.map((booking) => (
@@ -875,12 +856,12 @@ export default function BackJobsContent() {
                 ))}
               </select>
             </label>
-            <label className="text-xs text-ink-muted md:col-span-2">
+            <label className="label md:col-span-2">
               Return inspection
               <select
                 value={createDraft.returnInspectionId}
                 onChange={(event) => setCreateDraft((current) => ({ ...current, returnInspectionId: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="">No return inspection yet</option>
                 {vehicleInspections
@@ -893,52 +874,52 @@ export default function BackJobsContent() {
               </select>
             </label>
           </div>
-          <label className="block text-xs text-ink-muted">
+          <label className="label">
             Complaint
             <textarea
               value={createDraft.complaint}
               onChange={(event) => setCreateDraft((current) => ({ ...current, complaint: event.target.value }))}
               rows={3}
-              className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="input min-h-[96px] resize-y"
               placeholder="Customer reports the same concern after prior completed work."
             />
           </label>
-          <label className="block text-xs text-ink-muted">
+          <label className="label">
             Review notes
             <textarea
               value={createDraft.reviewNotes}
               onChange={(event) => setCreateDraft((current) => ({ ...current, reviewNotes: event.target.value }))}
               rows={2}
-              className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="input min-h-[84px] resize-y"
             />
           </label>
           <div className="rounded-xl border border-surface-border bg-surface-raised p-3">
             <p className="text-sm font-semibold text-ink-primary">Optional Finding</p>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Category
-                <select value={createDraft.findingCategory} onChange={(event) => setCreateDraft((current) => ({ ...current, findingCategory: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]">
+                <select value={createDraft.findingCategory} onChange={(event) => setCreateDraft((current) => ({ ...current, findingCategory: event.target.value }))} className="select">
                   {findingCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </label>
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Severity
-                <select value={createDraft.findingSeverity} onChange={(event) => setCreateDraft((current) => ({ ...current, findingSeverity: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]">
+                <select value={createDraft.findingSeverity} onChange={(event) => setCreateDraft((current) => ({ ...current, findingSeverity: event.target.value }))} className="select">
                   {Object.keys(SEVERITY_META).map((severity) => <option key={severity} value={severity}>{SEVERITY_META[severity].label}</option>)}
                 </select>
               </label>
-              <label className="text-xs text-ink-muted md:col-span-2">
+              <label className="label md:col-span-2">
                 Label
-                <input value={createDraft.findingLabel} onChange={(event) => setCreateDraft((current) => ({ ...current, findingLabel: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+                <input value={createDraft.findingLabel} onChange={(event) => setCreateDraft((current) => ({ ...current, findingLabel: event.target.value }))} className="input" />
               </label>
-              <label className="text-xs text-ink-muted md:col-span-2">
+              <label className="label md:col-span-2">
                 Notes
-                <textarea value={createDraft.findingNotes} onChange={(event) => setCreateDraft((current) => ({ ...current, findingNotes: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+                <textarea value={createDraft.findingNotes} onChange={(event) => setCreateDraft((current) => ({ ...current, findingNotes: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
               </label>
             </div>
           </div>
           {createState.message ? (
-            <div className={`rounded-xl border px-4 py-3 text-sm ${createState.status === 'create_saved' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : 'border-red-500/25 bg-red-500/10 text-red-200'}`}>
+            <div className={createState.status === 'create_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}>
               {createState.message}
             </div>
           ) : null}
@@ -954,12 +935,12 @@ export default function BackJobsContent() {
               <p className="card-title">Review Status Update</p>
               <p className="mt-1 text-xs text-ink-muted">Move the selected case through review, approval, or closure.</p>
             </div>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Next status
               <select
                 value={allowedStatusTargets.includes(statusDraft.status) ? statusDraft.status : (allowedStatusTargets[0] ?? '')}
                 onChange={(event) => setStatusDraft((current) => ({ ...current, status: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
                 disabled={!allowedStatusTargets.length}
               >
                 {allowedStatusTargets.length ? allowedStatusTargets.map((status) => (
@@ -967,9 +948,9 @@ export default function BackJobsContent() {
                 )) : <option value="">No transitions available</option>}
               </select>
             </label>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Return inspection
-              <select value={statusDraft.returnInspectionId} onChange={(event) => setStatusDraft((current) => ({ ...current, returnInspectionId: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" >
+              <select value={statusDraft.returnInspectionId} onChange={(event) => setStatusDraft((current) => ({ ...current, returnInspectionId: event.target.value }))} className="select" >
                 <option value="">Choose return inspection</option>
                 {vehicleInspections
                   .filter((inspection) => inspection.inspectionType === 'return')
@@ -980,16 +961,16 @@ export default function BackJobsContent() {
                   ))}
               </select>
             </label>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Review notes
-              <textarea value={statusDraft.reviewNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, reviewNotes: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              <textarea value={statusDraft.reviewNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, reviewNotes: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
             </label>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Resolution notes
-              <textarea value={statusDraft.resolutionNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, resolutionNotes: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              <textarea value={statusDraft.resolutionNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, resolutionNotes: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
             </label>
             {statusState.message ? (
-              <div className={`rounded-xl border px-4 py-3 text-sm ${statusState.status === 'status_saved' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : 'border-red-500/25 bg-red-500/10 text-red-200'}`}>
+              <div className={statusState.status === 'status_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}>
                 {statusState.message}
               </div>
             ) : null}
@@ -1007,22 +988,22 @@ export default function BackJobsContent() {
               </div>
               <Link2 size={18} className="text-brand-orange" />
             </div>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Work item name
-              <input value={reworkDraft.itemName} onChange={(event) => setReworkDraft((current) => ({ ...current, itemName: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              <input value={reworkDraft.itemName} onChange={(event) => setReworkDraft((current) => ({ ...current, itemName: event.target.value }))} className="input" />
             </label>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Work item description
-              <textarea value={reworkDraft.itemDescription} onChange={(event) => setReworkDraft((current) => ({ ...current, itemDescription: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              <textarea value={reworkDraft.itemDescription} onChange={(event) => setReworkDraft((current) => ({ ...current, itemDescription: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
             </label>
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Estimated hours
-                <input type="number" min="1" step="1" value={reworkDraft.estimatedHours} onChange={(event) => setReworkDraft((current) => ({ ...current, estimatedHours: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+                <input type="number" min="1" step="1" value={reworkDraft.estimatedHours} onChange={(event) => setReworkDraft((current) => ({ ...current, estimatedHours: event.target.value }))} className="input" />
               </label>
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Technician
-                <select value={reworkDraft.assignedTechnicianIdsText} onChange={(event) => setReworkDraft((current) => ({ ...current, assignedTechnicianIdsText: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]">
+                <select value={reworkDraft.assignedTechnicianIdsText} onChange={(event) => setReworkDraft((current) => ({ ...current, assignedTechnicianIdsText: event.target.value }))} className="select">
                   <option value="">Unassigned</option>
                   {technicianOptions.map((account) => (
                     <option key={account.id} value={account.id}>
@@ -1032,17 +1013,17 @@ export default function BackJobsContent() {
                 </select>
               </label>
             </div>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Rework notes
-              <textarea value={reworkDraft.notes} onChange={(event) => setReworkDraft((current) => ({ ...current, notes: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              <textarea value={reworkDraft.notes} onChange={(event) => setReworkDraft((current) => ({ ...current, notes: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
             </label>
             {!canSubmitRework ? (
-              <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+              <p className="status-message status-message-warning text-xs">
                 Rework job creation unlocks only when the selected back-job is approved for rework and has no linked rework job order.
               </p>
             ) : null}
             {reworkState.message ? (
-              <div className={`rounded-xl border px-4 py-3 text-sm ${reworkState.status === 'rework_saved' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : 'border-red-500/25 bg-red-500/10 text-red-200'}`}>
+              <div className={reworkState.status === 'rework_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}>
                 {reworkState.message}
               </div>
             ) : null}

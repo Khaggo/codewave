@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 
 import PortalLink from '@/components/PortalLink'
+import PageHeader from '@/components/ui/PageHeader'
 import { ApiError, listAdminCustomers } from '@/lib/authClient'
 import { listVehicleBookings } from '@/lib/bookingStaffClient'
 import { createVehicleInspection, listVehicleInspections } from '@/lib/inspectionStaffClient'
@@ -27,6 +28,7 @@ import {
   inspectionStaffRoles,
   summarizeInspectionFindings,
 } from '@/lib/api/generated/inspections/staff-web-inspections'
+import { getInspectionMessageTone, splitRefs } from './digitalIntakeInspectionView.mjs'
 
 const formatLabel = (value) =>
   String(value ?? '')
@@ -51,12 +53,6 @@ const formatDateTime = (value) => {
   })
 }
 
-const splitRefs = (value) =>
-  String(value ?? '')
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-
 const getVerificationTone = (state) => {
   if (state === 'verified') return 'badge-green'
   if (state === 'mixed_verification') return 'badge-orange'
@@ -64,24 +60,10 @@ const getVerificationTone = (state) => {
 }
 
 const getMessageTone = (state) => {
-  if (
-    state === 'capture_saved_verified' ||
-    state === 'capture_saved_mixed' ||
-    state === 'capture_saved_unverified' ||
-    state === 'history_loaded'
-  ) {
-    return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-  }
-
-  if (state === 'history_empty') {
-    return 'border-brand-orange/25 bg-brand-orange/10 text-orange-100'
-  }
-
-  if (state === 'history_loading') {
-    return 'border-blue-500/25 bg-blue-500/10 text-blue-100'
-  }
-
-  return 'border-red-500/25 bg-red-500/10 text-red-200'
+  const tone = getInspectionMessageTone(state)
+  if (tone === 'success') return 'status-message status-message-success'
+  if (tone === 'warning' || tone === 'info') return 'status-message status-message-warning'
+  return 'status-message status-message-danger'
 }
 
 const initialDraft = {
@@ -464,19 +446,25 @@ export default function DigitalIntakeInspectionWorkspace() {
 
   return (
     <div className="ops-page-shell">
-      <section className="ops-page-header">
-        <div className="space-y-2">
-          <p className="ops-page-kicker">Digital Intake And Inspection</p>
-          <h1 className="ops-page-title">
-            {isTechnician ? 'Capture Vehicle Condition And Workshop Findings' : 'Capture Vehicle Condition Before Release Decisions'}
-          </h1>
-          <p className="ops-page-copy">
-            {isTechnician
-              ? 'Use this technician surface to review known vehicle history, capture intake or completion findings, and keep inspection evidence attached to the vehicle before and after service work.'
-              : 'Use this staff surface for vehicle-scoped intake, pre-repair, completion, and return inspection records. QA release review stays separate in the quality-gate workspace and should not replace physical inspection evidence.'}
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        eyebrow="Digital Intake And Inspection"
+        title={
+          isTechnician
+            ? 'Capture Vehicle Condition And Workshop Findings'
+            : 'Capture Vehicle Condition Before Release Decisions'
+        }
+        description={
+          isTechnician
+            ? 'Use this technician surface to review known vehicle history, capture intake or completion findings, and keep inspection evidence attached to the vehicle before and after service work.'
+            : 'Use this staff surface for vehicle-scoped intake, pre-repair, completion, and return inspection records. QA release review stays separate in the quality-gate workspace and should not replace physical inspection evidence.'
+        }
+        meta={
+          <>
+            <span className="badge badge-gray">{isTechnician ? 'Technician workflow' : 'Staff workflow'}</span>
+            <span className="badge badge-gray">{inspections.length} loaded record{inspections.length === 1 ? '' : 's'}</span>
+          </>
+        }
+      />
 
       <section className="ops-summary-grid">
         <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
@@ -577,7 +565,7 @@ export default function DigitalIntakeInspectionWorkspace() {
 
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             {!isTechnician ? (
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Customer
                 <select
                   value={draft.customerUserId}
@@ -588,7 +576,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                       bookingId: '',
                     })
                   }
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="select"
                 >
                   <option value="">Choose a customer</option>
                   {customers.map((customer) => (
@@ -599,20 +587,20 @@ export default function DigitalIntakeInspectionWorkspace() {
                 </select>
               </label>
             ) : null}
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Vehicle
               {isTechnician ? (
                 <input
                   value={draft.vehicleId}
                   onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="input"
                   placeholder="Paste vehicle UUID"
                 />
               ) : (
                 <select
                   value={draft.vehicleId}
                   onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="select"
                 >
                   <option value="">Choose a customer vehicle</option>
                   {customerVehicleOptions.map((vehicle) => (
@@ -623,20 +611,20 @@ export default function DigitalIntakeInspectionWorkspace() {
                 </select>
               )}
             </label>
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Optional booking
               {isTechnician ? (
                 <input
                   value={draft.bookingId}
                   onChange={(event) => updateDraft({ bookingId: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="input"
                   placeholder="Booking UUID if this came from intake"
                 />
               ) : (
                 <select
                   value={draft.bookingId}
                   onChange={(event) => updateDraft({ bookingId: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="select"
                 >
                   <option value="">No booking link</option>
                   {vehicleBookings.map((booking) => (
@@ -647,12 +635,12 @@ export default function DigitalIntakeInspectionWorkspace() {
                 </select>
               )}
             </label>
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Inspection type
               <select
                 value={draft.inspectionType}
                 onChange={(event) => updateDraft({ inspectionType: event.target.value })}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="intake">Intake</option>
                 <option value="pre_repair">Pre Repair</option>
@@ -660,12 +648,12 @@ export default function DigitalIntakeInspectionWorkspace() {
                 <option value="return">Return</option>
               </select>
             </label>
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Status
               <select
                 value={draft.status}
                 onChange={(event) => updateDraft({ status: event.target.value })}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="pending">Pending</option>
                 <option value="completed">Completed</option>
@@ -673,36 +661,44 @@ export default function DigitalIntakeInspectionWorkspace() {
                 <option value="void">Void</option>
               </select>
             </label>
-            <label className="text-xs text-ink-muted md:col-span-2">
+            <label className="label md:col-span-2">
               Notes
               <textarea
                 value={draft.notes}
                 onChange={(event) => updateDraft({ notes: event.target.value })}
                 rows={3}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="input min-h-[96px] resize-y"
                 placeholder="Describe the condition observed during intake or inspection."
               />
             </label>
-            <label className="text-xs text-ink-muted md:col-span-2">
+            <label className="label md:col-span-2">
               Attachment refs
               <input
                 value={draft.attachmentRefsText}
                 onChange={(event) => updateDraft({ attachmentRefsText: event.target.value })}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="input"
                 placeholder="upload://vehicle/intake-front, upload://vehicle/intake-dashboard"
               />
             </label>
           </div>
 
-          <div className="mt-5 rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">Primary Finding</p>
+          <div className="mt-5 rounded-2xl border border-surface-border bg-surface-card p-4 md:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-ink-primary">Primary Finding</p>
+                <p className="mt-1 text-sm text-ink-muted">
+                  Capture the clearest visible condition or repair-relevant note from this inspection.
+                </p>
+              </div>
+              <span className="badge badge-gray">Single finding entry</span>
+            </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Category
                 <select
                   value={draft.findingCategory}
                   onChange={(event) => updateDraft({ findingCategory: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="select"
                 >
                   {inspectionFindingCategoryOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -711,12 +707,12 @@ export default function DigitalIntakeInspectionWorkspace() {
                   ))}
                 </select>
               </label>
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Severity
                 <select
                   value={draft.findingSeverity}
                   onChange={(event) => updateDraft({ findingSeverity: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="select"
                 >
                   <option value="info">Info</option>
                   <option value="low">Low</option>
@@ -724,22 +720,22 @@ export default function DigitalIntakeInspectionWorkspace() {
                   <option value="high">High</option>
                 </select>
               </label>
-              <label className="text-xs text-ink-muted md:col-span-2">
+              <label className="label md:col-span-2">
                 Finding label
                 <input
                   value={draft.findingLabel}
                   onChange={(event) => updateDraft({ findingLabel: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="input"
                   placeholder="Brake pedal response confirmed"
                 />
               </label>
-              <label className="text-xs text-ink-muted md:col-span-2">
+              <label className="label md:col-span-2">
                 Finding notes
                 <textarea
                   value={draft.findingNotes}
                   onChange={(event) => updateDraft({ findingNotes: event.target.value })}
                   rows={3}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="input min-h-[96px] resize-y"
                   placeholder="Evidence notes or customer-safe observation."
                 />
               </label>
@@ -756,7 +752,7 @@ export default function DigitalIntakeInspectionWorkspace() {
           </div>
 
           {captureState.message ? (
-            <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${getMessageTone(captureState.status)}`}>
+            <div className={`mt-4 ${getMessageTone(captureState.status)}`}>
               {captureState.message}
             </div>
           ) : null}
@@ -797,13 +793,13 @@ export default function DigitalIntakeInspectionWorkspace() {
             </div>
 
             {historyState.message ? (
-              <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${getMessageTone(historyState.status)}`}>
+              <div className={`mt-4 ${getMessageTone(historyState.status)}`}>
                 {historyState.message}
               </div>
             ) : null}
 
             {historyState.status === 'history_loading' ? (
-              <div className="mt-4 flex items-center gap-2 rounded-2xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-secondary">
+              <div className="status-message status-message-warning mt-4 flex items-center gap-2">
                 <Loader2 size={15} className="animate-spin text-brand-orange" />
                 Loading live inspection history...
               </div>
@@ -820,7 +816,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                   />
                 ))
               ) : (
-                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-8 text-center">
+                <div className="empty-panel px-4 py-8 text-center">
                   <AlertTriangle size={26} className="mx-auto text-brand-orange" />
                   <p className="mt-3 text-sm font-bold text-ink-primary">No inspection records loaded</p>
                   <p className="mt-2 text-sm text-ink-muted">
@@ -891,9 +887,9 @@ export default function DigitalIntakeInspectionWorkspace() {
                 </div>
               </div>
             ) : (
-              <p className="mt-4 rounded-2xl border border-surface-border bg-surface-card p-4 text-sm text-ink-muted">
+              <div className="empty-panel mt-4">
                 Select an inspection from history to review its findings and verification state.
-              </p>
+              </div>
             )}
           </section>
         </div>

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 
 import { useToast } from '@/components/Toast.jsx'
+import PageHeader from '@/components/ui/PageHeader'
 import { useUser } from '@/lib/userContext'
 import {
   loadAdminAnalyticsSnapshot,
@@ -37,6 +38,7 @@ import {
   getAnalyticsFreshnessTone,
   getLoadedAdminAnalyticsSectionCount,
 } from '@/lib/api/generated/analytics/staff-web-dashboard'
+import { buildPartialErrorMessage, getVisibleAnalyticsTabs } from './adminAnalyticsView.mjs'
 
 const TAB_ICONS = {
   overview: BarChart3,
@@ -96,15 +98,19 @@ const formatShortDateTime = (value) => {
 
 function InfoPanel({ title, body, tone = 'info' }) {
   const Icon = tone === 'warning' ? AlertTriangle : Database
+  const toneClassName =
+    tone === 'warning'
+      ? 'status-message status-message-warning'
+      : 'status-message status-message-success'
 
   return (
-    <div className="card p-4 flex gap-3">
-      <div className="w-10 h-10 rounded-xl bg-surface-raised border border-surface-border flex items-center justify-center flex-shrink-0">
+    <div className={`${toneClassName} flex gap-3`}>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-surface-border bg-surface-raised">
         <Icon size={18} className={tone === 'warning' ? 'text-amber-400' : 'text-ink-muted'} />
       </div>
       <div>
         <p className="text-sm font-bold text-ink-primary">{title}</p>
-        <p className="text-sm text-ink-muted mt-1 leading-6">{body}</p>
+        <p className="mt-1 text-sm leading-6 text-ink-secondary">{body}</p>
       </div>
     </div>
   )
@@ -163,7 +169,7 @@ function SectionShell({
       </div>
       <div className="p-5">
         {loading && !hasData ? (
-          <div className="py-10 text-center">
+          <div className="empty-panel py-10">
             <LoaderCircle size={26} className="mx-auto mb-3 animate-spin text-brand-orange" />
             <p className="text-sm font-bold text-ink-primary">Loading Live Data</p>
             <p className="text-xs text-ink-muted mt-2">
@@ -177,7 +183,7 @@ function SectionShell({
         ) : null}
 
         {!loading && !errorMessage && !hasData ? (
-          <div className="py-10 text-center">
+          <div className="empty-panel py-10">
             <Sparkles size={24} className="mx-auto mb-3 text-ink-muted" />
             <p className="text-sm font-bold text-ink-primary">No Derived Signals Yet</p>
             <p className="text-xs text-ink-muted mt-2 max-w-xl mx-auto">{emptyMessage}</p>
@@ -192,23 +198,23 @@ function SectionShell({
 
 function DataTable({ headers, rows, emptyLabel }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm min-w-[720px]">
+    <div className="table-scroll">
+      <table className="data-table min-w-[720px]">
         <thead>
-          <tr className="text-left text-xs text-ink-muted border-b border-surface-border">
+          <tr>
             {headers.map((header) => (
-              <th key={header} className="px-4 py-3 font-semibold">
+              <th key={header}>
                 {header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-surface-border">
+        <tbody>
           {rows.length ? (
             rows
           ) : (
             <tr>
-              <td colSpan={headers.length} className="px-4 py-10 text-center text-ink-muted">
+              <td colSpan={headers.length} className="text-center text-ink-muted">
                 {emptyLabel}
               </td>
             </tr>
@@ -325,7 +331,7 @@ export default function AdminAnalyticsWorkspace() {
     [errors],
   )
   const visibleTabs = useMemo(
-    () => adminAnalyticsTabs.filter((item) => item.key !== 'summaryReview'),
+    () => getVisibleAnalyticsTabs(adminAnalyticsTabs),
     [],
   )
   const isBusy = requestState === 'loading' || requestState === 'refreshing'
@@ -499,84 +505,74 @@ export default function AdminAnalyticsWorkspace() {
 
   if (!canReadAnalytics) {
     return (
-      <InfoPanel
-        tone="warning"
-        title="Admin analytics is adviser and admin only"
-        body="Sign in as a service adviser or super admin to view the analytics dashboard and summary-review hub."
-      />
+      <section className="empty-panel text-left">
+        <AlertTriangle size={24} className="text-brand-orange" />
+        <h1 className="mt-3 text-2xl font-black text-ink-primary">Admin analytics is adviser and admin only</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-secondary">
+          Sign in as a service adviser or super admin to view the analytics dashboard and summary-review hub.
+        </p>
+      </section>
     )
   }
 
   if (!user?.accessToken) {
     return (
-      <InfoPanel
-        tone="warning"
-        title="Staff session required"
-        body="Restore a valid staff session before loading the live admin analytics snapshot."
-      />
+      <section className="empty-panel text-left">
+        <AlertTriangle size={24} className="text-brand-orange" />
+        <h1 className="mt-3 text-2xl font-black text-ink-primary">Staff session required</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-secondary">
+          Restore a valid staff session before loading the live admin analytics snapshot.
+        </p>
+      </section>
     )
   }
 
   return (
-    <div className="space-y-5">
-      <section className="card relative overflow-hidden p-6 md:p-7">
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-80 bg-gradient-to-l from-brand-orange/10 to-transparent" />
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-brand-orange">
-              Operational Read Models
-            </p>
-            <h1 className="mt-3 text-3xl font-bold text-ink-primary">
-              Admin Analytics
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
-              This hub keeps analytics read-only and derived so staff can inspect the real
-              snapshot without mixing reporting with unrelated review placeholders.
-            </p>
-          </div>
+    <div className="ops-page-shell">
+      <PageHeader
+        eyebrow="Operational Read Models"
+        title="Admin Analytics"
+        description="This hub keeps analytics read-only and derived so staff can inspect the real snapshot without mixing reporting with unrelated review placeholders."
+        actions={
+          <button
+            type="button"
+            onClick={() => loadAnalytics({ showToast: true, refreshSnapshot: true })}
+            disabled={isBusy}
+            className="btn-ghost"
+          >
+            <RefreshCcw size={14} className={isBusy ? 'animate-spin' : ''} />
+            Refresh Live Data
+          </button>
+        }
+        meta={
+          <>
+            <span className="badge badge-blue">{analyticsDerivedStateLabel}</span>
+            <span className={`badge ${freshnessMeta.badge}`}>{freshnessMeta.label}</span>
+            <span className={`badge ${snapshotStatusMeta.badge}`}>{snapshotStatusMeta.label}</span>
+            <span className="badge badge-gray">{LOAD_STATE_LABELS[derivedLoadState]}</span>
+          </>
+        }
+      />
 
-          <div className="flex flex-col items-start gap-3 lg:items-end">
-            <div className="flex flex-wrap gap-2">
-              <span className="badge badge-blue">{analyticsDerivedStateLabel}</span>
-              <span className={`badge ${freshnessMeta.badge}`}>{freshnessMeta.label}</span>
-              <span className={`badge ${snapshotStatusMeta.badge}`}>{snapshotStatusMeta.label}</span>
-              <span className="badge badge-gray">
-                {LOAD_STATE_LABELS[derivedLoadState]}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => loadAnalytics({ showToast: true, refreshSnapshot: true })}
-              disabled={isBusy}
-              className="btn-ghost"
-            >
-              <RefreshCcw size={14} className={isBusy ? 'animate-spin' : ''} />
-              Refresh Live Data
-            </button>
-          </div>
-        </div>
-
-        <div className="relative mt-6 grid gap-4 md:grid-cols-3">
-          <StatCard
-            icon={Database}
-            label="Loaded Sections"
-            value={`${loadedSectionCount}/6`}
-            sub="Dashboard, operations, back-jobs, loyalty, invoice aging, and audit trail."
-          />
-          <StatCard
-            icon={Clock3}
-            label="Latest Refresh"
-            value={latestRefresh ? formatShortDateTime(latestRefresh) : 'Pending'}
-            sub="Most recent timestamp from the analytics snapshot."
-          />
-          <StatCard
-            icon={FileClock}
-            label="Oldest Section"
-            value={oldestRefresh ? formatShortDateTime(oldestRefresh) : 'Pending'}
-            sub="Use this to spot stale sections when one read model lags behind the others."
-          />
-        </div>
+      <section className="ops-summary-grid">
+        <StatCard
+          icon={Database}
+          label="Loaded Sections"
+          value={`${loadedSectionCount}/6`}
+          sub="Dashboard, operations, back-jobs, loyalty, invoice aging, and audit trail."
+        />
+        <StatCard
+          icon={Clock3}
+          label="Latest Refresh"
+          value={latestRefresh ? formatShortDateTime(latestRefresh) : 'Pending'}
+          sub="Most recent timestamp from the analytics snapshot."
+        />
+        <StatCard
+          icon={FileClock}
+          label="Oldest Section"
+          value={oldestRefresh ? formatShortDateTime(oldestRefresh) : 'Pending'}
+          sub="Use this to spot stale sections when one read model lags behind the others."
+        />
       </section>
 
       <InfoPanel
@@ -588,9 +584,7 @@ export default function AdminAnalyticsWorkspace() {
         <InfoPanel
           tone="warning"
           title="Some analytics sections did not load cleanly"
-          body={partialErrorEntries
-            .map(([key, message]) => `${key}: ${message}`)
-            .join(' ')}
+          body={buildPartialErrorMessage(partialErrorEntries)}
         />
       ) : null}
 

@@ -6,26 +6,7 @@ import { ArrowRight, Bell, ChevronDown, LogOut, Menu, Search, X } from 'lucide-r
 import PortalLink from '@/components/PortalLink'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import { isEcommerceEnabled } from '@/lib/runtimeFlags'
-
-const ROUTE_TITLES = {
-  '/': 'Dashboard',
-  '/vehicles': 'Vehicle Records',
-  '/bookings': 'Bookings',
-  '/backjobs': 'Back-Jobs',
-  '/insurance': 'Insurance Inquiries',
-  '/shop': 'Shop & Inventory',
-  '/loyalty': 'Loyalty Management',
-  '/admin/customers': 'Customers & Vehicles',
-  '/admin/users': 'User Administration',
-  '/admin/services': 'Service Management',
-  '/admin/job-orders': 'Job Order Workbench',
-  '/admin/intake-inspections': 'Intake Inspections',
-  '/admin/qa-audit': 'QA Audit',
-  '/admin/invoices': 'Invoice & Orders',
-  '/admin/catalog': 'Catalog Administration',
-  '/admin/inventory': 'Inventory',
-  '/admin/summaries': 'Analytics',
-}
+import { getShellRouteMeta } from './layoutShellView.mjs'
 
 const SEARCH_DESTINATIONS = [
   { label: 'Dashboard', sub: 'Staff overview and live operations shortcuts', href: '/' },
@@ -90,12 +71,12 @@ function GlobalSearch() {
   }
 
   return (
-    <div ref={wrapRef} className="relative hidden sm:block">
-      <div className="flex w-48 items-center gap-2 rounded-lg border border-surface-border bg-surface-raised px-3 py-1.5 lg:w-72">
+    <div ref={wrapRef} className="relative hidden md:block">
+      <div className="flex w-56 items-center gap-2 rounded-xl border border-surface-border bg-surface-card/84 px-3 py-2 lg:w-80 xl:w-[22rem]">
         <Search size={14} className="flex-shrink-0 text-ink-muted" />
         <input
           type="text"
-          placeholder="Search pages..."
+          placeholder="Find a workspace..."
           value={query}
           onChange={(event) => {
             setQuery(event.target.value)
@@ -124,7 +105,7 @@ function GlobalSearch() {
       {open && query ? (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-80 overflow-hidden rounded-xl border border-surface-border bg-surface-raised shadow-card-md animate-slide-up lg:w-96">
+          <div className="absolute right-0 z-20 mt-2 w-80 overflow-hidden rounded-2xl border border-surface-border bg-surface-card shadow-card-md animate-slide-up lg:w-96">
             <div className="border-b border-surface-border px-4 py-2.5">
               <p className="text-xs font-semibold text-ink-muted">
                 {results.length ? `${results.length} matching page${results.length === 1 ? '' : 's'}` : 'No page matches'}
@@ -137,13 +118,13 @@ function GlobalSearch() {
                     <PortalLink
                       href={result.href}
                       onClick={handleNavigate}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-hover"
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-hover/70"
                     >
                       <div
-                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg"
-                        style={{ backgroundColor: 'rgba(240,124,0,0.08)' }}
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl"
+                        style={{ backgroundColor: 'rgb(var(--brand-orange) / 0.08)' }}
                       >
-                        <ArrowRight size={14} style={{ color: '#f07c00' }} />
+                        <ArrowRight size={14} className="text-brand-orange" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-ink-primary">{result.label}</p>
@@ -155,7 +136,7 @@ function GlobalSearch() {
                 ))}
               </ul>
             ) : (
-              <div className="px-4 py-8 text-center">
+              <div className="empty-panel m-3 px-4 py-8 text-center">
                 <p className="text-sm text-ink-muted">
                   No live page result for &quot;<span className="font-medium text-ink-secondary">{query}</span>&quot;.
                 </p>
@@ -173,7 +154,7 @@ function GlobalSearch() {
 
 export default function Topbar({ onMenuToggle, user, onLogout }) {
   const pathname = usePathname()
-  const title = ROUTE_TITLES[pathname] ?? 'Autocare Portal'
+  const routeMeta = getShellRouteMeta(pathname)
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -189,16 +170,23 @@ export default function Topbar({ onMenuToggle, user, onLogout }) {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-surface-border bg-surface-card">
-      <div className="flex h-16 items-center gap-3 px-4">
-        <button onClick={onMenuToggle} className="rounded-lg p-1.5 text-ink-muted hover:bg-surface-hover md:hidden">
+    <header className="sticky top-0 z-20 border-b border-surface-border bg-surface-bg/88 backdrop-blur">
+      <div className="flex h-[72px] items-center gap-3 px-4 md:px-6 xl:px-8">
+        <button
+          onClick={onMenuToggle}
+          className="rounded-xl p-2 text-ink-muted hover:bg-surface-hover md:hidden"
+          aria-label="Open navigation"
+        >
           <Menu size={20} />
         </button>
 
-        <h1 className="mr-auto truncate text-sm font-bold tracking-tight text-ink-primary">{title}</h1>
+        <div className="mr-auto min-w-0">
+          <p className="truncate text-base font-semibold tracking-tight text-ink-primary">{routeMeta.title}</p>
+          <p className="hidden truncate text-xs text-ink-muted xl:block">{routeMeta.subtitle}</p>
+        </div>
 
-        <ThemeSwitcher />
         <GlobalSearch />
+        <ThemeSwitcher />
 
         <div className="relative">
           <button
@@ -207,28 +195,28 @@ export default function Topbar({ onMenuToggle, user, onLogout }) {
               setNotifOpen((value) => !value)
               setProfileOpen(false)
             }}
-            className="relative rounded-lg p-2 text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink-secondary"
+            className="relative rounded-xl border border-transparent p-2 text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink-secondary"
             aria-label="Open notifications"
           >
             <Bell size={18} />
             {unread > 0 ? (
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ backgroundColor: '#f07c00' }} />
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand-orange" />
             ) : null}
           </button>
 
           {notifOpen ? (
             <>
               <div className="fixed inset-0 z-10" onClick={close} />
-              <div className="absolute right-0 z-20 mt-1 w-80 overflow-hidden rounded-xl border border-surface-border bg-surface-raised shadow-card-md animate-slide-up">
+              <div className="absolute right-0 z-20 mt-2 w-80 overflow-hidden rounded-2xl border border-surface-border bg-surface-card shadow-card-md animate-slide-up">
                 <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
                   <p className="text-sm font-semibold text-ink-primary">Notifications</p>
-                  <span className="badge badge-gray">Live feed</span>
+                  <span className="badge badge-gray">Updates</span>
                 </div>
-                <div className="px-4 py-8 text-center">
+                <div className="empty-panel m-3 px-4 py-8 text-center">
                   <Bell size={22} className="mx-auto text-ink-muted" />
-                  <p className="mt-3 text-sm font-semibold text-ink-primary">No live staff notifications yet</p>
+                  <p className="mt-3 text-sm font-semibold text-ink-primary">No notifications yet</p>
                   <p className="mt-2 text-xs leading-5 text-ink-muted">
-                    Booking, QA, and inventory notices will appear here once the backend feed is connected to this header.
+                    Booking, QA, and inventory updates will appear here when notification delivery is available.
                   </p>
                 </div>
               </div>
@@ -243,17 +231,17 @@ export default function Topbar({ onMenuToggle, user, onLogout }) {
               setProfileOpen((value) => !value)
               setNotifOpen(false)
             }}
-            className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-hover"
+            className="flex items-center gap-2 rounded-xl border border-transparent px-2 py-1.5 transition-colors hover:bg-surface-hover"
           >
             <div
-              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-              style={{ background: 'linear-gradient(135deg,#f07c00,#c9951a)' }}
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+              style={{ backgroundColor: 'rgb(var(--brand-orange))' }}
             >
               {initials}
             </div>
             <div className="hidden text-left md:block">
               <p className="text-xs font-semibold leading-none text-ink-primary">{user?.name ?? 'Admin'}</p>
-              <p className="mt-0.5 text-[10px] font-semibold" style={{ color: '#f07c00' }}>
+              <p className="mt-1 text-[11px] text-ink-muted">
                 {user?.roleLabel ?? user?.role ?? 'Administrator'}
               </p>
             </div>
@@ -263,10 +251,10 @@ export default function Topbar({ onMenuToggle, user, onLogout }) {
           {profileOpen ? (
             <>
               <div className="fixed inset-0 z-10" onClick={close} />
-              <div className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-xl border border-surface-border bg-surface-raised shadow-card-md animate-slide-up">
+              <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-surface-border bg-surface-card shadow-card-md animate-slide-up">
                 <div className="border-b border-surface-border px-4 py-3">
                   <p className="text-sm font-semibold text-ink-primary">{user?.name ?? 'Admin'}</p>
-                  <p className="mt-0.5 text-xs font-semibold" style={{ color: '#f07c00' }}>
+                  <p className="mt-1 text-xs text-ink-muted">
                     {user?.roleLabel ?? user?.role}
                   </p>
                   <p className="mt-0.5 truncate text-xs text-ink-muted">{user?.email}</p>

@@ -17,6 +17,7 @@ import {
   Wrench,
 } from 'lucide-react'
 
+import PageHeader from '@/components/ui/PageHeader'
 import PortalLink from '@/components/PortalLink'
 import { ApiError, listAdminCustomers } from '@/lib/authClient'
 import { getInvoiceAgingAnalytics } from '@/lib/analyticsAdminClient'
@@ -32,6 +33,11 @@ import {
   getStaffInvoiceOrderLoadState,
   staffInvoiceOrderPaymentCopy,
 } from '@/lib/api/generated/invoice-orders/staff-web-invoice-order-management'
+import {
+  getInvoicePdfStateLabel,
+  getLoadMessageTone,
+  shortId,
+} from './invoiceOrderManagementView.mjs'
 
 const LOAD_STATE_LABELS = {
   invoice_order_ready: 'Ready',
@@ -79,64 +85,29 @@ const formatLabel = (value, fallback = 'Unknown') => {
     .join(' ')
 }
 
-const shortId = (value) => {
-  const normalizedValue = String(value ?? '').trim()
-  return normalizedValue ? normalizedValue.slice(0, 8).toUpperCase() : 'NONE'
-}
-
-const getInvoicePdfStateLabel = (serviceInvoice) => {
-  if (!serviceInvoice) {
-    return 'Awaiting invoice'
-  }
-
-  if (serviceInvoice.pdfEmailError) {
-    return 'Email retry needed'
-  }
-
-  if (serviceInvoice.pdfEmailSentAt) {
-    return 'PDF emailed'
-  }
-
-  if (serviceInvoice.pdfGeneratedAt) {
-    return 'PDF generated'
-  }
-
-  return 'Generation pending'
-}
-
-const getLoadMessageToneClass = (status) => {
-  if (status === 'invoice_order_loaded') {
-    return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-  }
-
-  if (
-    status === 'invoice_order_failed' ||
-    status === 'invoice_order_runtime_unavailable' ||
-    status === 'invoice_order_forbidden_role' ||
-    status === 'invoice_order_unauthorized'
-  ) {
-    return 'border-red-500/25 bg-red-500/10 text-red-200'
-  }
-
-  return 'border-amber-500/25 bg-amber-500/10 text-amber-100'
-}
+const getLoadMessageToneClass = (status) =>
+  getLoadMessageTone(status) === 'success'
+    ? 'status-message status-message-success'
+    : getLoadMessageTone(status) === 'danger'
+      ? 'status-message status-message-danger'
+      : 'status-message status-message-warning'
 
 function InfoPanel({ icon: Icon = Database, title, body, tone = 'info' }) {
-  const toneClass =
-    tone === 'warning'
-      ? 'border-amber-500/20 bg-amber-500/10 text-amber-300'
-      : tone === 'danger'
-        ? 'border-red-500/20 bg-red-500/10 text-red-300'
-        : 'border-brand-orange/15 bg-brand-orange/10 text-brand-orange'
+  const panelTone =
+    tone === 'danger'
+      ? 'status-message status-message-danger'
+      : tone === 'warning'
+        ? 'status-message status-message-warning'
+        : 'status-message status-message-warning'
 
   return (
-    <div className="card flex gap-3 p-4">
-      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border ${toneClass}`}>
+    <div className={`flex gap-3 ${panelTone}`}>
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
         <Icon size={18} />
       </div>
       <div>
-        <p className="text-sm font-bold text-ink-primary">{title}</p>
-        <p className="mt-1 text-sm leading-6 text-ink-muted">{body}</p>
+        <p className="text-sm font-semibold text-ink-primary">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-ink-secondary">{body}</p>
       </div>
     </div>
   )
@@ -148,10 +119,10 @@ function MetricCard({ icon: Icon, label, value, sub }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</p>
-          <p className="mt-3 text-3xl font-black text-ink-primary">{value}</p>
-          {sub ? <p className="mt-2 text-xs leading-5 text-ink-muted">{sub}</p> : null}
+          <p className="mt-3 text-3xl font-semibold text-ink-primary">{value}</p>
+          {sub ? <p className="mt-2 text-xs leading-5 text-ink-secondary">{sub}</p> : null}
         </div>
-        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
+        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
           <Icon size={20} />
         </div>
       </div>
@@ -216,10 +187,10 @@ function RouteLedger({ routes }) {
 function PaymentEntries({ entries }) {
   if (!entries?.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-surface-border bg-surface-raised px-4 py-8 text-center">
+      <div className="empty-panel">
         <ReceiptText size={22} className="mx-auto text-ink-muted" />
-        <p className="mt-3 text-sm font-bold text-ink-primary">No payment entries yet</p>
-        <p className="mt-2 text-xs leading-5 text-ink-muted">
+        <p className="mt-3 text-sm font-semibold text-ink-primary">No payment entries yet</p>
+        <p className="mt-2 text-sm leading-6 text-ink-secondary">
           Payment-entry creation is backend-owned and remains manual tracking, not payment-gateway settlement.
         </p>
       </div>
@@ -227,23 +198,23 @@ function PaymentEntries({ entries }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-sm">
+    <div className="table-scroll">
+      <table className="data-table min-w-[720px]">
         <thead>
-          <tr className="border-b border-surface-border text-left text-xs text-ink-muted">
-            <th className="px-4 py-3 font-semibold">Received</th>
-            <th className="px-4 py-3 font-semibold">Amount</th>
-            <th className="px-4 py-3 font-semibold">Method</th>
-            <th className="px-4 py-3 font-semibold">Reference</th>
+          <tr>
+            <th>Received</th>
+            <th>Amount</th>
+            <th>Method</th>
+            <th>Reference</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-surface-border">
+        <tbody>
           {entries.map((entry) => (
-            <tr key={entry.id} className="hover:bg-surface-hover">
-              <td className="px-4 py-3.5 text-ink-secondary">{formatDateTime(entry.receivedAt)}</td>
-              <td className="px-4 py-3.5 font-bold text-ink-primary">{entry.amountLabel}</td>
-              <td className="px-4 py-3.5 text-ink-secondary">{entry.paymentMethodLabel}</td>
-              <td className="px-4 py-3.5 text-ink-secondary">{entry.reference ?? 'No reference'}</td>
+            <tr key={entry.id}>
+              <td className="text-ink-secondary">{formatDateTime(entry.receivedAt)}</td>
+              <td className="font-semibold text-ink-primary">{entry.amountLabel}</td>
+              <td className="text-ink-secondary">{entry.paymentMethodLabel}</td>
+              <td className="text-ink-secondary">{entry.reference ?? 'No reference'}</td>
             </tr>
           ))}
         </tbody>
@@ -516,34 +487,31 @@ export default function InvoiceOrderManagementWorkspace() {
 
   return (
     <div className="ops-page-shell">
-      <section className="ops-page-header">
-        <div className="space-y-2">
-          <p className="ops-page-kicker">Financial Operations</p>
-          <h1 className="ops-page-title">Invoice & Order Management</h1>
-          <p className="ops-page-copy">
-            Inspect service invoice readiness, known ecommerce order snapshots, and aging analytics from one
-            structured staff finance surface.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={loadInvoiceAging}
-          disabled={agingState.status === 'invoice_order_loading'}
-          className="ops-action-secondary min-w-[148px] self-start disabled:cursor-not-allowed disabled:opacity-60 xl:self-auto"
-        >
-          <RefreshCcw size={14} className={agingState.status === 'invoice_order_loading' ? 'animate-spin' : undefined} />
-          Refresh
-        </button>
-      </section>
+      <PageHeader
+        eyebrow="Financial Operations"
+        title="Invoice & Order Management"
+        description="Inspect service invoice readiness, known ecommerce order snapshots, and aging analytics from one structured staff finance surface."
+        actions={(
+          <button
+            type="button"
+            onClick={loadInvoiceAging}
+            disabled={agingState.status === 'invoice_order_loading'}
+            className="ops-action-secondary min-w-[148px] self-start disabled:cursor-not-allowed disabled:opacity-60 xl:self-auto"
+          >
+            <RefreshCcw size={14} className={agingState.status === 'invoice_order_loading' ? 'animate-spin' : undefined} />
+            Refresh
+          </button>
+        )}
+      />
 
       <section className="ops-control-strip">
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1fr)_auto]">
-          <label className="text-xs text-ink-muted">
-            Job order
+          <label>
+            <span className="label">Job order</span>
             <select
               value={jobOrderId}
               onChange={(event) => setJobOrderId(event.target.value)}
-              className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="select"
             >
               <option value="">Choose a finalized job order</option>
               {jobOrderOptions.map((jobOrder) => (
@@ -566,15 +534,15 @@ export default function InvoiceOrderManagementWorkspace() {
             )}
             Load Job Order
           </button>
-          <label className="text-xs text-ink-muted">
-            Customer
+          <label>
+            <span className="label">Customer</span>
             <select
               value={selectedCustomerUserId}
               onChange={(event) => {
                 setSelectedCustomerUserId(event.target.value)
                 setEcommerceOrderId('')
               }}
-              className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="select"
             >
               <option value="">Choose customer for ecommerce orders</option>
               {customerOptions.map((customer) => (
@@ -584,12 +552,12 @@ export default function InvoiceOrderManagementWorkspace() {
               ))}
             </select>
           </label>
-          <label className="text-xs text-ink-muted">
-            Ecommerce order
+          <label>
+            <span className="label">Ecommerce order</span>
             <select
               value={ecommerceOrderId}
               onChange={(event) => setEcommerceOrderId(event.target.value)}
-              className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="select"
             >
               <option value="">{selectedCustomerUserId ? 'Choose ecommerce order' : 'Choose customer first'}</option>
               {ecommerceOrderOptions.map((order) => (
@@ -672,7 +640,7 @@ export default function InvoiceOrderManagementWorkspace() {
               </div>
 
               {agingState.message ? (
-                <div className={`rounded-xl border px-4 py-3 text-xs ${getLoadMessageToneClass(agingState.status)}`}>
+                <div className={getLoadMessageToneClass(agingState.status)}>
                   {agingState.message}
                 </div>
               ) : null}
@@ -714,29 +682,29 @@ export default function InvoiceOrderManagementWorkspace() {
                   Refresh Aging
                 </button>
               </div>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[720px] text-sm">
+              <div className="mt-4 table-scroll">
+                <table className="data-table min-w-[720px]">
                   <thead>
-                    <tr className="border-b border-surface-border text-left text-xs text-ink-muted">
-                      <th className="px-4 py-3 font-semibold">Invoice</th>
-                      <th className="px-4 py-3 font-semibold">Latest Status</th>
-                      <th className="px-4 py-3 font-semibold">Scheduled For</th>
-                      <th className="px-4 py-3 font-semibold">Rule Count</th>
+                    <tr>
+                      <th>Invoice</th>
+                      <th>Latest Status</th>
+                      <th>Scheduled For</th>
+                      <th>Rule Count</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-surface-border">
+                  <tbody>
                     {trackedInvoicePolicies.length ? (
                       trackedInvoicePolicies.map((policy) => (
-                        <tr key={policy.invoiceId} className="hover:bg-surface-hover">
-                          <td className="px-4 py-3.5 font-semibold text-ink-primary break-all">{policy.invoiceId}</td>
-                          <td className="px-4 py-3.5 text-ink-secondary">{policy.latestReminderStatus}</td>
-                          <td className="px-4 py-3.5 text-ink-secondary">{policy.latestScheduledForLabel}</td>
-                          <td className="px-4 py-3.5 font-bold text-ink-primary">{policy.reminderRuleIds?.length ?? 0}</td>
+                        <tr key={policy.invoiceId}>
+                          <td className="break-all font-semibold text-ink-primary">{policy.invoiceId}</td>
+                          <td className="text-ink-secondary">{policy.latestReminderStatus}</td>
+                          <td className="text-ink-secondary">{policy.latestScheduledForLabel}</td>
+                          <td className="font-semibold text-ink-primary">{policy.reminderRuleIds?.length ?? 0}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-ink-muted">
+                        <td colSpan={4} className="text-center text-ink-muted">
                           No tracked reminder policies are present in the latest snapshot.
                         </td>
                       </tr>
@@ -764,7 +732,7 @@ export default function InvoiceOrderManagementWorkspace() {
             </div>
 
             {jobOrderState.message ? (
-              <div className={`mt-4 rounded-xl border px-4 py-3 text-xs ${getLoadMessageToneClass(jobOrderState.status)}`}>
+              <div className={`mt-4 ${getLoadMessageToneClass(jobOrderState.status)}`}>
                 {jobOrderState.message}
               </div>
             ) : null}
@@ -812,7 +780,7 @@ export default function InvoiceOrderManagementWorkspace() {
                     ) : null}
 
                     {serviceInvoice.pdfEmailError ? (
-                      <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+                      <div className="mt-4 status-message status-message-warning">
                         PDF delivery issue: {serviceInvoice.pdfEmailError}
                       </div>
                     ) : null}
@@ -851,7 +819,7 @@ export default function InvoiceOrderManagementWorkspace() {
             </div>
 
             {ecommerceState.message ? (
-              <div className={`mt-4 rounded-xl border px-4 py-3 text-xs ${getLoadMessageToneClass(ecommerceState.status)}`}>
+              <div className={`mt-4 ${getLoadMessageToneClass(ecommerceState.status)}`}>
                 {ecommerceState.message}
               </div>
             ) : null}

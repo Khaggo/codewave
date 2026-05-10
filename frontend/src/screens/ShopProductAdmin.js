@@ -10,7 +10,9 @@ import {
 } from '@autocare/shared'
 
 import { useToast } from '@/components/Toast.jsx'
+import PageHeader from '@/components/ui/PageHeader'
 import { useCatalogCategories, usePublishedCatalogProducts } from '@/hooks/useOperationsStore.js'
+import { buildModalForm, getCatalogImageCount, parseImageUrls } from './shopProductAdminView.mjs'
 
 const EMPTY_PRODUCT_FORM = {
   name: '',
@@ -36,27 +38,6 @@ const EMPTY_MODAL_FORM = {
 
 function formatCurrency(value) {
   return `PHP ${Number(value ?? 0).toLocaleString()}`
-}
-
-function parseImageUrls(value) {
-  return String(value ?? '')
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function buildModalForm(product) {
-  return {
-    id: product.id,
-    name: product.name ?? '',
-    category: product.category ?? '',
-    price: String(product.price ?? ''),
-    stock: String(product.stock ?? ''),
-    sku: product.sku ?? '',
-    description: product.description ?? '',
-    imageInput: '',
-    images: [...(product.images ?? [])],
-  }
 }
 
 function SummaryTile({ label, value, sub, icon: Icon }) {
@@ -259,7 +240,7 @@ function ProductEditModal({
                         </div>
                       ))
                     ) : (
-                      <div className="rounded-xl border border-dashed border-surface-border bg-surface-card px-4 py-6 text-sm text-ink-muted">
+                      <div className="empty-panel px-4 py-6 text-sm text-ink-muted">
                         No product images added yet.
                       </div>
                     )}
@@ -471,22 +452,24 @@ export default function ShopProductAdmin() {
 
   return (
     <div className="ops-page-shell">
-      <section className="ops-page-header">
-        <div className="space-y-2">
-          <p className="ops-page-kicker">Catalog Administration</p>
-          <h1 className="ops-page-title">Publish Storefront-Ready Shop Products</h1>
-          <p className="ops-page-copy">
-            Create categories, publish catalog products, and maintain live storefront entries from one clean admin workspace.
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        eyebrow="Catalog Administration"
+        title="Publish Storefront-Ready Shop Products"
+        description="Create categories, publish catalog products, and maintain live storefront entries from one clean admin workspace."
+        meta={
+          <>
+            <span className="badge badge-gray">{categories.length} categories</span>
+            <span className="badge badge-gray">{publishedProducts.length} live products</span>
+          </>
+        }
+      />
 
       <section className="ops-summary-grid">
         <SummaryTile label="Categories" value={categories.length} sub="Available for product publishing" icon={FolderPlus} />
         <SummaryTile label="Published Products" value={publishedProducts.length} sub="Live in the customer catalog" icon={PackagePlus} />
         <SummaryTile
           label="Product Images"
-          value={publishedProducts.reduce((total, product) => total + product.images.length, 0)}
+          value={getCatalogImageCount(publishedProducts)}
           sub="Catalog image URLs attached to live products"
           icon={ImagePlus}
         />
@@ -521,11 +504,17 @@ export default function ShopProductAdmin() {
           </form>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            {categories.map((category) => (
-              <span key={category.id} className="badge badge-gray">
-                {category.name}
-              </span>
-            ))}
+            {categories.length ? (
+              categories.map((category) => (
+                <span key={category.id} className="badge badge-gray">
+                  {category.name}
+                </span>
+              ))
+            ) : (
+              <div className="empty-panel w-full px-4 py-6 text-sm text-ink-muted">
+                No catalog categories yet.
+              </div>
+            )}
           </div>
         </SectionShell>
 
@@ -646,31 +635,31 @@ export default function ShopProductAdmin() {
         description="Click any product row to open the edit modal and manage product details or images."
         action={<span className="badge badge-orange">{publishedProducts.length} live</span>}
       >
-        <div className="overflow-hidden rounded-2xl border border-surface-border">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-sm" aria-label="Published products">
+        <div className="table-surface">
+          <div className="table-scroll">
+            <table className="data-table min-w-[860px]" aria-label="Published products">
               <thead>
-                <tr className="border-b border-surface-border bg-surface-raised text-left text-xs text-ink-muted">
-                  <th className="px-5 py-3.5 font-semibold">Product</th>
-                  <th className="px-5 py-3.5 font-semibold">Category</th>
-                  <th className="px-5 py-3.5 font-semibold">Price</th>
-                  <th className="px-5 py-3.5 font-semibold">Stock</th>
-                  <th className="px-5 py-3.5 font-semibold">Status</th>
-                  <th className="px-5 py-3.5 font-semibold">Images</th>
-                  <th className="px-5 py-3.5 font-semibold">Actions</th>
+                <tr>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Status</th>
+                  <th>Images</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-surface-border">
+              <tbody>
                 {publishedProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-sm text-ink-muted">
+                    <td colSpan={7} className="text-center text-sm text-ink-muted">
                       No published products yet.
                     </td>
                   </tr>
                 ) : (
                   publishedProducts.map((product) => (
-                    <tr key={product.id} className="transition-colors hover:bg-surface-hover">
-                      <td className="px-5 py-4">
+                    <tr key={product.id}>
+                      <td>
                         <button
                           type="button"
                           className="text-left"
@@ -680,14 +669,14 @@ export default function ShopProductAdmin() {
                           <p className="mt-1 text-xs text-ink-muted">{product.sku || 'No SKU assigned'}</p>
                         </button>
                       </td>
-                      <td className="px-5 py-4 text-ink-secondary">{product.category}</td>
-                      <td className="px-5 py-4 font-semibold text-ink-primary">{formatCurrency(product.price)}</td>
-                      <td className="px-5 py-4 font-semibold text-ink-primary">{product.stock}</td>
-                      <td className="px-5 py-4">
+                      <td>{product.category}</td>
+                      <td className="font-semibold text-ink-primary">{formatCurrency(product.price)}</td>
+                      <td className="font-semibold text-ink-primary">{product.stock}</td>
+                      <td>
                         <span className="badge badge-green">{product.status}</span>
                       </td>
-                      <td className="px-5 py-4 text-ink-secondary">{product.images.length}</td>
-                      <td className="px-5 py-4">
+                      <td>{product.images.length}</td>
+                      <td>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"

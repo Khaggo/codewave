@@ -97,17 +97,7 @@ export default function RegisterPage({ navigation, onRegister }) {
       setFormError('');
 
       try {
-        const registrationResult = await onRegister(trimmedAccount);
-
-        if (registrationResult?.mode === 'session') {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: registrationResult.nextRoute || 'Menu' }],
-          });
-          return;
-        }
-
-        const enrollment = registrationResult?.enrollment ?? registrationResult;
+        const enrollment = await onRegister(trimmedAccount);
 
         navigation.replace('OTP', {
           email: trimmedAccount.email,
@@ -388,29 +378,24 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    paddingVertical: 18,
+    borderRadius: radius.md,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.34,
-    shadowRadius: 24,
-    elevation: 5,
   },
   primaryButtonDisabled: {
-    opacity: 0.72,
+    opacity: 0.7,
   },
   primaryButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   signInRow: {
     marginTop: 20,
@@ -420,18 +405,18 @@ const styles = StyleSheet.create({
   },
   signInText: {
     color: colors.mutedText,
-    fontSize: 15,
+    fontSize: 14,
   },
   signInLink: {
     color: colors.primary,
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   formErrorText: {
     color: colors.danger,
     fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 19,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
 });

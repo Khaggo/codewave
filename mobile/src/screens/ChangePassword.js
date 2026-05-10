@@ -3,11 +3,10 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PasswordChecklist from '../components/PasswordChecklist';
 import PasswordField from '../components/PasswordField';
 import ScreenShell from '../components/ScreenShell';
-import { ApiError, requestChangePasswordOtp } from '../lib/authClient';
 import { colors, radius } from '../theme';
 import { validateChangePasswordForm } from '../utils/validation';
 
-export default function ChangePassword({ navigation, account }) {
+export default function ChangePassword({ navigation, account, onChangePassword }) {
   const [form, setForm] = useState({
     currentPassword: '',
     newPassword: '',
@@ -15,7 +14,6 @@ export default function ChangePassword({ navigation, account }) {
   });
   const [focusedField, setFocusedField] = useState('');
   const [errors, setErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
   const shouldShowPasswordChecklist =
     focusedField === 'newPassword' || form.newPassword.length > 0 || Boolean(errors.newPassword);
 
@@ -44,10 +42,10 @@ export default function ChangePassword({ navigation, account }) {
     }));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     const nextErrors = validateChangePasswordForm({
       ...form,
-      savedPassword: '',
+      savedPassword: account?.password || '',
     });
 
     if (Object.keys(nextErrors).length > 0) {
@@ -55,43 +53,9 @@ export default function ChangePassword({ navigation, account }) {
       return;
     }
 
-    if (!account?.accessToken) {
-      Alert.alert(
-        'Session Expired',
-        'Sign in again before requesting a password change code.',
-      );
-      return;
-    }
-
-    setSubmitting(true);
-
-    try {
-      const enrollment = await requestChangePasswordOtp({
-        currentPassword: form.currentPassword,
-        accessToken: account.accessToken,
-      });
-
-      navigation.navigate('OTP', {
-        email: account?.email,
-        maskedEmail: enrollment.maskedEmail,
-        otpPurpose: 'passwordChange',
-        enrollmentId: enrollment.enrollmentId,
-        currentPassword: form.currentPassword,
-        pendingPassword: form.newPassword,
-      });
-    } catch (requestError) {
-      const message =
-        requestError instanceof ApiError
-          ? requestError.message
-          : 'Unable to request a password change code right now.';
-      setErrors((currentErrors) => ({
-        ...currentErrors,
-        currentPassword: message,
-      }));
-      Alert.alert('Password Change Failed', message);
-    } finally {
-      setSubmitting(false);
-    }
+    onChangePassword(form.newPassword);
+    Alert.alert('Password Updated', 'Your password has been changed successfully.');
+    navigation.goBack();
   };
 
   return (
@@ -143,14 +107,8 @@ export default function ChangePassword({ navigation, account }) {
         textContentType="password"
       />
 
-      <TouchableOpacity
-        style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]}
-        onPress={() => void handleSubmit()}
-        disabled={submitting}
-      >
-        <Text style={styles.primaryButtonText}>
-          {submitting ? 'Sending Code...' : 'Send Verification Code'}
-        </Text>
+      <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit}>
+        <Text style={styles.primaryButtonText}>Save Password</Text>
       </TouchableOpacity>
     </ScreenShell>
   );
@@ -173,29 +131,25 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 6,
   },
   subtitle: {
     color: colors.mutedText,
     fontSize: 14,
-    lineHeight: 22,
-    marginBottom: 24,
+    lineHeight: 21,
+    marginBottom: 22,
   },
   primaryButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    paddingVertical: 16,
+    borderRadius: radius.md,
+    paddingVertical: 14,
     alignItems: 'center',
-  },
-  primaryButtonDisabled: {
-    opacity: 0.7,
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

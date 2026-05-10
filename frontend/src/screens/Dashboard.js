@@ -1,58 +1,58 @@
 'use client'
 
 import PortalLink from '@/components/PortalLink'
+import PageHeader from '@/components/ui/PageHeader'
 import {
-  AlertTriangle,
-  BarChart3,
+  ArrowRight,
   CalendarCheck,
-  CheckCircle2,
   ClipboardCheck,
+  ClipboardList,
   FileSearch,
-  PackageSearch,
   ReceiptText,
   ShieldCheck,
   Users,
   Wrench,
 } from 'lucide-react'
 
-import { jobOrders, timelineEvents, vehicles } from '@/lib/mockData'
+import { appointments, jobOrders, timelineEvents, vehicles } from '@/lib/mockData'
 import { useUser } from '@/lib/userContext'
 
-const workflowSteps = [
+const quickActions = [
   {
     href: '/bookings',
-    label: 'Booking Schedule',
-    description: 'Review customer booking requests, daily slots, queue state, and staff booking actions.',
+    label: 'Start booking',
+    description: 'Open the daily schedule and booking queue.',
     icon: CalendarCheck,
-    status: 'Live backend',
   },
   {
-    href: '/admin/intake-inspections',
-    label: 'Intake Inspection',
-    description: 'Capture vehicle condition and load vehicle-scoped inspection history before service work.',
-    icon: FileSearch,
-    status: 'Known vehicle required',
+    href: '/bookings',
+    label: 'Open pending bookings',
+    description: 'Review reservations awaiting confirmation or payment.',
+    icon: ClipboardCheck,
   },
   {
     href: '/admin/job-orders',
-    label: 'Job Orders',
-    description: 'Create job orders from confirmed bookings, add progress, photos, finalization, and payment records.',
-    icon: Wrench,
-    status: 'Live backend',
+    label: 'Create job order',
+    description: 'Move confirmed work into execution.',
+    icon: ClipboardList,
   },
   {
-    href: '/admin/qa-audit',
-    label: 'QA Audit',
-    description: 'Load quality gates, review findings, and record super-admin overrides when needed.',
-    icon: ShieldCheck,
-    status: 'Known job order required',
+    href: '/admin/intake-inspections',
+    label: 'Continue intake inspection',
+    description: 'Capture or review vehicle condition before service.',
+    icon: FileSearch,
   },
   {
     href: '/admin/invoices',
-    label: 'Invoices & Orders',
-    description: 'Lookup service invoice-ready job orders and known ecommerce order or invoice records.',
+    label: 'View invoices',
+    description: 'Open invoice-ready work and order records.',
     icon: ReceiptText,
-    status: 'Known record required',
+  },
+  {
+    href: '/admin/qa-audit',
+    label: 'QA review',
+    description: 'Review quality gates and release readiness.',
+    icon: ShieldCheck,
   },
 ]
 
@@ -60,42 +60,42 @@ const adminShortcuts = [
   {
     href: '/admin/users',
     label: 'Staff Accounts',
-    description: 'Create staff, mechanic, technician, and admin accounts with generated IDs and emails.',
+    description: 'Provision and manage staff access.',
     icon: Users,
     superAdminOnly: true,
   },
   {
     href: '/admin/services',
     label: 'Service Management',
-    description: 'Create booking service categories and publish customer-bookable services.',
+    description: 'Maintain bookable service offerings.',
     icon: Wrench,
   },
   {
     href: '/admin/catalog',
     label: 'Catalog Admin',
-    description: 'Manage ecommerce product catalog items separately from service offerings.',
-    icon: PackageSearch,
+    description: 'Manage visible product listings.',
+    icon: ClipboardList,
   },
   {
     href: '/admin/inventory',
     label: 'Inventory Admin',
-    description: 'Review stock visibility and inventory records without demo-only placeholder alerts.',
-    icon: PackageSearch,
+    description: 'Review stock health and inventory records.',
+    icon: ClipboardCheck,
   },
   {
     href: '/admin/summaries',
     label: 'Analytics',
-    description: 'Open the analytics workspace for backend-backed operational summaries.',
-    icon: BarChart3,
+    description: 'Open reporting and operational summaries.',
+    icon: ReceiptText,
   },
 ]
 
-const technicianStatusMeta = {
-  confirmed: { label: 'Ready to start', badge: 'badge-blue' },
-  assigned: { label: 'Assigned', badge: 'badge-blue' },
-  in_progress: { label: 'In progress', badge: 'badge-orange' },
-  blocked: { label: 'Blocked', badge: 'badge-red' },
-  completed: { label: 'Completed', badge: 'badge-green' },
+const statusMeta = {
+  confirmed: { label: 'Ready', className: 'badge-blue' },
+  assigned: { label: 'Assigned', className: 'badge-blue' },
+  in_progress: { label: 'In progress', className: 'badge-orange' },
+  blocked: { label: 'Blocked', className: 'badge-red' },
+  completed: { label: 'Completed', className: 'badge-green' },
 }
 
 function getGreeting() {
@@ -105,125 +105,182 @@ function getGreeting() {
   return 'Good evening'
 }
 
-function formatTechnicianStatus(status) {
+function formatDate(value) {
+  if (!value) {
+    return 'No date available'
+  }
+
+  return new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+function getVehicleRecord(vehicleId) {
+  return vehicles.find((item) => item.id === vehicleId)
+}
+
+function getStatusInfo(status) {
+  return statusMeta[status] ?? { label: 'Queued', className: 'badge-gray' }
+}
+
+function StatCard({ label, value, description }) {
   return (
-    technicianStatusMeta[status]?.label ??
-    String(status ?? '')
-      .split('_')
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ')
+    <div className="card p-5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</p>
+      <p className="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">{value}</p>
+      <p className="mt-2 text-sm leading-6 text-ink-secondary">{description}</p>
+    </div>
   )
 }
 
-function RouteCard({ item }) {
+function QuickActionTile({ item }) {
   const Icon = item.icon
 
   return (
-    <PortalLink href={item.href} className="card group p-5 transition-colors hover:border-brand-orange/50">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
-          <Icon size={19} />
-        </div>
-        {item.status ? <span className="badge badge-gray">{item.status}</span> : null}
+    <PortalLink
+      href={item.href}
+      className="group flex h-full items-start gap-3 rounded-2xl border border-surface-border bg-surface-card px-4 py-4 transition-all duration-150 hover:border-brand-orange/30 hover:bg-surface-hover/40"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
+        <Icon size={18} />
       </div>
-      <h2 className="mt-5 text-lg font-black text-ink-primary">{item.label}</h2>
-      <p className="mt-2 text-sm leading-6 text-ink-secondary">{item.description}</p>
-      <p className="mt-4 text-xs font-bold uppercase tracking-[0.18em] text-brand-orange">
-        Open workspace
-      </p>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-ink-primary">{item.label}</p>
+          <ArrowRight size={14} className="text-ink-dim transition-transform duration-150 group-hover:translate-x-0.5" />
+        </div>
+        <p className="mt-1 text-sm leading-6 text-ink-secondary">{item.description}</p>
+      </div>
     </PortalLink>
   )
 }
 
-function EmptyStateCard({ title, body }) {
+function WorkRow({ item }) {
+  const status = getStatusInfo(item.status)
+
   return (
-    <div className="rounded-2xl border border-dashed border-surface-border bg-surface-raised p-5">
-      <p className="text-sm font-bold text-ink-primary">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-ink-muted">{body}</p>
+    <li className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1.1fr)_180px_180px_160px] lg:items-center">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-ink-primary">{item.vehicleLabel}</p>
+          <span className={`badge ${status.className}`}>{status.label}</span>
+        </div>
+        <p className="mt-1 text-sm text-ink-secondary">{item.owner}</p>
+        <p className="mt-2 text-sm leading-6 text-ink-muted">{item.serviceSummary}</p>
+      </div>
+
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Assigned</p>
+        <p className="mt-1 text-sm text-ink-primary">{item.technician || 'Awaiting assignment'}</p>
+      </div>
+
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Target date</p>
+        <p className="mt-1 text-sm text-ink-primary">{formatDate(item.date)}</p>
+      </div>
+
+      <div className="flex items-center gap-3 lg:justify-end">
+        <PortalLink href={`/admin/job-orders?jobOrderId=${encodeURIComponent(item.id)}`} className="btn-ghost min-h-10 px-3">
+          Open
+        </PortalLink>
+      </div>
+    </li>
+  )
+}
+
+function ActivityItem({ event }) {
+  const vehicle = getVehicleRecord(event.vehicleId)
+
+  return (
+    <li className="rounded-2xl border border-surface-border bg-surface-raised/60 px-4 py-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm font-semibold text-ink-primary">{vehicle?.model ?? 'Vehicle record'}</p>
+        <span className="text-xs text-ink-muted">• {formatDate(event.date)}</span>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-ink-secondary">{event.description}</p>
+      <p className="mt-2 text-xs text-ink-muted">
+        {event.technicianName ? `Updated by ${event.technicianName}` : 'Recorded by operations staff'}
+      </p>
+    </li>
+  )
+}
+
+function EmptyPanel({ title, body }) {
+  return (
+    <div className="empty-panel">
+      <p className="text-sm font-semibold text-ink-primary">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-ink-secondary">{body}</p>
     </div>
   )
 }
 
-function TechnicianSummaryCard({ icon: Icon, label, value, copy }) {
+function AdminShortcutTile({ item }) {
+  const Icon = item.icon
+
   return (
-    <div className="card p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</p>
-          <p className="mt-3 text-3xl font-black tracking-tight text-ink-primary">{value}</p>
-          <p className="mt-2 text-sm leading-6 text-ink-secondary">{copy}</p>
-        </div>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
-          <Icon size={18} />
-        </div>
+    <PortalLink
+      href={item.href}
+      className="flex items-start gap-3 rounded-2xl border border-surface-border bg-surface-card px-4 py-4 transition-all duration-150 hover:border-brand-orange/25 hover:bg-surface-hover/40"
+    >
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-raised text-brand-orange">
+        <Icon size={16} />
       </div>
-    </div>
+      <div>
+        <p className="text-sm font-semibold text-ink-primary">{item.label}</p>
+        <p className="mt-1 text-sm leading-6 text-ink-secondary">{item.description}</p>
+      </div>
+    </PortalLink>
   )
 }
 
-function TechnicianTaskCard({ task }) {
-  const meta = technicianStatusMeta[task.status] ?? technicianStatusMeta.confirmed
+function TechnicianQueueRow({ item }) {
+  const status = getStatusInfo(item.status)
 
   return (
-    <div className="rounded-2xl border border-surface-border bg-surface-card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-orange">{task.id}</p>
-          <h3 className="mt-2 text-lg font-black text-ink-primary">{task.vehicleLabel}</h3>
-          <p className="mt-1 text-sm text-ink-secondary">{task.owner}</p>
+    <li className="grid gap-3 px-5 py-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_160px] lg:items-center">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-ink-primary">{item.vehicleLabel}</p>
+          <span className={`badge ${status.className}`}>{status.label}</span>
         </div>
-        <span className={`badge ${meta.badge}`}>{meta.label}</span>
+        <p className="mt-1 text-sm text-ink-secondary">{item.owner}</p>
+        <p className="mt-2 text-sm leading-6 text-ink-muted">{item.serviceSummary}</p>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">Work order</p>
-          <p className="mt-1 text-sm text-ink-primary">{task.serviceSummary}</p>
-        </div>
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">Shop</p>
-          <p className="mt-1 text-sm text-ink-primary">{task.shopName}</p>
-        </div>
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">Last update</p>
-          <p className="mt-1 text-sm text-ink-primary">{task.latestUpdate}</p>
-        </div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Latest update</p>
+        <p className="mt-1 text-sm text-ink-primary">{item.latestUpdate}</p>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <PortalLink href={`/admin/job-orders?jobOrderId=${encodeURIComponent(task.id)}`} className="ops-action-primary">
-          <Wrench size={14} />
+      <div className="flex items-center gap-3 lg:justify-end">
+        <PortalLink href={`/admin/job-orders?jobOrderId=${encodeURIComponent(item.id)}`} className="btn-primary min-h-10 px-3">
           Open Job Order
         </PortalLink>
-        <PortalLink href={`/admin/intake-inspections?vehicleId=${encodeURIComponent(task.vehicleId)}`} className="ops-action-secondary">
-          <ClipboardCheck size={14} />
-          Inspection History
-        </PortalLink>
       </div>
-    </div>
+    </li>
   )
 }
 
 export default function Dashboard() {
   const user = useUser()
-  const firstName = user?.name?.split(' ')[0] ?? 'Admin'
-  const visibleAdminShortcuts = adminShortcuts.filter((item) => !item.superAdminOnly || user?.role === 'super_admin')
+  const firstName = user?.name?.split(' ')[0] ?? 'Staff'
   const isTechnician = user?.role === 'technician'
 
-  const technicianQueue = jobOrders
+  const visibleAdminShortcuts = adminShortcuts.filter((item) => !item.superAdminOnly || user?.role === 'super_admin')
+
+  const activeJobOrders = jobOrders
     .filter((item) => item.status !== 'completed' && item.status !== 'cancelled')
     .map((item) => {
-      const vehicle = vehicles.find((entry) => entry.id === item.vehicleId)
+      const vehicle = getVehicleRecord(item.vehicleId)
       const relatedEvents = timelineEvents.filter((entry) => entry.jobOrderId === item.id)
-      const latestEvent = relatedEvents[0]
 
       return {
         ...item,
         owner: vehicle?.owner ?? 'Customer record unavailable',
         vehicleLabel: vehicle ? `${vehicle.model} • ${vehicle.plate}` : item.vehicleId,
         serviceSummary: item.services.join(', '),
-        latestUpdate: latestEvent?.description ?? 'Waiting for first workshop update',
+        latestUpdate: relatedEvents[0]?.description ?? 'No execution update recorded yet',
       }
     })
     .sort((left, right) => {
@@ -231,151 +288,135 @@ export default function Dashboard() {
       return (rank[left.status] ?? 99) - (rank[right.status] ?? 99)
     })
 
-  const inProgressCount = technicianQueue.filter((item) => item.status === 'in_progress').length
-  const readyToStartCount = technicianQueue.filter((item) => item.status === 'confirmed' || item.status === 'assigned').length
-  const needsUpdateCount = technicianQueue.filter((item) => item.status !== 'completed').length
+  const technicianQueue = activeJobOrders
+  const pendingBookings = appointments.filter((item) => ['pending', 'confirmed'].includes(item.status)).length
+  const activeRepairs = activeJobOrders.filter((item) => item.status === 'in_progress').length
+  const intakeReady = appointments.filter((item) => item.serviceStage === 'intake' || item.status === 'confirmed').length
+  const completedToday = timelineEvents.filter((item) => item.type === 'service' && item.category === 'verified').length
+  const recentActivity = [...timelineEvents]
+    .sort((left, right) => new Date(right.date) - new Date(left.date))
+    .slice(0, 4)
   const blockedCount = technicianQueue.filter((item) => item.status === 'blocked').length
+  const readyToStartCount = technicianQueue.filter((item) => ['confirmed', 'assigned'].includes(item.status)).length
 
   if (isTechnician) {
     return (
       <div className="ops-page-shell">
-        <section className="ops-page-header">
-          <div className="space-y-2">
-            <p className="ops-page-kicker">Technician Workspace</p>
-            <h1 className="ops-page-title">
-              {getGreeting()}, {firstName}
-            </h1>
-            <p className="ops-page-copy">
-              Review your assigned job orders, open the next vehicle in your queue, and keep progress,
-              evidence, and intake history updated from one focused work surface.
-            </p>
-          </div>
-          <PortalLink href="/admin/job-orders" className="ops-action-primary min-w-[160px] self-start xl:self-auto">
-            <Wrench size={14} />
-            Open Workbench
-          </PortalLink>
-        </section>
+        <PageHeader
+          eyebrow="Technician Workspace"
+          title={`${getGreeting()}, ${firstName}`}
+          description="Review assigned work, continue active repairs, and keep execution progress updated from one focused workspace."
+          actions={
+            <>
+              <PortalLink href="/admin/intake-inspections" className="btn-ghost">
+                <ClipboardCheck size={14} />
+                Inspection History
+              </PortalLink>
+              <PortalLink href="/admin/job-orders" className="btn-primary">
+                <Wrench size={14} />
+                Open Workbench
+              </PortalLink>
+            </>
+          }
+        />
 
         <section className="ops-summary-grid">
-          <TechnicianSummaryCard
-            icon={Wrench}
+          <StatCard
             label="Assigned job orders"
             value={technicianQueue.length}
-            copy="Live work currently in your technician queue."
+            description="Active work currently linked to your queue."
           />
-          <TechnicianSummaryCard
-            icon={AlertTriangle}
+          <StatCard
             label="In progress"
-            value={inProgressCount}
-            copy="Jobs that already need execution updates or completion evidence."
+            value={activeRepairs}
+            description="Repairs that already need progress updates or completion evidence."
           />
-          <TechnicianSummaryCard
-            icon={ClipboardCheck}
-            label="Needs update"
-            value={needsUpdateCount}
-            copy="Assigned work that should keep progress notes and photos current."
-          />
-          <TechnicianSummaryCard
-            icon={CheckCircle2}
+          <StatCard
             label="Ready to start"
             value={readyToStartCount}
-            copy="Confirmed jobs waiting for workshop execution."
+            description="Confirmed work that can move into workshop execution."
+          />
+          <StatCard
+            label="Blocked"
+            value={blockedCount}
+            description="Work that may need parts, approval, or supervisor review."
           />
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-          <div className="ops-panel">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+          <div className="table-surface">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-surface-border px-5 py-4">
               <div>
-                <p className="card-title">My Assigned Job Orders</p>
-                <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                  Open a job order to add technician progress, attach evidence, or continue vehicle work.
+                <p className="card-title">Assigned Work</p>
+                <p className="mt-1 text-sm leading-6 text-ink-secondary">
+                  Open a job order to capture progress, attach evidence, or review linked intake history.
                 </p>
               </div>
-              <span className="badge badge-gray">{technicianQueue.length} active tasks</span>
+              <span className="badge badge-gray">{technicianQueue.length} open items</span>
             </div>
 
-            <div className="mt-5 space-y-4">
-              {technicianQueue.length ? (
-                technicianQueue.map((task) => <TechnicianTaskCard key={task.id} task={task} />)
-              ) : (
-                <div className="rounded-2xl border border-surface-border bg-surface-card px-5 py-10 text-center">
-                  <CheckCircle2 size={28} className="mx-auto text-emerald-400" />
-                  <p className="mt-3 text-sm font-bold text-ink-primary">No assigned work in queue</p>
-                  <p className="mt-2 text-sm text-ink-muted">
-                    Your technician dashboard is clear right now. New assigned job orders will appear here.
-                  </p>
-                </div>
-              )}
-            </div>
+            {technicianQueue.length ? (
+              <ul className="divide-y divide-surface-border">
+                {technicianQueue.map((item) => (
+                  <TechnicianQueueRow key={item.id} item={item} />
+                ))}
+              </ul>
+            ) : (
+              <div className="p-5">
+                <EmptyPanel
+                  title="No assigned work right now"
+                  body="New technician assignments will appear here once a job order is handed off for execution."
+                />
+              </div>
+            )}
           </div>
 
-          <div className="space-y-5">
-            <div className="ops-panel">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-4">
+            <div className="card p-5">
+              <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="card-title">Today&apos;s Focus</p>
-                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                    The dashboard stays centered on technician execution instead of admin routing.
+                  <p className="mt-1 text-sm leading-6 text-ink-secondary">
+                    Keep updates timely so advisers, QA, and release staff see current execution status.
                   </p>
                 </div>
                 <span className={`badge ${blockedCount > 0 ? 'badge-red' : 'badge-green'}`}>
-                  {blockedCount > 0 ? `${blockedCount} blocked` : 'No blocked jobs'}
+                  {blockedCount > 0 ? `${blockedCount} blocked` : 'Clear'}
                 </span>
               </div>
 
-              <div className="mt-4 grid gap-3">
-                <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-                  <p className="text-sm font-bold text-ink-primary">Start with active work</p>
-                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                    Prioritize job orders already marked in progress so the service adviser sees fresh workshop updates.
+              <div className="mt-4 space-y-3">
+                <div className="rounded-2xl border border-surface-border bg-surface-raised/60 px-4 py-4">
+                  <p className="text-sm font-semibold text-ink-primary">Prioritize active repairs</p>
+                  <p className="mt-1 text-sm leading-6 text-ink-secondary">
+                    Update in-progress work first so the front desk sees the latest workshop status.
                   </p>
                 </div>
-                <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-                  <p className="text-sm font-bold text-ink-primary">Use intake history before repair</p>
-                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                    Open the linked inspection history when you need prior condition notes before continuing work.
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-                  <p className="text-sm font-bold text-ink-primary">Attach evidence early</p>
-                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                    Photo evidence and progress notes make QA and release review smoother once the repair is done.
+                <div className="rounded-2xl border border-surface-border bg-surface-raised/60 px-4 py-4">
+                  <p className="text-sm font-semibold text-ink-primary">Review intake before repair</p>
+                  <p className="mt-1 text-sm leading-6 text-ink-secondary">
+                    Use intake history whenever condition notes or prior findings affect the repair.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="ops-panel">
-              <div>
-                <p className="card-title">Technician Tools</p>
-                <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                  Jump straight into the two work surfaces technicians use most during execution.
-                </p>
-              </div>
-
+            <div className="card p-5">
+              <p className="card-title">Quick links</p>
               <div className="mt-4 grid gap-3">
-                <PortalLink href="/admin/intake-inspections" className="rounded-2xl border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-orange/40">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-ink-primary">Intake Inspection</p>
-                      <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                        Review vehicle condition history and capture new findings tied to a known vehicle.
-                      </p>
-                    </div>
-                    <ClipboardCheck size={18} className="text-brand-orange" />
-                  </div>
+                <PortalLink href="/admin/intake-inspections" className="btn-ghost justify-between">
+                  <span className="inline-flex items-center gap-2">
+                    <ClipboardCheck size={14} />
+                    Intake Inspection
+                  </span>
+                  <ArrowRight size={14} />
                 </PortalLink>
-                <PortalLink href="/admin/job-orders" className="rounded-2xl border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-orange/40">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-ink-primary">Job Order Workbench</p>
-                      <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                        Load a known job order, record progress, change status, and upload photo evidence.
-                      </p>
-                    </div>
-                    <Wrench size={18} className="text-brand-orange" />
-                  </div>
+                <PortalLink href="/admin/job-orders" className="btn-ghost justify-between">
+                  <span className="inline-flex items-center gap-2">
+                    <Wrench size={14} />
+                    Job Order Workbench
+                  </span>
+                  <ArrowRight size={14} />
                 </PortalLink>
               </div>
             </div>
@@ -386,73 +427,131 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="card relative overflow-hidden p-6 md:p-7">
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-80 bg-gradient-to-l from-brand-orange/10 to-transparent" />
-        <div className="relative max-w-4xl">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-brand-orange">
-            Staff Portal
-          </p>
-          <h1 className="mt-3 text-3xl font-black text-ink-primary">
-            {getGreeting()}, {firstName}
-          </h1>
-          <p className="mt-3 text-sm leading-6 text-ink-secondary">
-            This dashboard is now a live workflow launchpad. Demo-only revenue charts, stock warnings, and fake queues were removed so each card opens a real staff/admin surface.
-          </p>
-        </div>
-      </section>
-
-      <section>
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xl font-black text-ink-primary">Recommended Demo Flow</p>
-            <p className="mt-1 text-sm text-ink-muted">
-              Follow this order when presenting booking to release.
-            </p>
-          </div>
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Operations Dashboard"
+        title={`${getGreeting()}, ${firstName}`}
+        description="Use this workspace as the staff command center for booking review, intake coordination, job-order handoff, QA checks, and finance follow-through."
+        actions={
           <PortalLink href="/bookings" className="btn-primary">
-            <CalendarCheck size={15} />
-            Start With Bookings
+            <CalendarCheck size={14} />
+            Start booking flow
           </PortalLink>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-5">
-          {workflowSteps.map((item) => (
-            <RouteCard key={item.href} item={item} />
-          ))}
-        </div>
+        }
+        meta={<span className="badge badge-gray">{user?.roleLabel ?? user?.role ?? 'Staff access'}</span>}
+      />
+
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {quickActions.map((item) => (
+          <QuickActionTile key={item.label} item={item} />
+        ))}
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="card p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+      <section className="ops-summary-grid">
+        <StatCard
+          label="Pending bookings"
+          value={pendingBookings}
+          description="Reservations that still need payment review, approval, or schedule confirmation."
+        />
+        <StatCard
+          label="Active job orders"
+          value={activeJobOrders.length}
+          description="Open workshop work that has not yet been fully completed."
+        />
+        <StatCard
+          label="Intake ready"
+          value={intakeReady}
+          description="Vehicles ready for inspection or service handoff review."
+        />
+        <StatCard
+          label="Completed updates"
+          value={completedToday}
+          description="Recent verified service updates already logged in the system."
+        />
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_360px]">
+        <div className="table-surface">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-surface-border px-5 py-4">
             <div>
-              <p className="card-title">Admin Shortcuts</p>
-              <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                These pages are available according to your staff role guardrails.
+              <p className="card-title">Pending Work</p>
+              <p className="mt-1 text-sm leading-6 text-ink-secondary">
+                Follow the active workshop load first, then move confirmed work into the next service step.
               </p>
             </div>
-            <span className="badge badge-gray">{user?.roleLabel ?? user?.role ?? 'Staff'}</span>
+            <PortalLink href="/admin/job-orders" className="btn-ghost min-h-10 px-3">
+              Open job orders
+            </PortalLink>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {visibleAdminShortcuts.map((item) => (
-              <RouteCard key={item.href} item={item} />
-            ))}
-          </div>
+
+          {activeJobOrders.length ? (
+            <ul className="divide-y divide-surface-border">
+              {activeJobOrders.map((item) => (
+                <WorkRow key={item.id} item={item} />
+              ))}
+            </ul>
+          ) : (
+            <div className="p-5">
+              <EmptyPanel
+                title="No pending work"
+                body="When bookings move into active execution, open work items will appear here for quick follow-up."
+              />
+            </div>
+          )}
         </div>
 
-        <div className="space-y-4">
-          <EmptyStateCard
-            title="No fake notification feed"
-            body="Header notifications intentionally show an empty state until the staff notification feed is connected."
-          />
-          <EmptyStateCard
-            title="No demo-only finance cards"
-            body="Invoice and order queues now require known live records instead of placeholder staff queues or export controls."
-          />
-          <EmptyStateCard
-            title="No placeholder analytics on this landing page"
-            body="Use Analytics for backend-backed summaries; this page focuses on clear navigation and demo flow."
-          />
+        <div className="space-y-5">
+          <div className="card p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="card-title">Recent Activity</p>
+                <p className="mt-1 text-sm leading-6 text-ink-secondary">
+                  The latest recorded work across service, inspection, and administrative updates.
+                </p>
+              </div>
+              <span className="badge badge-gray">{recentActivity.length} updates</span>
+            </div>
+
+            {recentActivity.length ? (
+              <ul className="mt-4 space-y-3">
+                {recentActivity.map((event) => (
+                  <ActivityItem key={event.id} event={event} />
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-4">
+                <EmptyPanel
+                  title="No recent activity yet"
+                  body="Activity updates will appear here once staff records new booking, inspection, or workshop events."
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="card p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="card-title">Admin Shortcuts</p>
+                <p className="mt-1 text-sm leading-6 text-ink-secondary">
+                  Frequently used management workspaces for operations and administrative setup.
+                </p>
+              </div>
+              <span className="badge badge-gray">{visibleAdminShortcuts.length} available</span>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              {visibleAdminShortcuts.map((item) => (
+                <AdminShortcutTile key={item.href} item={item} />
+              ))}
+            </div>
+          </div>
+
+          {activeJobOrders.length === 0 ? (
+            <EmptyPanel
+              title="Operations queue is clear"
+              body="Use the booking schedule to review new reservations or open another workspace from the shortcuts above."
+            />
+          ) : null}
         </div>
       </section>
     </div>

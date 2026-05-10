@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react'
+import PageHeader from '@/components/ui/PageHeader'
 import { useUser } from '@/lib/userContext'
 import { ApiError, listAdminCustomers } from '@/lib/authClient'
 import {
@@ -23,6 +24,7 @@ import {
   getStaffInsuranceQueueState,
   insuranceReviewStaffRoles,
 } from '@/lib/api/generated/insurance/staff-web-insurance'
+import { formatStatusLabel as formatInsuranceStatusLabel, getInsuranceSummaryCards } from './insuranceView.mjs'
 
 const STATUS_META = {
   submitted: { label: 'Submitted', cls: 'badge-orange' },
@@ -35,11 +37,7 @@ const STATUS_META = {
 
 const formatStatusLabel = (value) =>
   STATUS_META[value]?.label ??
-  String(value ?? '')
-    .split('_')
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(' ')
+  formatInsuranceStatusLabel(value)
 
 const formatDateTime = (value) => {
   if (!value) return 'Not available'
@@ -79,7 +77,7 @@ function SummaryTile({ icon: Icon, label, value, sub }) {
 
 function BlockingState({ title, copy }) {
   return (
-    <div className="card px-5 py-10 text-center">
+    <div className="empty-panel px-5 py-10 text-center">
       <ShieldAlert size={34} className="mx-auto mb-3" style={{ color: '#f07c00' }} />
       <p className="text-sm font-bold text-ink-primary">{title}</p>
       <p className="text-xs text-ink-muted mt-2 max-w-lg mx-auto">{copy}</p>
@@ -129,6 +127,10 @@ export default function InsuranceContent() {
   const nextStatuses = useMemo(
     () => getAllowedInsuranceStatusTargets(activeInquiry?.status ?? 'closed'),
     [activeInquiry?.status],
+  )
+  const summaryCards = useMemo(
+    () => getInsuranceSummaryCards({ queueItems, queueState, activeInquiry }),
+    [activeInquiry, queueItems, queueState],
   )
 
   useEffect(() => {
@@ -302,59 +304,28 @@ export default function InsuranceContent() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="card p-4 md:p-5">
-        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-muted">Insurance Review Workspace</p>
-            <h1 className="text-xl md:text-2xl font-black text-ink-primary mt-1">Queue, Detail, and Claim Status Updates</h1>
-            <p className="text-sm text-ink-muted mt-2 max-w-3xl">
-              This web surface keeps staff review distinct from customer intake. Enter a known inquiry id from mobile intake,
-              then review details and move the claim status without placeholder queue data.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="badge badge-orange">
-              Queue planned
-            </span>
-            <span className="badge badge-green">
-              Detail review ready
-            </span>
-            <span className="badge badge-green">
-              Status update ready
-            </span>
-          </div>
-        </div>
-      </div>
+    <div className="ops-page-shell">
+      <PageHeader
+        eyebrow="Insurance Review Workspace"
+        title="Queue, Detail, and Claim Status Updates"
+        description="This web surface keeps staff review distinct from customer intake. Enter a known inquiry id from mobile intake, then review details and move the claim status without placeholder queue data."
+        meta={
+          <>
+            <span className="badge badge-orange">Queue planned</span>
+            <span className="badge badge-green">Detail review ready</span>
+            <span className="badge badge-green">Status update ready</span>
+          </>
+        }
+      />
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
-        <SummaryTile
-          icon={ClipboardList}
-          label="Review Queue"
-          value={queueItems.length}
-          sub={queueState === 'queue_loaded' ? 'Queue items loaded' : 'Manual inquiry lookup for now'}
-        />
-        <SummaryTile
-          icon={ShieldCheck}
-          label="Allowed Roles"
-          value="2"
-          sub="service adviser, super admin"
-        />
-        <SummaryTile
-          icon={FileClock}
-          label="Selected Inquiry"
-          value={activeInquiry ? formatStatusLabel(activeInquiry.status) : 'None'}
-          sub={activeInquiry ? activeInquiry.subject : 'Pick a queue item or enter an inquiry id'}
-        />
-        <SummaryTile
-          icon={CheckCircle2}
-          label="Editable Fields"
-          value="2"
-          sub="status and review notes only"
-        />
+        <SummaryTile icon={ClipboardList} {...summaryCards[0]} />
+        <SummaryTile icon={ShieldCheck} {...summaryCards[1]} />
+        <SummaryTile icon={FileClock} {...summaryCards[2]} />
+        <SummaryTile icon={CheckCircle2} {...summaryCards[3]} />
       </div>
 
-      <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3 text-xs text-ink-muted">
+      <div className="status-message status-message-warning text-xs">
         Pick a customer first, then choose from that customer&apos;s live insurance inquiries instead of pasting inquiry ids.
       </div>
 
@@ -373,12 +344,12 @@ export default function InsuranceContent() {
           </div>
 
           <div className="space-y-3 mt-4">
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Customer
               <select
                 value={selectedCustomerUserId}
                 onChange={(event) => setSelectedCustomerUserId(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                className="select"
               >
                 <option value="">Choose customer</option>
                 {customers.map((customer) => (
@@ -389,7 +360,7 @@ export default function InsuranceContent() {
               </select>
             </label>
             {queueItems.length === 0 ? (
-              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-8 text-center">
+              <div className="empty-panel px-4 py-8 text-center">
                 <p className="text-sm font-bold text-ink-primary">No queue items yet</p>
                 <p className="text-xs text-ink-muted mt-2">
                   Select a customer with insurance activity to continue.
@@ -441,7 +412,7 @@ export default function InsuranceContent() {
                 <select
                   value={manualInquiryId}
                   onChange={(event) => setManualInquiryId(event.target.value)}
-                  className="w-full lg:w-[320px] rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="select w-full lg:w-[320px]"
                 >
                   <option value="">Choose inquiry</option>
                   {queueItems.map((item) => (
@@ -458,12 +429,12 @@ export default function InsuranceContent() {
 
             {detailMessage ? (
               <div
-                className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
+                className={`mt-4 ${
                   detailState === 'detail_loaded'
-                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                    ? 'status-message status-message-success'
                     : detailState === 'forbidden_role'
-                      ? 'border-orange-500/25 bg-orange-500/10 text-orange-100'
-                      : 'border-red-500/25 bg-red-500/10 text-red-200'
+                      ? 'status-message status-message-warning'
+                      : 'status-message status-message-danger'
                 }`}
               >
                 {detailMessage}
@@ -518,7 +489,7 @@ export default function InsuranceContent() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-10 text-center mt-4">
+              <div className="empty-panel px-4 py-10 text-center mt-4">
                 <AlertTriangle size={28} className="mx-auto text-ink-dim mb-3" />
                 <p className="text-sm font-bold text-ink-primary">No inquiry selected yet</p>
                 <p className="text-xs text-ink-muted mt-2">
@@ -542,12 +513,12 @@ export default function InsuranceContent() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-3 mt-4">
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Next status
                 <select
                   value={updateDraft.status}
                   onChange={(event) => setUpdateDraft((current) => ({ ...current, status: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="select"
                   disabled={!nextStatuses.length}
                 >
                   {nextStatuses.length ? (
@@ -572,13 +543,13 @@ export default function InsuranceContent() {
                   Role failures, missing records, and invalid transitions stay distinct from one another.
                 </p>
               </div>
-              <label className="text-xs text-ink-muted md:col-span-2">
+              <label className="label md:col-span-2">
                 Review notes
                 <textarea
                   value={updateDraft.reviewNotes ?? ''}
                   onChange={(event) => setUpdateDraft((current) => ({ ...current, reviewNotes: event.target.value }))}
                   rows={4}
-                  className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                  className="input min-h-[120px] resize-y"
                   placeholder="Add staff review notes for the next status transition."
                 />
               </label>
@@ -586,12 +557,12 @@ export default function InsuranceContent() {
 
             {updateMessage ? (
               <div
-                className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
+                className={`mt-4 ${
                   updateState === 'status_update_saved'
-                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                    ? 'status-message status-message-success'
                     : updateState === 'forbidden_role'
-                      ? 'border-orange-500/25 bg-orange-500/10 text-orange-100'
-                      : 'border-red-500/25 bg-red-500/10 text-red-200'
+                      ? 'status-message status-message-warning'
+                      : 'status-message status-message-danger'
                 }`}
               >
                 {updateMessage}

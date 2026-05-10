@@ -40,13 +40,13 @@ export default function ThemeSwitcher() {
   }
 
   return (
-    <label className="hidden items-center gap-2 rounded-lg border border-surface-border bg-surface-raised px-2 py-1.5 text-xs text-ink-muted lg:flex">
-      <Palette size={14} className="text-brand-orange" />
-      <span className="sr-only">Theme</span>
+    <label className="hidden items-center gap-2 rounded-xl border border-surface-border bg-surface-card/80 px-3 py-2 text-xs text-ink-muted lg:flex">
+      <Palette size={14} className="text-ink-muted" />
+      <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-dim">Theme</span>
       <select
         value={theme}
         onChange={handleChange}
-        className="max-w-[9.5rem] bg-transparent text-xs font-semibold text-ink-secondary outline-none"
+        className="max-w-[9rem] bg-transparent text-xs font-semibold text-ink-secondary outline-none"
         aria-label="Choose portal theme"
       >
         {themes.map((item) => (

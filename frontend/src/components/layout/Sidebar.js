@@ -97,41 +97,38 @@ export default function Sidebar({ collapsed, onToggle }) {
   return (
     <aside
       className={`
-        fixed top-0 left-0 h-screen z-30 flex flex-col
-        bg-surface-card border-r border-surface-border
+        flex h-screen w-full flex-col
+        border-r border-surface-border bg-surface-card/95 backdrop-blur
         transition-all duration-200 ease-in-out
-        ${collapsed ? 'w-[60px]' : 'w-56'}
       `}
     >
       <div
-        className={`flex h-16 items-center gap-3 border-b border-surface-border
-                       ${collapsed ? 'px-2 justify-center' : 'px-4'}`}
+        className={`flex h-[72px] items-center gap-3 border-b border-surface-border ${collapsed ? 'justify-center px-3' : 'px-5'}`}
       >
         <div
-          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-          style={{ background: 'linear-gradient(135deg,#f07c00,#c9951a)' }}
+          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-surface-raised text-brand-orange"
         >
-          <Cog size={21} className="text-white" />
+          <Cog size={21} />
         </div>
         {!collapsed ? (
-          <div className="overflow-hidden leading-none">
-            <p className="text-base font-extrabold text-ink-primary tracking-tight whitespace-nowrap">CRUISERS CRIB</p>
-            <p className="text-[9px] font-medium text-ink-muted tracking-widest uppercase whitespace-nowrap mt-0.5">
+          <div className="min-w-0 overflow-hidden">
+            <p className="truncate text-sm font-semibold uppercase tracking-[0.22em] text-brand-orange">Cruisers Crib</p>
+            <p className="mt-1 truncate text-sm font-semibold tracking-tight text-ink-primary">
               Auto Care Center
             </p>
           </div>
         ) : null}
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
         {visibleSections.map((section) => (
           <div key={section.group ?? '_overview'}>
             {section.group && !collapsed ? (
-              <p className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-ink-dim">
+              <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-dim">
                 {section.group}
               </p>
             ) : null}
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               {section.items.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href
                 return (
@@ -140,24 +137,25 @@ export default function Sidebar({ collapsed, onToggle }) {
                     href={href}
                     title={collapsed ? label : undefined}
                     className={`
-                      flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
-                      transition-all duration-150
+                      flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all duration-150
                       ${collapsed ? 'justify-center' : ''}
-                      ${active ? 'text-ink-primary' : 'text-ink-muted hover:bg-surface-hover hover:text-ink-secondary'}
+                      ${active ? 'text-ink-primary' : 'text-ink-muted hover:bg-surface-hover/70 hover:text-ink-primary'}
                     `}
                     style={
                       active
                         ? {
-                            backgroundColor: 'rgb(var(--brand-orange) / 0.08)',
-                            color: 'rgb(var(--brand-orange))',
+                            background:
+                              'linear-gradient(90deg, rgb(var(--brand-orange) / 0.14), rgb(var(--brand-orange) / 0.03))',
+                            color: 'rgb(var(--ink-primary))',
+                            border: '1px solid rgb(var(--brand-orange) / 0.14)',
                           }
                         : {}
                     }
                   >
-                    <Icon size={17} className="flex-shrink-0" />
-                    {!collapsed ? <span className="truncate">{label}</span> : null}
+                    <Icon size={18} className={`flex-shrink-0 ${active ? 'text-brand-orange' : ''}`} />
+                    {!collapsed ? <span className="min-w-0 leading-5">{label}</span> : null}
                     {!collapsed && active ? (
-                      <span className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0 bg-brand-orange" />
+                      <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-brand-orange" />
                     ) : null}
                   </PortalLink>
                 )
@@ -167,15 +165,21 @@ export default function Sidebar({ collapsed, onToggle }) {
         ))}
       </nav>
 
-      <div className="px-2 pb-3">
+      <div className="border-t border-surface-border px-3 pb-4 pt-3">
         <button
           onClick={onToggle}
-          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg
-            text-ink-dim hover:bg-surface-hover hover:text-ink-secondary
-            transition-all duration-150 text-xs font-medium
+          className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-xs font-medium
+            text-ink-dim transition-all duration-150 hover:bg-surface-hover hover:text-ink-secondary
             ${collapsed ? 'justify-center' : ''}`}
         >
-          {collapsed ? <ChevronRight size={15} /> : <><ChevronLeft size={15} /><span>Collapse</span></>}
+          {collapsed ? (
+            <ChevronRight size={15} />
+          ) : (
+            <>
+              <ChevronLeft size={15} />
+              <span>Collapse navigation</span>
+            </>
+          )}
         </button>
       </div>
     </aside>

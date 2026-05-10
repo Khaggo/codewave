@@ -24,7 +24,6 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
     licensePlate: profile?.licensePlate || '',
     vehicleMake: profile?.vehicleMake || '',
     vehicleModel: profile?.vehicleModel || '',
-    vehicleColor: profile?.vehicleColor || '',
     vehicleYear:
       profile?.vehicleYear !== null && profile?.vehicleYear !== undefined
         ? String(profile.vehicleYear)
@@ -81,7 +80,6 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
       licensePlate: form.licensePlate.trim().toUpperCase(),
       vehicleMake: form.vehicleMake.trim(),
       vehicleModel: form.vehicleModel.trim(),
-      vehicleColor: form.vehicleColor.trim(),
       vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
       vehicleDisplayName: formatVehicleDisplayName({
         vehicleMake: form.vehicleMake,
@@ -155,7 +153,7 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
         onChangeText={() => null}
         placeholder=""
         editable={false}
-        helperText="Username is fixed for this account."
+        helperText="Username is fixed in this prototype."
       />
 
       <FormField
@@ -240,19 +238,6 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
       />
 
       <FormField
-        label="Vehicle Color"
-        value={form.vehicleColor}
-        onChangeText={(value) => handleFieldChange('vehicleColor', value)}
-        placeholder="Silver"
-        autoCapitalize="words"
-        error={errors.vehicleColor}
-        isFocused={focusedField === 'vehicleColor'}
-        onFocus={() => setFocusedField('vehicleColor')}
-        onBlur={() => setFocusedField('')}
-        editable={isEditing}
-      />
-
-      <FormField
         label="Vehicle Year"
         value={form.vehicleYear}
         onChangeText={(value) => handleFieldChange('vehicleYear', value)}
@@ -331,26 +316,26 @@ const styles = StyleSheet.create({
   primaryButton: {
     marginTop: 6,
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    paddingVertical: 16,
+    borderRadius: radius.md,
+    paddingVertical: 13,
     alignItems: 'center',
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   secondaryButton: {
-    marginTop: 12,
-    borderRadius: radius.medium,
+    marginTop: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: 16,
+    paddingVertical: 13,
     alignItems: 'center',
   },
   secondaryButtonText: {
     color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

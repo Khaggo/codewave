@@ -1,6 +1,15 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { colors, radius } from '../theme';
 import ScreenShell from './ScreenShell';
 
@@ -31,18 +40,18 @@ export default function AuthFrame({
     cardOpacity.stopAnimation();
     cardTranslate.stopAnimation();
     cardOpacity.setValue(0);
-    cardTranslate.setValue(20);
+    cardTranslate.setValue(16);
 
     Animated.parallel([
       Animated.timing(cardOpacity, {
         toValue: 1,
-        duration: 260,
+        duration: 220,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(cardTranslate, {
         toValue: 0,
-        duration: 300,
+        duration: 260,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
@@ -67,33 +76,31 @@ export default function AuthFrame({
         contentContainerStyle,
       ]}
     >
-      <View style={cardWrapStyle}>
-        <View
-          pointerEvents="none"
-          style={[styles.orbTopRight, isCompactLayout && styles.orbTopRightCompact]}
-        />
-        <View
-          pointerEvents="none"
-          style={[styles.orbBottomLeft, isCompactLayout && styles.orbBottomLeftCompact]}
-        />
-
+      <Animated.View style={cardWrapStyle}>
         <View style={[styles.card, isCompactLayout && styles.cardCompact, cardStyle]}>
-          {backLabel && onBack ? (
-            <TouchableOpacity style={styles.backLink} onPress={onBack} activeOpacity={0.8}>
-              <MaterialCommunityIcons name="arrow-left" size={18} color={colors.mutedText} />
-              <Text style={styles.backLinkText}>{backLabel}</Text>
-            </TouchableOpacity>
+          {onBack ? (
+            <View style={styles.backRow}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={onBack}
+                activeOpacity={0.7}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityLabel={backLabel || 'Go back'}
+              >
+                <Feather name="arrow-left" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
           ) : null}
 
           <View style={styles.heroBlock}>
             <View style={styles.brandRow}>
               <View style={styles.brandBadge}>
-                <MaterialCommunityIcons name="wrench-outline" size={22} color={colors.onPrimary} />
+                <Feather name="settings" size={20} color={colors.onPrimary} />
               </View>
 
-              <View>
-                <Text style={styles.brandEyebrow}>Cruisers Crib</Text>
-                <Text style={styles.brandTitle}>AUTOCARE</Text>
+              <View style={{ marginLeft: 12 }}>
+                <Text style={styles.brandEyebrow}>Auto Care Center</Text>
+                <Text style={styles.brandTitle}>CRUISERS CRIB</Text>
               </View>
             </View>
 
@@ -101,7 +108,7 @@ export default function AuthFrame({
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
 
-          <View style={styles.divider} />
+          {!isCompactLayout ? <View style={styles.divider} /> : null}
 
           <View
             style={[styles.body, bodyStyle]}
@@ -110,7 +117,7 @@ export default function AuthFrame({
             {children}
           </View>
         </View>
-      </View>
+      </Animated.View>
     </ScreenShell>
   );
 }
@@ -129,7 +136,7 @@ const styles = StyleSheet.create({
   },
   cardWrap: {
     width: '100%',
-    maxWidth: 520,
+    maxWidth: 480,
     alignSelf: 'center',
     position: 'relative',
     ...Platform.select({
@@ -140,44 +147,21 @@ const styles = StyleSheet.create({
   },
   cardWrapCompact: {
     maxWidth: '100%',
-  },
-  orbTopRight: {
-    position: 'absolute',
-    top: 18,
-    right: -28,
-    width: 118,
-    height: 118,
-    borderRadius: 59,
-    backgroundColor: 'rgba(255, 122, 0, 0.12)',
-  },
-  orbTopRightCompact: {
-    top: 10,
-    right: -18,
-  },
-  orbBottomLeft: {
-    position: 'absolute',
-    bottom: 20,
-    left: -22,
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    backgroundColor: 'rgba(255, 122, 0, 0.08)',
-  },
-  orbBottomLeftCompact: {
-    bottom: 42,
-    left: -12,
+    flexGrow: 1,
+    flex: 1,
+    alignSelf: 'stretch',
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.large,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.borderSoft,
+    borderColor: colors.border,
     overflow: 'hidden',
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.34,
-    shadowRadius: 28,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.32,
+    shadowRadius: 20,
+    elevation: 4,
     ...Platform.select({
       web: {
         minHeight: '100%',
@@ -190,68 +174,65 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     shadowRadius: 0,
     elevation: 0,
+    flexGrow: 1,
+    backgroundColor: 'transparent',
   },
-  backLink: {
+  backRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
-  backLinkText: {
-    color: colors.mutedText,
-    fontSize: 15,
-    fontWeight: '600',
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroBlock: {
     paddingHorizontal: 24,
-    paddingTop: 22,
-    paddingBottom: 24,
+    paddingTop: 24,
+    paddingBottom: 22,
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 22,
   },
   brandBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.42,
-    shadowRadius: 22,
-    elevation: 6,
   },
   brandEyebrow: {
     color: colors.labelText,
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '700',
-    letterSpacing: 1.8,
+    letterSpacing: 1.6,
     textTransform: 'uppercase',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   brandTitle: {
     color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    lineHeight: 22,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   title: {
     color: colors.text,
-    fontSize: 26,
-    fontWeight: '800',
-    lineHeight: 32,
-    marginBottom: 10,
+    fontSize: 24,
+    fontWeight: '700',
+    lineHeight: 30,
+    marginBottom: 8,
   },
   subtitle: {
     color: colors.mutedText,
-    fontSize: 16,
-    lineHeight: 25,
+    fontSize: 14,
+    lineHeight: 21,
     maxWidth: 420,
   },
   divider: {
@@ -260,7 +241,7 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: 24,
-    paddingTop: 28,
+    paddingTop: 24,
     paddingBottom: 24,
   },
 });

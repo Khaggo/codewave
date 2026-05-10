@@ -10,6 +10,12 @@ import {
   updateStaffAccountStatus,
 } from '@/lib/authClient'
 import { useUser } from '@/lib/userContext'
+import {
+  buildProvisioningErrors,
+  buildStatusErrors,
+  formatEmailPreviewName,
+  summarizeManagedAccounts,
+} from './staffProvisioningView.mjs'
 
 const emptyForm = {
   password: '',
@@ -67,33 +73,6 @@ const groupedAccountTypes = [
   { value: 'admin', label: 'Admins' },
 ]
 
-const buildErrors = (form) => {
-  const errors = {}
-
-  if (form.password.trim().length < 8) errors.password = 'Password must be at least 8 characters.'
-  if (!form.firstName.trim()) errors.firstName = 'First name is required.'
-  if (!form.lastName.trim()) errors.lastName = 'Last name is required.'
-  if (form.phone.trim() && form.phone.trim().length > 30) errors.phone = 'Phone number is too long.'
-
-  return errors
-}
-
-const buildStatusErrors = (form) => {
-  const errors = {}
-
-  if (!form.userId.trim()) errors.userId = 'Choose a staff account.'
-  if (form.reason.trim().length > 160) errors.reason = 'Reason is too long.'
-
-  return errors
-}
-
-const formatEmailPreviewName = (firstName) =>
-  String(firstName ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '')
-    .slice(0, 32) || 'firstname'
-
 function Field({ label, error, children, helper }) {
   return (
     <div>
@@ -111,13 +90,7 @@ function Notice({ notice }) {
   const isSuccess = notice.tone === 'success'
 
   return (
-    <div
-      className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${
-        isSuccess
-          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
-          : 'border-red-500/25 bg-red-500/10 text-red-300'
-      }`}
-    >
+    <div className={`flex items-start gap-2.5 ${isSuccess ? 'status-message status-message-success' : 'status-message status-message-danger'}`}>
       {isSuccess ? <CheckCircle2 size={15} className="mt-0.5 shrink-0" /> : <AlertCircle size={15} className="mt-0.5 shrink-0" />}
       <p>{notice.text}</p>
     </div>
@@ -145,6 +118,16 @@ function StaffAccountOption({ account }) {
   return `${account.displayName || account.email}${staffCode} (${status})`
 }
 
+function MetricCard({ label, value, hint }) {
+  return (
+    <div className="card p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
+      <p className="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">{value}</p>
+      <p className="mt-1 text-xs text-ink-secondary">{hint}</p>
+    </div>
+  )
+}
+
 export default function StaffProvisioningPanel() {
   const user = useUser()
   const [form, setForm] = useState(emptyForm)
@@ -166,6 +149,7 @@ export default function StaffProvisioningPanel() {
     [form.accountType],
   )
   const selectedStatusAccount = managedAccounts.find((account) => account.id === statusForm.userId)
+  const summary = useMemo(() => summarizeManagedAccounts(managedAccounts), [managedAccounts])
 
   const loadManagedAccounts = async () => {
     if (!user?.accessToken || !canProvision) return
@@ -224,7 +208,7 @@ export default function StaffProvisioningPanel() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    const nextErrors = buildErrors(form)
+    const nextErrors = buildProvisioningErrors(form)
     setErrors(nextErrors)
     setNotice(null)
 
@@ -349,305 +333,326 @@ export default function StaffProvisioningPanel() {
   }
 
   return (
-    <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-      <SectionShell
-        title="Provision Operations Accounts"
-        description="Create staff, mechanic, technician, and admin identities from one protected workspace. Emails and staff IDs are generated automatically, and new accounts can sign in immediately with the password you set."
-        action={
-          <div className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary">
-            <ShieldPlus size={14} />
-            Protected provisioning
-          </div>
-        }
-      >
-        <Notice notice={notice} />
+    <div className="space-y-5">
+      <section className="ops-summary-grid">
+        <MetricCard label="Managed accounts" value={summary.total} hint="All staff-capable accounts in the directory" />
+        <MetricCard label="Active accounts" value={summary.activeCount} hint="Accounts that can sign in right now" />
+        <MetricCard label="Inactive accounts" value={summary.inactiveCount} hint="Accounts currently blocked from sign-in" />
+        <MetricCard label="Admin accounts" value={summary.adminCount} hint="Protected admin identities in the directory" />
+      </section>
 
-        {lastProvisionedAccount ? (
-          <div className="mt-5 rounded-2xl border border-surface-border bg-surface-raised px-4 py-4 md:px-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">
-                  Last Created Account
-                </p>
-                <h3 className="mt-2 text-lg font-extrabold text-ink-primary">
-                  {lastProvisionedAccount.displayName || 'Staff Account'}
-                </h3>
-                <p className="mt-1 text-sm text-ink-secondary">{lastProvisionedAccount.email}</p>
-              </div>
-              <span className={`badge ${lastProvisionedAccount.isActive ? 'badge-green' : 'badge-gray'}`}>
-                {lastProvisionedAccount.isActive ? 'Ready to login' : 'Inactive'}
-              </span>
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+        <SectionShell
+          title="Provision Operations Accounts"
+          description="Create staff, mechanic, technician, and admin identities from one protected workspace. Emails and staff IDs are generated automatically, and new accounts can sign in immediately with the password you set."
+          action={
+            <div className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary">
+              <ShieldPlus size={14} />
+              Protected provisioning
             </div>
+          }
+        >
+          <Notice notice={notice} />
 
-            <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-ink-secondary md:grid-cols-3">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">Staff ID</p>
-                <p className="mt-1 font-semibold text-ink-primary">{lastProvisionedAccount.staffCode || 'Not assigned'}</p>
+          {lastProvisionedAccount ? (
+            <div className="mt-5 rounded-2xl border border-surface-border bg-surface-raised px-4 py-4 md:px-5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">
+                    Last Created Account
+                  </p>
+                  <h3 className="mt-2 text-lg font-extrabold text-ink-primary">
+                    {lastProvisionedAccount.displayName || 'Staff Account'}
+                  </h3>
+                  <p className="mt-1 text-sm text-ink-secondary">{lastProvisionedAccount.email}</p>
+                </div>
+                <span className={`badge ${lastProvisionedAccount.isActive ? 'badge-green' : 'badge-gray'}`}>
+                  {lastProvisionedAccount.isActive ? 'Ready to login' : 'Inactive'}
+                </span>
               </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">Role</p>
-                <p className="mt-1 font-semibold text-ink-primary">{lastProvisionedAccount.roleLabel}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">Login Email</p>
-                <p className="mt-1 break-all font-semibold text-ink-primary">{lastProvisionedAccount.email}</p>
-              </div>
-            </div>
-          </div>
-        ) : null}
 
-        <form onSubmit={handleSubmit} className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2" noValidate>
-          <Field label="First Name" error={errors.firstName}>
-            <input
-              value={form.firstName}
-              onChange={(event) => handleChange('firstName', event.target.value)}
-              className="input"
-              placeholder="Maria"
-            />
-          </Field>
-
-          <Field label="Last Name" error={errors.lastName}>
-            <input
-              value={form.lastName}
-              onChange={(event) => handleChange('lastName', event.target.value)}
-              className="input"
-              placeholder="Santos"
-            />
-          </Field>
-
-          <Field label="Password" error={errors.password}>
-            <input
-              type="password"
-              value={form.password}
-              onChange={(event) => handleChange('password', event.target.value)}
-              className="input"
-              placeholder="Minimum 8 characters"
-              autoComplete="new-password"
-            />
-          </Field>
-
-          <Field
-            label="Account Type"
-            helper={`Backend access: ${selectedAccountType.roleLabel}. ${selectedAccountType.helper}`}
-          >
-            <div className="relative">
-              <select
-                value={form.accountType}
-                onChange={(event) => handleChange('accountType', event.target.value)}
-                className="select"
-              >
-                {accountTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <UserCog
-                size={16}
-                className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 text-ink-muted"
-              />
-            </div>
-          </Field>
-
-          <Field label="Phone Number" error={errors.phone}>
-            <input
-              value={form.phone}
-              onChange={(event) => handleChange('phone', event.target.value)}
-              className="input"
-              placeholder="+639171234567"
-              autoComplete="tel"
-            />
-          </Field>
-
-          <div className="card-raised p-4 xl:col-span-2">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">
-              Generated On Save
-            </p>
-            <div className="mt-3 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-              <div>
-                <p className="text-xs text-ink-muted">Employee email pattern</p>
-                <p className="mt-1 break-all font-semibold text-ink-primary">
-                  {formatEmailPreviewName(form.firstName)}###.{selectedAccountType.value}@autocare.com
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-ink-muted">Staff ID pattern</p>
-                <p className="mt-1 font-semibold text-ink-primary">{selectedAccountType.staffCodeExample}</p>
+              <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-ink-secondary md:grid-cols-3">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">Staff ID</p>
+                  <p className="mt-1 font-semibold text-ink-primary">{lastProvisionedAccount.staffCode || 'Not assigned'}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">Role</p>
+                  <p className="mt-1 font-semibold text-ink-primary">{lastProvisionedAccount.roleLabel}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">Login Email</p>
+                  <p className="mt-1 break-all font-semibold text-ink-primary">{lastProvisionedAccount.email}</p>
+                </div>
               </div>
             </div>
-          </div>
+          ) : null}
 
-          <div className="flex flex-wrap items-center justify-between gap-4 pt-2 xl:col-span-2">
-            <p className="max-w-xl text-xs leading-5 text-ink-muted">
-              Staff sign-in uses the same staff/admin login page. No customer web registration is created here.
-            </p>
-            <button type="submit" disabled={loading} className="ops-action-primary min-w-[156px]">
-              {loading ? <RefreshCw size={14} className="animate-spin" /> : <ShieldPlus size={14} />}
-              {loading ? 'Creating...' : 'Create Account'}
-            </button>
-          </div>
-        </form>
-      </SectionShell>
-
-      <SectionShell
-        title="Account Status Control"
-        description="Choose a staff-capable account from the directory and activate or deactivate access without deleting its history. Admin accounts appear as Admin, not Super Admin."
-        action={
-          <button
-            type="button"
-            onClick={loadManagedAccounts}
-            className="ops-action-secondary min-w-[148px]"
-            disabled={directoryState.status === 'loading'}
-          >
-            {directoryState.status === 'loading' ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            Refresh Accounts
-          </button>
-        }
-      >
-        {directoryState.message ? (
-          <div className={`rounded-xl border px-4 py-3 text-xs ${
-            directoryState.status === 'error'
-              ? 'border-red-500/25 bg-red-500/10 text-red-300'
-              : 'border-surface-border bg-surface-raised text-ink-muted'
-          }`}>
-            {directoryState.message}
-          </div>
-        ) : null}
-
-        <div className="mt-5">
-          <Notice notice={statusNotice} />
-        </div>
-
-        <form onSubmit={handleStatusSubmit} className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2" noValidate>
-          <Field label="Staff Account" error={statusErrors.userId}>
-            <select
-              value={statusForm.userId}
-              onChange={(event) => handleSelectStatusAccount(event.target.value)}
-              className="select"
-            >
-              <option value="">Choose an account</option>
-              {groupedAccountTypes.map((group) => {
-                const groupAccounts = managedAccounts.filter((account) => account.accountType === group.value)
-                if (!groupAccounts.length) return null
-
-                return (
-                  <optgroup key={group.value} label={group.label}>
-                    {groupAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {StaffAccountOption({ account })}
-                      </option>
-                    ))}
-                  </optgroup>
-                )
-              })}
-            </select>
-          </Field>
-
-          <Field
-            label="Target Status"
-            helper={
-              selectedStatusAccount
-                ? `${selectedStatusAccount.displayName || selectedStatusAccount.email} is currently ${
-                    selectedStatusAccount.isActive ? 'active' : 'inactive'
-                  }.`
-                : 'Choose an account first.'
-            }
-          >
-            <div className="relative">
-              <select
-                value={statusForm.targetStatus}
-                onChange={(event) => handleStatusChange('targetStatus', event.target.value)}
-                className="select"
-              >
-                <option value="inactive">Set Inactive</option>
-                <option value="active">Set Active</option>
-              </select>
-              <Power size={16} className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 text-ink-muted" />
-            </div>
-          </Field>
-
-          <div className="xl:col-span-2">
-            <Field label="Reason (Optional)" error={statusErrors.reason}>
+          <form onSubmit={handleSubmit} className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2" noValidate>
+            <Field label="First Name" error={errors.firstName}>
               <input
-                value={statusForm.reason}
-                onChange={(event) => handleStatusChange('reason', event.target.value)}
+                value={form.firstName}
+                onChange={(event) => handleChange('firstName', event.target.value)}
                 className="input"
-                placeholder="Example: shift handover, temporary suspension, or reactivated for duty."
+                placeholder="Maria"
               />
             </Field>
-          </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-4 pt-2 xl:col-span-2">
-            <p className="max-w-xl text-xs leading-5 text-ink-muted">
-              Status updates revoke active refresh tokens when an account is deactivated.
-            </p>
-            <button type="submit" disabled={statusLoading || !managedAccounts.length} className="ops-action-primary min-w-[156px]">
-              {statusLoading ? <RefreshCw size={14} className="animate-spin" /> : <Power size={14} />}
-              {statusLoading ? 'Updating...' : 'Update Status'}
-            </button>
-          </div>
-        </form>
+            <Field label="Last Name" error={errors.lastName}>
+              <input
+                value={form.lastName}
+                onChange={(event) => handleChange('lastName', event.target.value)}
+                className="input"
+                placeholder="Santos"
+              />
+            </Field>
 
-        <div className="mt-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">
-            Managed Account Directory
-          </p>
-          <div className="mt-3 space-y-3">
-            {managedAccounts.length ? (
-              managedAccounts.map((account) => {
-                const isBusy = statusLoading && statusActionTargetId === account.id
+            <Field label="Password" error={errors.password}>
+              <input
+                type="password"
+                value={form.password}
+                onChange={(event) => handleChange('password', event.target.value)}
+                className="input"
+                placeholder="Minimum 8 characters"
+                autoComplete="new-password"
+              />
+            </Field>
 
-                return (
-                  <div
-                    key={account.id}
-                    className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-4"
-                  >
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-bold text-ink-primary">
-                            {account.displayName || account.email}
-                          </p>
-                          <span className={`badge ${account.isActive ? 'badge-green' : 'badge-gray'}`}>
-                            {account.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                          <span className="badge badge-gray">{account.roleLabel}</span>
-                        </div>
-                        <p className="mt-2 break-all text-xs text-ink-secondary">{account.email}</p>
-                        <p className="mt-1 text-[11px] text-ink-muted">
-                          {account.staffCode || 'No staff code'} • {account.id}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectStatusAccount(account.id)}
-                          className="ops-action-secondary"
-                        >
-                          Select in Form
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleQuickStatusToggle(account)}
-                          disabled={statusLoading}
-                          className={account.isActive ? 'ops-action-primary' : 'ops-action-secondary'}
-                        >
-                          {isBusy ? <RefreshCw size={14} className="animate-spin" /> : <Power size={14} />}
-                          {account.isActive ? 'Deactivate Account' : 'Activate Account'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })
-            ) : (
-              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-4 text-xs text-ink-muted">
-                No managed staff accounts are available yet.
+            <Field
+              label="Account Type"
+              helper={`Backend access: ${selectedAccountType.roleLabel}. ${selectedAccountType.helper}`}
+            >
+              <div className="relative">
+                <select
+                  value={form.accountType}
+                  onChange={(event) => handleChange('accountType', event.target.value)}
+                  className="select"
+                >
+                  {accountTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <UserCog
+                  size={16}
+                  className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 text-ink-muted"
+                />
               </div>
-            )}
+            </Field>
+
+            <Field label="Phone Number" error={errors.phone}>
+              <input
+                value={form.phone}
+                onChange={(event) => handleChange('phone', event.target.value)}
+                className="input"
+                placeholder="+639171234567"
+                autoComplete="tel"
+              />
+            </Field>
+
+            <div className="card-raised p-4 xl:col-span-2">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">
+                Generated On Save
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                <div>
+                  <p className="text-xs text-ink-muted">Employee email pattern</p>
+                  <p className="mt-1 break-all font-semibold text-ink-primary">
+                    {formatEmailPreviewName(form.firstName)}###.{selectedAccountType.value}@autocare.com
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-muted">Staff ID pattern</p>
+                  <p className="mt-1 font-semibold text-ink-primary">{selectedAccountType.staffCodeExample}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-2 xl:col-span-2">
+              <p className="max-w-xl text-xs leading-5 text-ink-muted">
+                Staff sign-in uses the same staff/admin login page. No customer web registration is created here.
+              </p>
+              <button type="submit" disabled={loading} className="ops-action-primary min-w-[156px]">
+                {loading ? <RefreshCw size={14} className="animate-spin" /> : <ShieldPlus size={14} />}
+                {loading ? 'Creating...' : 'Create Account'}
+              </button>
+            </div>
+          </form>
+        </SectionShell>
+
+        <SectionShell
+          title="Account Status Control"
+          description="Choose a staff-capable account from the directory and activate or deactivate access without deleting its history. Admin accounts appear as Admin, not Super Admin."
+          action={
+            <button
+              type="button"
+              onClick={loadManagedAccounts}
+              className="ops-action-secondary min-w-[148px]"
+              disabled={directoryState.status === 'loading'}
+            >
+              {directoryState.status === 'loading' ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Refresh Accounts
+            </button>
+          }
+        >
+          {directoryState.message ? (
+            <div className={directoryState.status === 'error' ? 'status-message status-message-danger' : 'status-message status-message-warning'}>
+              {directoryState.message}
+            </div>
+          ) : null}
+
+          <div className="mt-5">
+            <Notice notice={statusNotice} />
           </div>
-        </div>
-      </SectionShell>
-    </section>
+
+          <form onSubmit={handleStatusSubmit} className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2" noValidate>
+            <Field label="Staff Account" error={statusErrors.userId}>
+              <select
+                value={statusForm.userId}
+                onChange={(event) => handleSelectStatusAccount(event.target.value)}
+                className="select"
+              >
+                <option value="">Choose an account</option>
+                {groupedAccountTypes.map((group) => {
+                  const groupAccounts = managedAccounts.filter((account) => account.accountType === group.value)
+                  if (!groupAccounts.length) return null
+
+                  return (
+                    <optgroup key={group.value} label={group.label}>
+                      {groupAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {StaffAccountOption({ account })}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )
+                })}
+              </select>
+            </Field>
+
+            <Field
+              label="Target Status"
+              helper={
+                selectedStatusAccount
+                  ? `${selectedStatusAccount.displayName || selectedStatusAccount.email} is currently ${
+                      selectedStatusAccount.isActive ? 'active' : 'inactive'
+                    }.`
+                  : 'Choose an account first.'
+              }
+            >
+              <div className="relative">
+                <select
+                  value={statusForm.targetStatus}
+                  onChange={(event) => handleStatusChange('targetStatus', event.target.value)}
+                  className="select"
+                >
+                  <option value="inactive">Set Inactive</option>
+                  <option value="active">Set Active</option>
+                </select>
+                <Power size={16} className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 text-ink-muted" />
+              </div>
+            </Field>
+
+            <div className="xl:col-span-2">
+              <Field label="Reason (Optional)" error={statusErrors.reason}>
+                <input
+                  value={statusForm.reason}
+                  onChange={(event) => handleStatusChange('reason', event.target.value)}
+                  className="input"
+                  placeholder="Example: shift handover, temporary suspension, or reactivated for duty."
+                />
+              </Field>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-2 xl:col-span-2">
+              <p className="max-w-xl text-xs leading-5 text-ink-muted">
+                Status updates revoke active refresh tokens when an account is deactivated.
+              </p>
+              <button type="submit" disabled={statusLoading || !managedAccounts.length} className="ops-action-primary min-w-[156px]">
+                {statusLoading ? <RefreshCw size={14} className="animate-spin" /> : <Power size={14} />}
+                {statusLoading ? 'Updating...' : 'Update Status'}
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-6">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">
+              Managed Account Directory
+            </p>
+            <div className="mt-3">
+              {managedAccounts.length ? (
+                <div className="table-surface">
+                  <div className="table-scroll">
+                    <table className="data-table min-w-[760px]">
+                      <thead>
+                        <tr>
+                          <th>Account</th>
+                          <th>Role</th>
+                          <th>Staff Code</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {managedAccounts.map((account) => {
+                          const isBusy = statusLoading && statusActionTargetId === account.id
+
+                          return (
+                            <tr key={account.id}>
+                              <td>
+                                <p className="font-semibold text-ink-primary">{account.displayName || account.email}</p>
+                                <p className="mt-1 text-xs text-ink-secondary">{account.email}</p>
+                                <p className="mt-1 font-mono text-[11px] text-ink-muted">{account.id}</p>
+                              </td>
+                              <td>
+                                <span className="badge badge-gray">{account.roleLabel}</span>
+                              </td>
+                              <td className="text-ink-secondary">{account.staffCode || 'Not assigned'}</td>
+                              <td>
+                                <span className={`badge ${account.isActive ? 'badge-green' : 'badge-gray'}`}>
+                                  {account.isActive ? 'Active' : 'Inactive'}
+                                </span>
+                              </td>
+                              <td>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSelectStatusAccount(account.id)}
+                                    className="ops-action-secondary"
+                                  >
+                                    Select in Form
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickStatusToggle(account)}
+                                    disabled={statusLoading}
+                                    className={account.isActive ? 'ops-action-primary' : 'ops-action-secondary'}
+                                  >
+                                    {isBusy ? <RefreshCw size={14} className="animate-spin" /> : <Power size={14} />}
+                                    {account.isActive ? 'Deactivate' : 'Activate'}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="empty-panel">
+                  <p className="text-sm font-semibold text-ink-primary">No managed staff accounts yet</p>
+                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                    New staff, technician, mechanic, and admin accounts will appear here after they are provisioned.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </SectionShell>
+      </section>
+    </div>
   )
 }

@@ -3,6 +3,7 @@
 import { ShieldAlert, UserCog, Wrench } from 'lucide-react'
 
 import StaffProvisioningPanel from '@/components/StaffProvisioningPanel'
+import PageHeader from '@/components/ui/PageHeader'
 import { useUser } from '@/lib/userContext'
 
 const accountTypeCards = [
@@ -33,14 +34,17 @@ export default function AdminUsersPage() {
   if (!canManageUsers) {
     return (
       <section className="ops-page-shell">
-        <div className="card p-6">
-        <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: '#f07c00' }}>
-          Restricted
-        </p>
-        <h1 className="mt-3 text-2xl font-black text-ink-primary">User Administration</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-secondary">
-          Only super admins can create new staff, mechanic, technician, and admin accounts from this workspace.
-        </p>
+        <PageHeader
+          eyebrow="Restricted"
+          title="User Administration"
+          description="Only super admins can create new staff, mechanic, technician, and admin accounts from this workspace."
+        />
+        <div className="empty-panel">
+          <ShieldAlert size={28} className="mx-auto text-brand-orange" />
+          <p className="mt-3 text-sm font-semibold text-ink-primary">Super admin access required</p>
+          <p className="mt-2 text-sm leading-6 text-ink-secondary">
+            Provisioning, role assignment, and account status changes stay limited to authorized admin sessions.
+          </p>
         </div>
       </section>
     )
@@ -48,27 +52,22 @@ export default function AdminUsersPage() {
 
   return (
     <div className="ops-page-shell">
-      <section className="ops-page-header">
-        <div className="space-y-2">
-          <p className="ops-page-kicker">Super Admin</p>
-          <h1 className="ops-page-title">User Administration Workspace</h1>
-          <p className="ops-page-copy">
-            Provision operations accounts, capture the exact role mapping, and manage account status from one
-            super-admin-only page. Created accounts can sign in immediately with the generated email and selected password.
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        eyebrow="Super Admin"
+        title="User Administration Workspace"
+        description="Provision operations accounts, capture the exact role mapping, and manage account status from one protected admin workspace. Created accounts can sign in immediately with the generated email and selected password."
+      />
 
       <section className="ops-summary-grid">
         {accountTypeCards.map(({ title, copy, icon: Icon, accent }) => (
-          <div key={title} className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
+          <div key={title} className="card p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{accent}</p>
-                <p className="mt-3 text-xl font-black tracking-tight text-ink-primary">{title}</p>
-                <p className="mt-2 text-sm leading-6 text-ink-muted">{copy}</p>
+                <p className="mt-3 text-xl font-semibold tracking-tight text-ink-primary">{title}</p>
+                <p className="mt-2 text-sm leading-6 text-ink-secondary">{copy}</p>
               </div>
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
                 <Icon size={14} />
               </div>
             </div>
