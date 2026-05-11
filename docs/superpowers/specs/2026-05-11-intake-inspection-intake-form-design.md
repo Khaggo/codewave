@@ -56,7 +56,15 @@ Arrival photos should no longer use raw text inputs in the visible UI.
 Instead:
 - Render photo-slot cards matching the requested layout
 - Reuse the existing upload/storage workflow already used by `JobOrderWorkbench`
+- Show actual thumbnail previews inside the cards
+- Show a local preview immediately after file selection so the UI responds before persistence finishes
 - Store the returned upload refs back into the existing intake draft so payload output remains `attachmentRefs`
+
+Preview behavior:
+- Before upload: empty state card with upload button
+- After file selection: local thumbnail preview in the card
+- After successful upload: keep the stored upload ref as the persisted value
+- If the existing uploader exposes a reusable asset URL, the card can switch from local preview to stored asset preview after upload; otherwise the local preview remains session-scoped while the upload ref remains the saved source of truth
 
 Initial slot set:
 - `Front`
@@ -100,17 +108,20 @@ For intake-only data that does not fit the DTO directly, store it in a clearly l
 - Add or update a small `node:test` regression file for any extracted copy or view-shaping helper
 - Verify the workspace renders with the tabbed structure
 - Verify arrival-photo slots still serialize into `attachmentRefs`
+- Verify arrival-photo cards support preview state without breaking upload-ref persistence
 - Run targeted frontend tests for touched helper modules
 - Run frontend lint if the touched files participate cleanly in the existing lint setup
 
 ## Risks
 - Packing intake-only fields into `notes` may make later backend normalization necessary
 - Reusing the existing upload flow may require adapter code if that uploader is tightly coupled to another screen
+- Thumbnail previews may be session-local if the current upload response does not expose a displayable asset URL
 - The screen may mix intake-specific labels with generic inspection history language
 - Existing save validation for completion inspections must remain intact even after the intake form becomes the primary layout
 
 ## Risk Mitigation
 - Keep the mapping explicit and centralized
 - Reuse the proven upload path, but wrap it in intake-specific photo-slot UI instead of duplicating uploader logic
+- Treat preview and persistence as separate concerns: preview can be local-first while persisted values remain upload refs
 - Leave the backend contract unchanged for this pass
 - Limit behavioral change to the intake screen and its immediate helpers
