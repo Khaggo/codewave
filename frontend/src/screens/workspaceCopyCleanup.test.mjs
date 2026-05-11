@@ -42,3 +42,22 @@ test('intake, qa, and finance workspaces use short section descriptions', () => 
   assert.ok(finance.includes('Review aging, payment guidance, and live billing lookups before detail review.'))
   assert.ok(finance.includes('Inspect loaded job orders for invoice and payment status.'))
 })
+
+test('catalog, booking-service, and inventory workspaces use one-sentence descriptions', () => {
+  const shop = read('frontend/src/screens/ShopProductAdmin.js')
+  const booking = read('frontend/src/components/BookingServiceAdmin.js')
+  const inventory = read('frontend/src/screens/InventoryWorkspace.js')
+
+  assert.ok(shop.includes('Create categories and publish storefront-ready catalog products.'))
+  assert.ok(shop.includes('Create a category for product publishing.'))
+  assert.ok(shop.includes('Publish products with fields that match the shared catalog store.'))
+
+  assert.ok(booking.includes('Create booking categories and publish live booking services.'))
+  assert.ok(booking.includes('Create a category before publishing services.'))
+  assert.ok(booking.includes('Publish services with valid category records only.'))
+
+  assert.ok(inventory.includes('Review live product visibility and planned inventory readiness.'))
+  assert.ok(inventory.includes('Review current product visibility without stock counts.'))
+  assert.ok(inventory.includes('Inspect current catalog metadata for the selected product.'))
+  assert.ok(inventory.includes('Review which inventory capabilities are live or planned.'))
+})

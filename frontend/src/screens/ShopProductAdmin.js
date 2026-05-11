@@ -455,7 +455,7 @@ export default function ShopProductAdmin() {
       <PageHeader
         eyebrow="Catalog Administration"
         title="Publish Storefront-Ready Shop Products"
-        description="Create categories, publish catalog products, and maintain live storefront entries from one clean admin workspace."
+        description="Create categories and publish storefront-ready catalog products."
         meta={
           <>
             <span className="badge badge-gray">{categories.length} categories</span>
@@ -465,21 +465,21 @@ export default function ShopProductAdmin() {
       />
 
       <section className="ops-summary-grid">
-        <SummaryTile label="Categories" value={categories.length} sub="Available for product publishing" icon={FolderPlus} />
-        <SummaryTile label="Published Products" value={publishedProducts.length} sub="Live in the customer catalog" icon={PackagePlus} />
+        <SummaryTile label="Categories" value={categories.length} sub="Ready for product publishing" icon={FolderPlus} />
+        <SummaryTile label="Published Products" value={publishedProducts.length} sub="Live in the storefront catalog" icon={PackagePlus} />
         <SummaryTile
           label="Product Images"
           value={getCatalogImageCount(publishedProducts)}
-          sub="Catalog image URLs attached to live products"
+          sub="Image URLs attached to live products"
           icon={ImagePlus}
         />
-        <SummaryTile label="Edit Flow" value="Modal" sub="Click any product to edit fields and images" icon={PencilLine} />
+        <SummaryTile label="Edit Flow" value="Modal" sub="Open a product row to edit details" icon={PencilLine} />
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.38fr)]">
         <SectionShell
           title="Add Category"
-          description="New categories become available in the publish form right away."
+          description="Create a category for product publishing."
         >
           <form className="space-y-4" onSubmit={handleAddCategory}>
             <div>
@@ -520,7 +520,7 @@ export default function ShopProductAdmin() {
 
         <SectionShell
           title="Create And Publish Product"
-          description="Required fields match the shared catalog store so published products stay consistent across apps."
+          description="Publish products with fields that match the shared catalog store."
         >
           <form className="space-y-4" onSubmit={handlePublishProduct}>
             <div className="grid gap-4 md:grid-cols-2">
@@ -632,7 +632,7 @@ export default function ShopProductAdmin() {
 
       <SectionShell
         title="Published Products"
-        description="Click any product row to open the edit modal and manage product details or images."
+        description="Open any product row to manage details or images."
         action={<span className="badge badge-orange">{publishedProducts.length} live</span>}
       >
         <div className="table-surface">

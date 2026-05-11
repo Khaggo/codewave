@@ -215,7 +215,7 @@ export default function BookingServiceAdmin() {
       <PageHeader
         eyebrow="Service Operations"
         title="Booking Service Creation"
-        description="Create booking service categories and publish service offerings from the live main-service catalog. Category-linked fields stay on dropdowns so the service payload always uses valid backend IDs."
+        description="Create booking categories and publish live booking services."
         actions={
           <button type="button" onClick={loadDirectory} className="btn-ghost min-w-[148px]">
             <RefreshCw size={14} />
@@ -232,13 +232,13 @@ export default function BookingServiceAdmin() {
 
       <section className="ops-summary-grid">
         <SummaryTile label="Service Categories" value={categoriesState.items.length} sub="Live booking taxonomy" icon={FolderPlus} />
-        <SummaryTile label="Booking Services" value={servicesState.items.length} sub="Selectable in booking discovery" icon={Wrench} />
+        <SummaryTile label="Booking Services" value={servicesState.items.length} sub="Ready for booking discovery" icon={Wrench} />
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <SectionShell
           title="Create Service Category"
-          description="Create the category first so service creation can use a real dropdown instead of a typed category id."
+          description="Create a category before publishing services."
         >
           <Notice
             tone={categoriesState.status === 'error' ? 'error' : 'neutral'}
@@ -277,7 +277,7 @@ export default function BookingServiceAdmin() {
 
         <SectionShell
           title="Create Booking Service"
-          description="Only valid service-category records appear in the dropdown so the backend receives the exact category id it expects."
+          description="Publish services with valid category records only."
         >
           <Notice
             tone={servicesState.status === 'error' ? 'error' : 'neutral'}
@@ -358,7 +358,7 @@ export default function BookingServiceAdmin() {
 
       <SectionShell
         title="Live Booking Services"
-        description="These service offerings come from the live booking catalog in main-service."
+        description="Review live services from the booking catalog."
       >
         {groupedServices.length ? (
           <div className="space-y-4">

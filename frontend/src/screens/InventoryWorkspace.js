@@ -399,7 +399,7 @@ export default function InventoryWorkspace() {
         <PageHeader
           eyebrow="Inventory Operations"
           title="Product Visibility And Inventory Readiness"
-          description="Review live catalog visibility, inspect product metadata, and keep planned stock behavior clearly separated from the current read-only inventory surface."
+          description="Review live product visibility and planned inventory readiness."
         />
       </motion.div>
 
@@ -456,28 +456,28 @@ export default function InventoryWorkspace() {
           icon={Boxes}
           label="Live Product Records"
           value={stats.liveProducts}
-          sub="Current product records loaded from the catalog."
+          sub="Current product records from the catalog."
           toneClass="border-brand-orange/15 bg-brand-orange/10 text-brand-orange"
         />
         <StatCard
           icon={Eye}
           label="Published Products"
           value={stats.publishedProducts}
-          sub="Visible product records returned by the catalog."
+          sub="Visible product records from the catalog."
           toneClass="border-emerald-500/15 bg-emerald-500/10 text-emerald-400"
         />
         <StatCard
           icon={Tag}
           label="Hidden Products"
           value={stats.hiddenProducts}
-          sub="Live records that stay unpublished without implying stock state."
+          sub="Live records that stay unpublished."
           toneClass="border-sky-500/15 bg-sky-500/10 text-sky-400"
         />
         <StatCard
           icon={Warehouse}
           label="Planned Stock States"
           value={staffInventoryStateScenarios.length}
-          sub="In-stock, low-stock, reserved, and out-of-stock are future readiness states."
+          sub="Future readiness states for stock behavior."
           toneClass="border-amber-500/15 bg-amber-500/10 text-amber-400"
         />
       </section>
@@ -485,7 +485,7 @@ export default function InventoryWorkspace() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
         <SectionShell
           title="Live Product Visibility"
-          description="This table shows current catalog product visibility. Quantity-on-hand remains planned, so the page avoids fake stock counts."
+          description="Review current product visibility without stock counts."
           action={
             <button
               type="button"
@@ -577,7 +577,7 @@ export default function InventoryWorkspace() {
         <div className="space-y-4">
           <SectionShell
             title="Selected Product Detail"
-            description="Select a product to refresh its current catalog metadata without guessing stock quantities."
+            description="Inspect current catalog metadata for the selected product."
           >
             {!selectedProduct ? (
               <div className="empty-panel min-h-[180px]">
@@ -644,7 +644,7 @@ export default function InventoryWorkspace() {
 
           <SectionShell
             title="Inventory Coverage"
-            description="Every stock capability stays labeled as live or planned so the page does not invent inventory behavior."
+            description="Review which inventory capabilities are live or planned."
           >
             <div className="space-y-3">
               {staffInventoryRouteRules.map((routeRule) => (
@@ -669,7 +669,7 @@ export default function InventoryWorkspace() {
       {staffInventoryKnownApiGaps.length ? (
         <SectionShell
           title="Planned Stock Controls"
-          description="These controls remain intentionally out of the live workspace until the backend exposes actual stock behavior."
+          description="Review planned stock controls that are not live yet."
         >
           <div className="grid gap-3 lg:grid-cols-3">
             {staffInventoryKnownApiGaps.map((gap) => (
@@ -681,7 +681,7 @@ export default function InventoryWorkspace() {
 
       <SectionShell
         title="Planned Stock State Glossary"
-        description="These visibility scenarios describe future stock controls. They stay clearly marked as planned until inventory quantities are implemented."
+        description="Review the planned stock-state glossary."
       >
         <motion.div
           variants={containerVariants}
