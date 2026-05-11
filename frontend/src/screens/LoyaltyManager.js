@@ -853,7 +853,7 @@ export default function LoyaltyManager() {
       <PageHeader
         eyebrow="Customer Loyalty"
         title="Loyalty Management"
-        description="Rewards, earning rules, and usage analytics now read from the live backend."
+        description="Manage rewards, earning rules, and loyalty analytics."
         actions={
           <button onClick={loadLoyaltyState} className="btn-ghost self-start lg:self-auto">
             <RefreshCcw size={14} /> Refresh Live Data
@@ -1087,8 +1087,8 @@ export default function LoyaltyManager() {
           />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <StatCard label="Known Accounts" value={(state.analytics?.totals.accountCount ?? 0).toLocaleString()} />
-            <StatCard label="Total Balance" value={(state.analytics?.totals.totalPointsBalance ?? 0).toLocaleString()} helper="Across all loyalty accounts" />
-            <StatCard label="Manual Adjustment" value="Blocked" helper="Planned for a later staff control" />
+            <StatCard label="Total Balance" value={(state.analytics?.totals.totalPointsBalance ?? 0).toLocaleString()} helper="Across all loyalty accounts." />
+            <StatCard label="Manual Adjustment" value="Blocked" helper="Planned for a later staff control." />
           </div>
         </div>
       ) : null}

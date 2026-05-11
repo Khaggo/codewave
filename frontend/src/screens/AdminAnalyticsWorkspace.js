@@ -459,7 +459,7 @@ export default function AdminAnalyticsWorkspace() {
             icon: Award,
             label: 'Loyalty Accounts',
             value: formatNumber(snapshot.loyalty.totals.accountCount),
-            sub: 'Customer loyalty accounts represented in the latest snapshot.',
+            sub: 'Loyalty accounts in the latest snapshot.',
           }
         : null,
       snapshot.auditTrail
@@ -467,7 +467,7 @@ export default function AdminAnalyticsWorkspace() {
             icon: ShieldCheck,
             label: 'Sensitive Actions',
             value: formatNumber(snapshot.auditTrail.totals.totalSensitiveActions),
-            sub: 'Derived audit events across staff actions, overrides, and release decisions.',
+            sub: 'Audit events from staff actions, overrides, and releases.',
           }
         : null,
     ].filter(Boolean)
@@ -532,7 +532,7 @@ export default function AdminAnalyticsWorkspace() {
       <PageHeader
         eyebrow="Operational Read Models"
         title="Admin Analytics"
-        description="This hub keeps analytics read-only and derived so staff can inspect the real snapshot without mixing reporting with unrelated review placeholders."
+        description="Inspect read-only analytics snapshots across operations and support domains."
         actions={
           <button
             type="button"
@@ -559,19 +559,19 @@ export default function AdminAnalyticsWorkspace() {
           icon={Database}
           label="Loaded Sections"
           value={`${loadedSectionCount}/6`}
-          sub="Dashboard, operations, back-jobs, loyalty, invoice aging, and audit trail."
+          sub="Dashboard, operations, back-jobs, loyalty, aging, and audit."
         />
         <StatCard
           icon={Clock3}
           label="Latest Refresh"
           value={latestRefresh ? formatShortDateTime(latestRefresh) : 'Pending'}
-          sub="Most recent timestamp from the analytics snapshot."
+          sub="Most recent analytics snapshot timestamp."
         />
         <StatCard
           icon={FileClock}
           label="Oldest Section"
           value={oldestRefresh ? formatShortDateTime(oldestRefresh) : 'Pending'}
-          sub="Use this to spot stale sections when one read model lags behind the others."
+          sub="Use this to spot stale sections."
         />
       </section>
 
@@ -627,7 +627,7 @@ export default function AdminAnalyticsWorkspace() {
           <div className="grid gap-5 xl:grid-cols-2">
             <SectionShell
               title="Sales Signals"
-              description="Invoice-ready counts remain derived visibility only and do not imply settled payment totals."
+              description="Review derived sales signals from the latest snapshot."
               loading={derivedLoadState === 'analytics_loading'}
               errorMessage={errors.dashboard}
               hasData={Boolean(snapshot.dashboard)}
@@ -645,7 +645,7 @@ export default function AdminAnalyticsWorkspace() {
 
             <SectionShell
               title="Insurance Snapshot"
-              description="A derived view of insurance inquiry workload from the current analytics refresh."
+              description="Review insurance workload from the latest snapshot."
               loading={derivedLoadState === 'analytics_loading'}
               errorMessage={errors.dashboard}
               hasData={Boolean(snapshot.dashboard)}
@@ -666,7 +666,7 @@ export default function AdminAnalyticsWorkspace() {
 
           <SectionShell
             title="Demand Preview"
-            description="High-level service demand preview from the latest dashboard snapshot."
+            description="Review service demand from the latest dashboard snapshot."
             loading={derivedLoadState === 'analytics_loading'}
             errorMessage={errors.dashboard}
             hasData={Boolean(snapshot.dashboard?.serviceDemandPreview?.length)}
@@ -691,7 +691,7 @@ export default function AdminAnalyticsWorkspace() {
 
           <SectionShell
             title="Peak-Hour Preview"
-            description="Current slot pressure preview from the latest rebuildable dashboard snapshot."
+            description="Review slot pressure from the latest dashboard snapshot."
             loading={derivedLoadState === 'analytics_loading'}
             errorMessage={errors.dashboard}
             hasData={Boolean(snapshot.dashboard?.peakHoursPreview?.length)}
@@ -721,7 +721,7 @@ export default function AdminAnalyticsWorkspace() {
           <div className="grid gap-5 xl:grid-cols-2">
             <SectionShell
               title="Booking Status Mix"
-              description="Derived booking state counts from the latest operational snapshot."
+              description="Review booking-state counts from the operations snapshot."
               loading={derivedLoadState === 'analytics_loading'}
               errorMessage={errors.operations}
               hasData={Boolean(snapshot.operations?.bookingStatuses?.length)}
@@ -735,7 +735,7 @@ export default function AdminAnalyticsWorkspace() {
 
             <SectionShell
               title="Job Order Status Mix"
-              description="Derived job-order counts across the current operational pipeline."
+              description="Review job-order counts from the operations snapshot."
               loading={derivedLoadState === 'analytics_loading'}
               errorMessage={errors.operations}
               hasData={Boolean(snapshot.operations?.jobOrderStatuses?.length)}
@@ -750,7 +750,7 @@ export default function AdminAnalyticsWorkspace() {
 
           <SectionShell
             title="Peak-Hour Pressure"
-            description="Operational slot load ordered by booking pressure."
+            description="Review operational slot pressure."
             loading={derivedLoadState === 'analytics_loading'}
             errorMessage={errors.operations}
             hasData={Boolean(snapshot.operations?.peakHours?.length)}
@@ -773,7 +773,7 @@ export default function AdminAnalyticsWorkspace() {
           <div className="grid gap-5 xl:grid-cols-2">
             <SectionShell
               title="Service Demand"
-              description="Top service demand signals in the operations read model."
+              description="Review service demand from the operations snapshot."
               loading={derivedLoadState === 'analytics_loading'}
               errorMessage={errors.operations}
               hasData={Boolean(snapshot.operations?.serviceDemand?.length)}
@@ -795,7 +795,7 @@ export default function AdminAnalyticsWorkspace() {
 
             <SectionShell
               title="Service Adviser Load"
-              description="Read-only adviser workload from the latest operations snapshot."
+              description="Review adviser workload from the operations snapshot."
               loading={derivedLoadState === 'analytics_loading'}
               errorMessage={errors.operations}
               hasData={Boolean(snapshot.operations?.serviceAdviserLoad?.length)}
@@ -825,32 +825,32 @@ export default function AdminAnalyticsWorkspace() {
               icon={Wrench}
               label="Total Back-Jobs"
               value={formatNumber(snapshot.backJobs?.totals?.totalBackJobs)}
-              sub="Total derived back-job cases seen by the analytics refresh."
+              sub="Back-job cases in the latest snapshot."
             />
             <StatCard
               icon={AlertTriangle}
               label="Open Back-Jobs"
               value={formatNumber(snapshot.backJobs?.totals?.openBackJobs)}
-              sub="Open or still-active rework issues in the latest snapshot."
+              sub="Open rework issues in the latest snapshot."
             />
             <StatCard
               icon={CheckCircle2}
               label="Resolved"
               value={formatNumber(snapshot.backJobs?.totals?.resolvedBackJobs)}
-              sub="Back-job cases that already reached a resolved state."
+              sub="Back-job cases already resolved."
             />
             <StatCard
               icon={ShieldCheck}
               label="Validated Findings"
               value={formatNumber(snapshot.backJobs?.totals?.validatedFindings)}
-              sub="Validated findings attached to back-job review records."
+              sub="Validated findings on back-job reviews."
             />
           </div>
 
           <div className="grid gap-5 xl:grid-cols-2">
             <SectionShell
               title="Status Distribution"
-              description="Read-model breakdown of current back-job lifecycle states."
+              description="Review current back-job lifecycle states."
               loading={derivedLoadState === 'analytics_loading'}
               errorMessage={errors.backJobs}
               hasData={Boolean(snapshot.backJobs?.statuses?.length)}
@@ -864,7 +864,7 @@ export default function AdminAnalyticsWorkspace() {
 
             <SectionShell
               title="Severity Distribution"
-              description="Read-model severity view for validated back-job findings."
+              description="Review severity for validated back-job findings."
               loading={derivedLoadState === 'analytics_loading'}
               errorMessage={errors.backJobs}
               hasData={Boolean(snapshot.backJobs?.severities?.length)}
@@ -879,7 +879,7 @@ export default function AdminAnalyticsWorkspace() {
 
           <SectionShell
             title="Repeat Original Sources"
-            description="Which original job orders are producing repeated rework pressure."
+            description="Review which job orders are driving repeated rework."
             loading={derivedLoadState === 'analytics_loading'}
             errorMessage={errors.backJobs}
             hasData={Boolean(snapshot.backJobs?.repeatSources?.length)}
@@ -910,38 +910,38 @@ export default function AdminAnalyticsWorkspace() {
               icon={Users}
               label="Accounts"
               value={formatNumber(snapshot.loyalty?.totals?.accountCount)}
-              sub="Customer accounts participating in loyalty."
+              sub="Customer accounts in loyalty."
             />
             <StatCard
               icon={Award}
               label="Balance"
               value={formatNumber(snapshot.loyalty?.totals?.totalPointsBalance)}
-              sub="Current total point balance across loyalty accounts."
+              sub="Total point balance across loyalty accounts."
             />
             <StatCard
               icon={TrendingUp}
               label="Earned"
               value={formatNumber(snapshot.loyalty?.totals?.totalPointsEarned)}
-              sub="Total points earned across the tracked snapshot history."
+              sub="Total points earned in the snapshot."
             />
             <StatCard
               icon={ReceiptText}
               label="Redeemed"
               value={formatNumber(snapshot.loyalty?.totals?.totalPointsRedeemed)}
-              sub="Total points redeemed across tracked rewards."
+              sub="Total points redeemed in tracked rewards."
             />
             <StatCard
               icon={Sparkles}
               label="Redemptions"
               value={formatNumber(snapshot.loyalty?.totals?.redemptionCount)}
-              sub="Count of completed reward redemptions in analytics."
+              sub="Completed reward redemptions in analytics."
             />
           </div>
 
           <div className="grid gap-5 xl:grid-cols-2">
             <SectionShell
               title="Transaction Mix"
-              description="Derived loyalty activity mix from the latest analytics snapshot."
+              description="Review loyalty activity from the latest analytics snapshot."
               loading={derivedLoadState === 'analytics_loading'}
               errorMessage={errors.loyalty}
               hasData={Boolean(snapshot.loyalty?.transactionTypes?.length)}
@@ -967,7 +967,7 @@ export default function AdminAnalyticsWorkspace() {
 
             <SectionShell
               title="Top Rewards"
-              description="Most-used rewards from the current loyalty analytics read model."
+              description="Review top rewards from the loyalty snapshot."
               loading={derivedLoadState === 'analytics_loading'}
               errorMessage={errors.loyalty}
               hasData={Boolean(snapshot.loyalty?.topRewards?.length)}
@@ -1000,7 +1000,7 @@ export default function AdminAnalyticsWorkspace() {
               icon={ReceiptText}
               label="Tracked Invoices"
               value={formatNumber(snapshot.invoiceAging?.totals?.trackedInvoices)}
-              sub="Invoices with reminder-policy visibility in analytics."
+              sub="Invoices visible in reminder analytics."
             />
             <StatCard
               icon={CalendarClock}
@@ -1012,7 +1012,7 @@ export default function AdminAnalyticsWorkspace() {
               icon={History}
               label="Processed Rules"
               value={formatNumber(snapshot.invoiceAging?.totals?.processedReminderRules)}
-              sub="Reminder rules already processed by the reminder engine."
+              sub="Reminder rules already processed."
             />
             <StatCard
               icon={AlertTriangle}
@@ -1024,7 +1024,7 @@ export default function AdminAnalyticsWorkspace() {
 
           <SectionShell
             title="Aging Buckets"
-            description="Reminder-driven invoice aging counts from the latest analytics refresh."
+            description="Review invoice aging from the latest analytics snapshot."
             loading={derivedLoadState === 'analytics_loading'}
             errorMessage={errors.invoiceAging}
             hasData={Boolean(snapshot.invoiceAging?.agingBuckets?.length)}
@@ -1042,7 +1042,7 @@ export default function AdminAnalyticsWorkspace() {
 
           <SectionShell
             title="Tracked Reminder Policies"
-            description="Read-only reminder-policy visibility for invoices represented in the latest snapshot."
+            description="Review reminder-policy visibility for tracked invoices."
             loading={derivedLoadState === 'analytics_loading'}
             errorMessage={errors.invoiceAging}
             hasData={Boolean(snapshot.invoiceAging?.trackedInvoicePolicies?.length)}
@@ -1071,31 +1071,31 @@ export default function AdminAnalyticsWorkspace() {
               icon={ShieldCheck}
               label="Sensitive Actions"
               value={formatNumber(snapshot.auditTrail?.totals?.totalSensitiveActions)}
-              sub="Total sensitive audit events in the latest snapshot."
+              sub="Sensitive audit events in the latest snapshot."
             />
             <StatCard
               icon={Users}
               label="Staff/Admin Actions"
               value={formatNumber(snapshot.auditTrail?.totals?.staffAdminActions)}
-              sub="Sensitive staff-account and admin-surface actions."
+              sub="Sensitive staff and admin actions."
             />
             <StatCard
               icon={AlertTriangle}
               label="QA Overrides"
               value={formatNumber(snapshot.auditTrail?.totals?.qualityGateOverrides)}
-              sub="Manual quality-gate override events represented in analytics."
+              sub="Manual QA override events in analytics."
             />
             <StatCard
               icon={CheckCircle2}
               label="Release Decisions"
               value={formatNumber(snapshot.auditTrail?.totals?.releaseDecisions)}
-              sub="Release and invoice-finalization audit records in the latest snapshot."
+              sub="Release and finalization audit records."
             />
           </div>
 
           <SectionShell
             title="Audit Timeline"
-            description="A rebuildable audit trail over staff-admin actions, QA overrides, and release decisions."
+            description="Review the audit trail from the latest analytics snapshot."
             loading={derivedLoadState === 'analytics_loading'}
             errorMessage={errors.auditTrail}
             hasData={Boolean(snapshot.auditTrail?.entries?.length)}

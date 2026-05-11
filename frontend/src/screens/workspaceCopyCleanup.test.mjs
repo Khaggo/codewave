@@ -61,3 +61,15 @@ test('catalog, booking-service, and inventory workspaces use one-sentence descri
   assert.ok(inventory.includes('Inspect current catalog metadata for the selected product.'))
   assert.ok(inventory.includes('Review which inventory capabilities are live or planned.'))
 })
+
+test('analytics and loyalty workspaces stay concise', () => {
+  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
+  const loyalty = read('frontend/src/screens/LoyaltyManager.js')
+
+  assert.ok(analytics.includes('Inspect read-only analytics snapshots across operations and support domains.'))
+  assert.ok(analytics.includes('Review derived sales signals from the latest snapshot.'))
+  assert.ok(analytics.includes('Review insurance workload from the latest snapshot.'))
+  assert.ok(analytics.includes('Review service demand from the latest dashboard snapshot.'))
+
+  assert.ok(loyalty.includes('Manage rewards, earning rules, and loyalty analytics.'))
+})
