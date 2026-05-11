@@ -33,7 +33,11 @@ test('intake, qa, and finance workspaces use short section descriptions', () => 
   const finance = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
 
   assert.ok(intakeView.includes('Record vehicle condition before service begins.'))
-  assert.ok(intakeScreen.includes('Save one inspection record for the selected vehicle.'))
+  assert.ok(
+    intakeScreen.includes(
+      'Start from the customer, vehicle, and booking, then capture the vehicle&apos;s arrival condition before',
+    ),
+  )
   assert.ok(intakeScreen.includes('Load prior inspection records for the active vehicle.'))
 
   assert.ok(qa.includes('Review QA checks, record verdicts, and keep overrides auditable.'))
