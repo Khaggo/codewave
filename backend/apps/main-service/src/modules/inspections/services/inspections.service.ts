@@ -1,10 +1,12 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Optional } from '@nestjs/common';
 
 import { BookingsService } from '@main-modules/bookings/services/bookings.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
 
 import { CreateInspectionDto } from '../dto/create-inspection.dto';
+import { UploadInspectionPhotoDto } from '../dto/upload-inspection-photo.dto';
 import { InspectionsRepository } from '../repositories/inspections.repository';
+import { InspectionEvidenceStorageService } from './inspection-evidence-storage.service';
 
 @Injectable()
 export class InspectionsService {
@@ -12,6 +14,8 @@ export class InspectionsService {
     private readonly inspectionsRepository: InspectionsRepository,
     private readonly vehiclesService: VehiclesService,
     private readonly bookingsService: BookingsService,
+    @Optional()
+    private readonly inspectionEvidenceStorageService?: InspectionEvidenceStorageService,
   ) {}
 
   async create(vehicleId: string, payload: CreateInspectionDto) {
@@ -38,5 +42,42 @@ export class InspectionsService {
   async findByVehicleId(vehicleId: string) {
     await this.vehiclesService.findById(vehicleId);
     return this.inspectionsRepository.findByVehicleId(vehicleId);
+  }
+
+  async uploadPhoto(
+    vehicleId: string,
+    payload: UploadInspectionPhotoDto,
+    file: {
+      originalname: string;
+      mimetype: string;
+      buffer: Buffer;
+    },
+  ) {
+    await this.vehiclesService.findById(vehicleId);
+
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('An image upload is required');
+    }
+
+    if (!String(file.mimetype).startsWith('image/')) {
+      throw new BadRequestException('Only image uploads are supported for inspection evidence');
+    }
+
+    const slot = payload.slot?.trim() || 'general';
+    const storageService =
+      this.inspectionEvidenceStorageService ?? new InspectionEvidenceStorageService();
+    const persistedFile = await storageService.saveImage({
+      vehicleId,
+      slot,
+      originalFileName: file.originalname,
+      mimeType: file.mimetype,
+      buffer: file.buffer,
+    });
+
+    return {
+      slot,
+      attachmentRef: persistedFile.attachmentRef,
+      storageKey: persistedFile.storageKey,
+    };
   }
 }

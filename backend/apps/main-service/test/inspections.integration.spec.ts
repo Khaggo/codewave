@@ -3,6 +3,43 @@ import request from 'supertest';
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
 describe('InspectionsController integration', () => {
+  it('uploads an inspection photo and returns an attachment reference', async () => {
+    const { app } = await createMainServiceTestApp();
+
+    try {
+      const userResponse = await request(app.getHttpServer()).post('/api/users').send({
+        email: 'inspection-photo-owner@example.com',
+        firstName: 'Jordan',
+        lastName: 'Uploader',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: userResponse.body.id,
+        plateNumber: 'INSP321',
+        make: 'Nissan',
+        model: 'Almera',
+        year: 2023,
+      });
+
+      const uploadResponse = await request(app.getHttpServer())
+        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .field('slot', 'front')
+        .attach('file', Buffer.from('inspection-photo-binary'), {
+          filename: 'front.jpg',
+          contentType: 'image/jpeg',
+        });
+
+      expect(uploadResponse.status).toBe(200);
+      expect(uploadResponse.body).toEqual({
+        slot: 'front',
+        attachmentRef: expect.stringMatching(/^upload:\/\/vehicle\//),
+        storageKey: expect.any(String),
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   it('creates and lists inspections for a valid vehicle context', async () => {
     const { app } = await createMainServiceTestApp();
 
