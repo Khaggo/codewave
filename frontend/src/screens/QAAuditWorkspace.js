@@ -216,7 +216,7 @@ function PreCheckSummaryPanel({ qualityGate }) {
         <div>
           <p className="card-title">Pre-Check Summary</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            The evidence validator prepares this summary for the head technician. It never passes or blocks release on its own.
+            Review the validator summary before the head technician decides.
           </p>
         </div>
         <span className={`badge ${getQualityStatusTone(qualityGate?.status)}`}>
@@ -300,7 +300,7 @@ function ReleaseDecisionPanel({ qualityGate, releaseState }) {
         <div>
           <p className="card-title">Release Decision</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Completion and customer release should follow the head-technician verdict, not the automated pre-check alone.
+            Follow the head-technician verdict for release decisions.
           </p>
         </div>
         <span className={`badge ${getReleaseTone(releaseState)}`}>{getReleaseCopy(releaseState)}</span>
@@ -334,7 +334,7 @@ function FindingsReviewPanel({ qualityGate }) {
         <div>
           <p className="card-title">Findings Review</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Automated pre-check findings stay grouped here so the head technician can quickly confirm what still needs physical verification.
+            Review findings that still need physical verification.
           </p>
         </div>
         <EmptyPanelState
@@ -356,7 +356,7 @@ function FindingsReviewPanel({ qualityGate }) {
         <div>
           <p className="card-title">Findings Review</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Review blocking and advisory findings before the head technician passes the job or a super admin records an override.
+            Review blocking and advisory findings before release.
           </p>
         </div>
         <span className={`badge ${getQualityStatusTone(qualityGate.status)}`}>{formatLabel(qualityGate.status)}</span>
@@ -396,7 +396,7 @@ function AuditTimelinePanel({ qualityGate, releaseState }) {
       <div>
           <p className="card-title">Audit Timeline / Worker Detail</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Monitor pre-check request timing, worker completion, and the release state that staff should follow.
+            Review request timing, worker status, and release state.
           </p>
       </div>
       {qualityGate ? (
@@ -444,7 +444,7 @@ function HeadTechnicianVerdictPanel({
         <div>
           <p className="card-title">Head Technician Verdict</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Only the head technician can pass or block the release after physically reviewing the work and the pre-check summary.
+            Only the head technician can pass or block release.
           </p>
         </div>
         <span className={`badge ${canRecordLiveVerdict ? 'badge-green' : 'badge-gray'}`}>
@@ -544,7 +544,7 @@ function OverrideAuditPanel({
         <div>
           <p className="card-title">Override Audit</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Overrides remain fully auditable and never replace the original pre-check findings or the missing head-technician accountability.
+            Keep overrides auditable without replacing the original findings.
           </p>
         </div>
         <span className={`badge ${getReleaseTone(releaseState)}`}>{getReleaseCopy(releaseState)}</span>
@@ -598,7 +598,7 @@ function ContractSourcesPanel() {
         <div>
           <p className="card-title">Contract Sources / Linked Context</p>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
-            QA Review is a live pre-check, verdict, and override surface. It does not create inspections, job orders, or fake audit queues.
+            Review live QA checks without creating duplicate records.
           </p>
         </div>
       </div>
@@ -606,13 +606,13 @@ function ContractSourcesPanel() {
         <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
           <p className="text-sm font-bold text-ink-primary">Staff Action</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Load one live job order from the selector, inspect the pre-check summary, then return to Job Orders if remediation is needed.
+            Load a job order, review QA, then return to Job Orders if needed.
           </p>
         </div>
         <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
           <p className="text-sm font-bold text-ink-primary">Super Admin Action</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Override only blocked reviews, with a clear reason that stays in the audit trail.
+            Override blocked reviews with a clear audit reason.
           </p>
         </div>
         <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
@@ -917,7 +917,7 @@ export default function QAAuditWorkspace() {
       <PageHeader
         eyebrow="Quality Governance"
         title="QA Review Workspace"
-        description="Review automated pre-check summaries, let the head technician record the final pass or block verdict, and keep overrides auditable when a super admin must intervene."
+        description="Review QA checks, record verdicts, and keep overrides auditable."
         actions={(
           <button
             type="button"

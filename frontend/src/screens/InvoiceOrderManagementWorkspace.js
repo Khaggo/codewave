@@ -490,7 +490,7 @@ export default function InvoiceOrderManagementWorkspace() {
       <PageHeader
         eyebrow="Financial Operations"
         title="Invoice & Order Management"
-        description="Inspect service invoice readiness, known ecommerce order snapshots, and aging analytics from one structured staff finance surface."
+        description="Review service invoices, ecommerce orders, and aging analytics from one workspace."
         actions={(
           <button
             type="button"
@@ -625,8 +625,7 @@ export default function InvoiceOrderManagementWorkspace() {
             <div>
               <p className="card-title">Financial Snapshot</p>
               <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Group aging analytics, payment-state guidance, and live lookup notices before drilling into a
-                specific billing record.
+                Review aging, payment guidance, and live billing lookups before detail review.
               </p>
             </div>
             <span className="badge badge-gray">{agingLoadLabel}</span>
@@ -724,8 +723,7 @@ export default function InvoiceOrderManagementWorkspace() {
               <div>
                 <p className="card-title">Job Order Billing Detail</p>
                 <p className="mt-1 text-sm leading-6 text-ink-muted">
-                  Inspect a loaded job order to confirm invoice-ready state, recorded payment details, and the
-                  owner workflow that still controls service billing actions.
+                  Inspect loaded job orders for invoice and payment status.
                 </p>
               </div>
               <span className="badge badge-gray">{jobOrderLoadLabel}</span>
@@ -811,8 +809,7 @@ export default function InvoiceOrderManagementWorkspace() {
               <div>
                 <p className="card-title">Ecommerce Order Detail</p>
                 <p className="mt-1 text-sm leading-6 text-ink-muted">
-                  Review a known ecommerce order snapshot and its linked invoice detail without duplicating the
-                  owner workflows that manage fulfillment or billing updates.
+                  Inspect loaded ecommerce orders and invoice details.
                 </p>
               </div>
               <span className="badge badge-gray">{ecommerceLoadLabel}</span>
@@ -889,8 +886,7 @@ export default function InvoiceOrderManagementWorkspace() {
             <div>
               <p className="card-title">Payment Entries</p>
               <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Review ecommerce invoice payment-entry history here while service payment remains summarized
-                separately in the service billing surface.
+                Review payment entries for the loaded invoice context.
               </p>
             </div>
             <span className="badge badge-gray">

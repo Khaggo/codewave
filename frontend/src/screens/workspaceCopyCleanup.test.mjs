@@ -25,3 +25,20 @@ test('settings workspace copy stays one sentence', () => {
 
   assert.ok(source.includes('Review staff details and current account security controls.'))
 })
+
+test('intake, qa, and finance workspaces use short section descriptions', () => {
+  const intakeView = read('frontend/src/screens/digitalIntakeInspectionWorkspaceView.mjs')
+  const intakeScreen = read('frontend/src/screens/DigitalIntakeInspectionWorkspace.js')
+  const qa = read('frontend/src/screens/QAAuditWorkspace.js')
+  const finance = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
+
+  assert.ok(intakeView.includes('Record intake, pre-repair, completion, and return findings per vehicle.'))
+  assert.ok(intakeScreen.includes('Save one inspection record for the selected vehicle.'))
+  assert.ok(intakeScreen.includes('Load prior inspection records for the active vehicle.'))
+
+  assert.ok(qa.includes('Review QA checks, record verdicts, and keep overrides auditable.'))
+
+  assert.ok(finance.includes('Review service invoices, ecommerce orders, and aging analytics from one workspace.'))
+  assert.ok(finance.includes('Review aging, payment guidance, and live billing lookups before detail review.'))
+  assert.ok(finance.includes('Inspect loaded job orders for invoice and payment status.'))
+})
