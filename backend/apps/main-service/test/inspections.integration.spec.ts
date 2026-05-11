@@ -86,6 +86,42 @@ describe('InspectionsController integration', () => {
     }
   });
 
+  it('persists a safe image extension instead of trusting a misleading filename extension', async () => {
+    const { app } = await createMainServiceTestApp();
+
+    try {
+      const userResponse = await request(app.getHttpServer()).post('/api/users').send({
+        email: 'inspection-photo-safe-extension@example.com',
+        firstName: 'Taylor',
+        lastName: 'Mismatch',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: userResponse.body.id,
+        plateNumber: 'INSP741',
+        make: 'Hyundai',
+        model: 'Accent',
+        year: 2021,
+      });
+
+      const uploadResponse = await request(app.getHttpServer())
+        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .field('slot', 'front')
+        .attach('file', Buffer.from('inspection-photo-jpeg'), {
+          filename: 'front.exe',
+          contentType: 'image/jpeg',
+        });
+
+      expect(uploadResponse.status).toBe(200);
+      expect(uploadResponse.body.attachmentRef).toMatch(/^upload:\/\/vehicle\/.+\.(jpg|jpeg)$/);
+      expect(uploadResponse.body.storageKey).toMatch(/\.(jpg|jpeg)$/);
+      expect(uploadResponse.body.attachmentRef).not.toMatch(/\.exe$/);
+      expect(uploadResponse.body.storageKey).not.toMatch(/\.exe$/);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('rejects upload requests for a missing vehicle, non-image files, and missing files', async () => {
     const { app } = await createMainServiceTestApp();
 

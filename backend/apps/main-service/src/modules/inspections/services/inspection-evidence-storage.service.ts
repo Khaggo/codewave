@@ -15,11 +15,10 @@ export class InspectionEvidenceStorageService {
   async saveImage(payload: {
     vehicleId: string;
     slot: string;
-    originalFileName: string;
     mimeType: string;
     buffer: Buffer;
   }) {
-    const extension = this.resolveExtension(payload.originalFileName, payload.mimeType);
+    const extension = this.resolveExtension(payload.mimeType);
     const safeSlot = this.normalizeSlotSegment(payload.slot);
     const relativeDirectory = join(payload.vehicleId, safeSlot);
     const storageKey = join(relativeDirectory, `${randomUUID()}.${extension}`).replace(/\\/g, '/');
@@ -44,14 +43,22 @@ export class InspectionEvidenceStorageService {
     return normalized || 'general';
   }
 
-  private resolveExtension(fileName: string, mimeType: string) {
-    const match = /\.([a-zA-Z0-9]+)$/.exec(String(fileName ?? '').trim());
-    if (match?.[1]) {
-      return match[1].toLowerCase();
+  private resolveExtension(mimeType: string) {
+    const normalizedMimeType = String(mimeType).trim().toLowerCase();
+
+    switch (normalizedMimeType) {
+      case 'image/jpeg':
+      case 'image/jpg':
+        return 'jpg';
+      case 'image/svg+xml':
+        return 'svg';
+      case 'image/x-icon':
+      case 'image/vnd.microsoft.icon':
+        return 'ico';
     }
 
-    if (String(mimeType).startsWith('image/')) {
-      const subtype = String(mimeType).slice('image/'.length).split('+')[0];
+    if (normalizedMimeType.startsWith('image/')) {
+      const subtype = normalizedMimeType.slice('image/'.length).split('+')[0];
       const normalizedSubtype = subtype.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
       if (normalizedSubtype) {

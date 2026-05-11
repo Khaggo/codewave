@@ -8,6 +8,12 @@ import { UploadInspectionPhotoDto } from '../dto/upload-inspection-photo.dto';
 import { InspectionsRepository } from '../repositories/inspections.repository';
 import { InspectionEvidenceStorageService } from './inspection-evidence-storage.service';
 
+export type InspectionUploadFile = {
+  originalname: string;
+  mimetype: string;
+  buffer: Buffer;
+};
+
 @Injectable()
 export class InspectionsService {
   constructor(
@@ -46,11 +52,7 @@ export class InspectionsService {
   async uploadPhoto(
     vehicleId: string,
     payload: UploadInspectionPhotoDto,
-    file: {
-      originalname: string;
-      mimetype: string;
-      buffer: Buffer;
-    },
+    file: InspectionUploadFile,
   ) {
     await this.vehiclesService.findById(vehicleId);
 
@@ -66,7 +68,6 @@ export class InspectionsService {
     const persistedFile = await this.inspectionEvidenceStorageService.saveImage({
       vehicleId,
       slot,
-      originalFileName: file.originalname,
       mimeType: file.mimetype,
       buffer: file.buffer,
     });

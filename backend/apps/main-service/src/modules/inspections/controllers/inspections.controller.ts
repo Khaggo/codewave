@@ -27,7 +27,7 @@ import { CreateInspectionDto } from '../dto/create-inspection.dto';
 import { InspectionResponseDto } from '../dto/inspection-response.dto';
 import { UploadInspectionPhotoDto } from '../dto/upload-inspection-photo.dto';
 import { UploadInspectionPhotoResponseDto } from '../dto/upload-inspection-photo-response.dto';
-import { InspectionsService } from '../services/inspections.service';
+import { InspectionUploadFile, InspectionsService } from '../services/inspections.service';
 
 @ApiTags('inspections')
 @Controller()
@@ -81,7 +81,7 @@ export class InspectionsController {
   uploadPhoto(
     @Param('id') id: string,
     @Body() payload: UploadInspectionPhotoDto,
-    @UploadedFile() file: any,
+    @UploadedFile() file: InspectionUploadFile,
   ) {
     return this.inspectionsService.uploadPhoto(id, payload, file);
   }
