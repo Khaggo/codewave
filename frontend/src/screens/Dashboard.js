@@ -305,7 +305,7 @@ export default function Dashboard() {
         <PageHeader
           eyebrow="Technician Workspace"
           title={`${getGreeting()}, ${firstName}`}
-          description="Review assigned work, continue active repairs, and keep execution progress updated from one focused workspace."
+          description="Review assigned work and keep repair progress current."
           actions={
             <>
               <PortalLink href="/admin/intake-inspections" className="btn-ghost">
@@ -324,22 +324,22 @@ export default function Dashboard() {
           <StatCard
             label="Assigned job orders"
             value={technicianQueue.length}
-            description="Active work currently linked to your queue."
+            description="Work currently assigned to your queue."
           />
           <StatCard
             label="In progress"
             value={activeRepairs}
-            description="Repairs that already need progress updates or completion evidence."
+            description="Repairs awaiting progress or completion updates."
           />
           <StatCard
             label="Ready to start"
             value={readyToStartCount}
-            description="Confirmed work that can move into workshop execution."
+            description="Confirmed work ready for workshop execution."
           />
           <StatCard
             label="Blocked"
             value={blockedCount}
-            description="Work that may need parts, approval, or supervisor review."
+            description="Work waiting on parts, approval, or review."
           />
         </section>
 
@@ -349,7 +349,7 @@ export default function Dashboard() {
               <div>
                 <p className="card-title">Assigned Work</p>
                 <p className="mt-1 text-sm leading-6 text-ink-secondary">
-                  Open a job order to capture progress, attach evidence, or review linked intake history.
+                  Open a job order to update progress or review intake history.
                 </p>
               </div>
               <span className="badge badge-gray">{technicianQueue.length} open items</span>
@@ -377,7 +377,7 @@ export default function Dashboard() {
                 <div>
                   <p className="card-title">Today&apos;s Focus</p>
                   <p className="mt-1 text-sm leading-6 text-ink-secondary">
-                    Keep updates timely so advisers, QA, and release staff see current execution status.
+                    Keep workshop updates current for the rest of the staff.
                   </p>
                 </div>
                 <span className={`badge ${blockedCount > 0 ? 'badge-red' : 'badge-green'}`}>
@@ -431,7 +431,7 @@ export default function Dashboard() {
       <PageHeader
         eyebrow="Operations Dashboard"
         title={`${getGreeting()}, ${firstName}`}
-        description="Use this workspace as the staff command center for booking review, intake coordination, job-order handoff, QA checks, and finance follow-through."
+        description="Manage booking, intake, job-order, QA, and finance work from one workspace."
         actions={
           <PortalLink href="/bookings" className="btn-primary">
             <CalendarCheck size={14} />

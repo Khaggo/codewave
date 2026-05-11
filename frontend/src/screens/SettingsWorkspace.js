@@ -21,7 +21,7 @@ export default function SettingsWorkspace() {
       <PageHeader
         eyebrow="Staff Settings"
         title="Profile And Account Security"
-        description="Review the staff identity details shown across the portal and follow the current security controls for account protection."
+        description="Review staff details and current account security controls."
         meta={
           <>
             <span className="badge badge-gray">Profile</span>
