@@ -1,23 +1,15 @@
+import { rm } from 'fs/promises';
+import { join } from 'path';
 import request from 'supertest';
-import { Test } from '@nestjs/testing';
 
-import { InspectionEvidenceStorageService } from '../src/modules/inspections/services/inspection-evidence-storage.service';
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
 describe('InspectionsController integration', () => {
-  const originalCreateTestingModule = Test.createTestingModule.bind(Test);
-
-  beforeAll(() => {
-    jest.spyOn(Test, 'createTestingModule').mockImplementation((metadata) =>
-      originalCreateTestingModule({
-        ...metadata,
-        providers: [...(metadata.providers ?? []), InspectionEvidenceStorageService],
-      }),
-    );
-  });
-
-  afterAll(() => {
-    jest.restoreAllMocks();
+  afterEach(async () => {
+    await rm(join(process.cwd(), '.runtime', 'uploads', 'inspection-evidence'), {
+      recursive: true,
+      force: true,
+    });
   });
 
   it('uploads an inspection photo and returns an attachment reference', async () => {
@@ -52,6 +44,88 @@ describe('InspectionsController integration', () => {
         attachmentRef: expect.stringMatching(/^upload:\/\/vehicle\//),
         storageKey: expect.any(String),
       });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('uploads a valid image subtype even when the filename has no extension', async () => {
+    const { app } = await createMainServiceTestApp();
+
+    try {
+      const userResponse = await request(app.getHttpServer()).post('/api/users').send({
+        email: 'inspection-photo-avif@example.com',
+        firstName: 'Avery',
+        lastName: 'Subtype',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: userResponse.body.id,
+        plateNumber: 'INSP654',
+        make: 'Mazda',
+        model: '2',
+        year: 2024,
+      });
+
+      const uploadResponse = await request(app.getHttpServer())
+        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .field('slot', 'front')
+        .attach('file', Buffer.from('inspection-photo-avif'), {
+          filename: 'front',
+          contentType: 'image/avif',
+        });
+
+      expect(uploadResponse.status).toBe(200);
+      expect(uploadResponse.body).toEqual({
+        slot: 'front',
+        attachmentRef: expect.stringMatching(/^upload:\/\/vehicle\//),
+        storageKey: expect.stringMatching(/\.avif$/),
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects upload requests for a missing vehicle, non-image files, and missing files', async () => {
+    const { app } = await createMainServiceTestApp();
+
+    try {
+      const userResponse = await request(app.getHttpServer()).post('/api/users').send({
+        email: 'inspection-upload-errors@example.com',
+        firstName: 'Morgan',
+        lastName: 'Verifier',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: userResponse.body.id,
+        plateNumber: 'INSP987',
+        make: 'Kia',
+        model: 'Soluto',
+        year: 2022,
+      });
+
+      const missingVehicleUploadResponse = await request(app.getHttpServer())
+        .post('/api/vehicles/missing-vehicle-id/inspections/photos/upload')
+        .field('slot', 'front')
+        .attach('file', Buffer.from('missing-vehicle-photo'), {
+          filename: 'front.jpg',
+          contentType: 'image/jpeg',
+        });
+      expect(missingVehicleUploadResponse.status).toBe(404);
+
+      const nonImageUploadResponse = await request(app.getHttpServer())
+        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .field('slot', 'front')
+        .attach('file', Buffer.from('not-an-image'), {
+          filename: 'front.txt',
+          contentType: 'text/plain',
+        });
+      expect(nonImageUploadResponse.status).toBe(400);
+
+      const missingFileUploadResponse = await request(app.getHttpServer())
+        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .field('slot', 'front');
+      expect(missingFileUploadResponse.status).toBe(400);
     } finally {
       await app.close();
     }

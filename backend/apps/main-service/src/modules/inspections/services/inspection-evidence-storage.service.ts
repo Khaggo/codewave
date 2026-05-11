@@ -50,22 +50,15 @@ export class InspectionEvidenceStorageService {
       return match[1].toLowerCase();
     }
 
-    switch (mimeType) {
-      case 'image/png':
-        return 'png';
-      case 'image/webp':
-        return 'webp';
-      case 'image/heic':
-        return 'heic';
-      case 'image/heif':
-        return 'heif';
-      case 'image/gif':
-        return 'gif';
-      case 'image/jpeg':
-      case 'image/jpg':
-        return 'jpg';
-      default:
-        throw new InternalServerErrorException('Unsupported inspection evidence file format');
+    if (String(mimeType).startsWith('image/')) {
+      const subtype = String(mimeType).slice('image/'.length).split('+')[0];
+      const normalizedSubtype = subtype.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+      if (normalizedSubtype) {
+        return normalizedSubtype.toLowerCase();
+      }
     }
+
+    throw new InternalServerErrorException('Unsupported inspection evidence file format');
   }
 }

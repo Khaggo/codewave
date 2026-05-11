@@ -61,6 +61,7 @@ import {
   inspectionStatusEnum,
   inspectionTypeEnum,
 } from '../../src/modules/inspections/schemas/inspections.schema';
+import { InspectionEvidenceStorageService } from '../../src/modules/inspections/services/inspection-evidence-storage.service';
 import { InspectionsService } from '../../src/modules/inspections/services/inspections.service';
 import { JobOrdersController } from '../../src/modules/job-orders/controllers/job-orders.controller';
 import { AddJobOrderPhotoDto } from '../../src/modules/job-orders/dto/add-job-order-photo.dto';
@@ -4526,6 +4527,7 @@ export async function createMainServiceTestApp(): Promise<{
       QualityGateDiscrepancyEngineService,
       QualityGateSemanticAuditorService,
       QualityGatesService,
+      InspectionEvidenceStorageService,
       InspectionsService,
       VehicleLifecycleSummaryProviderService,
       VehicleLifecycleService,

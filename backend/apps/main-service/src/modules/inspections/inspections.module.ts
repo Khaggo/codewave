@@ -12,6 +12,6 @@ import { InspectionsService } from './services/inspections.service';
   imports: [VehiclesModule, BookingsModule],
   controllers: [InspectionsController],
   providers: [InspectionsRepository, InspectionEvidenceStorageService, InspectionsService],
-  exports: [InspectionsRepository, InspectionEvidenceStorageService, InspectionsService],
+  exports: [InspectionsRepository, InspectionsService],
 })
 export class InspectionsModule {}
