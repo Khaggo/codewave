@@ -10,7 +10,6 @@ type SupportedInspectionImageMimeType =
   | 'image/heif'
   | 'image/jpeg'
   | 'image/png'
-  | 'image/svg+xml'
   | 'image/webp'
   | 'image/x-icon';
 
@@ -89,8 +88,6 @@ export class InspectionEvidenceStorageService {
         return 'heic';
       case 'image/heif':
         return 'heif';
-      case 'image/svg+xml':
-        return 'svg';
       case 'image/x-icon':
         return 'ico';
     }
@@ -147,14 +144,6 @@ export class InspectionEvidenceStorageService {
 
     if (buffer.length >= 4 && buffer[0] === 0x00 && buffer[1] === 0x00 && buffer[2] === 0x01 && buffer[3] === 0x00) {
       return 'image/x-icon';
-    }
-
-    const maybeSvg = buffer.toString('utf8', 0, Math.min(buffer.length, 512)).trimStart();
-    if (
-      maybeSvg.startsWith('<svg') ||
-      (maybeSvg.startsWith('<?xml') && maybeSvg.includes('<svg'))
-    ) {
-      return 'image/svg+xml';
     }
 
     const isoMimeType = this.detectIsoBaseMediaImageMimeType(buffer);

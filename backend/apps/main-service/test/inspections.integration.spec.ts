@@ -15,6 +15,7 @@ const AVIF_IMAGE_BYTES = Buffer.from([
   0x00, 0x00, 0x00, 0x00, 0x61, 0x76, 0x69, 0x66, 0x6d, 0x69, 0x66, 0x31,
   0x6d, 0x69, 0x61, 0x66, 0x00, 0x00, 0x00, 0x00,
 ]);
+const SVG_IMAGE_BYTES = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>');
 
 describe('InspectionsController integration', () => {
   afterEach(async () => {
@@ -158,6 +159,38 @@ describe('InspectionsController integration', () => {
         .attach('file', Buffer.from('definitely-not-an-image'), {
           filename: 'front.jpg',
           contentType: 'image/jpeg',
+        });
+
+      expect(uploadResponse.status).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects svg uploads for inspection photos', async () => {
+    const { app } = await createMainServiceTestApp();
+
+    try {
+      const userResponse = await request(app.getHttpServer()).post('/api/users').send({
+        email: 'inspection-upload-svg@example.com',
+        firstName: 'Skyler',
+        lastName: 'Vector',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: userResponse.body.id,
+        plateNumber: 'INSP159',
+        make: 'Chevrolet',
+        model: 'Spark',
+        year: 2018,
+      });
+
+      const uploadResponse = await request(app.getHttpServer())
+        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .field('slot', 'front')
+        .attach('file', SVG_IMAGE_BYTES, {
+          filename: 'front.svg',
+          contentType: 'image/svg+xml',
         });
 
       expect(uploadResponse.status).toBe(400);
