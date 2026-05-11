@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 
 import { BookingsService } from '@main-modules/bookings/services/bookings.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
@@ -14,8 +14,7 @@ export class InspectionsService {
     private readonly inspectionsRepository: InspectionsRepository,
     private readonly vehiclesService: VehiclesService,
     private readonly bookingsService: BookingsService,
-    @Optional()
-    private readonly inspectionEvidenceStorageService?: InspectionEvidenceStorageService,
+    private readonly inspectionEvidenceStorageService: InspectionEvidenceStorageService,
   ) {}
 
   async create(vehicleId: string, payload: CreateInspectionDto) {
@@ -64,9 +63,7 @@ export class InspectionsService {
     }
 
     const slot = payload.slot?.trim() || 'general';
-    const storageService =
-      this.inspectionEvidenceStorageService ?? new InspectionEvidenceStorageService();
-    const persistedFile = await storageService.saveImage({
+    const persistedFile = await this.inspectionEvidenceStorageService.saveImage({
       vehicleId,
       slot,
       originalFileName: file.originalname,

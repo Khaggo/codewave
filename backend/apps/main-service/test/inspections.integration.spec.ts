@@ -1,8 +1,25 @@
 import request from 'supertest';
+import { Test } from '@nestjs/testing';
 
+import { InspectionEvidenceStorageService } from '../src/modules/inspections/services/inspection-evidence-storage.service';
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
 describe('InspectionsController integration', () => {
+  const originalCreateTestingModule = Test.createTestingModule.bind(Test);
+
+  beforeAll(() => {
+    jest.spyOn(Test, 'createTestingModule').mockImplementation((metadata) =>
+      originalCreateTestingModule({
+        ...metadata,
+        providers: [...(metadata.providers ?? []), InspectionEvidenceStorageService],
+      }),
+    );
+  });
+
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
+
   it('uploads an inspection photo and returns an attachment reference', async () => {
     const { app } = await createMainServiceTestApp();
 
