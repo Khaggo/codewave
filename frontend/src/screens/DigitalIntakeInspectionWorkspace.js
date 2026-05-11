@@ -17,12 +17,30 @@ import {
   getSelectedInspection,
   getStaffInspectionCaptureSuccessState,
   getStaffInspectionHistoryState,
-  inspectionCaptureSubmissionTemplate,
   inspectionStaffRoles,
   summarizeInspectionFindings,
 } from '@/lib/api/generated/inspections/staff-web-inspections'
-import { getInspectionMessageTone, splitRefs } from './digitalIntakeInspectionView.mjs'
+import { getInspectionMessageTone } from './digitalIntakeInspectionView.mjs'
+import {
+  arrivalPhotoSlots,
+  buildIntakeInspectionPayload,
+  checklistItemOptions,
+  createInitialIntakeDraft,
+  damageAreaOptions,
+  fuelLevelOptions,
+} from './digitalIntakeInspectionWorkspaceForm.mjs'
 import { getIntakeWorkspaceHeroCopy } from './digitalIntakeInspectionWorkspaceView.mjs'
+
+const intakeStatusMeta = {
+  pending: {
+    badgeClassName: 'badge badge-orange',
+    label: 'Pending draft',
+  },
+  completed: {
+    badgeClassName: 'badge badge-green',
+    label: 'Completed intake',
+  },
+}
 
 const formatLabel = (value) =>
   String(value ?? '')
@@ -47,6 +65,23 @@ const formatDateTime = (value) => {
   })
 }
 
+const formatVehicleOptionLabel = (vehicle) =>
+  [
+    vehicle?.plateNumber || vehicle?.id,
+    [vehicle?.year, vehicle?.make, vehicle?.model].filter(Boolean).join(' '),
+  ]
+    .filter(Boolean)
+    .join(' / ')
+
+const formatBookingOptionLabel = (booking) =>
+  [
+    booking?.customerLabel,
+    booking?.scheduledDate,
+    formatLabel(booking?.status),
+  ]
+    .filter(Boolean)
+    .join(' / ')
+
 const getVerificationTone = (state) => {
   if (state === 'verified') return 'badge-green'
   if (state === 'mixed_verification') return 'badge-orange'
@@ -60,32 +95,20 @@ const getMessageTone = (state) => {
   return 'status-message status-message-danger'
 }
 
-const initialDraft = {
-  customerUserId: '',
-  vehicleId: '',
-  bookingId: '',
-  inspectionType: inspectionCaptureSubmissionTemplate.request.inspectionType,
-  status: inspectionCaptureSubmissionTemplate.request.status ?? 'completed',
-  notes: inspectionCaptureSubmissionTemplate.request.notes ?? '',
-  attachmentRefsText: '',
-  findingCategory: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.category ?? 'general',
-  findingLabel: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.label ?? '',
-  findingSeverity: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.severity ?? 'medium',
-  findingNotes: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.notes ?? '',
-  findingVerified: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.isVerified ?? true,
-}
+const getDraftStatusMeta = (status) =>
+  intakeStatusMeta[status] ?? {
+    badgeClassName: 'badge badge-gray',
+    label: formatLabel(status) || 'Intake draft',
+  }
 
-const inspectionFindingCategoryOptions = [
-  { value: 'general', label: 'General' },
-  { value: 'engine', label: 'Engine' },
-  { value: 'brakes', label: 'Brakes' },
-  { value: 'suspension', label: 'Suspension' },
-  { value: 'electrical', label: 'Electrical' },
-  { value: 'body', label: 'Body' },
-  { value: 'interior', label: 'Interior' },
-  { value: 'fluids', label: 'Fluids' },
-  { value: 'tires', label: 'Tires' },
-]
+const getUserDisplayLabel = (user) =>
+  user?.displayName ||
+  user?.name ||
+  user?.fullName ||
+  user?.roleLabel ||
+  user?.email ||
+  user?.id ||
+  ''
 
 function InspectionCard({ inspection, isSelected, onSelect }) {
   const summaries = summarizeInspectionFindings(inspection.findings)
@@ -135,12 +158,27 @@ function InspectionCard({ inspection, isSelected, onSelect }) {
   )
 }
 
+function IntakeSection({ title, description, badge, children }) {
+  return (
+    <section className="rounded-2xl border border-surface-border bg-surface-card p-4 md:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-ink-primary">{title}</p>
+          {description ? <p className="mt-1 text-sm text-ink-muted">{description}</p> : null}
+        </div>
+        {badge ? <span className="badge badge-gray">{badge}</span> : null}
+      </div>
+      <div className="mt-4">{children}</div>
+    </section>
+  )
+}
+
 export default function DigitalIntakeInspectionWorkspace() {
   const user = useUser()
   const role = user?.role ?? null
   const isTechnician = role === 'technician'
   const canUseInspection = inspectionStaffRoles.includes(role)
-  const [draft, setDraft] = useState(initialDraft)
+  const [draft, setDraft] = useState(() => createInitialIntakeDraft())
   const [inspections, setInspections] = useState([])
   const [customers, setCustomers] = useState([])
   const [vehicleBookings, setVehicleBookings] = useState([])
@@ -198,14 +236,65 @@ export default function DigitalIntakeInspectionWorkspace() {
     () => customers.find((customer) => customer.id === draft.customerUserId) ?? null,
     [customers, draft.customerUserId],
   )
-  const customerVehicleOptions = selectedCustomer?.vehicles ?? []
-
+  const customerVehicleOptions = useMemo(() => selectedCustomer?.vehicles ?? [], [selectedCustomer])
+  const selectedVehicle = useMemo(
+    () => customerVehicleOptions.find((vehicle) => vehicle.id === draft.vehicleId) ?? null,
+    [customerVehicleOptions, draft.vehicleId],
+  )
+  const selectedBooking = useMemo(
+    () => vehicleBookings.find((booking) => booking.id === draft.bookingId) ?? null,
+    [vehicleBookings, draft.bookingId],
+  )
   const selectedInspection = useMemo(
     () => getSelectedInspection(inspections, selectedInspectionId),
     [inspections, selectedInspectionId],
   )
   const inspectionSummaryCount = selectedInspection?.findings?.length ?? 0
   const heroCopy = getIntakeWorkspaceHeroCopy(isTechnician)
+  const draftStatus = getDraftStatusMeta(draft.status)
+  const defaultReceivedByStaff = getUserDisplayLabel(user)
+
+  const intakeContext = useMemo(() => {
+    const items = []
+
+    if (selectedCustomer) {
+      items.push({
+        label: 'Customer',
+        value: selectedCustomer.displayName || selectedCustomer.email || selectedCustomer.id,
+        sub: selectedCustomer.email || selectedCustomer.id,
+      })
+    }
+
+    if (selectedVehicle) {
+      items.push({
+        label: 'Vehicle',
+        value: formatVehicleOptionLabel(selectedVehicle),
+        sub: `Vehicle ID: ${selectedVehicle.id}`,
+      })
+    } else if (draft.vehicleId.trim()) {
+      items.push({
+        label: 'Vehicle',
+        value: draft.vehicleId.trim(),
+        sub: isTechnician ? 'Manual vehicle reference' : 'Vehicle selected without profile details',
+      })
+    }
+
+    if (selectedBooking) {
+      items.push({
+        label: 'Booking',
+        value: selectedBooking.id,
+        sub: formatBookingOptionLabel(selectedBooking),
+      })
+    } else if (draft.bookingId.trim()) {
+      items.push({
+        label: 'Booking',
+        value: draft.bookingId.trim(),
+        sub: 'Manual booking reference',
+      })
+    }
+
+    return items
+  }, [draft.bookingId, draft.vehicleId, isTechnician, selectedBooking, selectedCustomer, selectedVehicle])
 
   const updateDraft = (patch) => {
     setDraft((current) => ({
@@ -214,28 +303,40 @@ export default function DigitalIntakeInspectionWorkspace() {
     }))
   }
 
-  const buildPayload = () => {
-    const finding =
-      draft.findingLabel.trim() || draft.findingCategory.trim() || draft.findingNotes.trim()
-        ? {
-            category: draft.findingCategory.trim() || 'general',
-            label: draft.findingLabel.trim() || 'Inspection note',
-            severity: draft.findingSeverity,
-            notes: draft.findingNotes.trim() || undefined,
-            isVerified: draft.findingVerified,
-          }
-        : null
-
-    return {
-      inspectionType: draft.inspectionType,
-      status: draft.status,
-      bookingId: draft.bookingId.trim() || undefined,
-      inspectorUserId: user?.id,
-      notes: draft.notes.trim() || undefined,
-      attachmentRefs: splitRefs(draft.attachmentRefsText),
-      findings: finding ? [finding] : [],
-    }
+  const updateArrivalPhoto = (slot, value) => {
+    setDraft((current) => ({
+      ...current,
+      arrivalPhotos: {
+        ...current.arrivalPhotos,
+        [slot]: value,
+      },
+    }))
   }
+
+  const updateChecklistItem = (item, value) => {
+    setDraft((current) => ({
+      ...current,
+      checklist: {
+        ...current.checklist,
+        [item]: value,
+      },
+    }))
+  }
+
+  const toggleDamageArea = (area) => {
+    setDraft((current) => ({
+      ...current,
+      damageAreas: current.damageAreas.includes(area)
+        ? current.damageAreas.filter((item) => item !== area)
+        : [...current.damageAreas, area],
+    }))
+  }
+
+  const buildPayload = (nextDraft = draft) =>
+    buildIntakeInspectionPayload({
+      draft: nextDraft,
+      userId: user?.id,
+    })
 
   const loadHistory = async () => {
     if (!canUseInspection) {
@@ -301,7 +402,7 @@ export default function DigitalIntakeInspectionWorkspace() {
     }
   }
 
-  const saveInspection = async () => {
+  const saveInspection = async (nextStatus) => {
     if (!canUseInspection) {
       setCaptureState({
         status: 'forbidden_role',
@@ -318,14 +419,6 @@ export default function DigitalIntakeInspectionWorkspace() {
       return
     }
 
-    if (draft.inspectionType === 'completion' && !draft.findingLabel.trim()) {
-      setCaptureState({
-        status: 'completion_missing_findings',
-        message: 'Completion inspections need at least one finding before they can support release verification.',
-      })
-      return
-    }
-
     if (!user?.accessToken) {
       setCaptureState({
         status: 'capture_failed',
@@ -334,6 +427,13 @@ export default function DigitalIntakeInspectionWorkspace() {
       return
     }
 
+    const normalizedDraft = {
+      ...draft,
+      status: nextStatus,
+      receivedByStaff: draft.receivedByStaff || defaultReceivedByStaff,
+    }
+
+    setDraft(normalizedDraft)
     setCaptureState({
       status: 'capture_submitting',
       message: '',
@@ -341,37 +441,39 @@ export default function DigitalIntakeInspectionWorkspace() {
 
     try {
       const savedInspection = await createVehicleInspection({
-        vehicleId: draft.vehicleId.trim(),
-        inspection: buildPayload(),
+        vehicleId: normalizedDraft.vehicleId.trim(),
+        inspection: buildPayload(normalizedDraft),
         accessToken: user.accessToken,
       })
-      const nextStatus = getStaffInspectionCaptureSuccessState(savedInspection)
+      const nextCaptureState = getStaffInspectionCaptureSuccessState(savedInspection)
 
       setInspections((current) => [savedInspection, ...current.filter((item) => item.id !== savedInspection.id)])
       setSelectedInspectionId(savedInspection.id)
       setCaptureState({
-        status: nextStatus,
-        message: `Inspection saved with ${formatLabel(savedInspection.verificationState)} evidence state.`,
+        status: nextCaptureState,
+        message: `${
+          savedInspection.status === 'pending' ? 'Pending intake draft saved' : 'Intake inspection saved'
+        } with ${formatLabel(savedInspection.verificationState)} evidence state.`,
       })
       setHistoryState({
         status: 'history_loaded',
         message: 'Latest saved inspection is selected below.',
       })
     } catch (error) {
-      let nextStatus = 'capture_failed'
+      let nextCaptureState = 'capture_failed'
 
       if (error instanceof ApiError && error.status === 403) {
-        nextStatus = 'forbidden_role'
+        nextCaptureState = 'forbidden_role'
       } else if (error instanceof ApiError && error.status === 404) {
-        nextStatus = 'vehicle_not_found'
+        nextCaptureState = 'vehicle_not_found'
       } else if (error instanceof ApiError && error.status === 409) {
-        nextStatus = 'booking_vehicle_conflict'
+        nextCaptureState = 'booking_vehicle_conflict'
       } else if (error instanceof ApiError && error.status === 400) {
-        nextStatus = 'completion_missing_findings'
+        nextCaptureState = 'capture_failed'
       }
 
       setCaptureState({
-        status: nextStatus,
+        status: nextCaptureState,
         message: error?.message || 'Inspection could not be saved.',
       })
     }
@@ -395,14 +497,13 @@ export default function DigitalIntakeInspectionWorkspace() {
         <div className="card p-5 md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="card-title">Live Vehicle Inspection Capture</p>
+              <p className="card-title">Booking Reference</p>
               <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                {isTechnician
-                  ? 'Save one inspection record for the assigned vehicle.'
-                  : 'Save one inspection record for the selected vehicle.'}
+                Start from the customer, vehicle, and booking, then capture the vehicle&apos;s arrival condition before
+                service begins.
               </p>
             </div>
-            <span className="badge badge-gray">{isTechnician ? 'Assigned vehicle context' : 'Vehicle and booking selectors'}</span>
+            <span className={draftStatus.badgeClassName}>{draftStatus.label}</span>
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-2">
@@ -447,20 +548,20 @@ export default function DigitalIntakeInspectionWorkspace() {
                   <option value="">Choose a customer vehicle</option>
                   {customerVehicleOptions.map((vehicle) => (
                     <option key={vehicle.id} value={vehicle.id}>
-                      {vehicle.plateNumber || vehicle.id} / {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')}
+                      {formatVehicleOptionLabel(vehicle)}
                     </option>
                   ))}
                 </select>
               )}
             </label>
-            <label className="label">
+            <label className="label md:col-span-2">
               Optional booking
               {isTechnician ? (
                 <input
                   value={draft.bookingId}
                   onChange={(event) => updateDraft({ bookingId: event.target.value })}
                   className="input"
-                  placeholder="Booking UUID if this came from intake"
+                  placeholder="Booking UUID if this intake came from a scheduled visit"
                 />
               ) : (
                 <select
@@ -471,126 +572,233 @@ export default function DigitalIntakeInspectionWorkspace() {
                   <option value="">No booking link</option>
                   {vehicleBookings.map((booking) => (
                     <option key={booking.id} value={booking.id}>
-                      {booking.customerLabel} / {booking.scheduledDate} / {booking.status}
+                      {formatBookingOptionLabel(booking)}
                     </option>
                   ))}
                 </select>
               )}
             </label>
-            <label className="label">
-              Inspection type
-              <select
-                value={draft.inspectionType}
-                onChange={(event) => updateDraft({ inspectionType: event.target.value })}
-                className="select"
-              >
-                <option value="intake">Intake</option>
-                <option value="pre_repair">Pre Repair</option>
-                <option value="completion">Completion</option>
-                <option value="return">Return</option>
-              </select>
-            </label>
-            <label className="label">
-              Status
-              <select
-                value={draft.status}
-                onChange={(event) => updateDraft({ status: event.target.value })}
-                className="select"
-              >
-                <option value="pending">Pending</option>
-                <option value="completed">Completed</option>
-                <option value="needs_followup">Needs Followup</option>
-                <option value="void">Void</option>
-              </select>
-            </label>
-            <label className="label md:col-span-2">
-              Notes
-              <textarea
-                value={draft.notes}
-                onChange={(event) => updateDraft({ notes: event.target.value })}
-                rows={3}
-                className="input min-h-[96px] resize-y"
-                placeholder="Describe the condition observed during intake or inspection."
-              />
-            </label>
-            <label className="label md:col-span-2">
-              Attachment refs
-              <input
-                value={draft.attachmentRefsText}
-                onChange={(event) => updateDraft({ attachmentRefsText: event.target.value })}
-                className="input"
-                placeholder="upload://vehicle/intake-front, upload://vehicle/intake-dashboard"
-              />
-            </label>
           </div>
 
-          <div className="mt-5 rounded-2xl border border-surface-border bg-surface-card p-4 md:p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-bold text-ink-primary">Primary Finding</p>
-                <p className="mt-1 text-sm text-ink-muted">
-                  Capture the clearest visible condition or repair-relevant note from this inspection.
-                </p>
+          <div className="mt-5 space-y-4">
+            <IntakeSection
+              title="Vehicle Details"
+              description="Record the odometer and a concise arrival summary for the selected intake context."
+              badge={draft.vehicleId ? 'Vehicle selected' : 'Vehicle required'}
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="label">
+                  Current odometer (km)
+                  <input
+                    value={draft.currentOdometerKm}
+                    onChange={(event) => updateDraft({ currentOdometerKm: event.target.value })}
+                    className="input"
+                    inputMode="numeric"
+                    placeholder="45230"
+                  />
+                </label>
+                <div className="rounded-xl border border-surface-border bg-surface-raised p-4 md:col-span-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Selected context</p>
+                  {intakeContext.length ? (
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      {intakeContext.map((item) => (
+                        <div key={item.label} className="rounded-xl border border-surface-border bg-surface-card p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">{item.label}</p>
+                          <p className="mt-2 text-sm font-semibold text-ink-primary">{item.value}</p>
+                          {item.sub ? <p className="mt-1 text-xs text-ink-muted">{item.sub}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-ink-muted">
+                      Select a customer and vehicle, or paste the assigned vehicle reference first.
+                    </p>
+                  )}
+                </div>
+                <label className="label md:col-span-2">
+                  Service concern on arrival
+                  <textarea
+                    value={draft.serviceConcern}
+                    onChange={(event) => updateDraft({ serviceConcern: event.target.value })}
+                    rows={3}
+                    className="input min-h-[96px] resize-y"
+                    placeholder="Summarize the customer-reported concern or requested check."
+                  />
+                </label>
               </div>
-              <span className="badge badge-gray">Single finding entry</span>
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="label">
-                Category
-                <select
-                  value={draft.findingCategory}
-                  onChange={(event) => updateDraft({ findingCategory: event.target.value })}
-                  className="select"
-                >
-                  {inspectionFindingCategoryOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="label">
-                Severity
-                <select
-                  value={draft.findingSeverity}
-                  onChange={(event) => updateDraft({ findingSeverity: event.target.value })}
-                  className="select"
-                >
-                  <option value="info">Info</option>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </label>
-              <label className="label md:col-span-2">
-                Finding label
-                <input
-                  value={draft.findingLabel}
-                  onChange={(event) => updateDraft({ findingLabel: event.target.value })}
-                  className="input"
-                  placeholder="Brake pedal response confirmed"
-                />
-              </label>
-              <label className="label md:col-span-2">
-                Finding notes
+            </IntakeSection>
+
+            <IntakeSection
+              title="Fuel Level On Arrival"
+              description="Use the intake-first fuel snapshot instead of a free-form note."
+              badge={draft.fuelLevel || 'Not set'}
+            >
+              <div className="booking-segmented-control w-full flex-wrap">
+                {fuelLevelOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => updateDraft({ fuelLevel: option })}
+                    className={`booking-tab-button ${draft.fuelLevel === option ? 'booking-tab-button-active' : ''}`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </IntakeSection>
+
+            <IntakeSection
+              title="Existing Damage / Marks"
+              description="Mark visible areas with existing damage or special attention points before the vehicle enters service."
+              badge={draft.damageAreas.length ? `${draft.damageAreas.length} area(s)` : 'None marked'}
+            >
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {damageAreaOptions.map((area) => {
+                  const isSelected = draft.damageAreas.includes(area.value)
+
+                  return (
+                    <button
+                      key={area.value}
+                      type="button"
+                      onClick={() => toggleDamageArea(area.value)}
+                      className={`rounded-xl border px-4 py-3 text-left text-sm font-medium transition-colors ${
+                        isSelected
+                          ? 'border-brand-orange bg-brand-orange/10 text-ink-primary'
+                          : 'border-surface-border bg-surface-raised text-ink-secondary hover:border-brand-orange/40'
+                      }`}
+                    >
+                      {area.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <label className="label mt-4">
+                Additional damage notes
                 <textarea
-                  value={draft.findingNotes}
-                  onChange={(event) => updateDraft({ findingNotes: event.target.value })}
+                  value={draft.damageNotes}
+                  onChange={(event) => updateDraft({ damageNotes: event.target.value })}
                   rows={3}
                   className="input min-h-[96px] resize-y"
-                  placeholder="Evidence notes or customer-safe observation."
+                  placeholder="Describe scratches, dents, chips, or anything the next handoff should know."
                 />
               </label>
-            </div>
-            <label className="mt-3 flex items-center gap-2 text-sm text-ink-secondary">
-              <input
-                type="checkbox"
-                checked={draft.findingVerified}
-                onChange={(event) => updateDraft({ findingVerified: event.target.checked })}
-                className="h-4 w-4 accent-[#f07c00]"
-              />
-              Mark this finding as verified evidence
-            </label>
+            </IntakeSection>
+
+            <IntakeSection
+              title="Arrival Photos"
+              description="Use named slots for the existing upload-ref workflow. This screen records refs only."
+              badge="Ref-based save"
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                {arrivalPhotoSlots.map((slot) => (
+                  <label key={slot.value} className="label">
+                    {slot.label}
+                    <input
+                      value={draft.arrivalPhotos[slot.value]}
+                      onChange={(event) => updateArrivalPhoto(slot.value, event.target.value)}
+                      className="input"
+                      placeholder={`upload://vehicle/${slot.value}`}
+                    />
+                  </label>
+                ))}
+              </div>
+            </IntakeSection>
+
+            <IntakeSection
+              title="Pre-Service Checklist"
+              description="Capture a quick OK or Issue result for the standard arrival checks."
+              badge="OK / Issue"
+            >
+              <div className="space-y-3">
+                {checklistItemOptions.map((item) => (
+                  <div
+                    key={item.value}
+                    className="rounded-xl border border-surface-border bg-surface-raised p-3 md:flex md:items-center md:justify-between"
+                  >
+                    <p className="text-sm font-medium text-ink-primary">{item.label}</p>
+                    <div className="booking-segmented-control mt-3 w-full flex-wrap md:mt-0 md:w-auto">
+                      {[
+                        { value: 'ok', label: 'OK' },
+                        { value: 'issue', label: 'Issue' },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => updateChecklistItem(item.value, option.value)}
+                          className={`booking-tab-button ${
+                            draft.checklist[item.value] === option.value ? 'booking-tab-button-active' : ''
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </IntakeSection>
+
+            <IntakeSection
+              title="Customer Items In Vehicle"
+              description="Note any personal items or accessories that should be acknowledged at handoff."
+            >
+              <label className="label">
+                Items left in vehicle
+                <textarea
+                  value={draft.customerItems}
+                  onChange={(event) => updateDraft({ customerItems: event.target.value })}
+                  rows={3}
+                  className="input min-h-[96px] resize-y"
+                  placeholder="Dashcam, child seat, parking card, tools, loose valuables, and similar items."
+                />
+              </label>
+            </IntakeSection>
+
+            <IntakeSection
+              title="Customer Acknowledgment"
+              description="Capture the sign-off details that confirm the arrival condition was reviewed with the customer."
+              badge={draft.customerAcknowledged ? 'Acknowledged' : 'Awaiting acknowledgment'}
+            >
+              <label className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary">
+                <input
+                  type="checkbox"
+                  checked={draft.customerAcknowledged}
+                  onChange={(event) => updateDraft({ customerAcknowledged: event.target.checked })}
+                  className="h-4 w-4 accent-[#f07c00]"
+                />
+                Customer acknowledged the intake condition summary.
+              </label>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <label className="label">
+                  Customer signature name
+                  <input
+                    value={draft.customerSignatureName}
+                    onChange={(event) => updateDraft({ customerSignatureName: event.target.value })}
+                    className="input"
+                    placeholder="Customer full name"
+                  />
+                </label>
+                <label className="label">
+                  Received by staff
+                  <input
+                    value={draft.receivedByStaff}
+                    onChange={(event) => updateDraft({ receivedByStaff: event.target.value })}
+                    className="input"
+                    placeholder={defaultReceivedByStaff || 'Staff member name'}
+                  />
+                </label>
+                <label className="label md:col-span-2">
+                  Additional staff notes
+                  <textarea
+                    value={draft.notes}
+                    onChange={(event) => updateDraft({ notes: event.target.value })}
+                    rows={3}
+                    className="input min-h-[96px] resize-y"
+                    placeholder="Optional extra intake notes that should travel with the inspection record."
+                  />
+                </label>
+              </div>
+            </IntakeSection>
           </div>
 
           {captureState.message ? (
@@ -599,24 +807,49 @@ export default function DigitalIntakeInspectionWorkspace() {
             </div>
           ) : null}
 
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={saveInspection}
-              disabled={captureState.status === 'capture_submitting'}
-              className="btn-primary"
-            >
-              {captureState.status === 'capture_submitting' ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <BadgeCheck size={15} />
-              )}
-              Save Inspection
-            </button>
-            <button type="button" onClick={loadHistory} className="btn-ghost">
-              <FileSearch size={15} />
-              Load Vehicle History
-            </button>
+          <div className="mt-5 rounded-2xl border border-surface-border bg-surface-card p-4 md:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-ink-primary">Actions</p>
+                <p className="mt-1 text-sm text-ink-muted">
+                  Save a pending draft while the intake is still in progress, or submit the completed intake once the
+                  arrival check is captured.
+                </p>
+              </div>
+              <span className="badge badge-gray">History stays on the right</span>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void saveInspection('pending')}
+                disabled={captureState.status === 'capture_submitting'}
+                className="btn-ghost"
+              >
+                {captureState.status === 'capture_submitting' && draft.status === 'pending' ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <FileSearch size={15} />
+                )}
+                Save Pending Draft
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveInspection('completed')}
+                disabled={captureState.status === 'capture_submitting'}
+                className="btn-primary"
+              >
+                {captureState.status === 'capture_submitting' && draft.status === 'completed' ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <BadgeCheck size={15} />
+                )}
+                Submit Completed Intake
+              </button>
+              <button type="button" onClick={loadHistory} className="btn-ghost">
+                <FileSearch size={15} />
+                Load Vehicle History
+              </button>
+            </div>
           </div>
         </div>
 
@@ -701,7 +934,8 @@ export default function DigitalIntakeInspectionWorkspace() {
                 <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
                   <p className="text-sm font-bold text-ink-primary">Findings</p>
                   <p className="mt-1 text-xs text-ink-muted">
-                    {inspectionSummaryCount} finding{inspectionSummaryCount === 1 ? '' : 's'} attached to this inspection record.
+                    {inspectionSummaryCount} finding{inspectionSummaryCount === 1 ? '' : 's'} attached to this inspection
+                    record.
                   </p>
                   <div className="mt-3 space-y-3">
                     {selectedInspection.findings?.length ? (
@@ -732,49 +966,6 @@ export default function DigitalIntakeInspectionWorkspace() {
               </div>
             )}
           </section>
-        </div>
-      </section>
-
-      <section className="card p-5 md:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="card-title">Workflow Notes</p>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
-              {isTechnician
-                ? 'Use this page for vehicle evidence and history review.'
-                : 'Use this workspace for inspection records without duplicating other workflows.'}
-            </p>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">Vehicle History</p>
-            <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              {isTechnician
-                ? 'Load prior inspection records before continuing work.'
-                : 'Create and review inspection records for the selected vehicle.'}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">
-              {isTechnician ? 'Workshop Discipline' : 'Queue Expectation'}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              {isTechnician
-                ? 'Use clear labels and verified evidence for the next handoff.'
-                : 'Start from a known vehicle instead of a broad intake queue.'}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">
-              {isTechnician ? 'Job Order Handoff' : 'Product Boundary'}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              {isTechnician
-                ? 'Use Job Orders for progress updates after inspection capture.'
-                : 'Staff inspection capture stays separate from the customer mobile app.'}
-            </p>
-          </div>
         </div>
       </section>
     </div>

@@ -12,6 +12,7 @@ test('createInitialIntakeDraft returns the intake defaults', () => {
     customerUserId: '',
     vehicleId: '',
     bookingId: '',
+    status: 'pending',
     notes: '',
     serviceConcern: '',
     currentOdometerKm: '',
@@ -78,6 +79,7 @@ test('buildIntakeInspectionPayload maps intake fields into the current inspectio
   const draft = {
     ...createInitialIntakeDraft(),
     bookingId: 'booking-9',
+    status: 'completed',
     notes:
       'Customer reports vibration at low speed. ' +
       'Please inspect suspension, alignment, and related components. '.repeat(24),
@@ -119,4 +121,32 @@ test('buildIntakeInspectionPayload maps intake fields into the current inspectio
   assert.equal(payload.findings[0].label, 'Existing damage marked')
   assert.match(payload.findings[0].notes, /Front bumper/)
   assert.match(payload.notes, /Customer reports vibration at low speed/)
+})
+
+test('buildIntakeInspectionPayload preserves a pending intake draft status', () => {
+  const draft = {
+    ...createInitialIntakeDraft(),
+    status: 'pending',
+    bookingId: 'booking-draft-2',
+    currentOdometerKm: '11002',
+    fuelLevel: '1/4',
+    arrivalPhotos: {
+      ...createInitialIntakeDraft().arrivalPhotos,
+      front: 'upload://vehicle/front-draft',
+    },
+  }
+
+  const payload = buildIntakeInspectionPayload({
+    draft,
+    userId: 'staff-21',
+  })
+
+  assert.equal(payload.inspectionType, 'intake')
+  assert.equal(payload.status, 'pending')
+  assert.equal(payload.bookingId, 'booking-draft-2')
+  assert.equal(payload.inspectorUserId, 'staff-21')
+  assert.deepEqual(payload.attachmentRefs, ['upload://vehicle/front-draft'])
+  assert.equal(payload.findings.length, 0)
+  assert.match(payload.notes, /Current odometer \(km\): 11002/)
+  assert.match(payload.notes, /Fuel level on arrival: 1\/4/)
 })

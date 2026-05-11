@@ -17,21 +17,50 @@ const damageAreaLabels = {
   undercarriage: 'Undercarriage',
 }
 
+const arrivalPhotoLabels = {
+  front: 'Front view',
+  rear: 'Rear view',
+  leftSide: 'Left side',
+  rightSide: 'Right side',
+  dashboardOdometer: 'Dashboard / odometer',
+  interior: 'Interior',
+  damageCloseup: 'Damage close-up',
+  additional: 'Additional reference',
+}
+
 const maxNotesLength = 1000
 
 const normalizeAttachmentRefs = (arrivalPhotos) =>
   [...new Set(
-    Object.values(arrivalPhotos)
+    Object.values(arrivalPhotos ?? {})
       .map((ref) => String(ref ?? '').trim())
       .filter(Boolean),
   )]
 
 const capInspectionNotes = (value) => String(value ?? '').trim().slice(0, maxNotesLength)
 
+export const fuelLevelOptions = ['Empty', '1/4', '1/2', '3/4', 'Full']
+
+export const damageAreaOptions = Object.entries(damageAreaLabels).map(([value, label]) => ({
+  value,
+  label,
+}))
+
+export const arrivalPhotoSlots = Object.entries(arrivalPhotoLabels).map(([value, label]) => ({
+  value,
+  label,
+}))
+
+export const checklistItemOptions = Object.entries(checklistLabels).map(([value, label]) => ({
+  value,
+  label,
+}))
+
 export const createInitialIntakeDraft = () => ({
   customerUserId: '',
   vehicleId: '',
   bookingId: '',
+  status: 'pending',
   notes: '',
   serviceConcern: '',
   currentOdometerKm: '',
@@ -114,7 +143,7 @@ export const buildIntakeInspectionPayload = ({ draft, userId }) => {
 
   return {
     inspectionType: 'intake',
-    status: 'completed',
+    status: draft.status || 'completed',
     bookingId: draft.bookingId.trim() || undefined,
     inspectorUserId: userId,
     notes,
