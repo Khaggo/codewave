@@ -28,6 +28,7 @@ import {
   createInitialIntakeDraft,
   damageAreaOptions,
   fuelLevelOptions,
+  intakeFieldMaxLengths,
 } from './digitalIntakeInspectionWorkspaceForm.mjs'
 import { getIntakeWorkspaceHeroCopy } from './digitalIntakeInspectionWorkspaceView.mjs'
 
@@ -191,6 +192,7 @@ export default function DigitalIntakeInspectionWorkspace() {
     status: 'capture_ready',
     message: '',
   })
+  const [submitIntent, setSubmitIntent] = useState(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -253,6 +255,8 @@ export default function DigitalIntakeInspectionWorkspace() {
   const heroCopy = getIntakeWorkspaceHeroCopy(isTechnician)
   const draftStatus = getDraftStatusMeta(draft.status)
   const defaultReceivedByStaff = getUserDisplayLabel(user)
+  const isSubmittingPending = captureState.status === 'capture_submitting' && submitIntent === 'pending'
+  const isSubmittingCompleted = captureState.status === 'capture_submitting' && submitIntent === 'completed'
 
   const intakeContext = useMemo(() => {
     const items = []
@@ -433,7 +437,7 @@ export default function DigitalIntakeInspectionWorkspace() {
       receivedByStaff: draft.receivedByStaff || defaultReceivedByStaff,
     }
 
-    setDraft(normalizedDraft)
+    setSubmitIntent(nextStatus)
     setCaptureState({
       status: 'capture_submitting',
       message: '',
@@ -449,6 +453,12 @@ export default function DigitalIntakeInspectionWorkspace() {
 
       setInspections((current) => [savedInspection, ...current.filter((item) => item.id !== savedInspection.id)])
       setSelectedInspectionId(savedInspection.id)
+      setDraft((current) => ({
+        ...current,
+        status: savedInspection.status || nextStatus,
+        receivedByStaff: current.receivedByStaff || defaultReceivedByStaff,
+      }))
+      setSubmitIntent(null)
       setCaptureState({
         status: nextCaptureState,
         message: `${
@@ -476,6 +486,7 @@ export default function DigitalIntakeInspectionWorkspace() {
         status: nextCaptureState,
         message: error?.message || 'Inspection could not be saved.',
       })
+      setSubmitIntent(null)
     }
   }
 
@@ -594,6 +605,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                     onChange={(event) => updateDraft({ currentOdometerKm: event.target.value })}
                     className="input"
                     inputMode="numeric"
+                    maxLength={intakeFieldMaxLengths.currentOdometerKm}
                     placeholder="45230"
                   />
                 </label>
@@ -622,6 +634,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                     onChange={(event) => updateDraft({ serviceConcern: event.target.value })}
                     rows={3}
                     className="input min-h-[96px] resize-y"
+                    maxLength={intakeFieldMaxLengths.serviceConcern}
                     placeholder="Summarize the customer-reported concern or requested check."
                   />
                 </label>
@@ -679,6 +692,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                   onChange={(event) => updateDraft({ damageNotes: event.target.value })}
                   rows={3}
                   className="input min-h-[96px] resize-y"
+                  maxLength={intakeFieldMaxLengths.damageNotes}
                   placeholder="Describe scratches, dents, chips, or anything the next handoff should know."
                 />
               </label>
@@ -749,6 +763,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                   onChange={(event) => updateDraft({ customerItems: event.target.value })}
                   rows={3}
                   className="input min-h-[96px] resize-y"
+                  maxLength={intakeFieldMaxLengths.customerItems}
                   placeholder="Dashcam, child seat, parking card, tools, loose valuables, and similar items."
                 />
               </label>
@@ -775,6 +790,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                     value={draft.customerSignatureName}
                     onChange={(event) => updateDraft({ customerSignatureName: event.target.value })}
                     className="input"
+                    maxLength={intakeFieldMaxLengths.customerSignatureName}
                     placeholder="Customer full name"
                   />
                 </label>
@@ -784,6 +800,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                     value={draft.receivedByStaff}
                     onChange={(event) => updateDraft({ receivedByStaff: event.target.value })}
                     className="input"
+                    maxLength={intakeFieldMaxLengths.receivedByStaff}
                     placeholder={defaultReceivedByStaff || 'Staff member name'}
                   />
                 </label>
@@ -794,6 +811,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                     onChange={(event) => updateDraft({ notes: event.target.value })}
                     rows={3}
                     className="input min-h-[96px] resize-y"
+                    maxLength={intakeFieldMaxLengths.notes}
                     placeholder="Optional extra intake notes that should travel with the inspection record."
                   />
                 </label>
@@ -825,7 +843,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                 disabled={captureState.status === 'capture_submitting'}
                 className="btn-ghost"
               >
-                {captureState.status === 'capture_submitting' && draft.status === 'pending' ? (
+                {isSubmittingPending ? (
                   <Loader2 size={15} className="animate-spin" />
                 ) : (
                   <FileSearch size={15} />
@@ -838,7 +856,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                 disabled={captureState.status === 'capture_submitting'}
                 className="btn-primary"
               >
-                {captureState.status === 'capture_submitting' && draft.status === 'completed' ? (
+                {isSubmittingCompleted ? (
                   <Loader2 size={15} className="animate-spin" />
                 ) : (
                   <BadgeCheck size={15} />

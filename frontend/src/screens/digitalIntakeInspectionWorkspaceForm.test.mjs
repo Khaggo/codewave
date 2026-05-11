@@ -150,3 +150,31 @@ test('buildIntakeInspectionPayload preserves a pending intake draft status', () 
   assert.match(payload.notes, /Current odometer \(km\): 11002/)
   assert.match(payload.notes, /Fuel level on arrival: 1\/4/)
 })
+
+test('buildIntakeInspectionPayload preserves later intake sections when long text is entered', () => {
+  const draft = {
+    ...createInitialIntakeDraft(),
+    status: 'completed',
+    serviceConcern: 'Service concern '.repeat(80),
+    damageAreas: ['front_bumper', 'right_side_panels'],
+    damageNotes: 'Damage note '.repeat(80),
+    customerItems: 'Customer item '.repeat(80),
+    customerAcknowledged: true,
+    customerSignatureName: 'Signature '.repeat(30),
+    receivedByStaff: 'Receiving staff '.repeat(30),
+    notes: 'Additional handoff note '.repeat(80),
+  }
+
+  const payload = buildIntakeInspectionPayload({
+    draft,
+    userId: 'staff-55',
+  })
+
+  assert.ok(payload.notes.length <= 1000)
+  assert.match(payload.notes, /SERVICE CONCERN/)
+  assert.match(payload.notes, /PRE-SERVICE CHECKLIST/)
+  assert.match(payload.notes, /CUSTOMER ITEMS/)
+  assert.match(payload.notes, /CUSTOMER ACKNOWLEDGMENT/)
+  assert.match(payload.notes, /Customer signature:/)
+  assert.match(payload.notes, /Received by staff:/)
+})

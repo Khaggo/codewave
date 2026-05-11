@@ -29,6 +29,18 @@ const arrivalPhotoLabels = {
 }
 
 const maxNotesLength = 1000
+const truncationMarker = '...'
+
+export const intakeFieldMaxLengths = Object.freeze({
+  currentOdometerKm: 20,
+  fuelLevel: 20,
+  serviceConcern: 120,
+  damageNotes: 90,
+  customerItems: 90,
+  customerSignatureName: 48,
+  receivedByStaff: 48,
+  notes: 120,
+})
 
 const normalizeAttachmentRefs = (arrivalPhotos) =>
   [...new Set(
@@ -37,7 +49,44 @@ const normalizeAttachmentRefs = (arrivalPhotos) =>
       .filter(Boolean),
   )]
 
-const capInspectionNotes = (value) => String(value ?? '').trim().slice(0, maxNotesLength)
+const truncateText = (value, maxLength) => {
+  const text = String(value ?? '').trim()
+  if (!text || text.length <= maxLength) {
+    return text
+  }
+  if (maxLength <= truncationMarker.length) {
+    return text.slice(0, maxLength)
+  }
+
+  return `${text.slice(0, maxLength - truncationMarker.length).trimEnd()}${truncationMarker}`
+}
+
+const buildCappedIntakeDraft = (draft) => ({
+  ...draft,
+  currentOdometerKm: truncateText(draft.currentOdometerKm, intakeFieldMaxLengths.currentOdometerKm),
+  fuelLevel: truncateText(draft.fuelLevel, intakeFieldMaxLengths.fuelLevel),
+  serviceConcern: truncateText(draft.serviceConcern, intakeFieldMaxLengths.serviceConcern),
+  damageNotes: truncateText(draft.damageNotes, intakeFieldMaxLengths.damageNotes),
+  customerItems: truncateText(draft.customerItems, intakeFieldMaxLengths.customerItems),
+  customerSignatureName: truncateText(draft.customerSignatureName, intakeFieldMaxLengths.customerSignatureName),
+  receivedByStaff: truncateText(draft.receivedByStaff, intakeFieldMaxLengths.receivedByStaff),
+  notes: truncateText(draft.notes, intakeFieldMaxLengths.notes),
+})
+
+const appendWithinNoteBudget = (baseNotes, extraNotes) => {
+  if (!extraNotes) {
+    return baseNotes
+  }
+
+  const separator = '\n\n'
+  const remaining = maxNotesLength - baseNotes.length - separator.length
+
+  if (remaining <= 0) {
+    return baseNotes
+  }
+
+  return `${baseNotes}${separator}${truncateText(extraNotes, remaining)}`
+}
 
 export const fuelLevelOptions = ['Empty', '1/4', '1/2', '3/4', 'Full']
 
@@ -92,42 +141,45 @@ export const createInitialIntakeDraft = () => ({
 })
 
 export const buildIntakeInspectionNotes = (draft) => {
-  const damageAreas = draft.damageAreas
+  const cappedDraft = buildCappedIntakeDraft(draft)
+
+  const damageAreas = cappedDraft.damageAreas
     .map((area) => damageAreaLabels[area] || area)
     .join(', ')
 
-  const checklistNotes = Object.entries(draft.checklist)
+  const checklistNotes = Object.entries(cappedDraft.checklist)
     .map(([key, value]) => `${checklistLabels[key] || key}: ${value === 'issue' ? 'Issue' : 'OK'}`)
     .join('\n')
 
   return [
     'SERVICE CONCERN',
-    draft.serviceConcern || 'Not provided',
+    cappedDraft.serviceConcern || 'Not provided',
     '',
     'INTAKE DETAILS',
-    `Current odometer (km): ${draft.currentOdometerKm || 'Not provided'}`,
-    `Fuel level on arrival: ${draft.fuelLevel || 'Not provided'}`,
+    `Current odometer (km): ${cappedDraft.currentOdometerKm || 'Not provided'}`,
+    `Fuel level on arrival: ${cappedDraft.fuelLevel || 'Not provided'}`,
     `Damage areas: ${damageAreas || 'None marked'}`,
-    `Damage notes: ${draft.damageNotes || 'None'}`,
+    `Damage notes: ${cappedDraft.damageNotes || 'None'}`,
     '',
     'PRE-SERVICE CHECKLIST',
     checklistNotes,
     '',
     'CUSTOMER ITEMS',
-    draft.customerItems || 'None noted',
+    cappedDraft.customerItems || 'None noted',
     '',
     'CUSTOMER ACKNOWLEDGMENT',
-    `Acknowledged: ${draft.customerAcknowledged ? 'Yes' : 'No'}`,
-    `Customer signature: ${draft.customerSignatureName || 'Not captured'}`,
-    `Received by staff: ${draft.receivedByStaff || 'Not assigned'}`,
+    `Acknowledged: ${cappedDraft.customerAcknowledged ? 'Yes' : 'No'}`,
+    `Customer signature: ${cappedDraft.customerSignatureName || 'Not captured'}`,
+    `Received by staff: ${cappedDraft.receivedByStaff || 'Not assigned'}`,
   ].join('\n')
 }
 
 export const buildIntakeInspectionPayload = ({ draft, userId }) => {
-  const attachmentRefs = normalizeAttachmentRefs(draft.arrivalPhotos)
-  const damageLabels = draft.damageAreas.map((area) => damageAreaLabels[area] || area)
-  const damageNotes = [damageLabels.join(', '), draft.damageNotes.trim()].filter(Boolean).join(' | ')
-  const findings = damageLabels.length || draft.damageNotes.trim()
+  const cappedDraft = buildCappedIntakeDraft(draft)
+  const attachmentRefs = normalizeAttachmentRefs(cappedDraft.arrivalPhotos)
+  const damageLabels = cappedDraft.damageAreas.map((area) => damageAreaLabels[area] || area)
+  const damageNotes = [damageLabels.join(', '), cappedDraft.damageNotes.trim()].filter(Boolean).join(' | ')
+  const findings = damageLabels.length || cappedDraft.damageNotes.trim()
     ? [
         {
           category: 'body',
@@ -139,12 +191,15 @@ export const buildIntakeInspectionPayload = ({ draft, userId }) => {
       ]
     : []
 
-  const notes = capInspectionNotes([buildIntakeInspectionNotes(draft), draft.notes.trim()].filter(Boolean).join('\n\n'))
+  const notes = appendWithinNoteBudget(
+    buildIntakeInspectionNotes(cappedDraft),
+    cappedDraft.notes,
+  )
 
   return {
     inspectionType: 'intake',
-    status: draft.status || 'completed',
-    bookingId: draft.bookingId.trim() || undefined,
+    status: cappedDraft.status || 'completed',
+    bookingId: cappedDraft.bookingId.trim() || undefined,
     inspectorUserId: userId,
     notes,
     attachmentRefs,
