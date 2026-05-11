@@ -73,7 +73,7 @@ export class InspectionsService {
     });
 
     return {
-      slot,
+      slot: persistedFile.slot,
       attachmentRef: persistedFile.attachmentRef,
       storageKey: persistedFile.storageKey,
     };

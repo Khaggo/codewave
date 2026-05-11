@@ -29,6 +29,8 @@ import { UploadInspectionPhotoDto } from '../dto/upload-inspection-photo.dto';
 import { UploadInspectionPhotoResponseDto } from '../dto/upload-inspection-photo-response.dto';
 import { InspectionUploadFile, InspectionsService } from '../services/inspections.service';
 
+const INSPECTION_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+
 @ApiTags('inspections')
 @Controller()
 export class InspectionsController {
@@ -54,7 +56,13 @@ export class InspectionsController {
 
   @Post('vehicles/:id/inspections/photos/upload')
   @HttpCode(HttpStatus.OK)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize: INSPECTION_UPLOAD_MAX_BYTES,
+      },
+    }),
+  )
   @ApiOperation({ summary: 'Upload a vehicle inspection photo and receive an attachment reference.' })
   @ApiConsumes('multipart/form-data')
   @ApiParam({

@@ -4,6 +4,18 @@ import request from 'supertest';
 
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
+const MAX_INSPECTION_UPLOAD_BYTES = 5 * 1024 * 1024;
+const JPEG_IMAGE_BYTES = Buffer.from([
+  0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06,
+  0x05, 0x08, 0x07, 0x07, 0x07, 0x09, 0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d,
+  0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12, 0x13, 0x0f, 0xff, 0xd9,
+]);
+const AVIF_IMAGE_BYTES = Buffer.from([
+  0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66,
+  0x00, 0x00, 0x00, 0x00, 0x61, 0x76, 0x69, 0x66, 0x6d, 0x69, 0x66, 0x31,
+  0x6d, 0x69, 0x61, 0x66, 0x00, 0x00, 0x00, 0x00,
+]);
+
 describe('InspectionsController integration', () => {
   afterEach(async () => {
     await rm(join(process.cwd(), '.runtime', 'uploads', 'inspection-evidence'), {
@@ -33,7 +45,7 @@ describe('InspectionsController integration', () => {
       const uploadResponse = await request(app.getHttpServer())
         .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
         .field('slot', 'front')
-        .attach('file', Buffer.from('inspection-photo-binary'), {
+        .attach('file', JPEG_IMAGE_BYTES, {
           filename: 'front.jpg',
           contentType: 'image/jpeg',
         });
@@ -70,7 +82,7 @@ describe('InspectionsController integration', () => {
       const uploadResponse = await request(app.getHttpServer())
         .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
         .field('slot', 'front')
-        .attach('file', Buffer.from('inspection-photo-avif'), {
+        .attach('file', AVIF_IMAGE_BYTES, {
           filename: 'front',
           contentType: 'image/avif',
         });
@@ -107,7 +119,7 @@ describe('InspectionsController integration', () => {
       const uploadResponse = await request(app.getHttpServer())
         .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
         .field('slot', 'front')
-        .attach('file', Buffer.from('inspection-photo-jpeg'), {
+        .attach('file', JPEG_IMAGE_BYTES, {
           filename: 'front.exe',
           contentType: 'image/jpeg',
         });
@@ -117,6 +129,73 @@ describe('InspectionsController integration', () => {
       expect(uploadResponse.body.storageKey).toMatch(/\.(jpg|jpeg)$/);
       expect(uploadResponse.body.attachmentRef).not.toMatch(/\.exe$/);
       expect(uploadResponse.body.storageKey).not.toMatch(/\.exe$/);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects uploads whose declared image MIME type does not match the file content', async () => {
+    const { app } = await createMainServiceTestApp();
+
+    try {
+      const userResponse = await request(app.getHttpServer()).post('/api/users').send({
+        email: 'inspection-upload-mime-mismatch@example.com',
+        firstName: 'Riley',
+        lastName: 'Signature',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: userResponse.body.id,
+        plateNumber: 'INSP852',
+        make: 'Suzuki',
+        model: 'Dzire',
+        year: 2020,
+      });
+
+      const uploadResponse = await request(app.getHttpServer())
+        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .field('slot', 'front')
+        .attach('file', Buffer.from('definitely-not-an-image'), {
+          filename: 'front.jpg',
+          contentType: 'image/jpeg',
+        });
+
+      expect(uploadResponse.status).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects uploads that exceed the inspection image size limit', async () => {
+    const { app } = await createMainServiceTestApp();
+
+    try {
+      const userResponse = await request(app.getHttpServer()).post('/api/users').send({
+        email: 'inspection-upload-too-large@example.com',
+        firstName: 'Jamie',
+        lastName: 'Limit',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: userResponse.body.id,
+        plateNumber: 'INSP963',
+        make: 'Ford',
+        model: 'Fiesta',
+        year: 2019,
+      });
+
+      const oversizedImageBuffer = Buffer.alloc(MAX_INSPECTION_UPLOAD_BYTES + 1, 0);
+      JPEG_IMAGE_BYTES.copy(oversizedImageBuffer);
+
+      const uploadResponse = await request(app.getHttpServer())
+        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .field('slot', 'front')
+        .attach('file', oversizedImageBuffer, {
+          filename: 'front.jpg',
+          contentType: 'image/jpeg',
+        });
+
+      expect(uploadResponse.status).toBe(413);
     } finally {
       await app.close();
     }
@@ -143,7 +222,7 @@ describe('InspectionsController integration', () => {
       const missingVehicleUploadResponse = await request(app.getHttpServer())
         .post('/api/vehicles/missing-vehicle-id/inspections/photos/upload')
         .field('slot', 'front')
-        .attach('file', Buffer.from('missing-vehicle-photo'), {
+        .attach('file', JPEG_IMAGE_BYTES, {
           filename: 'front.jpg',
           contentType: 'image/jpeg',
         });
