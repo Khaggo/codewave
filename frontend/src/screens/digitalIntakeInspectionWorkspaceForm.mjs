@@ -17,6 +17,17 @@ const damageAreaLabels = {
   undercarriage: 'Undercarriage',
 }
 
+const maxNotesLength = 1000
+
+const normalizeAttachmentRefs = (arrivalPhotos) =>
+  [...new Set(
+    Object.values(arrivalPhotos)
+      .map((ref) => String(ref ?? '').trim())
+      .filter(Boolean),
+  )]
+
+const capInspectionNotes = (value) => String(value ?? '').trim().slice(0, maxNotesLength)
+
 export const createInitialIntakeDraft = () => ({
   customerUserId: '',
   vehicleId: '',
@@ -84,7 +95,7 @@ export const buildIntakeInspectionNotes = (draft) => {
 }
 
 export const buildIntakeInspectionPayload = ({ draft, userId }) => {
-  const attachmentRefs = Object.values(draft.arrivalPhotos).filter(Boolean)
+  const attachmentRefs = normalizeAttachmentRefs(draft.arrivalPhotos)
   const damageLabels = draft.damageAreas.map((area) => damageAreaLabels[area] || area)
   const damageNotes = [damageLabels.join(', '), draft.damageNotes.trim()].filter(Boolean).join(' | ')
   const findings = damageLabels.length || draft.damageNotes.trim()
@@ -99,7 +110,7 @@ export const buildIntakeInspectionPayload = ({ draft, userId }) => {
       ]
     : []
 
-  const notes = [draft.notes.trim(), buildIntakeInspectionNotes(draft)].filter(Boolean).join('\n\n')
+  const notes = capInspectionNotes([buildIntakeInspectionNotes(draft), draft.notes.trim()].filter(Boolean).join('\n\n'))
 
   return {
     inspectionType: 'intake',

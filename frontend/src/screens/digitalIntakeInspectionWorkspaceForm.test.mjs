@@ -78,16 +78,18 @@ test('buildIntakeInspectionPayload maps intake fields into the current inspectio
   const draft = {
     ...createInitialIntakeDraft(),
     bookingId: 'booking-9',
-    notes: 'Customer reports vibration at low speed.',
+    notes:
+      'Customer reports vibration at low speed. ' +
+      'Please inspect suspension, alignment, and related components. '.repeat(24),
     arrivalPhotos: {
-      front: 'upload://vehicle/front',
+      front: ' upload://vehicle/front ',
       rear: 'upload://vehicle/rear',
-      leftSide: '',
+      leftSide: 'upload://vehicle/front',
       rightSide: 'upload://vehicle/right',
       dashboardOdometer: 'upload://vehicle/dashboard',
-      interior: '',
+      interior: '   ',
       damageCloseup: 'upload://vehicle/damage',
-      additional: '',
+      additional: 'upload://vehicle/rear',
     },
     damageAreas: ['front_bumper'],
     damageNotes: 'Scuffed lower lip.',
@@ -109,6 +111,9 @@ test('buildIntakeInspectionPayload maps intake fields into the current inspectio
     'upload://vehicle/dashboard',
     'upload://vehicle/damage',
   ])
+  assert.ok(payload.notes.length <= 1000)
+  assert.match(payload.notes, /SERVICE CONCERN/)
+  assert.match(payload.notes, /Fuel level on arrival:/)
   assert.equal(payload.findings.length, 1)
   assert.equal(payload.findings[0].category, 'body')
   assert.equal(payload.findings[0].label, 'Existing damage marked')
