@@ -73,3 +73,29 @@ test('analytics and loyalty workspaces stay concise', () => {
 
   assert.ok(loyalty.includes('Manage rewards, earning rules, and loyalty analytics.'))
 })
+
+test('old verbose workspace descriptions are removed from targeted files', () => {
+  const checks = [
+    [
+      'frontend/src/screens/Dashboard.js',
+      'Use this workspace as the staff command center for booking review, intake coordination, job-order handoff, QA checks, and finance follow-through.',
+    ],
+    [
+      'frontend/src/screens/QAAuditWorkspace.js',
+      'Review automated pre-check summaries, let the head technician record the final pass or block verdict, and keep overrides auditable when a super admin must intervene.',
+    ],
+    [
+      'frontend/src/screens/AdminAnalyticsWorkspace.js',
+      'This hub keeps analytics read-only and derived so staff can inspect the real snapshot without mixing reporting with unrelated review placeholders.',
+    ],
+    [
+      'frontend/src/screens/InventoryWorkspace.js',
+      'Review live catalog visibility, inspect product metadata, and keep planned stock behavior clearly separated from the current read-only inventory surface.',
+    ],
+  ]
+
+  for (const [target, oldCopy] of checks) {
+    const source = read(target)
+    assert.ok(!source.includes(oldCopy))
+  }
+})
