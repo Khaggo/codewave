@@ -58,13 +58,21 @@ Instead:
 - Reuse the existing upload/storage workflow already used by `JobOrderWorkbench`
 - Show actual thumbnail previews inside the cards
 - Show a local preview immediately after file selection so the UI responds before persistence finishes
+- Do not auto-upload on file selection; selection and upload are separate user actions
 - Store the returned upload refs back into the existing intake draft so payload output remains `attachmentRefs`
 
 Preview behavior:
 - Before upload: empty state card with upload button
 - After file selection: local thumbnail preview in the card
+- After file selection: show a clear pending state until the user presses `Upload`
 - After successful upload: keep the stored upload ref as the persisted value
 - If the existing uploader exposes a reusable asset URL, the card can switch from local preview to stored asset preview after upload; otherwise the local preview remains session-scoped while the upload ref remains the saved source of truth
+
+Card state model:
+- Selected file state and persisted upload-ref state must be tracked separately
+- A card may contain a local preview without yet contributing a persisted `attachmentRef`
+- Required-slot validation should distinguish `selected but not uploaded` from `uploaded`
+- Main form persistence continues to serialize only uploaded refs, not transient local file objects
 
 Initial slot set:
 - `Front`
