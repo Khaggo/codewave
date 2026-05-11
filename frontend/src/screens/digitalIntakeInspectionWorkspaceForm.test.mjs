@@ -7,6 +7,42 @@ import {
   createInitialIntakeDraft,
 } from './digitalIntakeInspectionWorkspaceForm.mjs'
 
+test('createInitialIntakeDraft returns the intake defaults', () => {
+  assert.deepEqual(createInitialIntakeDraft(), {
+    customerUserId: '',
+    vehicleId: '',
+    bookingId: '',
+    notes: '',
+    serviceConcern: '',
+    currentOdometerKm: '',
+    fuelLevel: '1/2',
+    damageAreas: [],
+    damageNotes: '',
+    customerItems: '',
+    customerAcknowledged: false,
+    customerSignatureName: '',
+    receivedByStaff: '',
+    arrivalPhotos: {
+      front: '',
+      rear: '',
+      leftSide: '',
+      rightSide: '',
+      dashboardOdometer: '',
+      interior: '',
+      damageCloseup: '',
+      additional: '',
+    },
+    checklist: {
+      batteryCondition: 'ok',
+      engineOilLevel: 'ok',
+      coolantLevel: 'ok',
+      tirePressure: 'ok',
+      allLightsFunctional: 'ok',
+      brakePedalFeel: 'ok',
+    },
+  })
+})
+
 test('buildIntakeInspectionNotes stores intake-only sections in labeled note blocks', () => {
   const draft = {
     ...createInitialIntakeDraft(),
