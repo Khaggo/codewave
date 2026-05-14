@@ -1,4 +1,5 @@
 import { access, rm } from 'fs/promises';
+import { randomUUID } from 'crypto';
 import { join } from 'path';
 
 import request from 'supertest';
@@ -42,6 +43,71 @@ function failNextInsuranceUploadPersistence(
   };
 
   insuranceRepository.failNextUploadedDocumentPersistence = true;
+}
+
+function failNextInsuranceWorkflowPersistence(
+  app: Awaited<ReturnType<typeof createMainServiceTestApp>>['app'],
+) {
+  const insuranceRepository = app.get(InsuranceRepository) as {
+    failNextWorkflowPersistence?: boolean;
+  };
+
+  insuranceRepository.failNextWorkflowPersistence = true;
+}
+
+function installInsuranceWorkflowRepositoryContract(
+  app: Awaited<ReturnType<typeof createMainServiceTestApp>>['app'],
+) {
+  const insuranceRepository = app.get(InsuranceRepository) as {
+    inquiries?: Map<string, Record<string, unknown>>;
+    activities?: Array<Record<string, unknown>>;
+    failNextWorkflowPersistence?: boolean;
+    updateWorkflow?: (
+      id: string,
+      patch: Record<string, unknown>,
+      activities?: Array<Record<string, unknown>>,
+    ) => Promise<Record<string, unknown>>;
+    findById: (id: string) => Promise<Record<string, unknown>>;
+  };
+
+  if (typeof insuranceRepository.updateWorkflow === 'function') {
+    return;
+  }
+
+  insuranceRepository.updateWorkflow = async (id, patch, activities = []) => {
+    const inquiry = insuranceRepository.inquiries?.get(id);
+
+    if (!insuranceRepository.inquiries || !insuranceRepository.activities || !inquiry) {
+      throw new Error(`Unable to update insurance workflow for ${id}`);
+    }
+
+    if (insuranceRepository.failNextWorkflowPersistence) {
+      insuranceRepository.failNextWorkflowPersistence = false;
+      throw new Error('Simulated workflow persistence failure');
+    }
+
+    const now = new Date();
+    insuranceRepository.inquiries.set(id, {
+      ...inquiry,
+      ...patch,
+      updatedAt: now,
+    });
+
+    insuranceRepository.activities.push(
+      ...activities.map((activity) => ({
+        id: randomUUID(),
+        inquiryId: id,
+        action: activity.action,
+        actorUserId: activity.actorUserId ?? null,
+        documentType: activity.documentType ?? null,
+        notes: activity.notes ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })),
+    );
+
+    return insuranceRepository.findById(id);
+  };
 }
 
 describe('InsuranceController integration', () => {
@@ -384,6 +450,8 @@ describe('InsuranceController integration', () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
+      installInsuranceWorkflowRepositoryContract(app);
+
       const adviser = await seedAuthUser({
         email: 'adviser.insurance.workflow@example.com',
         password: 'password123',
@@ -452,6 +520,183 @@ describe('InsuranceController integration', () => {
           paymentStatus: 'verifying',
           paymentDueAt: '2026-05-30T00:00:00.000Z',
           reviewNotes: 'Collections team is validating payment submission.',
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('creates the insurance record when the workflow route closes an inquiry', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      installInsuranceWorkflowRepositoryContract(app);
+
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.workflow.close@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5105',
+      });
+
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.workflow.close@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110G',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const createInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Workflow close-out',
+          description: 'Customer workflow is ready to be closed by collections.',
+        });
+      expect(createInquiryResponse.status).toBe(201);
+
+      seedInsuranceInquiryWorkflowState(app, createInquiryResponse.body.id, {
+        status: 'active',
+      });
+
+      const workflowResponse = await request(app.getHttpServer())
+        .patch(`/api/insurance/inquiries/${createInquiryResponse.body.id}/workflow`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'closed',
+          reviewNotes: 'Collections closed the inquiry after confirming completion.',
+        });
+
+      expect(workflowResponse.status).toBe(200);
+      expect(workflowResponse.body).toEqual(
+        expect.objectContaining({
+          id: createInquiryResponse.body.id,
+          status: 'closed',
+          reviewNotes: 'Collections closed the inquiry after confirming completion.',
+        }),
+      );
+
+      const vehicleRecordsResponse = await request(app.getHttpServer())
+        .get(`/api/vehicles/${vehicleResponse.body.id}/insurance-records`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+
+      expect(vehicleRecordsResponse.status).toBe(200);
+      expect(vehicleRecordsResponse.body[0]).toEqual(
+        expect.objectContaining({
+          inquiryId: createInquiryResponse.body.id,
+          vehicleId: vehicleResponse.body.id,
+          status: 'closed',
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rolls back workflow changes when transactional workflow persistence fails', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      installInsuranceWorkflowRepositoryContract(app);
+
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.workflow.rollback@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5106',
+      });
+
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.workflow.rollback@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110H',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const createInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Workflow rollback guard',
+          description: 'This request verifies workflow transaction rollback behavior.',
+        });
+      expect(createInquiryResponse.status).toBe(201);
+
+      seedInsuranceInquiryWorkflowState(app, createInquiryResponse.body.id, {
+        status: 'approved',
+      });
+      failNextInsuranceWorkflowPersistence(app);
+
+      const workflowResponse = await request(app.getHttpServer())
+        .patch(`/api/insurance/inquiries/${createInquiryResponse.body.id}/workflow`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'payment_pending',
+          paymentStatus: 'verifying',
+          paymentDueAt: '2026-05-30T00:00:00.000Z',
+          reviewNotes: 'Collections is validating payment submission.',
+        });
+
+      expect(workflowResponse.status).toBe(500);
+
+      const readBackResponse = await request(app.getHttpServer())
+        .get(`/api/insurance/inquiries/${createInquiryResponse.body.id}`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+
+      expect(readBackResponse.status).toBe(200);
+      expect(readBackResponse.body).toEqual(
+        expect.objectContaining({
+          id: createInquiryResponse.body.id,
+          status: 'approved',
+          reviewNotes: null,
+          activities: [],
         }),
       );
     } finally {

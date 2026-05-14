@@ -155,6 +155,13 @@ describe('InsuranceService', () => {
         reviewedByUserId: 'adviser-1',
         reviewedAt: expect.any(Date),
       }),
+      [
+        {
+          action: 'payment_due_date_updated',
+          actorUserId: 'adviser-1',
+          notes: 'Waiting for proof of payment validation.',
+        },
+      ],
     );
   });
 
@@ -169,11 +176,6 @@ describe('InsuranceService', () => {
         id: 'insurance-inquiry-1',
         status: 'active',
         paymentStatus: 'paid',
-      }),
-      appendActivity: jest.fn().mockResolvedValue({
-        id: 'activity-1',
-        inquiryId: 'insurance-inquiry-1',
-        action: 'payment_marked_paid',
       }),
     };
 
@@ -214,11 +216,20 @@ describe('InsuranceService', () => {
       },
     );
 
-    expect(insuranceRepository.appendActivity).toHaveBeenCalledWith('insurance-inquiry-1', {
-      action: 'payment_marked_paid',
-      actorUserId: 'adviser-1',
-      notes: null,
-    });
+    expect(insuranceRepository.updateWorkflow).toHaveBeenCalledWith(
+      'insurance-inquiry-1',
+      expect.objectContaining({
+        status: 'active',
+        paymentStatus: 'paid',
+      }),
+      [
+        {
+          action: 'payment_marked_paid',
+          actorUserId: 'adviser-1',
+          notes: null,
+        },
+      ],
+    );
   });
 
   it('sends workflow partial updates without overwriting omitted fields', async () => {
@@ -232,7 +243,6 @@ describe('InsuranceService', () => {
         status: 'active',
         paymentStatus: 'paid',
       }),
-      appendActivity: jest.fn(),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -273,6 +283,7 @@ describe('InsuranceService', () => {
     );
 
     const workflowPatch = insuranceRepository.updateWorkflow.mock.calls[0]?.[1];
+    const workflowActivities = insuranceRepository.updateWorkflow.mock.calls[0]?.[2];
 
     expect(workflowPatch).toEqual(
       expect.objectContaining({
@@ -289,6 +300,74 @@ describe('InsuranceService', () => {
     expect(workflowPatch).not.toHaveProperty('policyExpiryAt');
     expect(workflowPatch).not.toHaveProperty('renewalDueAt');
     expect(workflowPatch).not.toHaveProperty('reviewNotes');
+    expect(workflowActivities).toEqual([
+      {
+        action: 'payment_marked_paid',
+        actorUserId: 'adviser-1',
+        notes: null,
+      },
+    ]);
+  });
+
+  it('does not append payment_due_date_updated when the workflow receives the same due date', async () => {
+    const insuranceRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        status: 'payment_pending',
+        paymentDueAt: new Date('2026-05-30T00:00:00.000Z'),
+      }),
+      updateWorkflow: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        status: 'active',
+        paymentDueAt: new Date('2026-05-30T00:00:00.000Z'),
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    await service.updateWorkflow(
+      'insurance-inquiry-1',
+      {
+        status: 'active',
+        paymentDueAt: '2026-05-30T00:00:00.000Z',
+      },
+      {
+        userId: 'adviser-1',
+        role: 'service_adviser',
+      },
+    );
+
+    expect(insuranceRepository.updateWorkflow).toHaveBeenCalledWith(
+      'insurance-inquiry-1',
+      expect.objectContaining({
+        status: 'active',
+        paymentDueAt: new Date('2026-05-30T00:00:00.000Z'),
+      }),
+      [],
+    );
   });
 
   it('rejects customer inquiry creation for another user or mismatched vehicle', async () => {
@@ -440,6 +519,157 @@ describe('InsuranceService', () => {
         }),
       }),
     );
+  });
+
+  it('creates a record and emits the status notification when workflow closes an inquiry', async () => {
+    const notificationsService = {
+      applyTrigger: jest.fn().mockResolvedValue({ triggerName: 'insurance.inquiry_status_changed' }),
+    };
+
+    const insuranceRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        userId: 'customer-1',
+        vehicleId: 'vehicle-1',
+        inquiryType: 'comprehensive',
+        status: 'active',
+        subject: 'Accident repair inquiry',
+        providerName: 'Safe Road Insurance',
+        policyNumber: 'POL-2026-0042',
+      }),
+      updateWorkflow: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        userId: 'customer-1',
+        vehicleId: 'vehicle-1',
+        inquiryType: 'comprehensive',
+        status: 'closed',
+        subject: 'Accident repair inquiry',
+        providerName: 'Safe Road Insurance',
+        policyNumber: 'POL-2026-0042',
+      }),
+      upsertRecordFromInquiry: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        { provide: NotificationsService, useValue: notificationsService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    await service.updateWorkflow(
+      'insurance-inquiry-1',
+      {
+        status: 'closed',
+        reviewNotes: 'Collections workflow completed and the case is closed.',
+      },
+      {
+        userId: 'adviser-1',
+        role: 'service_adviser',
+      },
+    );
+
+    expect(insuranceRepository.upsertRecordFromInquiry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inquiryId: 'insurance-inquiry-1',
+        userId: 'customer-1',
+        vehicleId: 'vehicle-1',
+        status: 'closed',
+      }),
+    );
+    expect(notificationsService.applyTrigger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'insurance.inquiry_status_changed',
+        sourceDomain: 'main-service.insurance',
+        payload: expect.objectContaining({
+          inquiryId: 'insurance-inquiry-1',
+          userId: 'customer-1',
+          status: 'closed',
+          subject: 'Accident repair inquiry',
+        }),
+      }),
+    );
+  });
+
+  it('bubbles workflow persistence failures before any close side effects run', async () => {
+    const notificationsService = {
+      applyTrigger: jest.fn(),
+    };
+
+    const insuranceRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        userId: 'customer-1',
+        vehicleId: 'vehicle-1',
+        inquiryType: 'comprehensive',
+        status: 'active',
+        subject: 'Accident repair inquiry',
+      }),
+      updateWorkflow: jest.fn().mockRejectedValue(new Error('Simulated workflow persistence failure')),
+      upsertRecordFromInquiry: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        { provide: NotificationsService, useValue: notificationsService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    await expect(
+      service.updateWorkflow(
+        'insurance-inquiry-1',
+        {
+          status: 'closed',
+          reviewNotes: 'Collections workflow completed and the case is closed.',
+        },
+        {
+          userId: 'adviser-1',
+          role: 'service_adviser',
+        },
+      ),
+    ).rejects.toThrow('Simulated workflow persistence failure');
+
+    expect(insuranceRepository.upsertRecordFromInquiry).not.toHaveBeenCalled();
+    expect(notificationsService.applyTrigger).not.toHaveBeenCalled();
   });
 
   it('blocks document uploads once an inquiry is rejected or closed', async () => {

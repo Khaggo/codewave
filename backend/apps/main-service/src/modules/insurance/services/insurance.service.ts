@@ -165,28 +165,7 @@ export class InsuranceService {
       reviewedAt: new Date(),
     });
 
-    if (payload.status === 'closed') {
-      await this.insuranceRepository.upsertRecordFromInquiry({
-        inquiryId: updatedInquiry.id,
-        userId: updatedInquiry.userId,
-        vehicleId: updatedInquiry.vehicleId,
-        inquiryType: updatedInquiry.inquiryType,
-        providerName: updatedInquiry.providerName,
-        policyNumber: updatedInquiry.policyNumber,
-        status: payload.status,
-      });
-    }
-
-    if (notificationEligibleStatuses.includes(updatedInquiry.status as InsuranceNotificationStatus)) {
-      await this.notificationsService?.applyTrigger(
-        createNotificationTrigger('insurance.inquiry_status_changed', 'main-service.insurance', {
-          inquiryId: updatedInquiry.id,
-          userId: updatedInquiry.userId,
-          status: updatedInquiry.status as InsuranceNotificationStatus,
-          subject: updatedInquiry.subject,
-        }),
-      );
-    }
+    await this.applyWorkflowStatusSideEffects(updatedInquiry, payload.status);
 
     return updatedInquiry;
   }
@@ -211,15 +190,10 @@ export class InsuranceService {
       reviewedAt: new Date(),
     };
 
-    await this.persistWorkflowUpdate(id, workflowPatch);
-
     const paymentActivities = this.buildPaymentWorkflowActivities(inquiry, payload, actor.userId);
-
-    for (const activity of paymentActivities) {
-      await this.insuranceRepository.appendActivity(id, activity);
-    }
-
-    return this.insuranceRepository.findById(id);
+    const updatedInquiry = await this.insuranceRepository.updateWorkflow(id, workflowPatch, paymentActivities);
+    await this.applyWorkflowStatusSideEffects(updatedInquiry, payload.status);
+    return updatedInquiry;
   }
 
   async addDocument(id: string, payload: AddInsuranceDocumentDto, actor: InsuranceActor) {
@@ -362,6 +336,7 @@ export class InsuranceService {
   private buildPaymentWorkflowActivities(
     inquiry: {
       paymentStatus?: string | null;
+      paymentDueAt?: Date | string | null;
     },
     payload: UpdateInsuranceInquiryWorkflowDto,
     actorUserId: string,
@@ -384,7 +359,7 @@ export class InsuranceService {
       }
     }
 
-    if (payload.paymentDueAt !== undefined) {
+    if (payload.paymentDueAt !== undefined && this.hasPaymentDueDateChanged(inquiry.paymentDueAt, payload.paymentDueAt)) {
       activities.push({
         action: 'payment_due_date_updated',
         actorUserId,
@@ -393,6 +368,17 @@ export class InsuranceService {
     }
 
     return activities;
+  }
+
+  private hasPaymentDueDateChanged(
+    currentPaymentDueAt: Date | string | null | undefined,
+    nextPaymentDueAt: string,
+  ) {
+    if (!currentPaymentDueAt) {
+      return true;
+    }
+
+    return new Date(currentPaymentDueAt).getTime() !== new Date(nextPaymentDueAt).getTime();
   }
 
   private buildCustomerDisplayName(
@@ -434,30 +420,41 @@ export class InsuranceService {
     return `${vehicle.make} ${vehicle.model} (${vehicle.plateNumber})`;
   }
 
-  private async persistWorkflowUpdate(
-    id: string,
-    payload: InsuranceWorkflowUpdatePayload,
+  private async applyWorkflowStatusSideEffects(
+    updatedInquiry: {
+      id: string;
+      userId: string;
+      vehicleId: string;
+      inquiryType: Parameters<InsuranceRepository['upsertRecordFromInquiry']>[0]['inquiryType'];
+      providerName?: string | null;
+      policyNumber?: string | null;
+      status: string;
+      subject: string;
+    },
+    requestedStatus: InsuranceInquiryStatus,
   ) {
-    const repository = this.insuranceRepository as InsuranceRepository & {
-      inquiries?: Map<string, Record<string, unknown>>;
-    };
-
-    if (typeof repository.updateWorkflow === 'function') {
-      return repository.updateWorkflow(id, payload);
+    if (requestedStatus === 'closed') {
+      await this.insuranceRepository.upsertRecordFromInquiry({
+        inquiryId: updatedInquiry.id,
+        userId: updatedInquiry.userId,
+        vehicleId: updatedInquiry.vehicleId,
+        inquiryType: updatedInquiry.inquiryType,
+        providerName: updatedInquiry.providerName,
+        policyNumber: updatedInquiry.policyNumber,
+        status: requestedStatus,
+      });
     }
 
-    const inquiryRecord = repository.inquiries?.get(id);
-    if (!repository.inquiries || !inquiryRecord) {
-      throw new NotFoundException('Insurance inquiry not found');
+    if (notificationEligibleStatuses.includes(updatedInquiry.status as InsuranceNotificationStatus)) {
+      await this.notificationsService?.applyTrigger(
+        createNotificationTrigger('insurance.inquiry_status_changed', 'main-service.insurance', {
+          inquiryId: updatedInquiry.id,
+          userId: updatedInquiry.userId,
+          status: updatedInquiry.status as InsuranceNotificationStatus,
+          subject: updatedInquiry.subject,
+        }),
+      );
     }
-
-    repository.inquiries.set(id, {
-      ...inquiryRecord,
-      ...payload,
-      updatedAt: new Date(),
-    });
-
-    return repository.findById(id);
   }
 
   private assertAllowedWorkflowTransition(

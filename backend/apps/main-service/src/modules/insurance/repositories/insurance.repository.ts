@@ -29,7 +29,7 @@ type UpdateInsuranceInquiryStatusPersistenceInput = UpdateInsuranceInquiryStatus
   reviewedAt: Date;
 };
 
-type UpdateInsuranceInquiryWorkflowPersistenceInput = Omit<
+export type UpdateInsuranceInquiryWorkflowPersistenceInput = Omit<
   UpdateInsuranceInquiryWorkflowDto,
   'paymentDueAt' | 'policyExpiryAt' | 'renewalDueAt'
 > & {
@@ -40,7 +40,7 @@ type UpdateInsuranceInquiryWorkflowPersistenceInput = Omit<
   reviewedAt: Date;
 };
 
-type InsuranceActivityPersistenceInput = {
+export type InsuranceActivityPersistenceInput = {
   action: string;
   actorUserId?: string | null;
   documentType?: (typeof insuranceDocumentTypeEnum.enumValues)[number] | null;
@@ -53,7 +53,7 @@ type UploadInsuranceDocumentPersistenceInput = {
   uploadedByUserId: string;
 };
 
-type UpsertInsuranceRecordInput = {
+export type UpsertInsuranceRecordInput = {
   inquiryId: string;
   userId: string;
   vehicleId: string;
@@ -173,7 +173,11 @@ export class InsuranceRepository extends BaseRepository {
     return this.findById(id);
   }
 
-  async updateWorkflow(id: string, payload: UpdateInsuranceInquiryWorkflowPersistenceInput) {
+  async updateWorkflow(
+    id: string,
+    payload: UpdateInsuranceInquiryWorkflowPersistenceInput,
+    activities: InsuranceActivityPersistenceInput[] = [],
+  ) {
     const workflowPatch = {
       status: payload.status,
       ...(payload.documentStatus !== undefined ? { documentStatus: payload.documentStatus } : {}),
@@ -189,14 +193,29 @@ export class InsuranceRepository extends BaseRepository {
       updatedAt: new Date(),
     };
 
-    const [updatedInquiry] = await this.db
-      .update(insuranceInquiries)
-      .set(workflowPatch)
-      .where(eq(insuranceInquiries.id, id))
-      .returning();
+    return this.db.transaction(async (tx) => {
+      const [updatedInquiry] = await tx
+        .update(insuranceInquiries)
+        .set(workflowPatch)
+        .where(eq(insuranceInquiries.id, id))
+        .returning();
 
-    this.assertFound(updatedInquiry, 'Insurance inquiry not found');
-    return this.findById(id);
+      this.assertFound(updatedInquiry, 'Insurance inquiry not found');
+
+      if (activities.length) {
+        await tx.insert(insuranceActivities).values(
+          activities.map((activity) => ({
+            inquiryId: id,
+            action: activity.action,
+            actorUserId: activity.actorUserId ?? null,
+            documentType: activity.documentType ?? null,
+            notes: activity.notes ?? null,
+          })),
+        );
+      }
+
+      return this.findById(id, tx);
+    });
   }
 
   async addDocument(id: string, payload: AddInsuranceDocumentDto, uploadedByUserId: string) {
