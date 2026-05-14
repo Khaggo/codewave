@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
-import { mkdir, writeFile } from 'fs/promises';
-import { extname, join } from 'path';
+import { mkdir, readdir, rm, writeFile } from 'fs/promises';
+import { dirname, extname, join } from 'path';
 
 type SupportedInsuranceUploadMimeType =
   | 'application/pdf'
@@ -51,6 +51,17 @@ export class InsuranceDocumentStorageService {
       storageKey,
       fileUrl: `upload://insurance/${storageKey}`,
     };
+  }
+
+  async deleteDocument(storageKey: string) {
+    const normalizedStorageKey = String(storageKey ?? '').replace(/\\/g, '/');
+    if (!normalizedStorageKey) {
+      return;
+    }
+
+    const absolutePath = join(this.rootDirectory, normalizedStorageKey);
+    await rm(absolutePath, { force: true });
+    await this.pruneEmptyDirectories(dirname(absolutePath));
   }
 
   private normalizeMimeType(mimeType: string) {
@@ -141,5 +152,23 @@ export class InsuranceDocumentStorageService {
     }
 
     return null;
+  }
+
+  private async pruneEmptyDirectories(directoryPath: string) {
+    let currentPath = directoryPath;
+
+    while (currentPath.startsWith(this.rootDirectory)) {
+      if (currentPath === this.rootDirectory) {
+        break;
+      }
+
+      const entries = await readdir(currentPath).catch(() => null);
+      if (entries === null || entries.length > 0) {
+        break;
+      }
+
+      await rm(currentPath, { recursive: true, force: true }).catch(() => undefined);
+      currentPath = dirname(currentPath);
+    }
   }
 }

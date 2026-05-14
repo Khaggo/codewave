@@ -3040,6 +3040,7 @@ class InMemoryInsuranceRepository {
   private readonly documents: InsuranceDocumentRecord[] = [];
   private readonly activities: InsuranceActivityRecord[] = [];
   private readonly records = new Map<string, InsuranceRecordRecord>();
+  failNextUploadedDocumentPersistence = false;
 
   async create(payload: CreateInsuranceInquiryDto & { createdByUserId: string }) {
     const now = new Date();
@@ -3113,6 +3114,56 @@ class InMemoryInsuranceRepository {
       uploadedByUserId,
       createdAt: new Date(),
       updatedAt: new Date(),
+    });
+
+    return this.findById(id);
+  }
+
+  async addUploadedDocument(
+    id: string,
+    payload: {
+      document: AddInsuranceDocumentDto;
+      activity: {
+        action: string;
+        actorUserId?: string | null;
+        documentType?: InsuranceDocumentType | null;
+        notes?: string | null;
+      };
+      uploadedByUserId: string;
+    },
+  ) {
+    if (this.failNextUploadedDocumentPersistence) {
+      this.failNextUploadedDocumentPersistence = false;
+      throw new Error('Simulated insurance upload persistence failure');
+    }
+
+    const inquiry = this.inquiries.get(id);
+    if (!inquiry) {
+      throw new NotFoundException('Insurance inquiry not found');
+    }
+
+    const now = new Date();
+    this.documents.push({
+      id: randomUUID(),
+      inquiryId: id,
+      fileName: payload.document.fileName,
+      fileUrl: payload.document.fileUrl,
+      documentType: payload.document.documentType,
+      notes: payload.document.notes ?? null,
+      uploadedByUserId: payload.uploadedByUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    this.activities.push({
+      id: randomUUID(),
+      inquiryId: id,
+      action: payload.activity.action,
+      actorUserId: payload.activity.actorUserId ?? null,
+      documentType: payload.activity.documentType ?? null,
+      notes: payload.activity.notes ?? null,
+      createdAt: now,
+      updatedAt: now,
     });
 
     return this.findById(id);

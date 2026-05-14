@@ -1,4 +1,4 @@
-import { rm } from 'fs/promises';
+import { access, rm } from 'fs/promises';
 import { join } from 'path';
 
 import request from 'supertest';
@@ -32,6 +32,16 @@ function seedInsuranceInquiryWorkflowState(
     ...patch,
     updatedAt: new Date(),
   });
+}
+
+function failNextInsuranceUploadPersistence(
+  app: Awaited<ReturnType<typeof createMainServiceTestApp>>['app'],
+) {
+  const insuranceRepository = app.get(InsuranceRepository) as {
+    failNextUploadedDocumentPersistence?: boolean;
+  };
+
+  insuranceRepository.failNextUploadedDocumentPersistence = true;
 }
 
 describe('InsuranceController integration', () => {
@@ -453,6 +463,72 @@ describe('InsuranceController integration', () => {
           }),
         ]),
       );
+    } finally {
+      await app.close();
+      await rm(insuranceUploadRuntimeDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('rolls back the saved upload artifact when insurance upload persistence fails', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.rollback@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110E',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const createInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Persistence failure guard',
+          description: 'This request verifies upload rollback behavior.',
+        });
+      expect(createInquiryResponse.status).toBe(201);
+
+      failNextInsuranceUploadPersistence(app);
+
+      const uploadResponse = await request(app.getHttpServer())
+        .post(`/api/insurance/inquiries/${createInquiryResponse.body.id}/documents/upload`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .field('documentType', 'proof_of_payment')
+        .attach('file', Buffer.from('%PDF-1.4 test rollback proof'), 'rollback-proof.pdf');
+
+      expect(uploadResponse.status).toBe(500);
+
+      const readBackResponse = await request(app.getHttpServer())
+        .get(`/api/insurance/inquiries/${createInquiryResponse.body.id}`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+
+      expect(readBackResponse.status).toBe(200);
+      expect(readBackResponse.body.documents).toEqual([]);
+      expect(readBackResponse.body.activities).toEqual([]);
+
+      const inquiryDirectory = join(
+        insuranceUploadRuntimeDirectory,
+        createInquiryResponse.body.id,
+      );
+      await expect(access(inquiryDirectory)).rejects.toThrow();
     } finally {
       await app.close();
       await rm(insuranceUploadRuntimeDirectory, { recursive: true, force: true });

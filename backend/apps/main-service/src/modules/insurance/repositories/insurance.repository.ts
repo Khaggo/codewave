@@ -47,6 +47,12 @@ type InsuranceActivityPersistenceInput = {
   notes?: string | null;
 };
 
+type UploadInsuranceDocumentPersistenceInput = {
+  document: AddInsuranceDocumentDto;
+  activity: InsuranceActivityPersistenceInput;
+  uploadedByUserId: string;
+};
+
 type UpsertInsuranceRecordInput = {
   inquiryId: string;
   userId: string;
@@ -206,6 +212,31 @@ export class InsuranceRepository extends BaseRepository {
     });
 
     return this.findById(id);
+  }
+
+  async addUploadedDocument(id: string, payload: UploadInsuranceDocumentPersistenceInput) {
+    return this.db.transaction(async (tx) => {
+      const inquiry = await this.findById(id, tx);
+
+      await tx.insert(insuranceDocuments).values({
+        inquiryId: inquiry.id,
+        fileName: payload.document.fileName,
+        fileUrl: payload.document.fileUrl,
+        documentType: payload.document.documentType,
+        notes: payload.document.notes ?? null,
+        uploadedByUserId: payload.uploadedByUserId,
+      });
+
+      await tx.insert(insuranceActivities).values({
+        inquiryId: inquiry.id,
+        action: payload.activity.action,
+        actorUserId: payload.activity.actorUserId ?? null,
+        documentType: payload.activity.documentType ?? null,
+        notes: payload.activity.notes ?? null,
+      });
+
+      return this.findById(id, tx);
+    });
   }
 
   async appendActivity(inquiryId: string, payload: InsuranceActivityPersistenceInput) {

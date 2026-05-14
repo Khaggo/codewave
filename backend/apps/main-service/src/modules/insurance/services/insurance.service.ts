@@ -63,17 +63,6 @@ const notificationEligibleStatuses: InsuranceNotificationStatus[] = [
   'closed',
 ];
 
-type InsuranceActivityEvent = {
-  id: string;
-  inquiryId: string;
-  action: string;
-  actorUserId?: string | null;
-  documentType?: string | null;
-  notes?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 @Injectable()
 export class InsuranceService {
   constructor(
@@ -252,24 +241,26 @@ export class InsuranceService {
       buffer: file.buffer,
     });
 
-    const updatedInquiry = await this.insuranceRepository.addDocument(
-      id,
-      {
-        fileName: file.originalname,
-        fileUrl: savedDocument.fileUrl,
-        documentType: payload.documentType,
-        notes: payload.notes,
-      },
-      actor.userId,
-    );
-
-    await this.insuranceRepository.appendActivity(id, {
-      action: 'document_uploaded',
-      actorUserId: actor.userId,
-      documentType: payload.documentType,
-      notes: payload.notes ?? null,
-    });
-    return this.insuranceRepository.findById(updatedInquiry.id);
+    try {
+      return await this.insuranceRepository.addUploadedDocument(id, {
+        document: {
+          fileName: file.originalname,
+          fileUrl: savedDocument.fileUrl,
+          documentType: payload.documentType,
+          notes: payload.notes,
+        },
+        activity: {
+          action: 'document_uploaded',
+          actorUserId: actor.userId,
+          documentType: payload.documentType,
+          notes: payload.notes ?? null,
+        },
+        uploadedByUserId: actor.userId,
+      });
+    } catch (error) {
+      await this.getInsuranceDocumentStorage().deleteDocument(savedDocument.storageKey);
+      throw error;
+    }
   }
 
   async findRecordsByVehicleId(vehicleId: string, actor: InsuranceActor) {
