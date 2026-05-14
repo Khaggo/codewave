@@ -141,6 +141,12 @@ export class InsuranceRepository extends BaseRepository {
     const inquiry = await db.query.insuranceInquiries.findFirst({
       where: eq(insuranceInquiries.id, id),
       with: {
+        user: {
+          with: {
+            profile: true,
+          },
+        },
+        vehicle: true,
         documents: {
           orderBy: desc(insuranceDocuments.createdAt),
         },
@@ -148,10 +154,13 @@ export class InsuranceRepository extends BaseRepository {
     });
 
     const resolvedInquiry = this.assertFound(inquiry, 'Insurance inquiry not found');
+    const { user, vehicle, ...inquiryWithoutRelations } = resolvedInquiry;
     const activities = await this.listActivitiesByInquiryId(id, db);
 
     return {
-      ...resolvedInquiry,
+      ...inquiryWithoutRelations,
+      customerDisplayName: this.buildCustomerDisplayName(user?.profile),
+      vehicleLabel: this.buildVehicleLabel(vehicle),
       activities,
     };
   }

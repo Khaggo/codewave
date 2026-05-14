@@ -100,18 +100,22 @@ export class InsuranceService {
       createdByUserId: actor.userId,
     });
 
-    return {
-      ...inquiry,
-      purpose: inquiry.purpose ?? payload.purpose ?? 'quotation',
-      documentStatus: inquiry.documentStatus ?? 'incomplete',
-      paymentStatus: inquiry.paymentStatus ?? 'not_required',
-      renewalStatus: inquiry.renewalStatus ?? 'not_applicable',
-    };
+    return this.presentInquiryForActor(
+      {
+        ...inquiry,
+        purpose: inquiry.purpose ?? payload.purpose ?? 'quotation',
+        documentStatus: inquiry.documentStatus ?? 'incomplete',
+        paymentStatus: inquiry.paymentStatus ?? 'not_required',
+        renewalStatus: inquiry.renewalStatus ?? 'not_applicable',
+      },
+      actor,
+    );
   }
 
   async createRenewalFollowUp(payload: CreateRenewalFollowUpDto, actor: InsuranceActor) {
     await this.assertStaffReviewer(actor.userId);
     await this.assertCustomerAndVehicle(payload.userId, payload.vehicleId);
+    await this.assertAssignableStaff(payload.assignedStaffId);
 
     const activity = {
       action: 'renewal_follow_up_created' as const,
@@ -164,7 +168,7 @@ export class InsuranceService {
   async findById(id: string, actor: InsuranceActor) {
     const inquiry = await this.insuranceRepository.findById(id);
     await this.assertCanAccessInquiry(inquiry.userId, actor);
-    return inquiry;
+    return this.presentInquiryForActor(inquiry, actor);
   }
 
   async findByUserId(userId: string, actor: InsuranceActor) {
@@ -241,6 +245,7 @@ export class InsuranceService {
     if (payload.status !== inquiry.status) {
       this.assertAllowedWorkflowTransition(inquiry.status, payload.status);
     }
+    await this.assertAssignableStaff(payload.assignedStaffId);
 
     const workflowPatch: InsuranceWorkflowUpdatePayload = {
       status: payload.status,
@@ -275,7 +280,10 @@ export class InsuranceService {
       throw new ConflictException('Closed or rejected insurance inquiries cannot accept new documents');
     }
 
-    return this.insuranceRepository.addDocument(id, payload, actor.userId);
+    return this.presentInquiryForActor(
+      await this.insuranceRepository.addDocument(id, payload, actor.userId),
+      actor,
+    );
   }
 
   async uploadDocument(
@@ -303,21 +311,24 @@ export class InsuranceService {
     });
 
     try {
-      return await this.insuranceRepository.addUploadedDocument(id, {
-        document: {
-          fileName: file.originalname,
-          fileUrl: savedDocument.fileUrl,
-          documentType: payload.documentType,
-          notes: payload.notes,
-        },
-        activity: {
-          action: 'document_uploaded',
-          actorUserId: actor.userId,
-          documentType: payload.documentType,
-          notes: payload.notes ?? null,
-        },
-        uploadedByUserId: actor.userId,
-      });
+      return this.presentInquiryForActor(
+        await this.insuranceRepository.addUploadedDocument(id, {
+          document: {
+            fileName: file.originalname,
+            fileUrl: savedDocument.fileUrl,
+            documentType: payload.documentType,
+            notes: payload.notes,
+          },
+          activity: {
+            action: 'document_uploaded',
+            actorUserId: actor.userId,
+            documentType: payload.documentType,
+            notes: payload.notes ?? null,
+          },
+          uploadedByUserId: actor.userId,
+        }),
+        actor,
+      );
     } catch (error) {
       await this.getInsuranceDocumentStorage().deleteDocument(savedDocument.storageKey);
       throw error;
@@ -400,8 +411,39 @@ export class InsuranceService {
     return user;
   }
 
+  private async assertAssignableStaff(assignedStaffId: string | undefined) {
+    if (!assignedStaffId) {
+      return;
+    }
+
+    const user = await this.usersService.findById(assignedStaffId);
+    if (!user || !user.isActive) {
+      throw new NotFoundException('Assigned staff member not found');
+    }
+
+    if (!['service_adviser', 'super_admin'].includes(user.role)) {
+      throw new BadRequestException('Assigned staff member must be a service adviser or super admin');
+    }
+  }
+
   private getInsuranceDocumentStorage() {
     return this.insuranceDocumentStorage ?? new InsuranceDocumentStorageService();
+  }
+
+  private presentInquiryForActor<
+    T extends {
+      customerDisplayName?: string;
+      vehicleLabel?: string;
+    },
+  >(inquiry: T, actor: InsuranceActor) {
+    if (actor.role !== 'customer') {
+      return inquiry;
+    }
+
+    const { customerDisplayName: _customerDisplayName, vehicleLabel: _vehicleLabel, ...customerInquiry } =
+      inquiry;
+
+    return customerInquiry;
   }
 
   private buildWorkflowActivities(

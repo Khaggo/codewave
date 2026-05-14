@@ -579,6 +579,60 @@ describe('InsuranceController integration', () => {
     }
   });
 
+  it('rejects manual renewal follow-up payloads when assignedStaffId does not match an existing staff reviewer', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.renewals.missing-assignee@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5103D',
+      });
+
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.renewals.missing-assignee@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110CD',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const createFollowUpResponse = await request(app.getHttpServer())
+        .post('/api/insurance/renewals/follow-ups')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Renewal due next month',
+          description: 'Customer should receive a renewal quote before the current policy expires.',
+          renewalDueAt: '2026-06-15T00:00:00.000Z',
+          assignedStaffId: '11111111-1111-4111-8111-111111111111',
+        });
+
+      expect(createFollowUpResponse.status).toBe(404);
+      expect(createFollowUpResponse.body.message).toBe('Assigned staff member not found');
+    } finally {
+      await app.close();
+    }
+  });
+
   it('allows an adviser to patch the broader insurance workflow route for collections fields', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 
@@ -654,6 +708,88 @@ describe('InsuranceController integration', () => {
           paymentDueAt: '2026-05-30T00:00:00.000Z',
           reviewNotes: 'Collections team is validating payment submission.',
         }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects workflow assignee updates when assignedStaffId belongs to a non-staff account', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      installInsuranceWorkflowRepositoryContract(app);
+
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.workflow.invalid-assignee@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5104B',
+      });
+
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.workflow.invalid-assignee@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const wrongRoleAssignee = await seedAuthUser({
+        email: 'customer.insurance.workflow.assignee@example.com',
+        password: 'password123',
+        firstName: 'Jordan',
+        lastName: 'Customer',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110F3',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const createInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Collections follow-up',
+          description: 'Customer is ready for a payment workflow update.',
+        });
+      expect(createInquiryResponse.status).toBe(201);
+
+      seedInsuranceInquiryWorkflowState(app, createInquiryResponse.body.id, {
+        status: 'approved',
+      });
+
+      const workflowResponse = await request(app.getHttpServer())
+        .patch(`/api/insurance/inquiries/${createInquiryResponse.body.id}/workflow`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'payment_pending',
+          assignedStaffId: wrongRoleAssignee.id,
+          paymentStatus: 'verifying',
+          reviewNotes: 'Trying to assign the case to a customer account.',
+        });
+
+      expect(workflowResponse.status).toBe(400);
+      expect(workflowResponse.body.message).toBe(
+        'Assigned staff member must be a service adviser or super admin',
       );
     } finally {
       await app.close();

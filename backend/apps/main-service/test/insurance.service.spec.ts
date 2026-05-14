@@ -1,11 +1,82 @@
 import { Test } from '@nestjs/testing';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 import { InsuranceRepository } from '@main-modules/insurance/repositories/insurance.repository';
 import { InsuranceService } from '@main-modules/insurance/services/insurance.service';
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
+
+describe('InsuranceRepository', () => {
+  it('hydrates staff-facing customer and vehicle labels when finding an inquiry by id', async () => {
+    const insuranceDb = {
+      query: {
+        insuranceInquiries: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: 'insurance-inquiry-1',
+            userId: 'customer-1',
+            vehicleId: 'vehicle-1',
+            inquiryType: 'comprehensive',
+            purpose: 'renewal',
+            subject: 'Renewal due next month',
+            description: 'Customer should receive a renewal quote before the current policy expires.',
+            providerName: null,
+            policyNumber: null,
+            notes: null,
+            status: 'for_renewal',
+            documentStatus: 'incomplete',
+            paymentStatus: 'not_required',
+            renewalStatus: 'upcoming',
+            assignedStaffId: 'adviser-1',
+            paymentDueAt: null,
+            policyExpiryAt: new Date('2026-06-20T00:00:00.000Z'),
+            renewalDueAt: new Date('2026-06-15T00:00:00.000Z'),
+            reviewNotes: null,
+            createdByUserId: 'adviser-1',
+            reviewedByUserId: null,
+            reviewedAt: null,
+            createdAt: new Date('2026-05-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+            user: {
+              profile: {
+                firstName: 'Casey',
+                lastName: 'Customer',
+              },
+            },
+            vehicle: {
+              make: 'Toyota',
+              model: 'Vios',
+              plateNumber: 'INS110C',
+            },
+            documents: [],
+          }),
+        },
+      },
+    };
+
+    const repository = new InsuranceRepository(insuranceDb as never);
+    jest.spyOn(repository, 'listActivitiesByInquiryId').mockResolvedValue([]);
+
+    const inquiry = await repository.findById('insurance-inquiry-1');
+
+    expect(insuranceDb.query.insuranceInquiries.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        with: expect.objectContaining({
+          user: expect.any(Object),
+          vehicle: true,
+        }),
+      }),
+    );
+    expect(inquiry).toEqual(
+      expect.objectContaining({
+        id: 'insurance-inquiry-1',
+        customerDisplayName: 'Casey Customer',
+        vehicleLabel: 'Toyota Vios (INS110C)',
+        activities: [],
+      }),
+    );
+  });
+});
 
 describe('InsuranceService', () => {
   it('creates an insurance inquiry when customer ownership and vehicle lineage are valid', async () => {
@@ -1036,5 +1107,141 @@ describe('InsuranceService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(insuranceRepository.addDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects manual renewal follow-up creation when assignedStaffId does not resolve to an active staff reviewer', async () => {
+    const insuranceRepository = {
+      createRenewalFollowUp: jest.fn(),
+    };
+    const findUserById = jest.fn(async (userId: string) => {
+      if (userId === 'adviser-1') {
+        return {
+          id: 'adviser-1',
+          role: 'service_adviser',
+          isActive: true,
+        };
+      }
+
+      if (userId === 'customer-1') {
+        return {
+          id: 'customer-1',
+          role: 'customer',
+          isActive: true,
+        };
+      }
+
+      return null;
+    });
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: findUserById,
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'vehicle-1',
+              userId: 'customer-1',
+            }),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    await expect(
+      service.createRenewalFollowUp(
+        {
+          userId: 'customer-1',
+          vehicleId: 'vehicle-1',
+          inquiryType: 'comprehensive',
+          subject: 'Renewal due next month',
+          description: 'Customer should receive a renewal quote before the current policy expires.',
+          renewalDueAt: '2026-06-15T00:00:00.000Z',
+          assignedStaffId: 'missing-adviser-id',
+        },
+        {
+          userId: 'adviser-1',
+          role: 'service_adviser',
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(insuranceRepository.createRenewalFollowUp).not.toHaveBeenCalled();
+  });
+
+  it('rejects workflow updates when assignedStaffId belongs to a non-staff account', async () => {
+    const insuranceRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        status: 'approved',
+      }),
+      updateWorkflow: jest.fn(),
+    };
+    const findUserById = jest.fn(async (userId: string) => {
+      if (userId === 'adviser-1') {
+        return {
+          id: 'adviser-1',
+          role: 'service_adviser',
+          isActive: true,
+        };
+      }
+
+      if (userId === 'customer-2') {
+        return {
+          id: 'customer-2',
+          role: 'customer',
+          isActive: true,
+        };
+      }
+
+      return null;
+    });
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: findUserById,
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    await expect(
+      service.updateWorkflow(
+        'insurance-inquiry-1',
+        {
+          status: 'payment_pending',
+          assignedStaffId: 'customer-2',
+          reviewNotes: 'Trying to assign the case to a customer account.',
+        },
+        {
+          userId: 'adviser-1',
+          role: 'service_adviser',
+        },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(insuranceRepository.updateWorkflow).not.toHaveBeenCalled();
   });
 });
