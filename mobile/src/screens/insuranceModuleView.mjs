@@ -1,10 +1,3 @@
-const titleCase = (value) =>
-  String(value ?? '')
-    .split('_')
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(' ')
-
 const REQUIRED_DOCUMENT_TYPES = [
   { type: 'or_cr', label: 'OR/CR' },
   { type: 'policy', label: 'Policy copy' },
@@ -46,7 +39,11 @@ export const buildRequirementsChecklist = ({ status = 'submitted', uploadedTypes
   }
 }
 
-export const getCustomerInsuranceTimeline = ({ status = 'submitted' } = {}) => {
+export const getCustomerInsuranceTimeline = ({
+  status = 'submitted',
+  paymentStatus = 'not_required',
+  renewalStatus = 'not_applicable',
+} = {}) => {
   const timeline = [
     {
       key: 'submitted',
@@ -76,32 +73,99 @@ export const getCustomerInsuranceTimeline = ({ status = 'submitted' } = {}) => {
     state: status === 'under_review' ? 'current' : 'done',
   })
 
-  const finalStepByStatus = {
-    needs_documents: 'documents',
-    for_approval: 'approval',
-    approved: 'approved',
-    payment_pending: 'payment',
-    active: 'approved',
-    for_renewal: 'renewal',
-    closed: 'closed',
-    rejected: 'rejected',
+  switch (status) {
+    case 'needs_documents':
+      timeline.push({
+        key: 'documents',
+        label: 'Documents',
+        state: 'current',
+      })
+      break
+    case 'for_approval':
+      timeline.push({
+        key: 'approval',
+        label: 'Approval',
+        state: 'current',
+      })
+      break
+    case 'approved':
+      timeline.push({
+        key: 'approved',
+        label: 'Approved',
+        state: 'current',
+      })
+      break
+    case 'payment_pending':
+      timeline.push({
+        key: 'payment',
+        label: 'Payment',
+        state: 'current',
+      })
+      break
+    case 'active':
+      if (paymentStatus !== 'not_required') {
+        timeline.push({
+          key: 'payment',
+          label: 'Payment',
+          state: 'done',
+        })
+      }
+      timeline.push({
+        key: 'active',
+        label: 'Active',
+        state: 'current',
+      })
+      break
+    case 'for_renewal':
+      timeline.push({
+        key: 'payment',
+        label: 'Payment',
+        state: 'done',
+      })
+      timeline.push({
+        key: 'renewal',
+        label: 'Renewal',
+        state: 'current',
+      })
+      break
+    case 'closed':
+      timeline.push({
+        key: 'closed',
+        label: 'Closed',
+        state: 'current',
+      })
+      break
+    case 'rejected':
+      timeline.push({
+        key: 'rejected',
+        label: 'Rejected',
+        state: 'current',
+      })
+      break
+    default:
+      break
   }
 
-  const finalStepKey = finalStepByStatus[status]
-
-  if (finalStepKey) {
+  const hasPaymentStep = timeline.some((step) => step.key === 'payment')
+  if (!hasPaymentStep && ['proof_submitted', 'verifying', 'paid'].includes(paymentStatus)) {
     timeline.push({
-      key: finalStepKey,
-      label: titleCase(finalStepKey),
-      state: 'current',
+      key: 'payment',
+      label: 'Payment',
+      state: paymentStatus === 'paid' ? 'done' : 'current',
     })
   }
 
-  if (status === 'for_renewal') {
-    timeline.splice(2, 0, {
-      key: 'payment',
-      label: 'Payment',
-      state: 'done',
+  const hasRenewalStep = timeline.some((step) => step.key === 'renewal')
+  const shouldShowRenewalPrompt =
+    renewalStatus !== 'not_applicable' &&
+    !hasRenewalStep &&
+    !['submitted', 'cancelled', 'rejected', 'closed'].includes(status)
+
+  if (shouldShowRenewalPrompt) {
+    timeline.push({
+      key: 'renewal',
+      label: 'Renewal',
+      state: 'upcoming',
     })
   }
 

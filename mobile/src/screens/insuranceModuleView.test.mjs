@@ -103,6 +103,17 @@ test('customer timeline maps phase-1 workflow statuses to explicit steps', () =>
   )
 })
 
+test('customer timeline includes payment pending and renewal prompts', () => {
+  assert.deepEqual(
+    getCustomerInsuranceTimeline({
+      status: 'payment_pending',
+      paymentStatus: 'proof_submitted',
+      renewalStatus: 'upcoming',
+    }).map((step) => step.key),
+    ['submitted', 'review', 'payment', 'renewal'],
+  )
+})
+
 test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for helper behavior', () => {
   assert.deepEqual(
     normalizeCustomerInsuranceInquiry({

@@ -5899,14 +5899,14 @@ export default function Dashboard({
       <View style={styles.infoPanel}>
         <Text style={styles.infoPanelTitle}>Insurance inquiry center</Text>
         <Text style={styles.infoPanelText}>
-          Start or continue CTPL and comprehensive insurance inquiries using a vehicle already attached to your account.
+          Open your customer insurance home to start a request, upload documents, and follow payment or renewal prompts for a saved vehicle.
         </Text>
         <TouchableOpacity
           style={[styles.primaryButton, styles.editProfileButton]}
           onPress={() => navigateToInsuranceInquiry(selectedGarageVehicleId)}
           activeOpacity={0.86}
         >
-          <Text style={styles.primaryButtonText}>Open Insurance Inquiry Form</Text>
+          <Text style={styles.primaryButtonText}>Open Insurance Home</Text>
         </TouchableOpacity>
       </View>
 
@@ -5951,7 +5951,7 @@ export default function Dashboard({
                   onPress={() => navigateToInsuranceInquiry(vehicle.id)}
                   activeOpacity={0.86}
                 >
-                  <Text style={styles.garageActionText}>Start Inquiry</Text>
+                  <Text style={styles.garageActionText}>Open Insurance Home</Text>
                 </TouchableOpacity>
               </MotionPressable>
             );
