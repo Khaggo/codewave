@@ -57,4 +57,5 @@
 - `GET /api/users/:id/insurance-inquiries` is the live staff-only customer history route.
 - `PATCH /api/insurance/inquiries/:id/status` remains the live staff edit route, but the controller currently binds to `UpdateInsuranceInquiryStatusDto` only. With whitelist + `forbidNonWhitelisted`, the live contract accepts `status` and optional `reviewNotes`, and rejects extra workflow fields.
 - Broader workflow metadata (`documentStatus`, `paymentStatus`, `renewalStatus`, `paymentDueAt`, `policyExpiryAt`, `renewalDueAt`, `assignedStaffId`) exists in the phase-1 service/design layer, but it is not exposed by the live controller DTO on this route today.
+- The shipped web phase-1 surface currently submits those broader workflow fields anyway, so there is an active web-to-backend contract mismatch until the controller/DTO are aligned.
 - `POST /api/insurance/inquiries/:id/documents/upload` is the live binary upload route for PDF/image files. `POST /api/insurance/inquiries/:id/documents` remains available for metadata/reference-style document attachment.

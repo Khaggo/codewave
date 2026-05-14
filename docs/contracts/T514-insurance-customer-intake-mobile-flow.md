@@ -73,11 +73,11 @@
 
 - vehicle ownership remains the backend gate for inquiry creation
 - the canonical phase-1 lifecycle contract comes from the live backend statuses: `submitted`, `needs_documents`, `under_review`, `for_approval`, `approved`, `payment_pending`, `active`, `for_renewal`, `closed`, `rejected`, `cancelled`
-- the shipped mobile surface still contains some legacy `approved_for_record` copy/handling; treat that as legacy client wording rather than canonical backend contract
+- the shipped mobile surface still contains some legacy `approved_for_record` copy/handling and screen copy about staff publishing or converting approved cases into vehicle records; treat that wording as stale client terminology rather than canonical backend contract
 - customer mobile must not expose `reviewNotes`, `reviewedByUserId`, or other staff-only review metadata
 - customer-safe tags also surface `documentStatus`, `paymentStatus`, and `renewalStatus`
 - binary uploads are the primary phase-1 document path; the reference-document route remains a compatibility path
-- vehicle-level insurance records are customer-safe follow-on tracking records; they are not a replacement for staff review workflows
+- vehicle-level insurance records are customer-safe follow-on tracking records; they are not a replacement for staff review workflows, and the backend currently upserts them when inquiry status transitions to `closed`
 - `PATCH /api/insurance/inquiries/:id/status` stays staff-only even though it influences later mobile-visible status
 
 ## Acceptance States
@@ -100,4 +100,4 @@
 - This slice upgrades the real customer mobile route instead of leaving `InsuranceInquiryScreen` as a placeholder module.
 - Dashboard quick actions now link into the live insurance inquiry screen.
 - The mobile client intentionally treats inquiry tracking as a known-id flow plus vehicle-record history; it does not call the live staff-only customer history route.
-- Legacy `approved_for_record` wording in the mobile client should not be treated as the phase-1 lifecycle contract. Vehicle records are follow-on history, not a separate customer-facing inquiry status.
+- Legacy mobile wording around `approved_for_record` and staff publishing records should not be treated as the phase-1 lifecycle contract or canonical record timing. Vehicle records are follow-on history, and the backend currently creates or refreshes them when an inquiry transitions to `closed`.

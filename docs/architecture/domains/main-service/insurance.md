@@ -51,6 +51,7 @@ Key relations:
 - track inquiry state from submission through document follow-up, review, approval, payment, renewal, and closure
 - expose staff list and customer-history reads for internal workflow operations
 - automatically upsert follow-on `insurance_records` for vehicle tracking when an inquiry transitions to `closed`
+- expose a live staff PATCH route that currently accepts only `status` and optional `reviewNotes`, even though broader phase-1 workflow metadata exists in service/design code
 - expose inquiry updates to notifications and lifecycle modules
 - keep direct insurer integration out of assumed scope unless explicitly added later
 
@@ -58,7 +59,7 @@ Key relations:
 
 1. Customer or authorized staff submits an insurance inquiry for a customer-owned vehicle.
 2. Required metadata is recorded and supporting documents can be attached while the inquiry remains open through either the reference-document route or the binary upload route.
-3. Staff lists inquiries, filters by workflow tags, reviews one inquiry in detail, and updates status plus workflow metadata through the internal workflow.
+3. Staff lists inquiries, filters by workflow tags, reviews one inquiry in detail, and uses the live PATCH route for status changes plus optional review notes. Broader workflow metadata remains part of the intended phase-1 workflow model, but the current controller contract is not yet aligned with that richer edit payload.
 4. Follow-on `insurance_records` support vehicle-level tracking records; the current service implementation upserts that record layer when an inquiry is moved to `closed`.
 5. Notifications and lifecycle updates are generated later as dependent integrations.
 
@@ -90,6 +91,7 @@ Key relations:
 - customer attempts to read a foreign insurance inquiry or vehicle insurance record
 - closed or rejected inquiries receive more document uploads
 - workflow filters return no staff-visible cases
+- the shipped web save payload includes broader workflow metadata fields that the live PATCH controller currently rejects
 - phase-1 clients still contain legacy wording that should not be treated as canonical lifecycle status
 - users expect direct insurer integration when the module only tracks internal workflow
 - inquiry closes without clear record linkage
