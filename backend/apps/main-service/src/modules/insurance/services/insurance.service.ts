@@ -74,6 +74,18 @@ type InsuranceActivityEvent = {
   updatedAt: Date;
 };
 
+type InsuranceDocumentRecord = {
+  id: string;
+  inquiryId: string;
+  fileName: string;
+  fileUrl: string;
+  documentType: string;
+  notes?: string | null;
+  uploadedByUserId?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 @Injectable()
 export class InsuranceService {
   constructor(
@@ -105,7 +117,7 @@ export class InsuranceService {
   async findById(id: string, actor: InsuranceActor) {
     const inquiry = await this.insuranceRepository.findById(id);
     await this.assertCanAccessInquiry(inquiry.userId, actor);
-    return inquiry;
+    return this.attachActivityTimeline(inquiry);
   }
 
   async findByUserId(userId: string, actor: InsuranceActor) {
@@ -150,10 +162,9 @@ export class InsuranceService {
         ]);
 
         return {
-          ...inquiry,
+          ...this.attachActivityTimeline(inquiry),
           customerDisplayName: this.buildCustomerDisplayName(user?.profile),
           vehicleLabel: this.buildVehicleLabel(vehicle),
-          activities: (inquiry as { activities?: InsuranceActivityEvent[] }).activities ?? [],
         };
       }),
     );
@@ -274,11 +285,8 @@ export class InsuranceService {
     const persistedActivities = await this.listActivityEvents(id);
 
     return {
-      ...updatedInquiry,
-      activities:
-        persistedActivities.length > 0
-          ? persistedActivities
-          : [...((updatedInquiry as { activities?: InsuranceActivityEvent[] }).activities ?? []), appendedActivity],
+      ...this.attachActivityTimeline(updatedInquiry),
+      activities: persistedActivities.length > 0 ? persistedActivities : [appendedActivity],
     };
   }
 
@@ -410,6 +418,37 @@ export class InsuranceService {
     }
 
     return [];
+  }
+
+  private attachActivityTimeline<T extends { id: string; documents?: InsuranceDocumentRecord[]; activities?: InsuranceActivityEvent[] }>(
+    inquiry: T,
+  ) {
+    const explicitActivities = inquiry.activities ?? [];
+    if (explicitActivities.length > 0) {
+      return inquiry;
+    }
+
+    const derivedActivities = this.deriveActivitiesFromDocuments(inquiry.documents ?? []);
+
+    return {
+      ...inquiry,
+      activities: derivedActivities,
+    };
+  }
+
+  private deriveActivitiesFromDocuments(documents: InsuranceDocumentRecord[]) {
+    return [...documents]
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+      .map((document) => ({
+        id: `document-upload-${document.id}`,
+        inquiryId: document.inquiryId,
+        action: 'document_uploaded',
+        actorUserId: document.uploadedByUserId ?? null,
+        documentType: document.documentType,
+        notes: document.notes ?? null,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt,
+      }));
   }
 
   private buildCustomerDisplayName(

@@ -370,7 +370,7 @@ describe('InsuranceController integration', () => {
     }
   });
 
-  it('uploads an insurance PDF and stores an activity event', async () => {
+  it('uploads an insurance PDF and exposes the persisted activity event on follow-up read', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
@@ -421,11 +421,26 @@ describe('InsuranceController integration', () => {
           fileUrl: expect.stringMatching(/^upload:\/\/insurance\//),
         }),
       );
-      expect(uploadResponse.body.activities.at(-1)).toEqual(
+
+      const readBackResponse = await request(app.getHttpServer())
+        .get(`/api/insurance/inquiries/${createInquiryResponse.body.id}`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+
+      expect(readBackResponse.status).toBe(200);
+      expect(readBackResponse.body.documents[0]).toEqual(
         expect.objectContaining({
-          action: 'document_uploaded',
           documentType: 'proof_of_payment',
+          fileName: 'proof-of-payment.pdf',
+          fileUrl: expect.stringMatching(/^upload:\/\/insurance\//),
         }),
+      );
+      expect(readBackResponse.body.activities).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'document_uploaded',
+            documentType: 'proof_of_payment',
+          }),
+        ]),
       );
     } finally {
       await app.close();
