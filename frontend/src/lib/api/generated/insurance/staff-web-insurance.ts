@@ -79,17 +79,7 @@ export interface StaffInsuranceQueueItemPresentation {
 export interface StaffInsuranceStatusUpdateDraft {
   inquiryId: string;
   request: UpdateInsuranceInquiryStatusRequest;
-  editableFields: Array<
-    | 'status'
-    | 'documentStatus'
-    | 'paymentStatus'
-    | 'renewalStatus'
-    | 'paymentDueAt'
-    | 'policyExpiryAt'
-    | 'renewalDueAt'
-    | 'assignedStaffId'
-    | 'reviewNotes'
-  >;
+  editableFields: Array<'status' | 'reviewNotes'>;
 }
 
 export const insuranceReviewStaffRoles: StaffPortalRole[] = [
@@ -180,7 +170,7 @@ export const staffInsuranceStatusUpdateStateRules: StaffInsuranceStatusUpdateSta
     truth: 'client-guard',
     routeKey: 'updateInquiryStatus',
     allowedRoles: insuranceReviewStaffRoles,
-    description: 'The selected inquiry is ready for a valid workflow and follow-up update.',
+    description: 'The selected inquiry is ready for a valid status and review-notes update.',
   },
   {
     state: 'status_update_submitting',
@@ -188,7 +178,7 @@ export const staffInsuranceStatusUpdateStateRules: StaffInsuranceStatusUpdateSta
     truth: 'client-guard',
     routeKey: 'updateInquiryStatus',
     allowedRoles: insuranceReviewStaffRoles,
-    description: 'The workflow update request is in flight and duplicate submit should be blocked.',
+    description: 'The narrow status update request is in flight and duplicate submit should be blocked.',
   },
   {
     state: 'status_update_saved',
@@ -196,7 +186,7 @@ export const staffInsuranceStatusUpdateStateRules: StaffInsuranceStatusUpdateSta
     truth: 'synchronous-insurance-record',
     routeKey: 'updateInquiryStatus',
     allowedRoles: insuranceReviewStaffRoles,
-    description: 'The backend accepted the inquiry workflow update and returned the updated inquiry.',
+    description: 'The backend accepted the inquiry status update and returned the updated inquiry.',
   },
   {
     state: 'forbidden_role',
@@ -204,7 +194,7 @@ export const staffInsuranceStatusUpdateStateRules: StaffInsuranceStatusUpdateSta
     truth: 'client-guard',
     routeKey: 'updateInquiryStatus',
     allowedRoles: [],
-    description: 'Only service advisers and super admins may update inquiry workflow state.',
+    description: 'Only service advisers and super admins may update inquiry status and review notes.',
   },
   {
     state: 'inquiry_not_found',
@@ -220,7 +210,7 @@ export const staffInsuranceStatusUpdateStateRules: StaffInsuranceStatusUpdateSta
     truth: 'synchronous-insurance-record',
     routeKey: 'updateInquiryStatus',
     allowedRoles: insuranceReviewStaffRoles,
-    description: "The requested workflow transition is not valid for the inquiry's current backend status.",
+    description: "The requested status transition is not valid for the inquiry's current backend status.",
   },
   {
     state: 'update_failed',
@@ -228,7 +218,7 @@ export const staffInsuranceStatusUpdateStateRules: StaffInsuranceStatusUpdateSta
     truth: 'synchronous-insurance-record',
     routeKey: 'updateInquiryStatus',
     allowedRoles: insuranceReviewStaffRoles,
-    description: 'A non-classified API or network failure blocked the workflow update.',
+    description: 'A non-classified API or network failure blocked the status update.',
   },
 ];
 
@@ -294,13 +284,6 @@ export const insuranceStatusUpdateDraftTemplate: StaffInsuranceStatusUpdateDraft
   },
   editableFields: [
     'status',
-    'documentStatus',
-    'paymentStatus',
-    'renewalStatus',
-    'paymentDueAt',
-    'policyExpiryAt',
-    'renewalDueAt',
-    'assignedStaffId',
     'reviewNotes',
   ],
 };

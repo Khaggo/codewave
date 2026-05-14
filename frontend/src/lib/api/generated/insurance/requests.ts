@@ -124,7 +124,7 @@ export const insuranceRoutes: Record<string, RouteContract> = {
     path: '/api/insurance/inquiries/:id/status',
     status: 'live',
     source: 'swagger',
-    notes: 'Only service advisers and super admins can advance inquiry workflow and follow-up tags.',
+    notes: 'Narrow status update route for inquiry status and optional review notes only.',
   },
   updateInquiryWorkflow: {
     method: 'PATCH',
