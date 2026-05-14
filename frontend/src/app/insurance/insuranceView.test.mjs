@@ -3,11 +3,26 @@ import assert from 'node:assert/strict'
 
 import {
   buildInsuranceTableRow,
+  getNextInsuranceWorkspaceViewState,
   formatStatusLabel,
   getInsuranceDetailTabs,
   getInsuranceSummaryCards,
 } from './insuranceView.mjs'
 import { updateInsuranceInquiryStatus } from '../../lib/insuranceStaffClient.js'
+
+const buildInquiryFixture = (overrides = {}) => ({
+  id: 'inq-1',
+  status: 'payment_pending',
+  documentStatus: 'complete',
+  paymentStatus: 'proof_submitted',
+  renewalStatus: 'upcoming',
+  paymentDueAt: '2026-05-30T00:00:00.000Z',
+  policyExpiryAt: '2026-08-15T00:00:00.000Z',
+  renewalDueAt: '2026-07-15T00:00:00.000Z',
+  assignedStaffId: 'adviser-1',
+  reviewNotes: 'Waiting for proof review.',
+  ...overrides,
+})
 
 test('formatStatusLabel title-cases unknown insurance statuses', () => {
   assert.equal(formatStatusLabel('approved_for_record'), 'Approved For Record')
@@ -95,6 +110,99 @@ test('getInsuranceDetailTabs exposes overview, documents, timeline, payment, and
   assert.deepEqual(
     getInsuranceDetailTabs().map((tab) => tab.key),
     ['overview', 'documents', 'timeline', 'payment', 'renewal', 'activity'],
+  )
+})
+
+test('getNextInsuranceWorkspaceViewState preserves tab, feedback, and dirty draft when the same inquiry refreshes', () => {
+  const draftInProgress = {
+    status: 'payment_pending',
+    documentStatus: 'complete',
+    paymentStatus: 'proof_submitted',
+    renewalStatus: 'upcoming',
+    paymentDueAt: '2026-05-30',
+    policyExpiryAt: '2026-08-15',
+    renewalDueAt: '2026-07-15',
+    assignedStaffId: 'adviser-1',
+    reviewNotes: 'Call customer before approval.',
+  }
+
+  assert.deepEqual(
+    getNextInsuranceWorkspaceViewState({
+      currentActiveDetailTab: 'payment',
+      currentDetailMessage: 'Live insurance detail refreshed from the backend.',
+      currentDetailState: 'detail_loaded',
+      currentUpdateDraft: draftInProgress,
+      currentUpdateMessage: 'Insurance workflow updated to Payment Pending.',
+      currentUpdateState: 'status_update_saved',
+      detailTabs: getInsuranceDetailTabs(),
+      nextInquiry: buildInquiryFixture(),
+      nextStatuses: ['active', 'for_renewal', 'closed'],
+      previousInquiryId: 'inq-1',
+    }),
+    {
+      activeDetailTab: 'payment',
+      detailMessage: 'Live insurance detail refreshed from the backend.',
+      detailState: 'detail_loaded',
+      updateDraft: draftInProgress,
+      updateMessage: 'Insurance workflow updated to Payment Pending.',
+      updateState: 'status_update_saved',
+    },
+  )
+})
+
+test('getNextInsuranceWorkspaceViewState resets tab and hydrates draft when the selected inquiry changes', () => {
+  assert.deepEqual(
+    getNextInsuranceWorkspaceViewState({
+      currentActiveDetailTab: 'payment',
+      currentDetailMessage: 'Old detail message',
+      currentDetailState: 'detail_loaded',
+      currentUpdateDraft: {
+        status: 'payment_pending',
+        documentStatus: 'complete',
+        paymentStatus: 'proof_submitted',
+        renewalStatus: 'upcoming',
+        paymentDueAt: '2026-05-30',
+        policyExpiryAt: '2026-08-15',
+        renewalDueAt: '2026-07-15',
+        assignedStaffId: 'adviser-1',
+        reviewNotes: 'Dirty draft',
+      },
+      currentUpdateMessage: 'Old update message',
+      currentUpdateState: 'status_update_saved',
+      detailTabs: getInsuranceDetailTabs(),
+      nextInquiry: buildInquiryFixture({
+        id: 'inq-2',
+        status: 'under_review',
+        documentStatus: 'under_verification',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+        paymentDueAt: null,
+        policyExpiryAt: null,
+        renewalDueAt: null,
+        assignedStaffId: null,
+        reviewNotes: null,
+      }),
+      nextStatuses: ['for_approval', 'approved'],
+      previousInquiryId: 'inq-1',
+    }),
+    {
+      activeDetailTab: 'overview',
+      detailMessage: '',
+      detailState: 'detail_loaded',
+      updateDraft: {
+        status: 'for_approval',
+        documentStatus: 'under_verification',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+        paymentDueAt: '',
+        policyExpiryAt: '',
+        renewalDueAt: '',
+        assignedStaffId: '',
+        reviewNotes: '',
+      },
+      updateMessage: '',
+      updateState: 'status_update_ready',
+    },
   )
 })
 

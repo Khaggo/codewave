@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
@@ -29,6 +29,7 @@ import {
   buildInsuranceTableRow,
   formatStatusLabel,
   getInsuranceDetailTabs,
+  getNextInsuranceWorkspaceViewState,
   getInsuranceSummaryCards,
 } from './insuranceView.mjs'
 
@@ -107,17 +108,6 @@ const getBadgeClassName = (value) => {
   if (WARNING_BADGE_VALUES.has(value)) return 'badge-orange'
   if (INFO_BADGE_VALUES.has(value)) return 'badge-blue'
   return 'badge-gray'
-}
-
-const toInputDateValue = (value) => {
-  if (!value) return ''
-
-  const parsedDate = new Date(value)
-  if (Number.isNaN(parsedDate.getTime())) {
-    return ''
-  }
-
-  return parsedDate.toISOString().slice(0, 10)
 }
 
 const formatDateTime = (value) => {
@@ -411,6 +401,24 @@ export default function InsuranceContent() {
   const [updateMessage, setUpdateMessage] = useState('')
   const [updateDraft, setUpdateDraft] = useState(DEFAULT_UPDATE_DRAFT)
   const [reloadTick, setReloadTick] = useState(0)
+  const previousSelectedInquiryIdRef = useRef('')
+  const workspaceStateRef = useRef({
+    activeDetailTab: 'overview',
+    detailMessage: '',
+    detailState: 'idle',
+    updateDraft: DEFAULT_UPDATE_DRAFT,
+    updateMessage: '',
+    updateState: 'status_update_ready',
+  })
+
+  workspaceStateRef.current = {
+    activeDetailTab,
+    detailMessage,
+    detailState,
+    updateDraft,
+    updateMessage,
+    updateState,
+  }
 
   const detailTabs = useMemo(() => getInsuranceDetailTabs(), [])
 
@@ -442,7 +450,6 @@ export default function InsuranceContent() {
       } catch (error) {
         if (ignore) return
 
-        setInquiries([])
         setListState('load_failed')
         setListMessage(error?.message || 'Insurance cases could not be loaded.')
       }
@@ -476,19 +483,19 @@ export default function InsuranceContent() {
   }, [filters.search, inquiries])
 
   useEffect(() => {
-    if (!filteredInquiries.length) {
+    if (!inquiries.length) {
       setSelectedInquiryId('')
       return
     }
 
-    if (!filteredInquiries.some((inquiry) => inquiry.id === selectedInquiryId)) {
-      setSelectedInquiryId(filteredInquiries[0].id)
+    if (!inquiries.some((inquiry) => inquiry.id === selectedInquiryId)) {
+      setSelectedInquiryId(inquiries[0].id)
     }
-  }, [filteredInquiries, selectedInquiryId])
+  }, [inquiries, selectedInquiryId])
 
   const selectedInquiry = useMemo(
-    () => filteredInquiries.find((inquiry) => inquiry.id === selectedInquiryId) ?? null,
-    [filteredInquiries, selectedInquiryId],
+    () => inquiries.find((inquiry) => inquiry.id === selectedInquiryId) ?? null,
+    [inquiries, selectedInquiryId],
   )
 
   const nextStatuses = useMemo(
@@ -498,32 +505,43 @@ export default function InsuranceContent() {
 
   useEffect(() => {
     if (!selectedInquiry) {
-      setActiveDetailTab(detailTabs[0]?.key ?? 'overview')
-      setUpdateDraft(DEFAULT_UPDATE_DRAFT)
+      previousSelectedInquiryIdRef.current = ''
+      if (!inquiries.length) {
+        setActiveDetailTab(detailTabs[0]?.key ?? 'overview')
+        setDetailState('idle')
+        setDetailMessage('')
+        setUpdateDraft(DEFAULT_UPDATE_DRAFT)
+        setUpdateState('status_update_ready')
+        setUpdateMessage('')
+      }
       return
     }
 
-    setActiveDetailTab(detailTabs[0]?.key ?? 'overview')
-    setDetailState('detail_loaded')
-    setDetailMessage('')
-    setUpdateDraft({
-      status: nextStatuses[0] ?? selectedInquiry.status,
-      documentStatus: selectedInquiry.documentStatus,
-      paymentStatus: selectedInquiry.paymentStatus,
-      renewalStatus: selectedInquiry.renewalStatus,
-      paymentDueAt: toInputDateValue(selectedInquiry.paymentDueAt),
-      policyExpiryAt: toInputDateValue(selectedInquiry.policyExpiryAt),
-      renewalDueAt: toInputDateValue(selectedInquiry.renewalDueAt),
-      assignedStaffId: selectedInquiry.assignedStaffId ?? '',
-      reviewNotes: selectedInquiry.reviewNotes ?? '',
+    const nextViewState = getNextInsuranceWorkspaceViewState({
+      currentActiveDetailTab: workspaceStateRef.current.activeDetailTab,
+      currentDetailMessage: workspaceStateRef.current.detailMessage,
+      currentDetailState: workspaceStateRef.current.detailState,
+      currentUpdateDraft: workspaceStateRef.current.updateDraft,
+      currentUpdateMessage: workspaceStateRef.current.updateMessage,
+      currentUpdateState: workspaceStateRef.current.updateState,
+      detailTabs,
+      nextInquiry: selectedInquiry,
+      nextStatuses,
+      previousInquiryId: previousSelectedInquiryIdRef.current,
     })
-    setUpdateState('status_update_ready')
-    setUpdateMessage('')
-  }, [detailTabs, nextStatuses, selectedInquiry])
+
+    previousSelectedInquiryIdRef.current = selectedInquiry.id
+    setActiveDetailTab(nextViewState.activeDetailTab)
+    setDetailState(nextViewState.detailState)
+    setDetailMessage(nextViewState.detailMessage)
+    setUpdateDraft(nextViewState.updateDraft)
+    setUpdateState(nextViewState.updateState)
+    setUpdateMessage(nextViewState.updateMessage)
+  }, [detailTabs, inquiries.length, nextStatuses, selectedInquiry])
 
   const summaryCards = useMemo(
-    () => getInsuranceSummaryCards({ inquiries: filteredInquiries }),
-    [filteredInquiries],
+    () => getInsuranceSummaryCards({ inquiries }),
+    [inquiries],
   )
 
   const tableRows = useMemo(

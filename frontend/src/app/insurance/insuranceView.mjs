@@ -24,6 +24,32 @@ const isTerminalInquiry = (inquiry) => TERMINAL_INQUIRY_STATUSES.includes(inquir
 const countMatchingInquiries = (inquiries, predicate) =>
   inquiries.reduce((total, inquiry) => (predicate(inquiry) ? total + 1 : total), 0)
 
+const toInputDateValue = (value) => {
+  if (!value) return ''
+
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return ''
+  }
+
+  return parsedDate.toISOString().slice(0, 10)
+}
+
+const buildInsuranceUpdateDraft = (inquiry, nextStatuses = []) => ({
+  status: nextStatuses[0] ?? inquiry?.status ?? 'submitted',
+  documentStatus: inquiry?.documentStatus ?? 'incomplete',
+  paymentStatus: inquiry?.paymentStatus ?? 'not_required',
+  renewalStatus: inquiry?.renewalStatus ?? 'not_applicable',
+  paymentDueAt: toInputDateValue(inquiry?.paymentDueAt),
+  policyExpiryAt: toInputDateValue(inquiry?.policyExpiryAt),
+  renewalDueAt: toInputDateValue(inquiry?.renewalDueAt),
+  assignedStaffId: inquiry?.assignedStaffId ?? '',
+  reviewNotes: inquiry?.reviewNotes ?? '',
+})
+
+const areInsuranceUpdateDraftsEqual = (left = {}, right = {}) =>
+  EDITABLE_WORKFLOW_FIELDS.every((field) => String(left?.[field] ?? '') === String(right?.[field] ?? ''))
+
 const buildLifecycleSummaryCards = (inquiries) => [
   {
     label: 'New Inquiries',
@@ -133,4 +159,42 @@ export function getInsuranceDetailTabs() {
       label: 'Activity',
     },
   ]
+}
+
+export function getNextInsuranceWorkspaceViewState({
+  currentActiveDetailTab,
+  currentDetailMessage,
+  currentDetailState,
+  currentUpdateDraft,
+  currentUpdateMessage,
+  currentUpdateState,
+  detailTabs = getInsuranceDetailTabs(),
+  nextInquiry,
+  nextStatuses = [],
+  previousInquiryId,
+} = {}) {
+  const defaultTabKey = detailTabs[0]?.key ?? 'overview'
+  const nextDraft = buildInsuranceUpdateDraft(nextInquiry, nextStatuses)
+  const sameInquiry = Boolean(nextInquiry?.id) && nextInquiry.id === previousInquiryId
+  const shouldPreserveDraft = sameInquiry && areInsuranceUpdateDraftsEqual(currentUpdateDraft, nextDraft) === false
+
+  if (sameInquiry) {
+    return {
+      activeDetailTab: currentActiveDetailTab || defaultTabKey,
+      detailMessage: currentDetailMessage ?? '',
+      detailState: currentDetailState === 'idle' ? 'detail_loaded' : currentDetailState,
+      updateDraft: shouldPreserveDraft ? currentUpdateDraft : nextDraft,
+      updateMessage: currentUpdateMessage ?? '',
+      updateState: currentUpdateState ?? 'status_update_ready',
+    }
+  }
+
+  return {
+    activeDetailTab: defaultTabKey,
+    detailMessage: '',
+    detailState: nextInquiry ? 'detail_loaded' : 'idle',
+    updateDraft: nextDraft,
+    updateMessage: '',
+    updateState: 'status_update_ready',
+  }
 }
