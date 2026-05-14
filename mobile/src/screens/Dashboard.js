@@ -78,6 +78,7 @@ import DatePickerField from '../components/DatePickerField';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import FormField from '../components/FormField';
 import PasswordChecklist from '../components/PasswordChecklist';
+import { getRememberedInquiryForVehicle } from './insuranceModuleView.mjs';
 import { colors, radius } from '../theme';
 import {
   formatDate,
@@ -3896,9 +3897,11 @@ export default function Dashboard({
       normalizeNavigationId(vehicleId) ??
       normalizeNavigationId(selectedGarageVehicleId) ??
       normalizeNavigationId(account?.primaryVehicleId);
+    const rememberedInquiryId = getRememberedInquiryForVehicle(selectedVehicleId);
 
     navigation.navigate('InsuranceInquiryScreen', {
       vehicleId: selectedVehicleId,
+      inquiryId: rememberedInquiryId,
     });
   };
 

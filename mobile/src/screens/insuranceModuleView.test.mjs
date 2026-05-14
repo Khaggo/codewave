@@ -3,9 +3,13 @@ import assert from 'node:assert/strict'
 
 import {
   buildRequirementsChecklist,
+  clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
+  getRememberedInquiryForVehicle,
   getCustomerInsuranceTimeline,
   getInsuranceHomeCards,
+  rememberInquiryForVehicle,
+  shouldShowCustomerInsuranceFollowUp,
 } from './insuranceModuleView.mjs'
 import {
   addInsuranceInquiryDocument,
@@ -134,6 +138,45 @@ test('createPickedInsuranceDocumentDraft maps a selected asset into upload-ready
       notes: '',
       fileSizeLabel: '240 KB',
     },
+  )
+})
+
+test('remembered inquiry ids can resume a vehicle-specific in-flight request', () => {
+  clearRememberedInquiryForVehicle('vehicle-1')
+
+  assert.equal(getRememberedInquiryForVehicle('vehicle-1'), null)
+
+  rememberInquiryForVehicle({
+    vehicleId: 'vehicle-1',
+    inquiryId: 'inq-1',
+  })
+
+  assert.equal(getRememberedInquiryForVehicle('vehicle-1'), 'inq-1')
+
+  clearRememberedInquiryForVehicle('vehicle-1')
+
+  assert.equal(getRememberedInquiryForVehicle('vehicle-1'), null)
+})
+
+test('terminal inquiries suppress payment and renewal follow-up even with stale tags', () => {
+  assert.equal(
+    shouldShowCustomerInsuranceFollowUp({
+      status: 'closed',
+      paymentStatus: 'proof_submitted',
+      renewalStatus: 'upcoming',
+      followUpType: 'payment',
+    }),
+    false,
+  )
+
+  assert.equal(
+    shouldShowCustomerInsuranceFollowUp({
+      status: 'rejected',
+      paymentStatus: 'proof_submitted',
+      renewalStatus: 'upcoming',
+      followUpType: 'renewal',
+    }),
+    false,
   )
 })
 

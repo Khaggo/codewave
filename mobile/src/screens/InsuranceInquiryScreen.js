@@ -29,9 +29,14 @@ import {
 } from '../lib/insuranceClient';
 import {
   buildRequirementsChecklist,
+  clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
+  getRememberedInquiryForVehicle,
   getCustomerInsuranceTimeline,
   getInsuranceHomeCards,
+  isTerminalCustomerInquiryStatus,
+  rememberInquiryForVehicle,
+  shouldShowCustomerInsuranceFollowUp,
 } from './insuranceModuleView.mjs';
 import { colors, radius } from '../theme';
 
@@ -382,9 +387,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const routeInquiryId = normalizeRouteId(route?.params?.inquiryId);
   const fallbackVehicleId =
     normalizeRouteId(account?.primaryVehicleId) ?? normalizeRouteId(ownedVehicles[0]?.id);
-  const [selectedVehicleId, setSelectedVehicleId] = useState(
-    routeVehicleId ?? fallbackVehicleId,
-  );
+  const initialVehicleId = routeVehicleId ?? fallbackVehicleId;
+  const [selectedVehicleId, setSelectedVehicleId] = useState(initialVehicleId);
   const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
   const [documentDraft, setDocumentDraft] = useState(buildInitialDocumentUploadDraft());
   const [intakeState, setIntakeState] = useState(initialSnapshot.intakeState);
@@ -394,7 +398,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const [trackingState, setTrackingState] = useState(initialSnapshot.trackingState);
   const [trackingMessage, setTrackingMessage] = useState('');
   const [latestInquiry, setLatestInquiry] = useState(null);
-  const [latestInquiryId, setLatestInquiryId] = useState(routeInquiryId);
+  const [latestInquiryId, setLatestInquiryId] = useState(
+    routeInquiryId ?? getRememberedInquiryForVehicle(initialVehicleId),
+  );
   const [claimStatusUpdates, setClaimStatusUpdates] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
@@ -426,11 +432,21 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   );
   const paymentPromptVisible = Boolean(
     latestInquiry &&
-      (latestInquiry.status === 'payment_pending' || latestInquiry.paymentStatus !== 'not_required'),
+      shouldShowCustomerInsuranceFollowUp({
+        status: latestInquiry.status,
+        paymentStatus: latestInquiry.paymentStatus,
+        renewalStatus: latestInquiry.renewalStatus,
+        followUpType: 'payment',
+      }),
   );
   const renewalPromptVisible = Boolean(
     latestInquiry &&
-      (latestInquiry.status === 'for_renewal' || latestInquiry.renewalStatus !== 'not_applicable'),
+      shouldShowCustomerInsuranceFollowUp({
+        status: latestInquiry.status,
+        paymentStatus: latestInquiry.paymentStatus,
+        renewalStatus: latestInquiry.renewalStatus,
+        followUpType: 'renewal',
+      }),
   );
   const homeCards = useMemo(
     () =>
@@ -521,6 +537,26 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       setLiveOwnedVehicles(accountOwnedVehicles);
     }
   }, [accountOwnedVehicles]);
+
+  useEffect(() => {
+    if (!routeVehicleId) {
+      return;
+    }
+
+    setSelectedVehicleId(routeVehicleId);
+    setLatestInquiryId(routeInquiryId ?? getRememberedInquiryForVehicle(routeVehicleId));
+  }, [routeInquiryId, routeVehicleId]);
+
+  useEffect(() => {
+    if (!selectedVehicleId) {
+      setLatestInquiryId(null);
+      return;
+    }
+
+    if (!routeInquiryId) {
+      setLatestInquiryId((currentInquiryId) => currentInquiryId ?? getRememberedInquiryForVehicle(selectedVehicleId));
+    }
+  }, [routeInquiryId, selectedVehicleId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -622,6 +658,22 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setDocumentDraft(buildInitialDocumentUploadDraft());
   };
 
+  const syncRememberedInquiry = (vehicleId, inquiry) => {
+    if (!vehicleId) {
+      return;
+    }
+
+    if (inquiry?.id && !isTerminalCustomerInquiryStatus(inquiry.status)) {
+      rememberInquiryForVehicle({
+        vehicleId,
+        inquiryId: inquiry.id,
+      });
+      return;
+    }
+
+    clearRememberedInquiryForVehicle(vehicleId);
+  };
+
   const refreshTracking = async ({ inquiryIdOverride } = {}) => {
     if (!hasSession) {
       setTrackingState('tracking_unauthorized_session');
@@ -665,8 +717,14 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         accessToken,
       });
 
+      syncRememberedInquiry(selectedVehicleId, nextInquiry ?? null);
       setLatestInquiry(nextInquiry ?? null);
       setClaimStatusUpdates(nextRecords);
+      setLatestInquiryId(
+        nextInquiry?.id && !isTerminalCustomerInquiryStatus(nextInquiry.status)
+          ? nextInquiry.id
+          : null,
+      );
       setTrackingState(
         inquiryNotFound && !nextRecords.length
           ? 'tracking_not_found'
@@ -701,7 +759,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     refreshTracking();
     // The screen should refresh when the selected vehicle changes or the session becomes valid.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSession, selectedVehicleId]);
+  }, [hasSession, latestInquiryId, selectedVehicleId]);
 
   const handleDraftChange = (field, value) => {
     setDraft((currentDraft) => ({
@@ -728,7 +786,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setSelectedVehicleId(vehicleId);
     setTrackingMessage('');
     setLatestInquiry(null);
-    setLatestInquiryId(null);
+    setLatestInquiryId(getRememberedInquiryForVehicle(vehicleId));
     setClaimStatusUpdates([]);
     setIntakeMessage('');
     setDocumentUploadState('document_idle');
@@ -893,6 +951,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
       setLatestInquiry(createdInquiry);
       setLatestInquiryId(createdInquiry?.id ?? null);
+      syncRememberedInquiry(selectedVehicle.id, createdInquiry);
       setIntakeState('submitted_inquiry');
       setIntakeMessage(
         `Inquiry submitted successfully with backend status ${createdInquiry?.status ?? 'submitted'}.`,
@@ -966,6 +1025,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
       setLatestInquiry(updatedInquiry);
       setLatestInquiryId(updatedInquiry?.id ?? null);
+      syncRememberedInquiry(selectedVehicleId, updatedInquiry);
       setTrackingState(
         getCustomerInsuranceTrackingState({
           latestInquiry: updatedInquiry,

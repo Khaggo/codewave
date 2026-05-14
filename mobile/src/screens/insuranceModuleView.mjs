@@ -13,6 +13,7 @@ const OPTIONAL_DOCUMENT_TYPES = [
 ]
 
 const hasUploadedType = (uploadedTypes, type) => uploadedTypes.includes(type)
+const rememberedInquiryIdsByVehicle = new Map()
 
 const formatFileSizeLabel = (size) => {
   if (!Number.isFinite(size) || size <= 0) {
@@ -43,6 +44,61 @@ export const createPickedInsuranceDocumentDraft = ({
   notes: '',
   fileSizeLabel: formatFileSizeLabel(asset?.size),
 })
+
+export const isTerminalCustomerInquiryStatus = (status) =>
+  ['closed', 'rejected', 'cancelled'].includes(status)
+
+export const shouldShowCustomerInsuranceFollowUp = ({
+  status = 'submitted',
+  paymentStatus = 'not_required',
+  renewalStatus = 'not_applicable',
+  followUpType,
+} = {}) => {
+  if (isTerminalCustomerInquiryStatus(status)) {
+    return false
+  }
+
+  if (followUpType === 'payment') {
+    return status === 'payment_pending' || paymentStatus !== 'not_required'
+  }
+
+  if (followUpType === 'renewal') {
+    return status === 'for_renewal' || renewalStatus !== 'not_applicable'
+  }
+
+  return false
+}
+
+export const rememberInquiryForVehicle = ({ vehicleId, inquiryId } = {}) => {
+  const normalizedVehicleId = String(vehicleId ?? '').trim()
+  const normalizedInquiryId = String(inquiryId ?? '').trim()
+
+  if (!normalizedVehicleId || !normalizedInquiryId) {
+    return
+  }
+
+  rememberedInquiryIdsByVehicle.set(normalizedVehicleId, normalizedInquiryId)
+}
+
+export const getRememberedInquiryForVehicle = (vehicleId) => {
+  const normalizedVehicleId = String(vehicleId ?? '').trim()
+
+  if (!normalizedVehicleId) {
+    return null
+  }
+
+  return rememberedInquiryIdsByVehicle.get(normalizedVehicleId) ?? null
+}
+
+export const clearRememberedInquiryForVehicle = (vehicleId) => {
+  const normalizedVehicleId = String(vehicleId ?? '').trim()
+
+  if (!normalizedVehicleId) {
+    return
+  }
+
+  rememberedInquiryIdsByVehicle.delete(normalizedVehicleId)
+}
 
 export const getInsuranceHomeCards = ({ hasActiveRequest } = {}) => [
   { key: 'start', label: 'Start New Request' },
@@ -171,7 +227,11 @@ export const getCustomerInsuranceTimeline = ({
   }
 
   const hasPaymentStep = timeline.some((step) => step.key === 'payment')
-  if (!hasPaymentStep && ['proof_submitted', 'verifying', 'paid'].includes(paymentStatus)) {
+  if (
+    !hasPaymentStep &&
+    !isTerminalCustomerInquiryStatus(status) &&
+    ['proof_submitted', 'verifying', 'paid'].includes(paymentStatus)
+  ) {
     timeline.push({
       key: 'payment',
       label: 'Payment',
@@ -181,9 +241,14 @@ export const getCustomerInsuranceTimeline = ({
 
   const hasRenewalStep = timeline.some((step) => step.key === 'renewal')
   const shouldShowRenewalPrompt =
-    renewalStatus !== 'not_applicable' &&
+    shouldShowCustomerInsuranceFollowUp({
+      status,
+      paymentStatus,
+      renewalStatus,
+      followUpType: 'renewal',
+    }) &&
     !hasRenewalStep &&
-    !['submitted', 'cancelled', 'rejected', 'closed'].includes(status)
+    status !== 'submitted'
 
   if (shouldShowRenewalPrompt) {
     timeline.push({
