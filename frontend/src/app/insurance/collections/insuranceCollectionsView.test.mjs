@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   buildCollectionsUpdateDraft,
   buildCollectionsTableRow,
+  filterCollectionsItems,
   getCollectionsActionState,
   getCollectionsSummaryCards,
 } from './insuranceCollectionsView.mjs'
@@ -198,5 +199,47 @@ test('buildCollectionsUpdateDraft keeps payment metadata editable for the collec
       paymentDueAt: '2026-06-01',
       reviewNotes: 'Uploaded receipt',
     },
+  )
+})
+
+test('buildCollectionsUpdateDraft does not copy customer intake notes into review notes', () => {
+  assert.deepEqual(
+    buildCollectionsUpdateDraft({
+      status: 'payment_pending',
+      paymentStatus: 'unpaid',
+      paymentDueAt: '2026-06-01T00:00:00.000Z',
+      notes: 'Customer asked for a callback after lunch.',
+      reviewNotes: null,
+    }),
+    {
+      status: 'payment_pending',
+      paymentStatus: 'unpaid',
+      paymentDueAt: '2026-06-01',
+      reviewNotes: '',
+    },
+  )
+})
+
+test('filterCollectionsItems re-applies the local payment-status filter after live item updates', () => {
+  const now = '2026-05-14T12:00:00.000Z'
+  const items = [
+    buildInquiryFixture({ id: 'inq-paid', paymentStatus: 'paid' }),
+    buildInquiryFixture({ id: 'inq-unpaid', paymentStatus: 'unpaid' }),
+  ].map((inquiry) => ({
+    inquiry,
+    row: buildCollectionsTableRow(inquiry, { now }),
+    actionState: getCollectionsActionState(inquiry, { now }),
+  }))
+
+  assert.deepEqual(
+    filterCollectionsItems(items, {
+      filters: {
+        paymentStatus: 'unpaid',
+        overdueOnly: false,
+        hasProof: 'all',
+        search: '',
+      },
+    }).map(({ inquiry }) => inquiry.id),
+    ['inq-unpaid'],
   )
 })

@@ -113,8 +113,44 @@ export function buildCollectionsUpdateDraft(inquiry = {}) {
     status: inquiry?.status ?? 'payment_pending',
     paymentStatus: inquiry?.paymentStatus ?? 'unpaid',
     paymentDueAt: toDateInputValue(inquiry?.paymentDueAt),
-    reviewNotes: inquiry?.reviewNotes ?? inquiry?.notes ?? '',
+    reviewNotes: typeof inquiry?.reviewNotes === 'string' ? inquiry.reviewNotes : '',
   }
+}
+
+export function filterCollectionsItems(collectionItems = [], { filters = {} } = {}) {
+  const searchNeedle = String(filters.search ?? '').trim().toLowerCase()
+
+  return collectionItems.filter(({ inquiry, row }) => {
+    if (filters.paymentStatus && filters.paymentStatus !== 'all' && inquiry?.paymentStatus !== filters.paymentStatus) {
+      return false
+    }
+
+    if (filters.overdueOnly && row.daysOverdue < 1) {
+      return false
+    }
+
+    if (filters.hasProof === 'with_proof' && !row.hasProofOfPayment) {
+      return false
+    }
+
+    if (filters.hasProof === 'without_proof' && row.hasProofOfPayment) {
+      return false
+    }
+
+    if (!searchNeedle) {
+      return true
+    }
+
+    return [
+      inquiry?.id,
+      inquiry?.customerDisplayName,
+      inquiry?.vehicleLabel,
+      inquiry?.subject,
+      inquiry?.policyNumber,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(searchNeedle))
+  })
 }
 
 export function getCollectionsSummaryCards({ inquiries = [], now } = {}) {

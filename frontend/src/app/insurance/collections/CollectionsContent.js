@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity,
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
   FileBadge2,
   RefreshCw,
   Search,
-  ShieldAlert,
   Wallet,
 } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
@@ -27,10 +25,21 @@ import {
 import {
   buildCollectionsTableRow,
   buildCollectionsUpdateDraft,
+  filterCollectionsItems,
   formatStatusLabel,
   getCollectionsActionState,
   getCollectionsSummaryCards,
 } from './insuranceCollectionsView.mjs'
+import {
+  BlockingState,
+  CollectionsDetailPanel,
+  CollectionsWorkflowPanel,
+  EmptyPanel,
+  FilterSelect,
+  formatDateOnly,
+  SummaryTile,
+  WorkflowBadge,
+} from './CollectionsPanels'
 
 const PAYMENT_STATUS_OPTIONS = ['unpaid', 'proof_submitted', 'verifying', 'paid', 'overdue']
 const HAS_PROOF_OPTIONS = [
@@ -39,15 +48,6 @@ const HAS_PROOF_OPTIONS = [
   { value: 'without_proof', label: 'Without proof' },
 ]
 
-const POSITIVE_BADGE_VALUES = new Set(['active', 'paid'])
-const WARNING_BADGE_VALUES = new Set([
-  'payment_pending',
-  'proof_submitted',
-  'unpaid',
-  'overdue',
-  'for_renewal',
-])
-const INFO_BADGE_VALUES = new Set(['verifying'])
 const TERMINAL_INQUIRY_STATUSES = new Set(['closed', 'cancelled', 'rejected'])
 
 const DEFAULT_COLLECTIONS_FILTERS = {
@@ -73,115 +73,6 @@ const SUMMARY_CARD_ICONS = {
 }
 
 const normalizeFilterValue = (value) => (value && value !== 'all' ? value : undefined)
-
-const getBadgeClassName = (value) => {
-  if (POSITIVE_BADGE_VALUES.has(value)) return 'badge-green'
-  if (WARNING_BADGE_VALUES.has(value)) return 'badge-orange'
-  if (INFO_BADGE_VALUES.has(value)) return 'badge-blue'
-  return 'badge-gray'
-}
-
-const formatDateTime = (value) => {
-  if (!value) return 'Not available'
-
-  const parsedDate = new Date(value)
-  if (Number.isNaN(parsedDate.getTime())) {
-    return 'Not available'
-  }
-
-  return parsedDate.toLocaleString('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-const formatDateOnly = (value) => {
-  if (!value) return 'Not set'
-
-  const parsedDate = new Date(value)
-  if (Number.isNaN(parsedDate.getTime())) {
-    return 'Not set'
-  }
-
-  return parsedDate.toLocaleDateString('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
-function SummaryTile({ icon: Icon, label, value, sub }) {
-  return (
-    <div className="card p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs text-ink-muted">{label}</p>
-          <p className="mt-1 text-2xl font-black text-ink-primary">{value}</p>
-          {sub ? <p className="mt-1 text-[11px] text-ink-muted">{sub}</p> : null}
-        </div>
-        <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-          style={{ background: 'rgba(240, 124, 0, 0.14)', color: '#f07c00' }}
-        >
-          <Icon size={18} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function BlockingState({ title, copy }) {
-  return (
-    <div className="empty-panel px-5 py-10 text-center">
-      <ShieldAlert size={34} className="mx-auto mb-3" style={{ color: '#f07c00' }} />
-      <p className="text-sm font-bold text-ink-primary">{title}</p>
-      <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">{copy}</p>
-    </div>
-  )
-}
-
-function EmptyPanel({ title, copy }) {
-  return (
-    <div className="empty-panel px-4 py-10 text-center">
-      <AlertTriangle size={28} className="mx-auto mb-3 text-ink-dim" />
-      <p className="text-sm font-bold text-ink-primary">{title}</p>
-      <p className="mt-2 text-xs text-ink-muted">{copy}</p>
-    </div>
-  )
-}
-
-function WorkflowBadge({ value, children }) {
-  return <span className={`badge ${getBadgeClassName(value)}`}>{children ?? formatStatusLabel(value)}</span>
-}
-
-function DetailField({ label, value, accent }) {
-  return (
-    <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-      <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">{label}</p>
-      <p className={`mt-1 text-sm whitespace-pre-wrap ${accent ? 'font-semibold text-[#a65600]' : 'text-ink-primary'}`}>
-        {value || 'Not set'}
-      </p>
-    </div>
-  )
-}
-
-function FilterSelect({ label, value, onChange, options }) {
-  return (
-    <label className="label">
-      {label}
-      <select value={value} onChange={onChange} className="select">
-        {options.map((option) => (
-          <option key={option.value ?? option} value={option.value ?? option}>
-            {option.label ?? formatStatusLabel(option)}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
 
 export default function CollectionsContent() {
   const user = useUser()
@@ -252,36 +143,8 @@ export default function CollectionsContent() {
   }, [inquiries])
 
   const filteredItems = useMemo(() => {
-    const searchNeedle = filters.search.trim().toLowerCase()
-
-    return collectionItems.filter(({ inquiry, row }) => {
-      if (filters.overdueOnly && row.daysOverdue < 1) {
-        return false
-      }
-
-      if (filters.hasProof === 'with_proof' && !row.hasProofOfPayment) {
-        return false
-      }
-
-      if (filters.hasProof === 'without_proof' && row.hasProofOfPayment) {
-        return false
-      }
-
-      if (!searchNeedle) {
-        return true
-      }
-
-      return [
-        inquiry.id,
-        inquiry.customerDisplayName,
-        inquiry.vehicleLabel,
-        inquiry.subject,
-        inquiry.policyNumber,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(searchNeedle))
-    })
-  }, [collectionItems, filters.hasProof, filters.overdueOnly, filters.search])
+    return filterCollectionsItems(collectionItems, { filters })
+  }, [collectionItems, filters])
 
   useEffect(() => {
     if (!filteredItems.length) {
@@ -464,6 +327,13 @@ export default function CollectionsContent() {
     }))
   }
 
+  const handleDraftChange = (field, value) => {
+    setUpdateDraft((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
   if (!canReviewInsurance) {
     return (
       <div className="space-y-5">
@@ -638,313 +508,54 @@ export default function CollectionsContent() {
         </section>
 
         <div className="space-y-5">
-          <div className="card p-4 md:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <p className="card-title">Case Detail</p>
-                <p className="mt-1 text-xs text-ink-muted">
-                  Payment due dates, proof uploads, and activity history stay together here so collections review stays focused.
-                </p>
-              </div>
-              <button
-                onClick={handleRefreshDetail}
-                disabled={!selectedInquiry || detailState === 'loading'}
-                className="btn-secondary"
-              >
-                {detailState === 'loading' ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                Refresh Detail
-              </button>
-            </div>
+          <CollectionsDetailPanel
+            detailMessage={detailMessage}
+            detailState={detailState}
+            onRefreshDetail={handleRefreshDetail}
+            proofDocuments={proofDocuments}
+            selectedInquiry={selectedInquiry}
+            selectedRow={selectedRow}
+          />
 
-            {detailMessage ? (
-              <div
-                className={`mt-4 ${
-                  detailState === 'detail_loaded'
-                    ? 'status-message status-message-success'
-                    : detailState === 'forbidden_role'
-                      ? 'status-message status-message-warning'
-                      : 'status-message status-message-danger'
-                }`}
-              >
-                {detailMessage}
-              </div>
-            ) : null}
-
-            {selectedInquiry && selectedRow ? (
-              <div className="mt-4 space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <WorkflowBadge value={selectedInquiry.paymentStatus} />
-                  <WorkflowBadge value={selectedInquiry.status} />
-                  <span className={`badge ${selectedRow.hasProofOfPayment ? 'badge-green' : 'badge-gray'}`}>
-                    {selectedRow.hasProofOfPayment ? 'Proof on file' : 'No proof yet'}
-                  </span>
-                  {selectedRow.daysOverdue > 0 ? (
-                    <span className="badge badge-orange">{selectedRow.daysOverdue} days overdue</span>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <DetailField label="Customer" value={selectedInquiry.customerDisplayName} />
-                  <DetailField label="Vehicle" value={selectedInquiry.vehicleLabel} />
-                  <DetailField label="Subject" value={selectedInquiry.subject || selectedInquiry.id} />
-                  <DetailField label="Policy Number" value={selectedInquiry.policyNumber} />
-                  <DetailField label="Payment Due" value={formatDateOnly(selectedInquiry.paymentDueAt)} />
-                  <DetailField
-                    label="Days Overdue"
-                    value={selectedRow.daysOverdue > 0 ? String(selectedRow.daysOverdue) : '0'}
-                    accent={selectedRow.daysOverdue > 0}
-                  />
-                  <DetailField label="Last Updated" value={formatDateTime(selectedInquiry.updatedAt)} />
-                  <DetailField label="Created" value={formatDateTime(selectedInquiry.createdAt)} />
-                </div>
-
-                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <FileBadge2 size={16} className="text-ink-dim" />
-                    <p className="text-sm font-semibold text-ink-primary">Proof Of Payment</p>
-                  </div>
-                  {proofDocuments.length ? (
-                    <div className="mt-3 space-y-3">
-                      {proofDocuments.map((document) => (
-                        <div key={document.id ?? `${document.fileName}-${document.fileUrl}`} className="rounded-xl border border-surface-border bg-surface-card px-3 py-3">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-bold text-ink-primary">{document.fileName}</p>
-                              <p className="mt-1 break-all text-xs text-ink-muted">{document.fileUrl}</p>
-                            </div>
-                            <span className="badge badge-green">{document.documentTypeLabel || 'Proof Of Payment'}</span>
-                          </div>
-                          {document.notes ? <p className="mt-2 text-xs leading-5 text-ink-secondary">{document.notes}</p> : null}
-                          <p className="mt-2 text-[11px] text-ink-muted">Uploaded {formatDateTime(document.createdAt)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-3 text-xs text-ink-muted">No proof-of-payment document has been attached to this case yet.</p>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Activity size={16} className="text-ink-dim" />
-                    <p className="text-sm font-semibold text-ink-primary">Collections Activity</p>
-                  </div>
-                  {selectedInquiry.activities?.length ? (
-                    <div className="mt-3 space-y-3">
-                      {selectedInquiry.activities.map((activityItem) => (
-                        <div
-                          key={activityItem.id ?? `${activityItem.action}-${activityItem.createdAt}`}
-                          className="rounded-xl border border-surface-border bg-surface-card px-3 py-3"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-ink-primary">
-                              {formatStatusLabel(activityItem.action)}
-                            </p>
-                            <p className="text-[11px] text-ink-muted">{formatDateTime(activityItem.createdAt)}</p>
-                          </div>
-                          <p className="mt-2 text-xs text-ink-muted">
-                            Actor: {activityItem.actorUserId || 'System'}
-                          </p>
-                          {activityItem.notes ? (
-                            <p className="mt-2 text-sm text-ink-secondary">{activityItem.notes}</p>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-3 text-xs text-ink-muted">No collections activity has been recorded for this case yet.</p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <EmptyPanel
-                title="No case selected"
-                copy="Choose a collections case from the table to inspect its payment detail and workflow history."
-              />
-            )}
-          </div>
-
-          <div className="card p-4 md:p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <p className="card-title">Workflow Update</p>
-                <p className="mt-1 text-xs text-ink-muted">
-                  This panel only edits collections metadata and saves through the broad workflow route.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <span className={`badge ${isTerminalInquiry ? 'badge-gray' : 'badge-green'}`}>
-                  {isTerminalInquiry ? 'Read only' : 'Collections editable'}
-                </span>
-                <span className="badge badge-gray">Workflow route only</span>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <label className="label">
-                Inquiry Status
-                <select
-                  value={updateDraft.status}
-                  onChange={(event) =>
-                    setUpdateDraft((current) => ({ ...current, status: event.target.value }))
-                  }
-                  className="select"
-                  disabled={!selectedInquiry || isTerminalInquiry}
-                >
-                  {nextStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {formatStatusLabel(status)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="label">
-                Payment Status
-                <select
-                  value={updateDraft.paymentStatus}
-                  onChange={(event) =>
-                    setUpdateDraft((current) => ({ ...current, paymentStatus: event.target.value }))
-                  }
-                  className="select"
-                  disabled={!selectedInquiry || isTerminalInquiry}
-                >
-                  {PAYMENT_STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {formatStatusLabel(status)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="label">
-                Payment Due Date
-                <input
-                  type="date"
-                  value={updateDraft.paymentDueAt}
-                  onChange={(event) =>
-                    setUpdateDraft((current) => ({ ...current, paymentDueAt: event.target.value }))
-                  }
-                  className="input"
-                  disabled={!selectedInquiry || isTerminalInquiry}
-                />
-              </label>
-
-              <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Action State</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span className={`badge ${selectedActionState.canSendPaymentReminder ? 'badge-orange' : 'badge-gray'}`}>
-                    {selectedActionState.canSendPaymentReminder ? 'Payment follow-up due' : 'No reminder flag'}
-                  </span>
-                  <span className={`badge ${selectedActionState.canReviewProofOfPayment ? 'badge-blue' : 'badge-gray'}`}>
-                    {selectedActionState.canReviewProofOfPayment ? 'Proof ready for review' : 'No proof review'}
-                  </span>
-                  <span className={`badge ${selectedActionState.canMarkAsPaid ? 'badge-green' : 'badge-gray'}`}>
-                    {selectedActionState.canMarkAsPaid ? 'Ready to mark paid' : 'Paid action locked'}
-                  </span>
-                </div>
-              </div>
-
-              <label className="label md:col-span-2">
-                Review Notes
-                <textarea
-                  value={updateDraft.reviewNotes}
-                  onChange={(event) =>
-                    setUpdateDraft((current) => ({ ...current, reviewNotes: event.target.value }))
-                  }
-                  rows={4}
-                  className="input min-h-[120px] resize-y"
-                  placeholder="Capture collections notes, verification context, or next follow-up steps."
-                  disabled={!selectedInquiry || isTerminalInquiry}
-                />
-              </label>
-            </div>
-
-            {updateMessage ? (
-              <div
-                className={`mt-4 ${
-                  updateState === 'status_update_saved'
-                    ? 'status-message status-message-success'
-                    : updateState === 'forbidden_role'
-                      ? 'status-message status-message-warning'
-                      : 'status-message status-message-danger'
-                }`}
-              >
-                {updateMessage}
-              </div>
-            ) : null}
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                onClick={() => submitWorkflowUpdate()}
-                disabled={!selectedInquiry || isTerminalInquiry || updateState === 'status_update_submitting'}
-                className="btn-primary"
-              >
-                {updateState === 'status_update_submitting' ? (
-                  <RefreshCw size={14} className="animate-spin" />
-                ) : (
-                  <Wallet size={14} />
-                )}
-                Save Collections Update
-              </button>
-
-              <button
-                onClick={() =>
-                  submitWorkflowUpdate(
-                    {
-                      paymentStatus: 'overdue',
-                      status: 'payment_pending',
-                    },
-                    'Collections workflow updated and the case is now flagged as overdue.',
-                  )
-                }
-                disabled={!selectedInquiry || isTerminalInquiry || !selectedActionState.canSendPaymentReminder || updateState === 'status_update_submitting'}
-                className="btn-secondary"
-              >
-                <AlertTriangle size={14} />
-                Flag Overdue
-              </button>
-
-              <button
-                onClick={() =>
-                  submitWorkflowUpdate(
-                    {
-                      paymentStatus: 'verifying',
-                      status: 'payment_pending',
-                    },
-                    'Collections workflow updated and proof review is now in progress.',
-                  )
-                }
-                disabled={!selectedInquiry || isTerminalInquiry || !selectedActionState.canReviewProofOfPayment || updateState === 'status_update_submitting'}
-                className="btn-secondary"
-              >
-                <ClipboardCheck size={14} />
-                Start Verifying
-              </button>
-
-              <button
-                onClick={() =>
-                  submitWorkflowUpdate(
-                    {
-                      status: 'active',
-                      paymentStatus: 'paid',
-                    },
-                    'Collections workflow updated and the case is now marked paid.',
-                  )
-                }
-                disabled={!selectedInquiry || isTerminalInquiry || !selectedActionState.canMarkAsPaid || updateState === 'status_update_submitting'}
-                className="btn-secondary"
-              >
-                <CheckCircle2 size={14} />
-                Mark Paid
-              </button>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-ink-muted">
-              <span className="badge badge-gray">Due date keeps `YYYY-MM-DD` form for the workflow route</span>
-              <span className="badge badge-gray">Quick actions only update collections fields</span>
-            </div>
-          </div>
+          <CollectionsWorkflowPanel
+            isTerminalInquiry={isTerminalInquiry}
+            nextStatuses={nextStatuses}
+            onDraftChange={handleDraftChange}
+            onFlagOverdue={() =>
+              submitWorkflowUpdate(
+                {
+                  paymentStatus: 'overdue',
+                  status: 'payment_pending',
+                },
+                'Collections workflow updated and the case is now flagged as overdue.',
+              )
+            }
+            onMarkPaid={() =>
+              submitWorkflowUpdate(
+                {
+                  status: 'active',
+                  paymentStatus: 'paid',
+                },
+                'Collections workflow updated and the case is now marked paid.',
+              )
+            }
+            onSave={() => submitWorkflowUpdate()}
+            onStartVerifying={() =>
+              submitWorkflowUpdate(
+                {
+                  paymentStatus: 'verifying',
+                  status: 'payment_pending',
+                },
+                'Collections workflow updated and proof review is now in progress.',
+              )
+            }
+            selectedActionState={selectedActionState}
+            selectedInquiry={selectedInquiry}
+            submitDisabled={!selectedInquiry || isTerminalInquiry || updateState === 'status_update_submitting'}
+            updateDraft={updateDraft}
+            updateMessage={updateMessage}
+            updateState={updateState}
+          />
         </div>
       </div>
     </div>
