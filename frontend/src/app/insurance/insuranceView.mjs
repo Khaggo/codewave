@@ -105,3 +105,32 @@ export function getInsuranceSummaryCards(input = {}) {
     },
   ]
 }
+
+export function getInsuranceDetailTabs() {
+  return [
+    {
+      key: 'overview',
+      label: 'Overview',
+    },
+    {
+      key: 'documents',
+      label: 'Documents',
+    },
+    {
+      key: 'timeline',
+      label: 'Timeline',
+    },
+    {
+      key: 'payment',
+      label: 'Payment',
+    },
+    {
+      key: 'renewal',
+      label: 'Renewal',
+    },
+    {
+      key: 'activity',
+      label: 'Activity',
+    },
+  ]
+}

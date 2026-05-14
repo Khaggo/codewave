@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   buildInsuranceTableRow,
   formatStatusLabel,
+  getInsuranceDetailTabs,
   getInsuranceSummaryCards,
 } from './insuranceView.mjs'
 import { updateInsuranceInquiryStatus } from '../../lib/insuranceStaffClient.js'
@@ -87,6 +88,13 @@ test('buildInsuranceTableRow returns customer, vehicle, and workflow badges', ()
       documentStatus: 'Complete',
       paymentStatus: 'Proof Submitted',
     },
+  )
+})
+
+test('getInsuranceDetailTabs exposes overview, documents, timeline, payment, and renewal', () => {
+  assert.deepEqual(
+    getInsuranceDetailTabs().map((tab) => tab.key),
+    ['overview', 'documents', 'timeline', 'payment', 'renewal', 'activity'],
   )
 })
 
