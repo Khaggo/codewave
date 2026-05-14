@@ -1,6 +1,7 @@
 import { formatStatusLabel } from '../insuranceView.mjs'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
+const TERMINAL_INQUIRY_STATUSES = ['closed', 'cancelled', 'rejected']
 
 const countMatchingInquiries = (inquiries, predicate) =>
   inquiries.reduce((total, inquiry) => (predicate(inquiry) ? total + 1 : total), 0)
@@ -29,6 +30,7 @@ const hasProofOfPaymentDocument = (documents = []) =>
   documents.some((document) => document?.documentType === 'proof_of_payment')
 
 const isReminderEligiblePaymentStatus = (paymentStatus) => ['unpaid', 'overdue'].includes(paymentStatus)
+const isTerminalCollectionInquiry = (inquiry) => TERMINAL_INQUIRY_STATUSES.includes(inquiry?.status)
 
 const isSameWeek = (date, now) => {
   const currentDate = toDate(now) ?? new Date()
@@ -49,7 +51,10 @@ const isSameWeek = (date, now) => {
 }
 
 const countByPaymentStatus = (inquiries, paymentStatus) =>
-  countMatchingInquiries(inquiries, (inquiry) => inquiry?.paymentStatus === paymentStatus)
+  countMatchingInquiries(
+    inquiries,
+    (inquiry) => !isTerminalCollectionInquiry(inquiry) && inquiry?.paymentStatus === paymentStatus,
+  )
 
 const countPaidThisWeek = (inquiries, now) =>
   countMatchingInquiries(
@@ -59,6 +64,14 @@ const countPaidThisWeek = (inquiries, now) =>
   )
 
 export function getCollectionsActionState(inquiry, { now } = {}) {
+  if (isTerminalCollectionInquiry(inquiry)) {
+    return {
+      canSendPaymentReminder: false,
+      canReviewProofOfPayment: false,
+      canMarkAsPaid: false,
+    }
+  }
+
   const paymentStatus = inquiry?.paymentStatus ?? ''
   const hasProofOfPayment = hasProofOfPaymentDocument(inquiry?.documents ?? [])
   const daysOverdue = getDaysOverdue(inquiry?.paymentDueAt, now)

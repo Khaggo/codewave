@@ -50,6 +50,28 @@ test('getCollectionsSummaryCards counts unpaid, proof-submitted, verifying, over
   )
 })
 
+test('getCollectionsSummaryCards excludes terminal inquiries from active collections buckets', () => {
+  assert.deepEqual(
+    getCollectionsSummaryCards({
+      now: '2026-05-14T12:00:00.000Z',
+      inquiries: [
+        buildInquiryFixture({ id: 'closed-unpaid', status: 'closed', paymentStatus: 'unpaid' }),
+        buildInquiryFixture({ id: 'cancelled-proof', status: 'cancelled', paymentStatus: 'proof_submitted' }),
+        buildInquiryFixture({ id: 'rejected-verifying', status: 'rejected', paymentStatus: 'verifying' }),
+        buildInquiryFixture({ id: 'closed-overdue', status: 'closed', paymentStatus: 'overdue' }),
+        buildInquiryFixture({ id: 'active-unpaid', status: 'payment_pending', paymentStatus: 'unpaid' }),
+      ],
+    }).map((card) => [card.label, card.value]),
+    [
+      ['Unpaid', 1],
+      ['Proof Submitted', 0],
+      ['Verifying', 0],
+      ['Overdue', 0],
+      ['Paid This Week', 0],
+    ],
+  )
+})
+
 test('buildCollectionsTableRow calculates overdue days and hides proof of payment when no proof exists', () => {
   assert.deepEqual(
     buildCollectionsTableRow(buildInquiryFixture(), {
@@ -132,6 +154,31 @@ test('getCollectionsActionState enables proof review and mark-paid actions only 
       canSendPaymentReminder: false,
       canReviewProofOfPayment: true,
       canMarkAsPaid: true,
+    },
+  )
+})
+
+test('getCollectionsActionState disables all actions for terminal inquiries', () => {
+  assert.deepEqual(
+    getCollectionsActionState(
+      buildInquiryFixture({
+        status: 'closed',
+        paymentStatus: 'verifying',
+        documents: [
+          {
+            id: 'doc-1',
+            documentType: 'proof_of_payment',
+          },
+        ],
+      }),
+      {
+        now: '2026-05-14T12:00:00.000Z',
+      },
+    ),
+    {
+      canSendPaymentReminder: false,
+      canReviewProofOfPayment: false,
+      canMarkAsPaid: false,
     },
   )
 })
