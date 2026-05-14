@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  buildRenewalUpdateDraft,
   buildRenewalsTableRow,
   getRenewalsSummaryCards,
   getRenewalTimeWindow,
@@ -224,6 +225,27 @@ test('buildRenewalsTableRow prioritizes renewalDueAt over policyExpiryAt and for
       renewalDueAt: '2026-05-21T00:00:00.000Z',
       policyExpiryAt: '2026-05-30T00:00:00.000Z',
       timeWindow: 'Due in 7 Days',
+    },
+  )
+})
+
+test('buildRenewalUpdateDraft keeps renewal workflow metadata editable for the renewals route', () => {
+  assert.deepEqual(
+    buildRenewalUpdateDraft({
+      status: 'for_renewal',
+      renewalStatus: 'quote_preparing',
+      policyExpiryAt: '2026-06-20T00:00:00.000Z',
+      renewalDueAt: '2026-06-15T00:00:00.000Z',
+      assignedStaffId: 'staff-1',
+      reviewNotes: 'Preparing quote',
+    }),
+    {
+      status: 'for_renewal',
+      renewalStatus: 'quote_preparing',
+      policyExpiryAt: '2026-06-20',
+      renewalDueAt: '2026-06-15',
+      assignedStaffId: 'staff-1',
+      reviewNotes: 'Preparing quote',
     },
   )
 })

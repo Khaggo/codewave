@@ -1,6 +1,7 @@
 import { formatStatusLabel } from '../insuranceView.mjs'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
+const ACTIVE_RENEWAL_STATUSES = ['upcoming', 'quote_preparing', 'quoted', 'awaiting_customer']
 const NON_ACTIVE_RENEWAL_STATUSES = ['renewed', 'cancelled', 'not_applicable', 'expired']
 const TERMINAL_INQUIRY_STATUSES = ['closed', 'cancelled', 'rejected']
 
@@ -21,6 +22,16 @@ const toUtcStartOfDay = (value) => {
   }
 
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+}
+
+const toDateInputValue = (value) => {
+  const date = toDate(value)
+
+  if (!date) {
+    return ''
+  }
+
+  return date.toISOString().slice(0, 10)
 }
 
 const getRenewalTargetDate = ({ renewalDueAt, policyExpiryAt } = {}) => {
@@ -64,6 +75,12 @@ export function getRenewalTimeWindow({ renewalDueAt, policyExpiryAt, now } = {})
 
 const isActiveRenewalQueueInquiry = (inquiry) =>
   !TERMINAL_INQUIRY_STATUSES.includes(inquiry?.status) && !NON_ACTIVE_RENEWAL_STATUSES.includes(inquiry?.renewalStatus)
+
+export const isRenewalWorkspaceInquiry = (inquiry = {}) =>
+  isActiveRenewalQueueInquiry(inquiry) &&
+  (inquiry?.purpose === 'renewal' ||
+    inquiry?.status === 'for_renewal' ||
+    ACTIVE_RENEWAL_STATUSES.includes(inquiry?.renewalStatus))
 
 const countRenewalsByWindow = (inquiries, timeWindow, now) =>
   inquiries.reduce(
@@ -128,5 +145,16 @@ export function buildRenewalsTableRow(inquiry, { now } = {}) {
       policyExpiryAt: inquiry?.policyExpiryAt,
       now,
     }),
+  }
+}
+
+export function buildRenewalUpdateDraft(inquiry = {}) {
+  return {
+    status: inquiry?.status ?? 'for_renewal',
+    renewalStatus: inquiry?.renewalStatus ?? 'upcoming',
+    policyExpiryAt: toDateInputValue(inquiry?.policyExpiryAt),
+    renewalDueAt: toDateInputValue(inquiry?.renewalDueAt),
+    assignedStaffId: inquiry?.assignedStaffId ?? '',
+    reviewNotes: typeof inquiry?.reviewNotes === 'string' ? inquiry.reviewNotes : '',
   }
 }
