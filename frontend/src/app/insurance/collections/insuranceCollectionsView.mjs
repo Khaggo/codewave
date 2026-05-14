@@ -15,6 +15,16 @@ const toDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
+const toDateInputValue = (value) => {
+  const date = toDate(value)
+
+  if (!date) {
+    return ''
+  }
+
+  return date.toISOString().slice(0, 10)
+}
+
 export const getDaysOverdue = (paymentDueAt, now) => {
   const dueDate = toDate(paymentDueAt)
   const currentDate = toDate(now) ?? new Date()
@@ -95,6 +105,15 @@ export function buildCollectionsTableRow(inquiry, { now } = {}) {
     paymentDueAt: inquiry?.paymentDueAt ?? null,
     daysOverdue: getDaysOverdue(inquiry?.paymentDueAt, now),
     hasProofOfPayment: hasProofOfPaymentDocument(inquiry?.documents ?? []),
+  }
+}
+
+export function buildCollectionsUpdateDraft(inquiry = {}) {
+  return {
+    status: inquiry?.status ?? 'payment_pending',
+    paymentStatus: inquiry?.paymentStatus ?? 'unpaid',
+    paymentDueAt: toDateInputValue(inquiry?.paymentDueAt),
+    reviewNotes: inquiry?.reviewNotes ?? inquiry?.notes ?? '',
   }
 }
 

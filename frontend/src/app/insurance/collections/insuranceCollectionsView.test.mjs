@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  buildCollectionsUpdateDraft,
   buildCollectionsTableRow,
   getCollectionsActionState,
   getCollectionsSummaryCards,
@@ -179,6 +180,23 @@ test('getCollectionsActionState disables all actions for terminal inquiries', ()
       canSendPaymentReminder: false,
       canReviewProofOfPayment: false,
       canMarkAsPaid: false,
+    },
+  )
+})
+
+test('buildCollectionsUpdateDraft keeps payment metadata editable for the collections workflow route', () => {
+  assert.deepEqual(
+    buildCollectionsUpdateDraft({
+      status: 'payment_pending',
+      paymentStatus: 'proof_submitted',
+      paymentDueAt: '2026-06-01T00:00:00.000Z',
+      reviewNotes: 'Uploaded receipt',
+    }),
+    {
+      status: 'payment_pending',
+      paymentStatus: 'proof_submitted',
+      paymentDueAt: '2026-06-01',
+      reviewNotes: 'Uploaded receipt',
     },
   )
 })
