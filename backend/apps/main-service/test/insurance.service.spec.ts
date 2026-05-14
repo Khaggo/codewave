@@ -373,6 +373,94 @@ describe('InsuranceService', () => {
     );
   });
 
+  it('allows same-status workflow updates for payment metadata and review notes', async () => {
+    const insuranceRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        status: 'payment_pending',
+        paymentStatus: 'unpaid',
+        paymentDueAt: null,
+      }),
+      updateWorkflow: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        status: 'payment_pending',
+        paymentStatus: 'verifying',
+        paymentDueAt: new Date('2026-05-30T00:00:00.000Z'),
+        reviewNotes: 'Collections is validating payment submission.',
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    await expect(
+      service.updateWorkflow(
+        'insurance-inquiry-1',
+        {
+          status: 'payment_pending',
+          paymentStatus: 'verifying',
+          paymentDueAt: '2026-05-30T00:00:00.000Z',
+          reviewNotes: 'Collections is validating payment submission.',
+        },
+        {
+          userId: 'adviser-1',
+          role: 'service_adviser',
+        },
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: 'insurance-inquiry-1',
+        status: 'payment_pending',
+        paymentStatus: 'verifying',
+      }),
+    );
+
+    expect(insuranceRepository.updateWorkflow).toHaveBeenCalledWith(
+      'insurance-inquiry-1',
+      expect.objectContaining({
+        status: 'payment_pending',
+        paymentStatus: 'verifying',
+        paymentDueAt: new Date('2026-05-30T00:00:00.000Z'),
+        reviewNotes: 'Collections is validating payment submission.',
+      }),
+      [
+        {
+          action: 'payment_verification_started',
+          actorUserId: 'adviser-1',
+          notes: 'Collections is validating payment submission.',
+        },
+        {
+          action: 'payment_due_date_updated',
+          actorUserId: 'adviser-1',
+          notes: 'Collections is validating payment submission.',
+        },
+      ],
+      undefined,
+    );
+  });
+
   it('rejects customer inquiry creation for another user or mismatched vehicle', async () => {
     const moduleRef = await Test.createTestingModule({
       providers: [

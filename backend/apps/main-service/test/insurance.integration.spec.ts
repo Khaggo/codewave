@@ -585,6 +585,88 @@ describe('InsuranceController integration', () => {
     }
   });
 
+  it('allows same-status workflow updates for collections metadata', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      installInsuranceWorkflowRepositoryContract(app);
+
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.workflow.same-status@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5104A',
+      });
+
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.workflow.same-status@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110F2',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const createInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Same-status workflow update',
+          description: 'Customer is ready for a metadata-only collections update.',
+        });
+      expect(createInquiryResponse.status).toBe(201);
+
+      seedInsuranceInquiryWorkflowState(app, createInquiryResponse.body.id, {
+        status: 'payment_pending',
+        paymentStatus: 'unpaid',
+      });
+
+      const workflowResponse = await request(app.getHttpServer())
+        .patch(`/api/insurance/inquiries/${createInquiryResponse.body.id}/workflow`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'payment_pending',
+          paymentStatus: 'verifying',
+          paymentDueAt: '2026-06-02T00:00:00.000Z',
+          reviewNotes: 'Same-status workflow update should still persist collections metadata.',
+        });
+
+      expect(workflowResponse.status).toBe(200);
+      expect(workflowResponse.body).toEqual(
+        expect.objectContaining({
+          id: createInquiryResponse.body.id,
+          status: 'payment_pending',
+          paymentStatus: 'verifying',
+          paymentDueAt: '2026-06-02T00:00:00.000Z',
+          reviewNotes: 'Same-status workflow update should still persist collections metadata.',
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
   it('creates the insurance record when the workflow route closes an inquiry', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 

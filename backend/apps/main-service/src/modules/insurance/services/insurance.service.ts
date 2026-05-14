@@ -177,7 +177,9 @@ export class InsuranceService {
     await this.assertStaffReviewer(actor.userId);
 
     const inquiry = await this.insuranceRepository.findById(id);
-    this.assertAllowedWorkflowTransition(inquiry.status, payload.status);
+    if (payload.status !== inquiry.status) {
+      this.assertAllowedWorkflowTransition(inquiry.status, payload.status);
+    }
 
     const workflowPatch: InsuranceWorkflowUpdatePayload = {
       status: payload.status,
