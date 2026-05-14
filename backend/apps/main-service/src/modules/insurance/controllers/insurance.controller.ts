@@ -44,6 +44,7 @@ import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-
 import { UploadInsuranceDocumentDto } from '../dto/upload-insurance-document.dto';
 import { UploadInsuranceDocumentResponseDto } from '../dto/upload-insurance-document-response.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
+import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inquiry-workflow.dto';
 import { InsuranceUploadFile, InsuranceService } from '../services/insurance.service';
 import { insuranceDocumentTypeEnum } from '../schemas/insurance.schema';
 
@@ -172,6 +173,34 @@ export class InsuranceController {
     @Req() request: Request,
   ) {
     return this.insuranceService.updateStatus(id, payload, request.user as { userId: string; role: string });
+  }
+
+  @Patch('insurance/inquiries/:id/workflow')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Update insurance inquiry workflow details for collections and renewal handling.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Insurance inquiry identifier.',
+    example: '4c559c0b-4d1b-492f-a11f-e61271f4a32d',
+  })
+  @ApiOkResponse({
+    description: 'The updated insurance inquiry workflow.',
+    type: InsuranceInquiryResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The insurance workflow payload is invalid.' })
+  @ApiConflictResponse({ description: 'The requested insurance inquiry transition is not allowed.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can update insurance workflows.' })
+  @ApiNotFoundResponse({ description: 'Insurance inquiry not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  updateWorkflow(
+    @Param('id') id: string,
+    @Body() payload: UpdateInsuranceInquiryWorkflowDto,
+    @Req() request: Request,
+  ) {
+    return this.insuranceService.updateWorkflow(id, payload, request.user as { userId: string; role: string });
   }
 
   @Post('insurance/inquiries/:id/documents')

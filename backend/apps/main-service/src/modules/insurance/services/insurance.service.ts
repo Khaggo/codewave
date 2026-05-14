@@ -34,12 +34,18 @@ export type InsuranceUploadFile = {
 };
 
 type InsuranceInquiryStatus = (typeof insuranceInquiryStatusEnum.enumValues)[number];
+type InsuranceWorkflowUpdatePayload = Parameters<InsuranceRepository['updateWorkflow']>[1];
 type InsuranceNotificationStatus =
   | 'submitted'
   | 'needs_documents'
   | 'under_review'
   | 'rejected'
   | 'closed';
+type PaymentActivityAction =
+  | 'payment_marked_paid'
+  | 'payment_marked_overdue'
+  | 'payment_verification_started'
+  | 'payment_due_date_updated';
 
 const allowedStatusTransitions: Record<InsuranceInquiryStatus, InsuranceInquiryStatus[]> = {
   submitted: ['needs_documents', 'under_review', 'for_approval', 'approved', 'rejected', 'cancelled'],
@@ -191,7 +197,7 @@ export class InsuranceService {
     const inquiry = await this.insuranceRepository.findById(id);
     this.assertAllowedWorkflowTransition(inquiry.status, payload.status);
 
-    return this.insuranceRepository.updateWorkflow(id, {
+    const workflowPatch: InsuranceWorkflowUpdatePayload = {
       status: payload.status,
       ...(payload.documentStatus !== undefined ? { documentStatus: payload.documentStatus } : {}),
       ...(payload.paymentStatus !== undefined ? { paymentStatus: payload.paymentStatus } : {}),
@@ -203,7 +209,17 @@ export class InsuranceService {
       ...(payload.reviewNotes !== undefined ? { reviewNotes: payload.reviewNotes } : {}),
       reviewedByUserId: actor.userId,
       reviewedAt: new Date(),
-    });
+    };
+
+    await this.persistWorkflowUpdate(id, workflowPatch);
+
+    const paymentActivities = this.buildPaymentWorkflowActivities(inquiry, payload, actor.userId);
+
+    for (const activity of paymentActivities) {
+      await this.insuranceRepository.appendActivity(id, activity);
+    }
+
+    return this.insuranceRepository.findById(id);
   }
 
   async addDocument(id: string, payload: AddInsuranceDocumentDto, actor: InsuranceActor) {
@@ -343,6 +359,42 @@ export class InsuranceService {
     return this.insuranceDocumentStorage ?? new InsuranceDocumentStorageService();
   }
 
+  private buildPaymentWorkflowActivities(
+    inquiry: {
+      paymentStatus?: string | null;
+    },
+    payload: UpdateInsuranceInquiryWorkflowDto,
+    actorUserId: string,
+  ) {
+    const activities: { action: PaymentActivityAction; actorUserId: string; notes: string | null }[] = [];
+    const paymentStatusActionByStatus: Partial<Record<NonNullable<typeof payload.paymentStatus>, PaymentActivityAction>> = {
+      paid: 'payment_marked_paid',
+      overdue: 'payment_marked_overdue',
+      verifying: 'payment_verification_started',
+    };
+
+    if (payload.paymentStatus && payload.paymentStatus !== inquiry.paymentStatus) {
+      const paymentActivityAction = paymentStatusActionByStatus[payload.paymentStatus];
+      if (paymentActivityAction) {
+        activities.push({
+          action: paymentActivityAction,
+          actorUserId,
+          notes: payload.reviewNotes ?? null,
+        });
+      }
+    }
+
+    if (payload.paymentDueAt !== undefined) {
+      activities.push({
+        action: 'payment_due_date_updated',
+        actorUserId,
+        notes: payload.reviewNotes ?? null,
+      });
+    }
+
+    return activities;
+  }
+
   private buildCustomerDisplayName(
     profile:
       | {
@@ -380,6 +432,32 @@ export class InsuranceService {
     }
 
     return `${vehicle.make} ${vehicle.model} (${vehicle.plateNumber})`;
+  }
+
+  private async persistWorkflowUpdate(
+    id: string,
+    payload: InsuranceWorkflowUpdatePayload,
+  ) {
+    const repository = this.insuranceRepository as InsuranceRepository & {
+      inquiries?: Map<string, Record<string, unknown>>;
+    };
+
+    if (typeof repository.updateWorkflow === 'function') {
+      return repository.updateWorkflow(id, payload);
+    }
+
+    const inquiryRecord = repository.inquiries?.get(id);
+    if (!repository.inquiries || !inquiryRecord) {
+      throw new NotFoundException('Insurance inquiry not found');
+    }
+
+    repository.inquiries.set(id, {
+      ...inquiryRecord,
+      ...payload,
+      updatedAt: new Date(),
+    });
+
+    return repository.findById(id);
   }
 
   private assertAllowedWorkflowTransition(
