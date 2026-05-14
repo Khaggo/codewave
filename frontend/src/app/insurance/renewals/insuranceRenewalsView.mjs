@@ -21,14 +21,22 @@ const toUtcStartOfDay = (value) => {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
 }
 
-const getRenewalTargetDate = ({ renewalDueAt, policyExpiryAt } = {}) => renewalDueAt ?? policyExpiryAt ?? null
+const getRenewalTargetDate = ({ renewalDueAt, policyExpiryAt } = {}) => {
+  const renewalDueDate = toDate(renewalDueAt)
+
+  if (renewalDueDate) {
+    return renewalDueDate
+  }
+
+  return toDate(policyExpiryAt)
+}
 
 export function getRenewalTimeWindow({ renewalDueAt, policyExpiryAt, now } = {}) {
   const targetDay = toUtcStartOfDay(getRenewalTargetDate({ renewalDueAt, policyExpiryAt }))
   const currentDay = toUtcStartOfDay(now) ?? toUtcStartOfDay(new Date())
 
   if (targetDay === null || currentDay === null) {
-    return 'Due in 30 Days'
+    return null
   }
 
   const diffDays = Math.floor((targetDay - currentDay) / MS_PER_DAY)
@@ -71,7 +79,7 @@ export function getRenewalsSummaryCards({ inquiries = [], now } = {}) {
     {
       label: 'Due in 30 Days',
       value: countRenewalsByWindow(inquiries, 'Due in 30 Days', now),
-      sub: 'Renewals due within the month',
+      sub: 'Renewals outside the urgent follow-up windows',
     },
     {
       label: 'Due in 15 Days',
