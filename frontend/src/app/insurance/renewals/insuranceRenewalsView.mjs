@@ -1,7 +1,7 @@
 import { formatStatusLabel } from '../insuranceView.mjs'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
-const ACTIVE_RENEWAL_STATUSES = ['upcoming', 'quote_preparing', 'quoted', 'awaiting_customer']
+export const ACTIVE_RENEWAL_WORKSPACE_STATUSES = ['upcoming', 'quote_preparing', 'quoted', 'awaiting_customer']
 const NON_ACTIVE_RENEWAL_STATUSES = ['renewed', 'cancelled', 'not_applicable', 'expired']
 const TERMINAL_INQUIRY_STATUSES = ['closed', 'cancelled', 'rejected']
 
@@ -80,7 +80,19 @@ export const isRenewalWorkspaceInquiry = (inquiry = {}) =>
   isActiveRenewalQueueInquiry(inquiry) &&
   (inquiry?.purpose === 'renewal' ||
     inquiry?.status === 'for_renewal' ||
-    ACTIVE_RENEWAL_STATUSES.includes(inquiry?.renewalStatus))
+    ACTIVE_RENEWAL_WORKSPACE_STATUSES.includes(inquiry?.renewalStatus))
+
+export function mergeRenewalInquiryUpdate(inquiries = [], updatedInquiry) {
+  if (!updatedInquiry?.id) {
+    return inquiries
+  }
+
+  return inquiries.map((inquiry) => (inquiry.id === updatedInquiry.id ? updatedInquiry : inquiry))
+}
+
+export function shouldApplyRenewalAsyncResult({ requestInquiryId, selectedInquiryId } = {}) {
+  return Boolean(requestInquiryId) && requestInquiryId === selectedInquiryId
+}
 
 const countRenewalsByWindow = (inquiries, timeWindow, now) =>
   inquiries.reduce(

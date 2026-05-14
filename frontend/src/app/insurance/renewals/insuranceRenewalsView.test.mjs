@@ -2,10 +2,13 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  ACTIVE_RENEWAL_WORKSPACE_STATUSES,
+  mergeRenewalInquiryUpdate,
   buildRenewalUpdateDraft,
   buildRenewalsTableRow,
   getRenewalsSummaryCards,
   getRenewalTimeWindow,
+  shouldApplyRenewalAsyncResult,
 } from './insuranceRenewalsView.mjs'
 
 const buildInquiryFixture = (overrides = {}) => ({
@@ -148,6 +151,50 @@ test('getRenewalsSummaryCards excludes terminal inquiry statuses from urgency an
       ['Overdue', 0],
       ['Awaiting Customer', 0],
     ],
+  )
+})
+
+test('ACTIVE_RENEWAL_WORKSPACE_STATUSES only exposes live renewal stages for this workspace filter', () => {
+  assert.deepEqual(ACTIVE_RENEWAL_WORKSPACE_STATUSES, ['upcoming', 'quote_preparing', 'quoted', 'awaiting_customer'])
+})
+
+test('mergeRenewalInquiryUpdate replaces the matching inquiry even when the renewal leaves the active queue', () => {
+  const updatedInquiry = buildInquiryFixture({
+    id: 'inq-active',
+    renewalStatus: 'renewed',
+    reviewNotes: 'Customer completed the renewal today.',
+  })
+
+  assert.deepEqual(
+    mergeRenewalInquiryUpdate(
+      [
+        buildInquiryFixture({ id: 'inq-active', renewalStatus: 'quoted', reviewNotes: 'Quote sent yesterday.' }),
+        buildInquiryFixture({ id: 'inq-other', renewalStatus: 'upcoming' }),
+      ],
+      updatedInquiry,
+    ),
+    [
+      updatedInquiry,
+      buildInquiryFixture({ id: 'inq-other', renewalStatus: 'upcoming' }),
+    ],
+  )
+})
+
+test('shouldApplyRenewalAsyncResult only applies row-level UI state when the same inquiry is still selected', () => {
+  assert.equal(
+    shouldApplyRenewalAsyncResult({
+      requestInquiryId: 'inq-1',
+      selectedInquiryId: 'inq-1',
+    }),
+    true,
+  )
+
+  assert.equal(
+    shouldApplyRenewalAsyncResult({
+      requestInquiryId: 'inq-1',
+      selectedInquiryId: 'inq-2',
+    }),
+    false,
   )
 })
 

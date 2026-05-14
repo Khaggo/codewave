@@ -16,10 +16,13 @@ import {
   insuranceReviewStaffRoles,
 } from '@/lib/api/generated/insurance/staff-web-insurance'
 import {
+  ACTIVE_RENEWAL_WORKSPACE_STATUSES,
   buildRenewalUpdateDraft,
   buildRenewalsTableRow,
   getRenewalsSummaryCards,
   isRenewalWorkspaceInquiry,
+  mergeRenewalInquiryUpdate,
+  shouldApplyRenewalAsyncResult,
 } from './insuranceRenewalsView.mjs'
 import { formatStatusLabel } from '../insuranceView.mjs'
 import {
@@ -34,15 +37,7 @@ import {
   formatDateOnly,
 } from './RenewalsPanels'
 
-const RENEWAL_STATUS_OPTIONS = [
-  'upcoming',
-  'quote_preparing',
-  'quoted',
-  'awaiting_customer',
-  'renewed',
-  'expired',
-  'cancelled',
-]
+const RENEWAL_STATUS_OPTIONS = ACTIVE_RENEWAL_WORKSPACE_STATUSES
 
 const TIME_WINDOW_OPTIONS = [
   { value: 'all', label: 'All windows' },
@@ -246,9 +241,6 @@ export default function RenewalsContent() {
   }, [selectedInquiry?.status])
 
   const applyInquiryUpdate = (updatedInquiry, successMessage) => {
-    setInquiries((currentInquiries) =>
-      currentInquiries.map((inquiry) => (inquiry.id === updatedInquiry.id ? updatedInquiry : inquiry)),
-    )
     setUpdateDraft(buildRenewalUpdateDraft(updatedInquiry))
     setUpdateState('status_update_saved')
     setUpdateMessage(successMessage)
@@ -286,7 +278,14 @@ export default function RenewalsContent() {
         accessToken: user.accessToken,
       })
 
-      if (selectedInquiryIdRef.current !== requestInquiryId) {
+      setInquiries((currentInquiries) => mergeRenewalInquiryUpdate(currentInquiries, updatedInquiry))
+
+      if (
+        !shouldApplyRenewalAsyncResult({
+          requestInquiryId,
+          selectedInquiryId: selectedInquiryIdRef.current,
+        })
+      ) {
         return
       }
 
@@ -329,9 +328,7 @@ export default function RenewalsContent() {
         accessToken: user.accessToken,
       })
 
-      setInquiries((currentInquiries) =>
-        currentInquiries.map((inquiry) => (inquiry.id === liveInquiry.id ? liveInquiry : inquiry)),
-      )
+      setInquiries((currentInquiries) => mergeRenewalInquiryUpdate(currentInquiries, liveInquiry))
 
       if (selectedInquiryIdRef.current === requestInquiryId) {
         setDetailState('detail_loaded')
