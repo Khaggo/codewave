@@ -421,6 +421,16 @@ describe('InsuranceController integration', () => {
           fileUrl: expect.stringMatching(/^upload:\/\/insurance\//),
         }),
       );
+      expect(uploadResponse.body.activities).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: expect.any(String),
+            action: 'document_uploaded',
+            documentType: 'proof_of_payment',
+          }),
+        ]),
+      );
+      expect(uploadResponse.body.activities.at(-1)?.id).not.toMatch(/^synthetic-/);
 
       const readBackResponse = await request(app.getHttpServer())
         .get(`/api/insurance/inquiries/${createInquiryResponse.body.id}`)
@@ -437,6 +447,7 @@ describe('InsuranceController integration', () => {
       expect(readBackResponse.body.activities).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
+            id: uploadResponse.body.activities.at(-1)?.id,
             action: 'document_uploaded',
             documentType: 'proof_of_payment',
           }),

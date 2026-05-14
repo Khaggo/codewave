@@ -74,18 +74,6 @@ type InsuranceActivityEvent = {
   updatedAt: Date;
 };
 
-type InsuranceDocumentRecord = {
-  id: string;
-  inquiryId: string;
-  fileName: string;
-  fileUrl: string;
-  documentType: string;
-  notes?: string | null;
-  uploadedByUserId?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 @Injectable()
 export class InsuranceService {
   constructor(
@@ -117,7 +105,7 @@ export class InsuranceService {
   async findById(id: string, actor: InsuranceActor) {
     const inquiry = await this.insuranceRepository.findById(id);
     await this.assertCanAccessInquiry(inquiry.userId, actor);
-    return this.attachActivityTimeline(inquiry);
+    return inquiry;
   }
 
   async findByUserId(userId: string, actor: InsuranceActor) {
@@ -162,7 +150,7 @@ export class InsuranceService {
         ]);
 
         return {
-          ...this.attachActivityTimeline(inquiry),
+          ...inquiry,
           customerDisplayName: this.buildCustomerDisplayName(user?.profile),
           vehicleLabel: this.buildVehicleLabel(vehicle),
         };
@@ -275,19 +263,13 @@ export class InsuranceService {
       actor.userId,
     );
 
-    const appendedActivity = await this.appendActivityEvent(id, {
+    await this.insuranceRepository.appendActivity(id, {
       action: 'document_uploaded',
       actorUserId: actor.userId,
       documentType: payload.documentType,
       notes: payload.notes ?? null,
     });
-
-    const persistedActivities = await this.listActivityEvents(id);
-
-    return {
-      ...this.attachActivityTimeline(updatedInquiry),
-      activities: persistedActivities.length > 0 ? persistedActivities : [appendedActivity],
-    };
+    return this.insuranceRepository.findById(updatedInquiry.id);
   }
 
   async findRecordsByVehicleId(vehicleId: string, actor: InsuranceActor) {
@@ -368,87 +350,6 @@ export class InsuranceService {
 
   private getInsuranceDocumentStorage() {
     return this.insuranceDocumentStorage ?? new InsuranceDocumentStorageService();
-  }
-
-  private async appendActivityEvent(
-    inquiryId: string,
-    payload: {
-      action: string;
-      actorUserId?: string | null;
-      documentType?: string | null;
-      notes?: string | null;
-    },
-  ) {
-    const activityRepository = this.insuranceRepository as InsuranceRepository & {
-      appendActivity?: (
-        inquiryId: string,
-        payload: {
-          action: string;
-          actorUserId?: string | null;
-          documentType?: string | null;
-          notes?: string | null;
-        },
-      ) => Promise<InsuranceActivityEvent>;
-    };
-
-    if (typeof activityRepository.appendActivity === 'function') {
-      return activityRepository.appendActivity(inquiryId, payload);
-    }
-
-    const now = new Date();
-    return {
-      id: `synthetic-${now.getTime()}`,
-      inquiryId,
-      action: payload.action,
-      actorUserId: payload.actorUserId ?? null,
-      documentType: payload.documentType ?? null,
-      notes: payload.notes ?? null,
-      createdAt: now,
-      updatedAt: now,
-    };
-  }
-
-  private async listActivityEvents(inquiryId: string) {
-    const activityRepository = this.insuranceRepository as InsuranceRepository & {
-      listActivitiesByInquiryId?: (inquiryId: string) => Promise<InsuranceActivityEvent[]>;
-    };
-
-    if (typeof activityRepository.listActivitiesByInquiryId === 'function') {
-      return activityRepository.listActivitiesByInquiryId(inquiryId);
-    }
-
-    return [];
-  }
-
-  private attachActivityTimeline<T extends { id: string; documents?: InsuranceDocumentRecord[]; activities?: InsuranceActivityEvent[] }>(
-    inquiry: T,
-  ) {
-    const explicitActivities = inquiry.activities ?? [];
-    if (explicitActivities.length > 0) {
-      return inquiry;
-    }
-
-    const derivedActivities = this.deriveActivitiesFromDocuments(inquiry.documents ?? []);
-
-    return {
-      ...inquiry,
-      activities: derivedActivities,
-    };
-  }
-
-  private deriveActivitiesFromDocuments(documents: InsuranceDocumentRecord[]) {
-    return [...documents]
-      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
-      .map((document) => ({
-        id: `document-upload-${document.id}`,
-        inquiryId: document.inquiryId,
-        action: 'document_uploaded',
-        actorUserId: document.uploadedByUserId ?? null,
-        documentType: document.documentType,
-        notes: document.notes ?? null,
-        createdAt: document.createdAt,
-        updatedAt: document.updatedAt,
-      }));
   }
 
   private buildCustomerDisplayName(

@@ -764,6 +764,17 @@ type InsuranceDocumentRecord = {
   updatedAt: Date;
 };
 
+type InsuranceActivityRecord = {
+  id: string;
+  inquiryId: string;
+  action: string;
+  actorUserId: string | null;
+  documentType: InsuranceDocumentType | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type InsuranceRecordRecord = {
   id: string;
   inquiryId: string;
@@ -1027,6 +1038,7 @@ const cloneBackJob = (
 const cloneInsuranceInquiry = (
   inquiry: InsuranceInquiryRecord | null | undefined,
   documents: InsuranceDocumentRecord[],
+  activities: InsuranceActivityRecord[],
 ) => {
   if (!inquiry) {
     return inquiry ?? null;
@@ -1038,6 +1050,10 @@ const cloneInsuranceInquiry = (
       .filter((document) => document.inquiryId === inquiry.id)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((document) => ({ ...document })),
+    activities: activities
+      .filter((activity) => activity.inquiryId === inquiry.id)
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+      .map((activity) => ({ ...activity })),
   };
 };
 
@@ -3022,6 +3038,7 @@ class InMemoryVehicleLifecycleRepository {
 class InMemoryInsuranceRepository {
   private readonly inquiries = new Map<string, InsuranceInquiryRecord>();
   private readonly documents: InsuranceDocumentRecord[] = [];
+  private readonly activities: InsuranceActivityRecord[] = [];
   private readonly records = new Map<string, InsuranceRecordRecord>();
 
   async create(payload: CreateInsuranceInquiryDto & { createdByUserId: string }) {
@@ -3055,7 +3072,7 @@ class InMemoryInsuranceRepository {
       throw new NotFoundException('Insurance inquiry not found');
     }
 
-    return cloneInsuranceInquiry(inquiry, this.documents);
+    return cloneInsuranceInquiry(inquiry, this.documents, this.activities);
   }
 
   async updateStatus(
@@ -3101,11 +3118,47 @@ class InMemoryInsuranceRepository {
     return this.findById(id);
   }
 
+  async appendActivity(
+    inquiryId: string,
+    payload: {
+      action: string;
+      actorUserId?: string | null;
+      documentType?: InsuranceDocumentType | null;
+      notes?: string | null;
+    },
+  ) {
+    if (!this.inquiries.has(inquiryId)) {
+      throw new NotFoundException('Insurance inquiry not found');
+    }
+
+    const now = new Date();
+    const activity: InsuranceActivityRecord = {
+      id: randomUUID(),
+      inquiryId,
+      action: payload.action,
+      actorUserId: payload.actorUserId ?? null,
+      documentType: payload.documentType ?? null,
+      notes: payload.notes ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.activities.push(activity);
+    return { ...activity };
+  }
+
+  async listActivitiesByInquiryId(inquiryId: string) {
+    return this.activities
+      .filter((activity) => activity.inquiryId === inquiryId)
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+      .map((activity) => ({ ...activity }));
+  }
+
   async findByUserId(userId: string) {
     return Array.from(this.inquiries.values())
       .filter((inquiry) => inquiry.userId === userId)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents));
+      .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents, this.activities));
   }
 
   async upsertRecordFromInquiry(payload: {
@@ -3160,7 +3213,7 @@ class InMemoryInsuranceRepository {
   async listForAnalytics() {
     return Array.from(this.inquiries.values())
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents));
+      .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents, this.activities));
   }
 }
 

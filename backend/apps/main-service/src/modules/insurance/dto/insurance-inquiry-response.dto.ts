@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 import {
   insuranceCasePurposeEnum,
+  insuranceDocumentTypeEnum,
   insuranceDocumentReviewStatusEnum,
   insuranceInquiryStatusEnum,
   insuranceInquiryTypeEnum,
@@ -10,6 +11,46 @@ import {
 } from '../schemas/insurance.schema';
 
 import { InsuranceDocumentResponseDto } from './insurance-document-response.dto';
+
+export class InsuranceActivityResponseDto {
+  @ApiProperty({
+    example: 'd9e1ab3d-a8c8-43da-b0ba-81a709f9385c',
+  })
+  id!: string;
+
+  @ApiProperty({
+    example: 'document_uploaded',
+  })
+  action!: string;
+
+  @ApiPropertyOptional({
+    enum: insuranceDocumentTypeEnum.enumValues,
+    example: 'proof_of_payment',
+  })
+  documentType?: (typeof insuranceDocumentTypeEnum.enumValues)[number] | null;
+
+  @ApiPropertyOptional({
+    example: 'd3bf3f0a-a95c-4b94-a3bd-f9f83120d017',
+  })
+  actorUserId?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Proof of payment from the customer mobile wallet transaction.',
+  })
+  notes?: string | null;
+
+  @ApiProperty({
+    example: '2026-05-14T08:00:00.000Z',
+    format: 'date-time',
+  })
+  createdAt!: string;
+
+  @ApiProperty({
+    example: '2026-05-14T08:00:00.000Z',
+    format: 'date-time',
+  })
+  updatedAt!: string;
+}
 
 export class InsuranceInquiryResponseDto {
   @ApiProperty({
@@ -98,6 +139,16 @@ export class InsuranceInquiryResponseDto {
   })
   assignedStaffId?: string | null;
 
+  @ApiPropertyOptional({
+    example: 'Casey Customer',
+  })
+  customerDisplayName?: string;
+
+  @ApiPropertyOptional({
+    example: 'Toyota Vios (INS110C)',
+  })
+  vehicleLabel?: string;
+
   @ApiProperty({
     example: 'd3bf3f0a-a95c-4b94-a3bd-f9f83120d017',
   })
@@ -137,6 +188,12 @@ export class InsuranceInquiryResponseDto {
     isArray: true,
   })
   documents!: InsuranceDocumentResponseDto[];
+
+  @ApiProperty({
+    type: () => InsuranceActivityResponseDto,
+    isArray: true,
+  })
+  activities!: InsuranceActivityResponseDto[];
 
   @ApiProperty({
     example: '2026-04-22T09:30:00.000Z',
