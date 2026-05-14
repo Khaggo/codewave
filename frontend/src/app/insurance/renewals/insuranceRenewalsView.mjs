@@ -2,6 +2,7 @@ import { formatStatusLabel } from '../insuranceView.mjs'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const NON_ACTIVE_RENEWAL_STATUSES = ['renewed', 'cancelled', 'not_applicable']
+const TERMINAL_INQUIRY_STATUSES = ['closed', 'cancelled', 'rejected']
 
 const toDate = (value) => {
   if (!value) {
@@ -61,13 +62,14 @@ export function getRenewalTimeWindow({ renewalDueAt, policyExpiryAt, now } = {})
   return 'Due in 30 Days'
 }
 
-const isActiveRenewalForUrgency = (inquiry) => !NON_ACTIVE_RENEWAL_STATUSES.includes(inquiry?.renewalStatus)
+const isActiveRenewalQueueInquiry = (inquiry) =>
+  !TERMINAL_INQUIRY_STATUSES.includes(inquiry?.status) && !NON_ACTIVE_RENEWAL_STATUSES.includes(inquiry?.renewalStatus)
 
 const countRenewalsByWindow = (inquiries, timeWindow, now) =>
   inquiries.reduce(
     (total, inquiry) =>
       total +
-      (isActiveRenewalForUrgency(inquiry) &&
+      (isActiveRenewalQueueInquiry(inquiry) &&
       getRenewalTimeWindow({
         renewalDueAt: inquiry?.renewalDueAt,
         policyExpiryAt: inquiry?.policyExpiryAt,
@@ -102,7 +104,11 @@ export function getRenewalsSummaryCards({ inquiries = [], now } = {}) {
     },
     {
       label: 'Awaiting Customer',
-      value: inquiries.reduce((total, inquiry) => total + (inquiry?.renewalStatus === 'awaiting_customer' ? 1 : 0), 0),
+      value: inquiries.reduce(
+        (total, inquiry) =>
+          total + (isActiveRenewalQueueInquiry(inquiry) && inquiry?.renewalStatus === 'awaiting_customer' ? 1 : 0),
+        0,
+      ),
       sub: 'Renewals waiting on customer response',
     },
   ]

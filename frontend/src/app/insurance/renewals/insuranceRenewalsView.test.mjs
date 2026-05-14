@@ -115,6 +115,36 @@ test('getRenewalsSummaryCards excludes completed and non-active renewal statuses
   )
 })
 
+test('getRenewalsSummaryCards excludes terminal inquiry statuses from urgency and awaiting-customer metrics', () => {
+  assert.deepEqual(
+    getRenewalsSummaryCards({
+      now: '2026-05-14T00:00:00.000Z',
+      inquiries: [
+        buildInquiryFixture({ id: 'active-30', status: 'for_renewal', renewalStatus: 'upcoming', renewalDueAt: '2026-06-13T00:00:00.000Z' }),
+        buildInquiryFixture({
+          id: 'closed-stale-renewal',
+          status: 'closed',
+          renewalStatus: 'upcoming',
+          renewalDueAt: '2026-05-20T00:00:00.000Z',
+        }),
+        buildInquiryFixture({
+          id: 'cancelled-awaiting',
+          status: 'cancelled',
+          renewalStatus: 'awaiting_customer',
+          renewalDueAt: '2026-05-20T00:00:00.000Z',
+        }),
+      ],
+    }).map((card) => [card.label, card.value]),
+    [
+      ['Due in 30 Days', 1],
+      ['Due in 15 Days', 0],
+      ['Due in 7 Days', 0],
+      ['Overdue', 0],
+      ['Awaiting Customer', 0],
+    ],
+  )
+})
+
 test('getRenewalTimeWindow falls back to policyExpiryAt when renewalDueAt is missing', () => {
   assert.equal(
     getRenewalTimeWindow({
