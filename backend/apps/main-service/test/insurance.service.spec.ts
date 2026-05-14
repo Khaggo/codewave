@@ -162,6 +162,7 @@ describe('InsuranceService', () => {
           notes: 'Waiting for proof of payment validation.',
         },
       ],
+      undefined,
     );
   });
 
@@ -229,6 +230,7 @@ describe('InsuranceService', () => {
           notes: null,
         },
       ],
+      undefined,
     );
   });
 
@@ -367,6 +369,7 @@ describe('InsuranceService', () => {
         paymentDueAt: new Date('2026-05-30T00:00:00.000Z'),
       }),
       [],
+      undefined,
     );
   });
 
@@ -458,7 +461,6 @@ describe('InsuranceService', () => {
         providerName: 'Safe Road Insurance',
         policyNumber: 'POL-2026-0042',
       }),
-      upsertRecordFromInquiry: jest.fn(),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -499,7 +501,13 @@ describe('InsuranceService', () => {
       },
     );
 
-    expect(insuranceRepository.upsertRecordFromInquiry).toHaveBeenCalledWith(
+    expect(insuranceRepository.updateStatus).toHaveBeenCalledWith(
+      'insurance-inquiry-1',
+      expect.objectContaining({
+        status: 'closed',
+        reviewedByUserId: 'adviser-1',
+        reviewedAt: expect.any(Date),
+      }),
       expect.objectContaining({
         inquiryId: 'insurance-inquiry-1',
         userId: 'customer-1',
@@ -547,7 +555,6 @@ describe('InsuranceService', () => {
         providerName: 'Safe Road Insurance',
         policyNumber: 'POL-2026-0042',
       }),
-      upsertRecordFromInquiry: jest.fn(),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -588,7 +595,14 @@ describe('InsuranceService', () => {
       },
     );
 
-    expect(insuranceRepository.upsertRecordFromInquiry).toHaveBeenCalledWith(
+    expect(insuranceRepository.updateWorkflow).toHaveBeenCalledWith(
+      'insurance-inquiry-1',
+      expect.objectContaining({
+        status: 'closed',
+        reviewedByUserId: 'adviser-1',
+        reviewedAt: expect.any(Date),
+      }),
+      [],
       expect.objectContaining({
         inquiryId: 'insurance-inquiry-1',
         userId: 'customer-1',
@@ -625,7 +639,6 @@ describe('InsuranceService', () => {
         subject: 'Accident repair inquiry',
       }),
       updateWorkflow: jest.fn().mockRejectedValue(new Error('Simulated workflow persistence failure')),
-      upsertRecordFromInquiry: jest.fn(),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -668,8 +681,155 @@ describe('InsuranceService', () => {
       ),
     ).rejects.toThrow('Simulated workflow persistence failure');
 
-    expect(insuranceRepository.upsertRecordFromInquiry).not.toHaveBeenCalled();
     expect(notificationsService.applyTrigger).not.toHaveBeenCalled();
+  });
+
+  it('returns a closed status response when status notifications fail after commit', async () => {
+    const notificationsService = {
+      applyTrigger: jest.fn().mockRejectedValue(new Error('Simulated notification failure')),
+    };
+
+    const insuranceRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        userId: 'customer-1',
+        vehicleId: 'vehicle-1',
+        inquiryType: 'comprehensive',
+        status: 'active',
+        subject: 'Accident repair inquiry',
+        providerName: 'Safe Road Insurance',
+        policyNumber: 'POL-2026-0042',
+      }),
+      updateStatus: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        userId: 'customer-1',
+        vehicleId: 'vehicle-1',
+        inquiryType: 'comprehensive',
+        status: 'closed',
+        subject: 'Accident repair inquiry',
+        providerName: 'Safe Road Insurance',
+        policyNumber: 'POL-2026-0042',
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        { provide: NotificationsService, useValue: notificationsService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    await expect(
+      service.updateStatus(
+        'insurance-inquiry-1',
+        {
+          status: 'closed',
+          reviewNotes: 'Internal review is complete and the case is now closed.',
+        },
+        {
+          userId: 'adviser-1',
+          role: 'service_adviser',
+        },
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: 'insurance-inquiry-1',
+        status: 'closed',
+      }),
+    );
+  });
+
+  it('returns a closed workflow response when status notifications fail after commit', async () => {
+    const notificationsService = {
+      applyTrigger: jest.fn().mockRejectedValue(new Error('Simulated notification failure')),
+    };
+
+    const insuranceRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        userId: 'customer-1',
+        vehicleId: 'vehicle-1',
+        inquiryType: 'comprehensive',
+        status: 'active',
+        subject: 'Accident repair inquiry',
+        providerName: 'Safe Road Insurance',
+        policyNumber: 'POL-2026-0042',
+      }),
+      updateWorkflow: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        userId: 'customer-1',
+        vehicleId: 'vehicle-1',
+        inquiryType: 'comprehensive',
+        status: 'closed',
+        subject: 'Accident repair inquiry',
+        providerName: 'Safe Road Insurance',
+        policyNumber: 'POL-2026-0042',
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        { provide: NotificationsService, useValue: notificationsService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    await expect(
+      service.updateWorkflow(
+        'insurance-inquiry-1',
+        {
+          status: 'closed',
+          reviewNotes: 'Collections workflow completed and the case is closed.',
+        },
+        {
+          userId: 'adviser-1',
+          role: 'service_adviser',
+        },
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: 'insurance-inquiry-1',
+        status: 'closed',
+      }),
+    );
   });
 
   it('blocks document uploads once an inquiry is rejected or closed', async () => {

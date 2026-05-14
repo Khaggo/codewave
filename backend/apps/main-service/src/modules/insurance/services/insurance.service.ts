@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
@@ -71,6 +72,8 @@ const notificationEligibleStatuses: InsuranceNotificationStatus[] = [
 
 @Injectable()
 export class InsuranceService {
+  private readonly logger = new Logger(InsuranceService.name);
+
   constructor(
     private readonly insuranceRepository: InsuranceRepository,
     private readonly usersService: UsersService,
@@ -163,9 +166,9 @@ export class InsuranceService {
       ...payload,
       reviewedByUserId: actor.userId,
       reviewedAt: new Date(),
-    });
+    }, this.buildCloseRecordUpsert(inquiry, payload.status));
 
-    await this.applyWorkflowStatusSideEffects(updatedInquiry, payload.status);
+    await this.emitWorkflowStatusNotification(updatedInquiry);
 
     return updatedInquiry;
   }
@@ -191,8 +194,13 @@ export class InsuranceService {
     };
 
     const paymentActivities = this.buildPaymentWorkflowActivities(inquiry, payload, actor.userId);
-    const updatedInquiry = await this.insuranceRepository.updateWorkflow(id, workflowPatch, paymentActivities);
-    await this.applyWorkflowStatusSideEffects(updatedInquiry, payload.status);
+    const updatedInquiry = await this.insuranceRepository.updateWorkflow(
+      id,
+      workflowPatch,
+      paymentActivities,
+      this.buildCloseRecordUpsert(inquiry, payload.status),
+    );
+    await this.emitWorkflowStatusNotification(updatedInquiry);
     return updatedInquiry;
   }
 
@@ -420,7 +428,33 @@ export class InsuranceService {
     return `${vehicle.make} ${vehicle.model} (${vehicle.plateNumber})`;
   }
 
-  private async applyWorkflowStatusSideEffects(
+  private buildCloseRecordUpsert(
+    inquiry: {
+      id: string;
+      userId: string;
+      vehicleId: string;
+      inquiryType: Parameters<InsuranceRepository['upsertRecordFromInquiry']>[0]['inquiryType'];
+      providerName?: string | null;
+      policyNumber?: string | null;
+    },
+    requestedStatus: InsuranceInquiryStatus,
+  ): Parameters<InsuranceRepository['upsertRecordFromInquiry']>[0] | undefined {
+    if (requestedStatus !== 'closed') {
+      return undefined;
+    }
+
+    return {
+      inquiryId: inquiry.id,
+      userId: inquiry.userId,
+      vehicleId: inquiry.vehicleId,
+      inquiryType: inquiry.inquiryType,
+      providerName: inquiry.providerName,
+      policyNumber: inquiry.policyNumber,
+      status: requestedStatus,
+    };
+  }
+
+  private async emitWorkflowStatusNotification(
     updatedInquiry: {
       id: string;
       userId: string;
@@ -431,21 +465,12 @@ export class InsuranceService {
       status: string;
       subject: string;
     },
-    requestedStatus: InsuranceInquiryStatus,
   ) {
-    if (requestedStatus === 'closed') {
-      await this.insuranceRepository.upsertRecordFromInquiry({
-        inquiryId: updatedInquiry.id,
-        userId: updatedInquiry.userId,
-        vehicleId: updatedInquiry.vehicleId,
-        inquiryType: updatedInquiry.inquiryType,
-        providerName: updatedInquiry.providerName,
-        policyNumber: updatedInquiry.policyNumber,
-        status: requestedStatus,
-      });
+    if (!notificationEligibleStatuses.includes(updatedInquiry.status as InsuranceNotificationStatus)) {
+      return;
     }
 
-    if (notificationEligibleStatuses.includes(updatedInquiry.status as InsuranceNotificationStatus)) {
+    try {
       await this.notificationsService?.applyTrigger(
         createNotificationTrigger('insurance.inquiry_status_changed', 'main-service.insurance', {
           inquiryId: updatedInquiry.id,
@@ -453,6 +478,12 @@ export class InsuranceService {
           status: updatedInquiry.status as InsuranceNotificationStatus,
           subject: updatedInquiry.subject,
         }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to emit insurance status notification for inquiry ${updatedInquiry.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       );
     }
   }

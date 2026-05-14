@@ -156,27 +156,39 @@ export class InsuranceRepository extends BaseRepository {
     }));
   }
 
-  async updateStatus(id: string, payload: UpdateInsuranceInquiryStatusPersistenceInput) {
-    const [updatedInquiry] = await this.db
-      .update(insuranceInquiries)
-      .set({
-        status: payload.status,
-        reviewNotes: payload.reviewNotes ?? null,
-        reviewedByUserId: payload.reviewedByUserId,
-        reviewedAt: payload.reviewedAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(insuranceInquiries.id, id))
-      .returning();
+  async updateStatus(
+    id: string,
+    payload: UpdateInsuranceInquiryStatusPersistenceInput,
+    recordUpsert?: UpsertInsuranceRecordInput,
+  ) {
+    return this.db.transaction(async (tx) => {
+      const [updatedInquiry] = await tx
+        .update(insuranceInquiries)
+        .set({
+          status: payload.status,
+          reviewNotes: payload.reviewNotes ?? null,
+          reviewedByUserId: payload.reviewedByUserId,
+          reviewedAt: payload.reviewedAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(insuranceInquiries.id, id))
+        .returning();
 
-    this.assertFound(updatedInquiry, 'Insurance inquiry not found');
-    return this.findById(id);
+      this.assertFound(updatedInquiry, 'Insurance inquiry not found');
+
+      if (recordUpsert) {
+        await this.upsertRecordFromInquiry(recordUpsert, tx);
+      }
+
+      return this.findById(id, tx);
+    });
   }
 
   async updateWorkflow(
     id: string,
     payload: UpdateInsuranceInquiryWorkflowPersistenceInput,
     activities: InsuranceActivityPersistenceInput[] = [],
+    recordUpsert?: UpsertInsuranceRecordInput,
   ) {
     const workflowPatch = {
       status: payload.status,
@@ -212,6 +224,10 @@ export class InsuranceRepository extends BaseRepository {
             notes: activity.notes ?? null,
           })),
         );
+      }
+
+      if (recordUpsert) {
+        await this.upsertRecordFromInquiry(recordUpsert, tx);
       }
 
       return this.findById(id, tx);
@@ -283,13 +299,13 @@ export class InsuranceRepository extends BaseRepository {
     return activities;
   }
 
-  async upsertRecordFromInquiry(payload: UpsertInsuranceRecordInput) {
-    const existingRecord = await this.db.query.insuranceRecords.findFirst({
+  async upsertRecordFromInquiry(payload: UpsertInsuranceRecordInput, db: AppDatabase = this.db) {
+    const existingRecord = await db.query.insuranceRecords.findFirst({
       where: eq(insuranceRecords.inquiryId, payload.inquiryId),
     });
 
     if (existingRecord) {
-      const [updatedRecord] = await this.db
+      const [updatedRecord] = await db
         .update(insuranceRecords)
         .set({
           providerName: payload.providerName ?? null,
@@ -303,7 +319,7 @@ export class InsuranceRepository extends BaseRepository {
       return this.assertFound(updatedRecord, 'Insurance record not found');
     }
 
-    const [createdRecord] = await this.db
+    const [createdRecord] = await db
       .insert(insuranceRecords)
       .values({
         inquiryId: payload.inquiryId,

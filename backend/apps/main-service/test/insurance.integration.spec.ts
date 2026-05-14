@@ -6,6 +6,7 @@ import request from 'supertest';
 
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
 import { InsuranceRepository } from '../src/modules/insurance/repositories/insurance.repository';
+import { NotificationsService } from '../src/modules/notifications/services/notifications.service';
 
 const insuranceUploadRuntimeDirectory = join(
   process.cwd(),
@@ -61,20 +62,76 @@ function installInsuranceWorkflowRepositoryContract(
   const insuranceRepository = app.get(InsuranceRepository) as {
     inquiries?: Map<string, Record<string, unknown>>;
     activities?: Array<Record<string, unknown>>;
+    records?: Map<string, Record<string, unknown>>;
     failNextWorkflowPersistence?: boolean;
+    updateStatus?: (
+      id: string,
+      patch: Record<string, unknown>,
+      recordUpsert?: Record<string, unknown>,
+    ) => Promise<Record<string, unknown>>;
     updateWorkflow?: (
       id: string,
       patch: Record<string, unknown>,
       activities?: Array<Record<string, unknown>>,
+      recordUpsert?: Record<string, unknown>,
     ) => Promise<Record<string, unknown>>;
     findById: (id: string) => Promise<Record<string, unknown>>;
   };
 
-  if (typeof insuranceRepository.updateWorkflow === 'function') {
+  if (typeof insuranceRepository.updateWorkflow === 'function' && typeof insuranceRepository.updateStatus === 'function') {
     return;
   }
 
-  insuranceRepository.updateWorkflow = async (id, patch, activities = []) => {
+  const applyRecordUpsert = (recordUpsert: Record<string, unknown> | undefined, now: Date) => {
+    if (!recordUpsert || !insuranceRepository.records) {
+      return;
+    }
+
+    const existingRecordEntry = Array.from(insuranceRepository.records.entries()).find(
+      ([, record]) => record.inquiryId === recordUpsert.inquiryId,
+    );
+
+    if (existingRecordEntry) {
+      const [recordId, existingRecord] = existingRecordEntry;
+      insuranceRepository.records.set(recordId, {
+        ...existingRecord,
+        ...recordUpsert,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    insuranceRepository.records.set(randomUUID(), {
+      id: randomUUID(),
+      ...recordUpsert,
+      createdAt: now,
+      updatedAt: now,
+    });
+  };
+
+  insuranceRepository.updateStatus = async (id, patch, recordUpsert) => {
+    const inquiry = insuranceRepository.inquiries?.get(id);
+
+    if (!insuranceRepository.inquiries || !inquiry) {
+      throw new Error(`Unable to update insurance status for ${id}`);
+    }
+
+    if (insuranceRepository.failNextWorkflowPersistence) {
+      insuranceRepository.failNextWorkflowPersistence = false;
+      throw new Error('Simulated workflow persistence failure');
+    }
+
+    const now = new Date();
+    insuranceRepository.inquiries.set(id, {
+      ...inquiry,
+      ...patch,
+      updatedAt: now,
+    });
+    applyRecordUpsert(recordUpsert, now);
+    return insuranceRepository.findById(id);
+  };
+
+  insuranceRepository.updateWorkflow = async (id, patch, activities = [], recordUpsert) => {
     const inquiry = insuranceRepository.inquiries?.get(id);
 
     if (!insuranceRepository.inquiries || !insuranceRepository.activities || !inquiry) {
@@ -92,7 +149,6 @@ function installInsuranceWorkflowRepositoryContract(
       ...patch,
       updatedAt: now,
     });
-
     insuranceRepository.activities.push(
       ...activities.map((activity) => ({
         id: randomUUID(),
@@ -105,7 +161,7 @@ function installInsuranceWorkflowRepositoryContract(
         updatedAt: now,
       })),
     );
-
+    applyRecordUpsert(recordUpsert, now);
     return insuranceRepository.findById(id);
   };
 }
@@ -115,6 +171,8 @@ describe('InsuranceController integration', () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
+      installInsuranceWorkflowRepositoryContract(app);
+
       const adviser = await seedAuthUser({
         email: 'adviser.insurance@example.com',
         password: 'password123',
@@ -604,6 +662,200 @@ describe('InsuranceController integration', () => {
         .get(`/api/vehicles/${vehicleResponse.body.id}/insurance-records`)
         .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
 
+      expect(vehicleRecordsResponse.status).toBe(200);
+      expect(vehicleRecordsResponse.body[0]).toEqual(
+        expect.objectContaining({
+          inquiryId: createInquiryResponse.body.id,
+          vehicleId: vehicleResponse.body.id,
+          status: 'closed',
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('keeps a close status transition successful when notification emission fails', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      installInsuranceWorkflowRepositoryContract(app);
+      jest
+        .spyOn(app.get(NotificationsService), 'applyTrigger')
+        .mockRejectedValue(new Error('Simulated notification failure'));
+
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.status.notification@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5107',
+      });
+
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.status.notification@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110I',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const createInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Status close notification guard',
+          description: 'This request verifies notification failures stay non-blocking.',
+        });
+      expect(createInquiryResponse.status).toBe(201);
+
+      seedInsuranceInquiryWorkflowState(app, createInquiryResponse.body.id, {
+        status: 'active',
+      });
+
+      const closeResponse = await request(app.getHttpServer())
+        .patch(`/api/insurance/inquiries/${createInquiryResponse.body.id}/status`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'closed',
+          reviewNotes: 'Closed even if the notification send fails.',
+        });
+
+      expect(closeResponse.status).toBe(200);
+      expect(closeResponse.body).toEqual(
+        expect.objectContaining({
+          id: createInquiryResponse.body.id,
+          status: 'closed',
+        }),
+      );
+
+      const readBackResponse = await request(app.getHttpServer())
+        .get(`/api/insurance/inquiries/${createInquiryResponse.body.id}`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+      expect(readBackResponse.status).toBe(200);
+      expect(readBackResponse.body.status).toBe('closed');
+
+      const vehicleRecordsResponse = await request(app.getHttpServer())
+        .get(`/api/vehicles/${vehicleResponse.body.id}/insurance-records`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+      expect(vehicleRecordsResponse.status).toBe(200);
+      expect(vehicleRecordsResponse.body[0]).toEqual(
+        expect.objectContaining({
+          inquiryId: createInquiryResponse.body.id,
+          vehicleId: vehicleResponse.body.id,
+          status: 'closed',
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('keeps a close workflow transition successful when notification emission fails', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      installInsuranceWorkflowRepositoryContract(app);
+      jest
+        .spyOn(app.get(NotificationsService), 'applyTrigger')
+        .mockRejectedValue(new Error('Simulated notification failure'));
+
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.workflow.notification@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5108',
+      });
+
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.workflow.notification@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110J',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const createInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Workflow close notification guard',
+          description: 'This request verifies workflow close stays successful when notification sending fails.',
+        });
+      expect(createInquiryResponse.status).toBe(201);
+
+      seedInsuranceInquiryWorkflowState(app, createInquiryResponse.body.id, {
+        status: 'active',
+      });
+
+      const closeResponse = await request(app.getHttpServer())
+        .patch(`/api/insurance/inquiries/${createInquiryResponse.body.id}/workflow`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'closed',
+          reviewNotes: 'Workflow close should still succeed if notification sending fails.',
+        });
+
+      expect(closeResponse.status).toBe(200);
+      expect(closeResponse.body).toEqual(
+        expect.objectContaining({
+          id: createInquiryResponse.body.id,
+          status: 'closed',
+        }),
+      );
+
+      const readBackResponse = await request(app.getHttpServer())
+        .get(`/api/insurance/inquiries/${createInquiryResponse.body.id}`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+      expect(readBackResponse.status).toBe(200);
+      expect(readBackResponse.body.status).toBe('closed');
+
+      const vehicleRecordsResponse = await request(app.getHttpServer())
+        .get(`/api/vehicles/${vehicleResponse.body.id}/insurance-records`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
       expect(vehicleRecordsResponse.status).toBe(200);
       expect(vehicleRecordsResponse.body[0]).toEqual(
         expect.objectContaining({
