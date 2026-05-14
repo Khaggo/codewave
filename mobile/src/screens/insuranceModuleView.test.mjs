@@ -6,6 +6,7 @@ import {
   clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
   doesCustomerInsuranceInquiryMatchVehicle,
+  getCustomerInsurancePaymentSummary,
   getVehicleScopedCustomerInquiryId,
   getRememberedInquiryForVehicle,
   getCustomerInsuranceTimeline,
@@ -121,6 +122,40 @@ test('customer timeline includes payment pending and renewal prompts', () => {
       renewalStatus: 'upcoming',
     }).map((step) => step.key),
     ['submitted', 'review', 'payment', 'renewal'],
+  )
+})
+
+test('payment follow-up prompt includes overdue urgency with overdue days', () => {
+  assert.deepEqual(
+    getCustomerInsurancePaymentSummary({
+      status: 'payment_pending',
+      paymentStatus: 'overdue',
+      paymentDueAt: '2026-05-10T00:00:00.000Z',
+      now: '2026-05-14T00:00:00.000Z',
+    }),
+    {
+      title: 'Payment overdue',
+      message:
+        'This request is 4 days overdue for payment. Upload proof after payment or contact staff for help.',
+      tone: 'danger',
+    },
+  )
+})
+
+test('payment follow-up prompt shows a visible due date for active payment follow-up', () => {
+  assert.deepEqual(
+    getCustomerInsurancePaymentSummary({
+      status: 'payment_pending',
+      paymentStatus: 'proof_submitted',
+      paymentDueAt: '2026-05-18T00:00:00.000Z',
+      now: '2026-05-14T00:00:00.000Z',
+    }),
+    {
+      title: 'Proof submitted',
+      message:
+        'Your proof of payment is on file. Staff still need to verify it before the request moves forward. Due date: May 18, 2026.',
+      tone: 'default',
+    },
   )
 })
 
@@ -464,4 +499,15 @@ test('addInsuranceInquiryDocument reports the full accepted document types', asy
   } finally {
     globalThis.__insuranceClientRuntime = originalInsuranceClientRuntime
   }
+})
+
+test('normalizeCustomerInsuranceInquiry does not preserve legacy approved_for_record copy', () => {
+  const inquiry = normalizeCustomerInsuranceInquiry({
+    id: 'inq-legacy',
+    status: 'approved_for_record',
+    documents: [],
+  })
+
+  assert.equal(inquiry?.status, 'approved_for_record')
+  assert.equal(inquiry?.statusHint, 'Insurance tracking is available for this request.')
 })

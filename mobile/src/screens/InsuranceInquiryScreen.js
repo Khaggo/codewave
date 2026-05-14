@@ -34,6 +34,7 @@ import {
   clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
   doesCustomerInsuranceInquiryMatchVehicle,
+  getCustomerInsurancePaymentSummary,
   getVehicleScopedCustomerInquiryId,
   getRememberedInquiryForVehicle,
   getCustomerInsuranceTimeline,
@@ -134,41 +135,6 @@ const timelineStepCopy = {
   rejected: 'The request could not continue in its current state.',
   cancelled: 'The request was cancelled before completion.',
   closed: 'This request is closed and no longer accepting updates.',
-};
-
-const buildPaymentPrompt = (inquiry) => {
-  switch (inquiry?.paymentStatus) {
-    case 'proof_submitted':
-      return {
-        title: 'Proof submitted',
-        message: 'Your proof of payment is on file. Staff still need to verify it before the request moves forward.',
-        tone: 'default',
-      };
-    case 'verifying':
-      return {
-        title: 'Payment under verification',
-        message: 'Staff are reviewing your payment proof now. Keep the receipt available in case they request a clearer copy.',
-        tone: 'default',
-      };
-    case 'paid':
-      return {
-        title: 'Payment received',
-        message: 'Payment is already tagged as paid. You can still refresh the request if you are waiting for the next status update.',
-        tone: 'success',
-      };
-    case 'overdue':
-      return {
-        title: 'Payment follow-up needed',
-        message: 'This request is overdue for payment. Upload your receipt after payment so staff can continue processing.',
-        tone: 'danger',
-      };
-    default:
-      return {
-        title: 'Payment step visible',
-        message: 'This request has a payment stage. Use the upload entry below for proof of payment when staff ask for it.',
-        tone: inquiry?.status === 'payment_pending' ? 'default' : 'success',
-      };
-  }
 };
 
 const buildRenewalPrompt = (inquiry) => {
@@ -453,6 +419,15 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         followUpType: 'payment',
       }),
   );
+  const paymentSummary = useMemo(
+    () =>
+      getCustomerInsurancePaymentSummary({
+        status: latestInquiry?.status,
+        paymentStatus: latestInquiry?.paymentStatus,
+        paymentDueAt: latestInquiry?.paymentDueAt,
+      }),
+    [latestInquiry?.paymentDueAt, latestInquiry?.paymentStatus, latestInquiry?.status],
+  );
   const renewalPromptVisible = Boolean(
     latestInquiry &&
       shouldShowCustomerInsuranceFollowUp({
@@ -494,7 +469,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             return {
               ...card,
               description: paymentPromptVisible
-                ? buildPaymentPrompt(latestInquiry).message
+                ? paymentSummary.message
                 : 'Payment instructions and proof-of-payment follow-up will surface here when needed.',
               value: latestInquiry ? formatWorkflowLabel(latestInquiry.paymentStatus) : 'Not required',
             };
@@ -510,8 +485,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             return {
               ...card,
               description: claimStatusUpdates.length
-                ? `${claimStatusUpdates.length} approved vehicle record${claimStatusUpdates.length === 1 ? '' : 's'} are available to review.`
-                : 'Approved policy or claim history will appear here after staff publish it to your vehicle record.',
+                ? `${claimStatusUpdates.length} vehicle insurance record${claimStatusUpdates.length === 1 ? '' : 's'} are available to review.`
+                : 'Vehicle insurance history will appear here once staff close the request and record it for tracking.',
               value: String(claimStatusUpdates.length),
             };
         }
@@ -522,6 +497,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       latestInquiry,
       missingRequiredDocuments.length,
       paymentPromptVisible,
+      paymentSummary.message,
       renewalPromptVisible,
       requirementsChecklist,
       selectedVehicle,
@@ -893,7 +869,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       );
       setTrackingMessage(
         inquiryNotFound && !nextRecords.length
-          ? 'The known inquiry could not be found anymore, but you can still track approved vehicle records here when they exist.'
+          ? 'The known inquiry could not be found anymore, but you can still track vehicle insurance records here when they exist.'
           : '',
       );
     } catch (error) {
@@ -1522,7 +1498,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               <InsuranceStatePanel
                 icon="refresh"
                 title="Loading insurance updates"
-                message="We’re checking the latest inquiry state and any published vehicle-level insurance history."
+                message="We’re checking the latest inquiry state and any vehicle-level insurance history already recorded for tracking."
                 loading
               />
             ) : null}
@@ -1616,9 +1592,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                     </View>
                     <InsuranceStatePanel
                       icon="cash-check"
-                      title={buildPaymentPrompt(latestInquiry).title}
-                      message={buildPaymentPrompt(latestInquiry).message}
-                      tone={buildPaymentPrompt(latestInquiry).tone}
+                      title={paymentSummary.title}
+                      message={paymentSummary.message}
+                      tone={paymentSummary.tone}
                     />
                   </View>
                 ) : null}
@@ -1857,7 +1833,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 <View style={styles.documentSectionCopy}>
                   <Text style={styles.documentSectionTitle}>Insurance history</Text>
                   <Text style={styles.documentSectionText}>
-                    Approved vehicle-level insurance records appear here after staff publish them for customer tracking.
+                    Vehicle-level insurance records appear here after staff close a request and record it for customer tracking.
                   </Text>
                 </View>
               </View>
@@ -1879,9 +1855,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 ))
               ) : (
                 <View style={styles.emptyDocumentCard}>
-                  <Text style={styles.emptyDocumentTitle}>No published insurance history yet</Text>
+                  <Text style={styles.emptyDocumentTitle}>No insurance history yet</Text>
                   <Text style={styles.emptyDocumentText}>
-                    Once staff convert an approved case into a customer-safe vehicle record, it will show up here.
+                    Once staff close and record a customer-safe insurance case for this vehicle, it will show up here.
                   </Text>
                 </View>
               )}

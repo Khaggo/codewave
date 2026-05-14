@@ -17,6 +17,12 @@ export const REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY =
 
 const hasUploadedType = (uploadedTypes, type) => uploadedTypes.includes(type)
 const rememberedInquiryIdsByVehicle = new Map()
+const CUSTOMER_PAYMENT_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+})
 
 const formatFileSizeLabel = (size) => {
   if (!Number.isFinite(size) || size <= 0) {
@@ -196,6 +202,105 @@ export const buildRequirementsChecklist = ({ status = 'submitted', uploadedTypes
     status,
     required: buildChecklistGroup(REQUIRED_DOCUMENT_TYPES, normalizedUploadedTypes),
     optional: buildChecklistGroup(OPTIONAL_DOCUMENT_TYPES, normalizedUploadedTypes),
+  }
+}
+
+const getDaysOverdue = ({ paymentDueAt, now = new Date().toISOString() } = {}) => {
+  if (!paymentDueAt) {
+    return 0
+  }
+
+  const dueDate = new Date(paymentDueAt)
+  const nowDate = new Date(now)
+
+  if (Number.isNaN(dueDate.getTime()) || Number.isNaN(nowDate.getTime())) {
+    return 0
+  }
+
+  const diffMs = nowDate.getTime() - dueDate.getTime()
+
+  if (diffMs <= 0) {
+    return 0
+  }
+
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+}
+
+const formatCustomerPaymentDueDate = (paymentDueAt) => {
+  if (!paymentDueAt) {
+    return null
+  }
+
+  const dueDate = new Date(paymentDueAt)
+
+  if (Number.isNaN(dueDate.getTime())) {
+    return null
+  }
+
+  return CUSTOMER_PAYMENT_DATE_FORMATTER.format(dueDate)
+}
+
+const appendDueDateCopy = (message, paymentDueAt) => {
+  const dueDateLabel = formatCustomerPaymentDueDate(paymentDueAt)
+
+  if (!dueDateLabel) {
+    return message
+  }
+
+  return `${message} Due date: ${dueDateLabel}.`
+}
+
+export const getCustomerInsurancePaymentSummary = ({
+  status = 'submitted',
+  paymentStatus = 'not_required',
+  paymentDueAt = null,
+  now = new Date().toISOString(),
+} = {}) => {
+  const daysOverdue = getDaysOverdue({ paymentDueAt, now })
+  const dueDateLabel = formatCustomerPaymentDueDate(paymentDueAt)
+
+  switch (paymentStatus) {
+    case 'proof_submitted':
+      return {
+        title: 'Proof submitted',
+        message: appendDueDateCopy(
+          'Your proof of payment is on file. Staff still need to verify it before the request moves forward.',
+          paymentDueAt,
+        ),
+        tone: 'default',
+      }
+    case 'verifying':
+      return {
+        title: 'Payment under verification',
+        message: appendDueDateCopy(
+          'Staff are reviewing your payment proof now. Keep the receipt available in case they request a clearer copy.',
+          paymentDueAt,
+        ),
+        tone: 'default',
+      }
+    case 'paid':
+      return {
+        title: 'Payment received',
+        message: 'Payment is already tagged as paid. You can still refresh the request if you are waiting for the next status update.',
+        tone: 'success',
+      }
+    case 'overdue':
+      return {
+        title: 'Payment overdue',
+        message:
+          daysOverdue > 0
+            ? `This request is ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} overdue for payment. Upload proof after payment or contact staff for help.`
+            : 'This request is overdue for payment. Upload proof after payment or contact staff for help.',
+        tone: 'danger',
+      }
+    default:
+      return {
+        title: 'Payment follow-up',
+        message: dueDateLabel
+          ? `Payment is being tracked for this request. Due date: ${dueDateLabel}.`
+          : 'Payment instructions will appear here when staff tag the request for follow-up.',
+        tone: status === 'payment_pending' ? 'default' : 'success',
+      }
   }
 }
 
