@@ -8,7 +8,9 @@ import {
   getRememberedInquiryForVehicle,
   getCustomerInsuranceTimeline,
   getInsuranceHomeCards,
+  hydrateRememberedInquiryMappings,
   rememberInquiryForVehicle,
+  serializeRememberedInquiryMappings,
   shouldShowCustomerInsuranceFollowUp,
 } from './insuranceModuleView.mjs'
 import {
@@ -178,6 +180,26 @@ test('terminal inquiries suppress payment and renewal follow-up even with stale 
     }),
     false,
   )
+})
+
+test('remembered inquiry mappings can round-trip through persisted storage data', () => {
+  clearRememberedInquiryForVehicle('vehicle-2')
+
+  rememberInquiryForVehicle({
+    vehicleId: 'vehicle-2',
+    inquiryId: 'inq-2',
+  })
+
+  const serialized = serializeRememberedInquiryMappings()
+
+  clearRememberedInquiryForVehicle('vehicle-2')
+  assert.equal(getRememberedInquiryForVehicle('vehicle-2'), null)
+
+  hydrateRememberedInquiryMappings(serialized)
+
+  assert.equal(getRememberedInquiryForVehicle('vehicle-2'), 'inq-2')
+
+  clearRememberedInquiryForVehicle('vehicle-2')
 })
 
 test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for helper behavior', () => {

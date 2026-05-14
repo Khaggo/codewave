@@ -12,6 +12,9 @@ const OPTIONAL_DOCUMENT_TYPES = [
   { type: 'other', label: 'Other document' },
 ]
 
+export const REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY =
+  'codewave:insurance:remembered-inquiries'
+
 const hasUploadedType = (uploadedTypes, type) => uploadedTypes.includes(type)
 const rememberedInquiryIdsByVehicle = new Map()
 
@@ -98,6 +101,31 @@ export const clearRememberedInquiryForVehicle = (vehicleId) => {
   }
 
   rememberedInquiryIdsByVehicle.delete(normalizedVehicleId)
+}
+
+export const serializeRememberedInquiryMappings = () =>
+  JSON.stringify(Object.fromEntries(rememberedInquiryIdsByVehicle))
+
+export const hydrateRememberedInquiryMappings = (serializedValue) => {
+  rememberedInquiryIdsByVehicle.clear()
+
+  if (!serializedValue) {
+    return
+  }
+
+  const parsedValue =
+    typeof serializedValue === 'string' ? JSON.parse(serializedValue) : serializedValue
+
+  if (!parsedValue || typeof parsedValue !== 'object') {
+    return
+  }
+
+  for (const [vehicleId, inquiryId] of Object.entries(parsedValue)) {
+    rememberInquiryForVehicle({
+      vehicleId,
+      inquiryId,
+    })
+  }
 }
 
 export const getInsuranceHomeCards = ({ hasActiveRequest } = {}) => [

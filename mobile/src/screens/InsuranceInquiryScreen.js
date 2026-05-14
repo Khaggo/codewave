@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -28,14 +29,17 @@ import {
   uploadInsuranceInquiryDocumentFile,
 } from '../lib/insuranceClient';
 import {
+  REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
   buildRequirementsChecklist,
   clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
   getRememberedInquiryForVehicle,
   getCustomerInsuranceTimeline,
   getInsuranceHomeCards,
+  hydrateRememberedInquiryMappings,
   isTerminalCustomerInquiryStatus,
   rememberInquiryForVehicle,
+  serializeRememberedInquiryMappings,
   shouldShowCustomerInsuranceFollowUp,
 } from './insuranceModuleView.mjs';
 import { colors, radius } from '../theme';
@@ -539,6 +543,28 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   }, [accountOwnedVehicles]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    loadPersistedRememberedInquiryMappings().then(() => {
+      if (!isMounted || routeInquiryId) {
+        return;
+      }
+
+      const resumedInquiryId = getRememberedInquiryForVehicle(
+        routeVehicleId ?? selectedVehicleId ?? fallbackVehicleId,
+      );
+
+      if (resumedInquiryId) {
+        setLatestInquiryId((currentInquiryId) => currentInquiryId ?? resumedInquiryId);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fallbackVehicleId, routeInquiryId, routeVehicleId, selectedVehicleId]);
+
+  useEffect(() => {
     if (!routeVehicleId) {
       return;
     }
@@ -658,7 +684,29 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setDocumentDraft(buildInitialDocumentUploadDraft());
   };
 
-  const syncRememberedInquiry = (vehicleId, inquiry) => {
+  const loadPersistedRememberedInquiryMappings = async () => {
+    try {
+      const serializedMappings = await AsyncStorage.getItem(
+        REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
+      );
+      hydrateRememberedInquiryMappings(serializedMappings);
+    } catch {
+      // Ignore resume-cache failures and keep the screen functional.
+    }
+  };
+
+  const persistRememberedInquiryMappings = async () => {
+    try {
+      await AsyncStorage.setItem(
+        REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
+        serializeRememberedInquiryMappings(),
+      );
+    } catch {
+      // Ignore persistence failures so resume storage never blocks the customer flow.
+    }
+  };
+
+  const syncRememberedInquiry = async (vehicleId, inquiry) => {
     if (!vehicleId) {
       return;
     }
@@ -668,10 +716,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         vehicleId,
         inquiryId: inquiry.id,
       });
+      await persistRememberedInquiryMappings();
       return;
     }
 
     clearRememberedInquiryForVehicle(vehicleId);
+    await persistRememberedInquiryMappings();
   };
 
   const refreshTracking = async ({ inquiryIdOverride } = {}) => {
@@ -717,7 +767,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         accessToken,
       });
 
-      syncRememberedInquiry(selectedVehicleId, nextInquiry ?? null);
+      await syncRememberedInquiry(selectedVehicleId, nextInquiry ?? null);
       setLatestInquiry(nextInquiry ?? null);
       setClaimStatusUpdates(nextRecords);
       setLatestInquiryId(
@@ -951,7 +1001,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
       setLatestInquiry(createdInquiry);
       setLatestInquiryId(createdInquiry?.id ?? null);
-      syncRememberedInquiry(selectedVehicle.id, createdInquiry);
+      await syncRememberedInquiry(selectedVehicle.id, createdInquiry);
       setIntakeState('submitted_inquiry');
       setIntakeMessage(
         `Inquiry submitted successfully with backend status ${createdInquiry?.status ?? 'submitted'}.`,
@@ -1025,7 +1075,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
       setLatestInquiry(updatedInquiry);
       setLatestInquiryId(updatedInquiry?.id ?? null);
-      syncRememberedInquiry(selectedVehicleId, updatedInquiry);
+      await syncRememberedInquiry(selectedVehicleId, updatedInquiry);
       setTrackingState(
         getCustomerInsuranceTrackingState({
           latestInquiry: updatedInquiry,

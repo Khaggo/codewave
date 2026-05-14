@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -78,7 +79,11 @@ import DatePickerField from '../components/DatePickerField';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import FormField from '../components/FormField';
 import PasswordChecklist from '../components/PasswordChecklist';
-import { getRememberedInquiryForVehicle } from './insuranceModuleView.mjs';
+import {
+  REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
+  getRememberedInquiryForVehicle,
+  hydrateRememberedInquiryMappings,
+} from './insuranceModuleView.mjs';
 import { colors, radius } from '../theme';
 import {
   formatDate,
@@ -3893,6 +3898,18 @@ export default function Dashboard({
   };
 
   const navigateToInsuranceInquiry = (vehicleId = null) => {
+    const loadRememberedInquiryMappings = async () => {
+      try {
+        const serializedMappings = await AsyncStorage.getItem(
+          REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
+        );
+        hydrateRememberedInquiryMappings(serializedMappings);
+      } catch {
+        // Ignore resume cache failures and fall back to the normal insurance home.
+      }
+    };
+
+    return loadRememberedInquiryMappings().then(() => {
     const selectedVehicleId =
       normalizeNavigationId(vehicleId) ??
       normalizeNavigationId(selectedGarageVehicleId) ??
@@ -3902,6 +3919,7 @@ export default function Dashboard({
     navigation.navigate('InsuranceInquiryScreen', {
       vehicleId: selectedVehicleId,
       inquiryId: rememberedInquiryId,
+    });
     });
   };
 
