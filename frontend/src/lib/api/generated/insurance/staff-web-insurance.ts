@@ -289,6 +289,7 @@ export const insuranceStatusUpdateDraftTemplate: StaffInsuranceStatusUpdateDraft
 };
 
 export const staffInsuranceContractSources = {
+  createRenewalFollowUp: insuranceRoutes.createRenewalFollowUp,
   queue: staffInsuranceQueueRoute,
   detail: insuranceRoutes.getInquiryById,
   update: insuranceRoutes.updateInquiryStatus,

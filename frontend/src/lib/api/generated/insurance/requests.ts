@@ -48,10 +48,12 @@ export type InsurancePaymentStatus =
 export type InsuranceRenewalStatus =
   | 'not_applicable'
   | 'upcoming'
+  | 'quote_preparing'
   | 'quoted'
   | 'awaiting_customer'
   | 'renewed'
-  | 'expired';
+  | 'expired'
+  | 'cancelled';
 
 export interface ListInsuranceInquiriesRequest {
   status?: InsuranceInquiryStatus;
@@ -68,6 +70,20 @@ export interface CreateInsuranceInquiryRequest {
   description: string;
   providerName?: string;
   policyNumber?: string;
+  notes?: string;
+}
+
+export interface CreateInsuranceRenewalFollowUpRequest {
+  userId: string;
+  vehicleId: string;
+  inquiryType: InsuranceInquiryType;
+  subject: string;
+  description: string;
+  renewalDueAt: string;
+  policyExpiryAt?: string;
+  providerName?: string;
+  policyNumber?: string;
+  assignedStaffId?: string;
   notes?: string;
 }
 
@@ -104,6 +120,12 @@ export const insuranceRoutes: Record<string, RouteContract> = {
   createInquiry: {
     method: 'POST',
     path: '/api/insurance/inquiries',
+    status: 'live',
+    source: 'swagger',
+  },
+  createRenewalFollowUp: {
+    method: 'POST',
+    path: '/api/insurance/renewals/follow-ups',
     status: 'live',
     source: 'swagger',
   },

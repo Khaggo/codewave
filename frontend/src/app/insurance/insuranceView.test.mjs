@@ -9,10 +9,13 @@ import {
   getInsuranceDetailTabs,
   getInsuranceSummaryCards,
 } from './insuranceView.mjs'
-import {
+import * as insuranceStaffClient from '../../lib/insuranceStaffClient.js'
+
+const {
+  createInsuranceRenewalFollowUp,
   updateInsuranceInquiryStatus,
   updateInsuranceInquiryWorkflow,
-} from '../../lib/insuranceStaffClient.js'
+} = insuranceStaffClient
 
 const buildInquiryFixture = (overrides = {}) => ({
   id: 'inq-1',
@@ -357,4 +360,91 @@ test('updateInsuranceInquiryWorkflow posts trimmed workflow metadata to the work
     assignedStaffId: 'adviser-2',
     reviewNotes: 'Waiting for accounting confirmation.',
   })
+})
+
+test('createInsuranceRenewalFollowUp posts a live renewal follow-up payload and returns a normalized inquiry', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({
+      url,
+      options: {
+        ...options,
+        body: options.body,
+      },
+    })
+
+    return new Response(
+      JSON.stringify({
+        id: 'inq-renewal-1',
+        userId: 'user-1',
+        vehicleId: 'vehicle-1',
+        inquiryType: 'comprehensive',
+        purpose: 'renewal',
+        subject: 'Renewal due next month',
+        description: 'Customer should receive a renewal quote before the current policy expires.',
+        status: 'for_renewal',
+        documentStatus: 'complete',
+        paymentStatus: 'not_required',
+        renewalStatus: 'upcoming',
+        providerName: 'Provider A',
+        policyNumber: 'POL-2026-00045',
+        notes: 'Customer prefers a morning follow-up call.',
+        assignedStaffId: '550e8400-e29b-41d4-a716-446655440000',
+        policyExpiryAt: '2026-06-20T00:00:00.000Z',
+        renewalDueAt: '2026-06-15T00:00:00.000Z',
+        createdByUserId: 'staff-1',
+        createdAt: '2026-05-14T00:00:00.000Z',
+        updatedAt: '2026-05-14T00:00:00.000Z',
+        documents: [],
+        activities: [],
+      }),
+      {
+        status: 201,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }
+
+  let result
+
+  try {
+    result = await createInsuranceRenewalFollowUp({
+      userId: ' user-1 ',
+      vehicleId: 'vehicle-1',
+      inquiryType: 'comprehensive',
+      subject: ' Renewal due next month ',
+      description: ' Customer should receive a renewal quote before the current policy expires. ',
+      renewalDueAt: ' 2026-06-15T00:00:00.000Z ',
+      policyExpiryAt: '2026-06-20T00:00:00.000Z',
+      providerName: ' Provider A ',
+      policyNumber: '   ',
+      assignedStaffId: ' ',
+      notes: ' Customer prefers a morning follow-up call. ',
+      accessToken: 'token-1',
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'http://127.0.0.1:3000/api/insurance/renewals/follow-ups')
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    userId: 'user-1',
+    vehicleId: 'vehicle-1',
+    inquiryType: 'comprehensive',
+    subject: 'Renewal due next month',
+    description: 'Customer should receive a renewal quote before the current policy expires.',
+    renewalDueAt: '2026-06-15T00:00:00.000Z',
+    policyExpiryAt: '2026-06-20T00:00:00.000Z',
+    providerName: 'Provider A',
+    notes: 'Customer prefers a morning follow-up call.',
+  })
+  assert.equal(result?.id, 'inq-renewal-1')
+  assert.equal(result?.purpose, 'renewal')
+  assert.equal(result?.renewalStatus, 'upcoming')
+  assert.equal(result?.subject, 'Renewal due next month')
 })

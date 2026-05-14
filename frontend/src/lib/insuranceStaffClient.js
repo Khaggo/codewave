@@ -32,6 +32,8 @@ const trimOrNull = (value) => {
   return normalizedValue ? normalizedValue : null;
 };
 
+const trimRequiredRequestValue = (value) => String(value ?? '').trim();
+
 const normalizeOptionalWorkflowValue = (value) => trimOrNull(value) ?? undefined;
 
 const formatDocumentTypeLabel = (value) =>
@@ -236,6 +238,47 @@ export const updateInsuranceInquiryStatus = async ({
       body: {
         status,
         reviewNotes: trimOrNull(reviewNotes) ?? undefined,
+      },
+    }),
+  );
+};
+
+export const createInsuranceRenewalFollowUp = async ({
+  userId,
+  vehicleId,
+  inquiryType,
+  subject,
+  description,
+  renewalDueAt,
+  policyExpiryAt,
+  providerName,
+  policyNumber,
+  assignedStaffId,
+  notes,
+  accessToken,
+}) => {
+  const normalizedPolicyExpiryAt = normalizeOptionalWorkflowValue(policyExpiryAt);
+  const normalizedProviderName = normalizeOptionalWorkflowValue(providerName);
+  const normalizedPolicyNumber = normalizeOptionalWorkflowValue(policyNumber);
+  const normalizedAssignedStaffId = normalizeOptionalWorkflowValue(assignedStaffId);
+  const normalizedNotes = normalizeOptionalWorkflowValue(notes);
+
+  return normalizeInsuranceInquiryForStaff(
+    await request('/api/insurance/renewals/follow-ups', {
+      method: 'POST',
+      headers: buildAuthorizedHeaders(accessToken),
+      body: {
+        userId: trimRequiredRequestValue(userId),
+        vehicleId: trimRequiredRequestValue(vehicleId),
+        inquiryType,
+        subject: trimRequiredRequestValue(subject),
+        description: trimRequiredRequestValue(description),
+        renewalDueAt: trimRequiredRequestValue(renewalDueAt),
+        ...(normalizedPolicyExpiryAt !== undefined ? { policyExpiryAt: normalizedPolicyExpiryAt } : {}),
+        ...(normalizedProviderName !== undefined ? { providerName: normalizedProviderName } : {}),
+        ...(normalizedPolicyNumber !== undefined ? { policyNumber: normalizedPolicyNumber } : {}),
+        ...(normalizedAssignedStaffId !== undefined ? { assignedStaffId: normalizedAssignedStaffId } : {}),
+        ...(normalizedNotes !== undefined ? { notes: normalizedNotes } : {}),
       },
     }),
   );
