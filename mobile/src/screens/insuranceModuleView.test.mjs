@@ -42,6 +42,20 @@ test('customer timeline shows submitted, review, and document follow-up states',
   )
 })
 
+test('customer timeline keeps under_review on an active review step', () => {
+  assert.deepEqual(
+    getCustomerInsuranceTimeline({
+      status: 'under_review',
+      paymentStatus: 'not_required',
+      renewalStatus: 'not_applicable',
+    }),
+    [
+      { key: 'submitted', label: 'Submitted', state: 'done' },
+      { key: 'review', label: 'In Review', state: 'current' },
+    ],
+  )
+})
+
 test('customer timeline maps phase-1 workflow statuses to explicit steps', () => {
   assert.deepEqual(
     getCustomerInsuranceTimeline({

@@ -73,7 +73,7 @@ export const getCustomerInsuranceTimeline = ({ status = 'submitted' } = {}) => {
   timeline.push({
     key: 'review',
     label: 'In Review',
-    state: 'done',
+    state: status === 'under_review' ? 'current' : 'done',
   })
 
   const finalStepByStatus = {
