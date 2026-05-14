@@ -90,11 +90,21 @@ describe('InsuranceController integration', () => {
         .patch(`/api/insurance/inquiries/${createInquiryResponse.body.id}/status`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'approved_for_record',
-          reviewNotes: 'Internal tracking record approved.',
+          status: 'approved',
+          reviewNotes: 'Review completed and approved for the next workflow step.',
         });
       expect(approvedResponse.status).toBe(200);
-      expect(approvedResponse.body.status).toBe('approved_for_record');
+      expect(approvedResponse.body.status).toBe('approved');
+
+      const closedResponse = await request(app.getHttpServer())
+        .patch(`/api/insurance/inquiries/${createInquiryResponse.body.id}/status`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'closed',
+          reviewNotes: 'Case closed after review completion.',
+        });
+      expect(closedResponse.status).toBe(200);
+      expect(closedResponse.body.status).toBe('closed');
 
       const customerReadResponse = await request(app.getHttpServer())
         .get(`/api/insurance/inquiries/${createInquiryResponse.body.id}`)
@@ -103,7 +113,7 @@ describe('InsuranceController integration', () => {
       expect(customerReadResponse.body).toEqual(
         expect.objectContaining({
           id: createInquiryResponse.body.id,
-          status: 'approved_for_record',
+          status: 'closed',
         }),
       );
 
@@ -115,7 +125,7 @@ describe('InsuranceController integration', () => {
         expect.objectContaining({
           inquiryId: createInquiryResponse.body.id,
           vehicleId: vehicleResponse.body.id,
-          status: 'approved_for_record',
+          status: 'closed',
         }),
       );
     } finally {

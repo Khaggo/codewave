@@ -14,21 +14,61 @@ import { vehicles } from '@main-modules/vehicles/schemas/vehicles.schema';
 
 export const insuranceInquiryTypeEnum = pgEnum('insurance_inquiry_type', ['ctpl', 'comprehensive']);
 
+export const insuranceCasePurposeEnum = pgEnum('insurance_case_purpose', [
+  'new_application',
+  'renewal',
+  'claim',
+  'quotation',
+]);
+
 export const insuranceInquiryStatusEnum = pgEnum('insurance_inquiry_status', [
   'submitted',
-  'under_review',
   'needs_documents',
-  'approved_for_record',
+  'under_review',
+  'for_approval',
+  'approved',
+  'payment_pending',
+  'active',
+  'for_renewal',
   'rejected',
+  'cancelled',
   'closed',
+]);
+
+export const insuranceDocumentReviewStatusEnum = pgEnum('insurance_document_review_status', [
+  'complete',
+  'incomplete',
+  'under_verification',
+  'rejected',
 ]);
 
 export const insuranceDocumentTypeEnum = pgEnum('insurance_document_type', [
   'or_cr',
   'policy',
+  'valid_id',
+  'police_report',
   'photo',
   'estimate',
+  'proof_of_payment',
   'other',
+]);
+
+export const insurancePaymentStatusEnum = pgEnum('insurance_payment_status', [
+  'not_required',
+  'unpaid',
+  'proof_submitted',
+  'verifying',
+  'paid',
+  'overdue',
+]);
+
+export const insuranceRenewalStatusEnum = pgEnum('insurance_renewal_status', [
+  'not_applicable',
+  'upcoming',
+  'quoted',
+  'awaiting_customer',
+  'renewed',
+  'expired',
 ]);
 
 export const insuranceInquiries = pgTable('insurance_inquiries', {
@@ -40,12 +80,20 @@ export const insuranceInquiries = pgTable('insurance_inquiries', {
     .notNull()
     .references(() => vehicles.id, { onDelete: 'cascade' }),
   inquiryType: insuranceInquiryTypeEnum('inquiry_type').notNull(),
+  purpose: insuranceCasePurposeEnum('purpose').notNull().default('quotation'),
   subject: varchar('subject', { length: 180 }).notNull(),
   description: text('description').notNull(),
   providerName: varchar('provider_name', { length: 180 }),
   policyNumber: varchar('policy_number', { length: 120 }),
   notes: text('notes'),
   status: insuranceInquiryStatusEnum('status').notNull().default('submitted'),
+  documentStatus: insuranceDocumentReviewStatusEnum('document_status').notNull().default('incomplete'),
+  paymentStatus: insurancePaymentStatusEnum('payment_status').notNull().default('not_required'),
+  renewalStatus: insuranceRenewalStatusEnum('renewal_status').notNull().default('not_applicable'),
+  assignedStaffId: uuid('assigned_staff_id').references(() => users.id, { onDelete: 'set null' }),
+  paymentDueAt: timestamp('payment_due_at', { withTimezone: true }),
+  policyExpiryAt: timestamp('policy_expiry_at', { withTimezone: true }),
+  renewalDueAt: timestamp('renewal_due_at', { withTimezone: true }),
   reviewNotes: text('review_notes'),
   createdByUserId: uuid('created_by_user_id')
     .notNull()
@@ -113,6 +161,11 @@ export const insuranceInquiriesRelations = relations(insuranceInquiries, ({ one,
     fields: [insuranceInquiries.reviewedByUserId],
     references: [users.id],
     relationName: 'insuranceInquiryReviewedBy',
+  }),
+  assignedStaffUser: one(users, {
+    fields: [insuranceInquiries.assignedStaffId],
+    references: [users.id],
+    relationName: 'insuranceInquiryAssignedStaff',
   }),
   documents: many(insuranceDocuments),
 }));

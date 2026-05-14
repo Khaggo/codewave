@@ -1,6 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-import { insuranceInquiryStatusEnum, insuranceInquiryTypeEnum } from '../schemas/insurance.schema';
+import {
+  insuranceCasePurposeEnum,
+  insuranceDocumentReviewStatusEnum,
+  insuranceInquiryStatusEnum,
+  insuranceInquiryTypeEnum,
+  insurancePaymentStatusEnum,
+  insuranceRenewalStatusEnum,
+} from '../schemas/insurance.schema';
 
 import { InsuranceDocumentResponseDto } from './insurance-document-response.dto';
 
@@ -25,6 +32,12 @@ export class InsuranceInquiryResponseDto {
     example: 'comprehensive',
   })
   inquiryType!: (typeof insuranceInquiryTypeEnum.enumValues)[number];
+
+  @ApiProperty({
+    enum: insuranceCasePurposeEnum.enumValues,
+    example: 'quotation',
+  })
+  purpose!: (typeof insuranceCasePurposeEnum.enumValues)[number];
 
   @ApiProperty({
     example: 'Accident repair inquiry',
@@ -57,10 +70,33 @@ export class InsuranceInquiryResponseDto {
   })
   status!: (typeof insuranceInquiryStatusEnum.enumValues)[number];
 
+  @ApiProperty({
+    enum: insuranceDocumentReviewStatusEnum.enumValues,
+    example: 'incomplete',
+  })
+  documentStatus!: (typeof insuranceDocumentReviewStatusEnum.enumValues)[number];
+
+  @ApiProperty({
+    enum: insurancePaymentStatusEnum.enumValues,
+    example: 'not_required',
+  })
+  paymentStatus!: (typeof insurancePaymentStatusEnum.enumValues)[number];
+
+  @ApiProperty({
+    enum: insuranceRenewalStatusEnum.enumValues,
+    example: 'not_applicable',
+  })
+  renewalStatus!: (typeof insuranceRenewalStatusEnum.enumValues)[number];
+
   @ApiPropertyOptional({
     example: 'Awaiting uploaded policy copy before approval.',
   })
   reviewNotes?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'd3bf3f0a-a95c-4b94-a3bd-f9f83120d099',
+  })
+  assignedStaffId?: string | null;
 
   @ApiProperty({
     example: 'd3bf3f0a-a95c-4b94-a3bd-f9f83120d017',
@@ -77,6 +113,24 @@ export class InsuranceInquiryResponseDto {
     format: 'date-time',
   })
   reviewedAt?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-05-30T00:00:00.000Z',
+    format: 'date-time',
+  })
+  paymentDueAt?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-08-15T00:00:00.000Z',
+    format: 'date-time',
+  })
+  policyExpiryAt?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-07-15T00:00:00.000Z',
+    format: 'date-time',
+  })
+  renewalDueAt?: string | null;
 
   @ApiProperty({
     type: () => InsuranceDocumentResponseDto,

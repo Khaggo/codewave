@@ -14,6 +14,7 @@ import { createNotificationTrigger } from '@shared/events/contracts/notification
 
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
+import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inquiry-workflow.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
 import { InsuranceRepository } from '../repositories/insurance.repository';
 import { insuranceInquiryStatusEnum } from '../schemas/insurance.schema';
@@ -24,15 +25,34 @@ type InsuranceActor = {
 };
 
 type InsuranceInquiryStatus = (typeof insuranceInquiryStatusEnum.enumValues)[number];
+type InsuranceNotificationStatus =
+  | 'submitted'
+  | 'needs_documents'
+  | 'under_review'
+  | 'rejected'
+  | 'closed';
 
 const allowedStatusTransitions: Record<InsuranceInquiryStatus, InsuranceInquiryStatus[]> = {
-  submitted: ['under_review', 'needs_documents', 'rejected'],
-  under_review: ['needs_documents', 'approved_for_record', 'rejected', 'closed'],
-  needs_documents: ['under_review', 'approved_for_record', 'rejected', 'closed'],
-  approved_for_record: ['closed'],
-  rejected: ['closed'],
+  submitted: ['needs_documents', 'under_review', 'for_approval', 'approved', 'rejected', 'cancelled'],
+  needs_documents: ['under_review', 'for_approval', 'approved', 'rejected', 'cancelled', 'closed'],
+  under_review: ['needs_documents', 'for_approval', 'approved', 'rejected', 'cancelled', 'closed'],
+  for_approval: ['approved', 'needs_documents', 'rejected', 'cancelled', 'closed'],
+  approved: ['payment_pending', 'active', 'for_renewal', 'closed', 'cancelled'],
+  payment_pending: ['active', 'for_renewal', 'closed', 'cancelled'],
+  active: ['for_renewal', 'closed', 'cancelled'],
+  for_renewal: ['active', 'closed', 'cancelled'],
+  rejected: ['closed', 'cancelled'],
+  cancelled: [],
   closed: [],
 };
+
+const notificationEligibleStatuses: InsuranceNotificationStatus[] = [
+  'submitted',
+  'needs_documents',
+  'under_review',
+  'rejected',
+  'closed',
+];
 
 @Injectable()
 export class InsuranceService {
@@ -47,10 +67,18 @@ export class InsuranceService {
     await this.assertActorCanCreate(payload.userId, actor);
     await this.assertCustomerAndVehicle(payload.userId, payload.vehicleId);
 
-    return this.insuranceRepository.create({
+    const inquiry = await this.insuranceRepository.create({
       ...payload,
       createdByUserId: actor.userId,
     });
+
+    return {
+      ...inquiry,
+      purpose: inquiry.purpose ?? payload.purpose ?? 'quotation',
+      documentStatus: inquiry.documentStatus ?? 'incomplete',
+      paymentStatus: inquiry.paymentStatus ?? 'not_required',
+      renewalStatus: inquiry.renewalStatus ?? 'not_applicable',
+    };
   }
 
   async findById(id: string, actor: InsuranceActor) {
@@ -73,15 +101,7 @@ export class InsuranceService {
     await this.assertStaffReviewer(actor.userId);
 
     const inquiry = await this.insuranceRepository.findById(id);
-    if (inquiry.status === payload.status) {
-      throw new BadRequestException('Insurance inquiry is already in the requested status');
-    }
-
-    if (!allowedStatusTransitions[inquiry.status].includes(payload.status)) {
-      throw new ConflictException(
-        `Cannot transition insurance inquiry from ${inquiry.status} to ${payload.status}`,
-      );
-    }
+    this.assertAllowedWorkflowTransition(inquiry.status, payload.status);
 
     const updatedInquiry = await this.insuranceRepository.updateStatus(id, {
       ...payload,
@@ -89,7 +109,7 @@ export class InsuranceService {
       reviewedAt: new Date(),
     });
 
-    if (payload.status === 'approved_for_record' || payload.status === 'closed') {
+    if (payload.status === 'closed') {
       await this.insuranceRepository.upsertRecordFromInquiry({
         inquiryId: updatedInquiry.id,
         userId: updatedInquiry.userId,
@@ -101,16 +121,39 @@ export class InsuranceService {
       });
     }
 
-    await this.notificationsService?.applyTrigger(
-      createNotificationTrigger('insurance.inquiry_status_changed', 'main-service.insurance', {
-        inquiryId: updatedInquiry.id,
-        userId: updatedInquiry.userId,
-        status: updatedInquiry.status,
-        subject: updatedInquiry.subject,
-      }),
-    );
+    if (notificationEligibleStatuses.includes(updatedInquiry.status as InsuranceNotificationStatus)) {
+      await this.notificationsService?.applyTrigger(
+        createNotificationTrigger('insurance.inquiry_status_changed', 'main-service.insurance', {
+          inquiryId: updatedInquiry.id,
+          userId: updatedInquiry.userId,
+          status: updatedInquiry.status as InsuranceNotificationStatus,
+          subject: updatedInquiry.subject,
+        }),
+      );
+    }
 
     return updatedInquiry;
+  }
+
+  async updateWorkflow(id: string, payload: UpdateInsuranceInquiryWorkflowDto, actor: InsuranceActor) {
+    await this.assertStaffReviewer(actor.userId);
+
+    const inquiry = await this.insuranceRepository.findById(id);
+    this.assertAllowedWorkflowTransition(inquiry.status, payload.status);
+
+    return this.insuranceRepository.updateWorkflow(id, {
+      status: payload.status,
+      ...(payload.documentStatus !== undefined ? { documentStatus: payload.documentStatus } : {}),
+      ...(payload.paymentStatus !== undefined ? { paymentStatus: payload.paymentStatus } : {}),
+      ...(payload.renewalStatus !== undefined ? { renewalStatus: payload.renewalStatus } : {}),
+      ...(payload.paymentDueAt !== undefined ? { paymentDueAt: new Date(payload.paymentDueAt) } : {}),
+      ...(payload.policyExpiryAt !== undefined ? { policyExpiryAt: new Date(payload.policyExpiryAt) } : {}),
+      ...(payload.renewalDueAt !== undefined ? { renewalDueAt: new Date(payload.renewalDueAt) } : {}),
+      ...(payload.assignedStaffId !== undefined ? { assignedStaffId: payload.assignedStaffId } : {}),
+      ...(payload.reviewNotes !== undefined ? { reviewNotes: payload.reviewNotes } : {}),
+      reviewedByUserId: actor.userId,
+      reviewedAt: new Date(),
+    });
   }
 
   async addDocument(id: string, payload: AddInsuranceDocumentDto, actor: InsuranceActor) {
@@ -198,5 +241,20 @@ export class InsuranceService {
     }
 
     return user;
+  }
+
+  private assertAllowedWorkflowTransition(
+    currentStatus: InsuranceInquiryStatus,
+    nextStatus: InsuranceInquiryStatus,
+  ) {
+    if (currentStatus === nextStatus) {
+      throw new BadRequestException('Insurance inquiry is already in the requested status');
+    }
+
+    if (!allowedStatusTransitions[currentStatus].includes(nextStatus)) {
+      throw new ConflictException(
+        `Cannot transition insurance inquiry from ${currentStatus} to ${nextStatus}`,
+      );
+    }
   }
 }

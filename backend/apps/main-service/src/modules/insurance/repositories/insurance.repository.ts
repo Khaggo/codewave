@@ -7,6 +7,7 @@ import { AppDatabase } from '@shared/db/database.types';
 
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
+import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inquiry-workflow.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
 import {
   insuranceDocuments,
@@ -21,6 +22,17 @@ type CreateInsuranceInquiryPersistenceInput = CreateInsuranceInquiryDto & {
 };
 
 type UpdateInsuranceInquiryStatusPersistenceInput = UpdateInsuranceInquiryStatusDto & {
+  reviewedByUserId: string;
+  reviewedAt: Date;
+};
+
+type UpdateInsuranceInquiryWorkflowPersistenceInput = Omit<
+  UpdateInsuranceInquiryWorkflowDto,
+  'paymentDueAt' | 'policyExpiryAt' | 'renewalDueAt'
+> & {
+  paymentDueAt?: Date;
+  policyExpiryAt?: Date;
+  renewalDueAt?: Date;
   reviewedByUserId: string;
   reviewedAt: Date;
 };
@@ -42,20 +54,23 @@ export class InsuranceRepository extends BaseRepository {
   }
 
   async create(payload: CreateInsuranceInquiryPersistenceInput) {
+    const values = {
+      userId: payload.userId,
+      vehicleId: payload.vehicleId,
+      inquiryType: payload.inquiryType,
+      ...(payload.purpose ? { purpose: payload.purpose } : {}),
+      subject: payload.subject,
+      description: payload.description,
+      providerName: payload.providerName ?? null,
+      policyNumber: payload.policyNumber ?? null,
+      notes: payload.notes ?? null,
+      status: 'submitted' as const,
+      createdByUserId: payload.createdByUserId,
+    };
+
     const [createdInquiry] = await this.db
       .insert(insuranceInquiries)
-      .values({
-        userId: payload.userId,
-        vehicleId: payload.vehicleId,
-        inquiryType: payload.inquiryType,
-        subject: payload.subject,
-        description: payload.description,
-        providerName: payload.providerName ?? null,
-        policyNumber: payload.policyNumber ?? null,
-        notes: payload.notes ?? null,
-        status: 'submitted',
-        createdByUserId: payload.createdByUserId,
-      })
+      .values(values)
       .returning();
 
     return this.findById(createdInquiry.id);
@@ -96,6 +111,32 @@ export class InsuranceRepository extends BaseRepository {
         reviewedAt: payload.reviewedAt,
         updatedAt: new Date(),
       })
+      .where(eq(insuranceInquiries.id, id))
+      .returning();
+
+    this.assertFound(updatedInquiry, 'Insurance inquiry not found');
+    return this.findById(id);
+  }
+
+  async updateWorkflow(id: string, payload: UpdateInsuranceInquiryWorkflowPersistenceInput) {
+    const workflowPatch = {
+      status: payload.status,
+      ...(payload.documentStatus !== undefined ? { documentStatus: payload.documentStatus } : {}),
+      ...(payload.paymentStatus !== undefined ? { paymentStatus: payload.paymentStatus } : {}),
+      ...(payload.renewalStatus !== undefined ? { renewalStatus: payload.renewalStatus } : {}),
+      ...(payload.paymentDueAt !== undefined ? { paymentDueAt: payload.paymentDueAt } : {}),
+      ...(payload.policyExpiryAt !== undefined ? { policyExpiryAt: payload.policyExpiryAt } : {}),
+      ...(payload.renewalDueAt !== undefined ? { renewalDueAt: payload.renewalDueAt } : {}),
+      ...(payload.assignedStaffId !== undefined ? { assignedStaffId: payload.assignedStaffId } : {}),
+      ...(payload.reviewNotes !== undefined ? { reviewNotes: payload.reviewNotes } : {}),
+      reviewedByUserId: payload.reviewedByUserId,
+      reviewedAt: payload.reviewedAt,
+      updatedAt: new Date(),
+    };
+
+    const [updatedInquiry] = await this.db
+      .update(insuranceInquiries)
+      .set(workflowPatch)
       .where(eq(insuranceInquiries.id, id))
       .returning();
 
