@@ -55,27 +55,53 @@ export const getCustomerInsuranceTimeline = ({ status = 'submitted' } = {}) => {
     },
   ]
 
-  if (status !== 'submitted') {
-    timeline.push({
-      key: 'review',
-      label: 'In Review',
-      state: status === 'needs_documents' ? 'done' : 'current',
-    })
+  if (status === 'submitted') {
+    return timeline
   }
 
-  if (status === 'needs_documents') {
+  if (status === 'cancelled') {
+    return [
+      ...timeline,
+      {
+        key: 'cancelled',
+        label: 'Cancelled',
+        state: 'current',
+      },
+    ]
+  }
+
+  timeline.push({
+    key: 'review',
+    label: 'In Review',
+    state: 'done',
+  })
+
+  const finalStepByStatus = {
+    needs_documents: 'documents',
+    for_approval: 'approval',
+    approved: 'approved',
+    payment_pending: 'payment',
+    active: 'approved',
+    for_renewal: 'renewal',
+    closed: 'closed',
+    rejected: 'rejected',
+  }
+
+  const finalStepKey = finalStepByStatus[status]
+
+  if (finalStepKey) {
     timeline.push({
-      key: 'documents',
-      label: 'Needs Documents',
+      key: finalStepKey,
+      label: titleCase(finalStepKey),
       state: 'current',
     })
   }
 
-  if (['approved', 'active', 'closed'].includes(status)) {
-    timeline.push({
-      key: status === 'active' ? 'approved' : status,
-      label: titleCase(status === 'active' ? 'approved' : status),
-      state: 'current',
+  if (status === 'for_renewal') {
+    timeline.splice(2, 0, {
+      key: 'payment',
+      label: 'Payment',
+      state: 'done',
     })
   }
 

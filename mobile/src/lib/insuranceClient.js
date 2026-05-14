@@ -7,9 +7,13 @@ const customerInsuranceStatusHints = {
   submitted: 'Your inquiry is recorded and waiting for staff review.',
   under_review: 'A service adviser is currently reviewing the insurance request.',
   needs_documents: 'More documents are needed before staff can continue the request.',
+  for_approval: 'The inquiry is waiting for final approval.',
+  payment_pending: 'A payment step is still in progress for this inquiry.',
+  for_renewal: 'The inquiry is now waiting on renewal follow-up.',
   approved_for_record: 'The inquiry is approved for internal record tracking.',
   rejected: 'The inquiry cannot continue in its current state.',
   closed: 'The inquiry is closed and no longer accepting changes.',
+  cancelled: 'The inquiry was cancelled before completion.',
 };
 
 const customerInsuranceDocumentTypeLabels = {
@@ -250,6 +254,9 @@ export const normalizeCustomerInsuranceInquiry = (inquiry) => {
     description: String(inquiry.description ?? '').trim(),
     status: inquiry.status ?? 'submitted',
     statusHint: buildCustomerInsuranceStatusHint(inquiry.status),
+    documentStatus: inquiry.documentStatus ?? 'incomplete',
+    paymentStatus: inquiry.paymentStatus ?? 'not_required',
+    renewalStatus: inquiry.renewalStatus ?? 'not_applicable',
     providerName: trimOrNull(inquiry.providerName),
     policyNumber: trimOrNull(inquiry.policyNumber),
     notes: trimOrNull(inquiry.notes),
@@ -397,7 +404,7 @@ export const addInsuranceInquiryDocument = async ({
 
   if (!customerInsuranceDocumentTypeLabels[normalizedDocumentType]) {
     throw new ApiError(
-      'Choose a valid document type: OR/CR, policy, photo, estimate, or other.',
+      'Choose a valid document type: OR/CR, policy, valid ID, police report, photo, estimate, proof of payment, or other.',
       400,
       {
         path: '/api/insurance/inquiries/:id/documents',

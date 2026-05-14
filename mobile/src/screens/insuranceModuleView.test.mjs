@@ -6,7 +6,11 @@ import {
   getCustomerInsuranceTimeline,
   getInsuranceHomeCards,
 } from './insuranceModuleView.mjs'
-import { uploadInsuranceInquiryDocumentFile } from '../lib/insuranceClient.js'
+import {
+  addInsuranceInquiryDocument,
+  normalizeCustomerInsuranceInquiry,
+  uploadInsuranceInquiryDocumentFile,
+} from '../lib/insuranceClient.js'
 
 test('home cards prioritize start, upload, payment, and renewal actions', () => {
   assert.deepEqual(
@@ -35,6 +39,91 @@ test('customer timeline shows submitted, review, and document follow-up states',
       renewalStatus: 'not_applicable',
     }).map((step) => step.key),
     ['submitted', 'review', 'documents'],
+  )
+})
+
+test('customer timeline maps phase-1 workflow statuses to explicit steps', () => {
+  assert.deepEqual(
+    getCustomerInsuranceTimeline({
+      status: 'for_approval',
+      paymentStatus: 'not_required',
+      renewalStatus: 'not_applicable',
+    }).map((step) => step.key),
+    ['submitted', 'review', 'approval'],
+  )
+
+  assert.deepEqual(
+    getCustomerInsuranceTimeline({
+      status: 'payment_pending',
+      paymentStatus: 'proof_submitted',
+      renewalStatus: 'not_applicable',
+    }).map((step) => step.key),
+    ['submitted', 'review', 'payment'],
+  )
+
+  assert.deepEqual(
+    getCustomerInsuranceTimeline({
+      status: 'for_renewal',
+      paymentStatus: 'paid',
+      renewalStatus: 'upcoming',
+    }).map((step) => step.key),
+    ['submitted', 'review', 'payment', 'renewal'],
+  )
+
+  assert.deepEqual(
+    getCustomerInsuranceTimeline({
+      status: 'rejected',
+      paymentStatus: 'not_required',
+      renewalStatus: 'not_applicable',
+    }).map((step) => step.key),
+    ['submitted', 'review', 'rejected'],
+  )
+
+  assert.deepEqual(
+    getCustomerInsuranceTimeline({
+      status: 'cancelled',
+      paymentStatus: 'not_required',
+      renewalStatus: 'not_applicable',
+    }).map((step) => step.key),
+    ['submitted', 'cancelled'],
+  )
+})
+
+test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for helper behavior', () => {
+  assert.deepEqual(
+    normalizeCustomerInsuranceInquiry({
+      id: 'inq-1',
+      inquiryType: 'comprehensive',
+      subject: 'Insurance follow-up',
+      description: 'Customer inquiry',
+      status: 'payment_pending',
+      documentStatus: 'complete',
+      paymentStatus: 'proof_submitted',
+      renewalStatus: 'upcoming',
+      documents: [],
+    }),
+    {
+      id: 'inq-1',
+      userId: null,
+      vehicleId: null,
+      inquiryType: 'comprehensive',
+      inquiryTypeLabel: 'Comprehensive',
+      subject: 'Insurance follow-up',
+      description: 'Customer inquiry',
+      status: 'payment_pending',
+      statusHint: 'A payment step is still in progress for this inquiry.',
+      documentStatus: 'complete',
+      paymentStatus: 'proof_submitted',
+      renewalStatus: 'upcoming',
+      providerName: null,
+      policyNumber: null,
+      notes: null,
+      documentCount: 0,
+      documents: [],
+      canAttachDocuments: true,
+      createdAt: null,
+      updatedAt: null,
+    },
   )
 })
 
@@ -124,4 +213,37 @@ test('uploadInsuranceInquiryDocumentFile posts multipart form data without forci
     ['documentType', 'proof_of_payment'],
     ['notes', 'Payment slip'],
   ])
+})
+
+test('addInsuranceInquiryDocument reports the full accepted document types', async () => {
+  const originalInsuranceClientRuntime = globalThis.__insuranceClientRuntime
+
+  globalThis.__insuranceClientRuntime = {
+    ApiError: class ApiError extends Error {
+      constructor(message, status, details) {
+        super(message)
+        this.name = 'ApiError'
+        this.status = status
+        this.details = details
+      }
+    },
+    getApiBaseUrl: () => 'http://127.0.0.1:3000',
+  }
+
+  try {
+    await assert.rejects(
+      addInsuranceInquiryDocument({
+        inquiryId: 'inq-1',
+        documentType: 'not_real',
+        fileName: 'doc.pdf',
+        fileUrl: 'upload://insurance/inq-1/doc.pdf',
+      }),
+      (error) => {
+        assert.equal(error.message, 'Choose a valid document type: OR/CR, policy, valid ID, police report, photo, estimate, proof of payment, or other.')
+        return true
+      },
+    )
+  } finally {
+    globalThis.__insuranceClientRuntime = originalInsuranceClientRuntime
+  }
 })
