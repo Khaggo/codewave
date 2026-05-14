@@ -1,4 +1,4 @@
-import { ApiError } from './authClient';
+import { ApiError } from './authClient.js';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 
@@ -31,6 +31,8 @@ const trimOrNull = (value) => {
   const normalizedValue = String(value ?? '').trim();
   return normalizedValue ? normalizedValue : null;
 };
+
+const normalizeOptionalWorkflowValue = (value) => trimOrNull(value) ?? undefined;
 
 const formatDocumentTypeLabel = (value) =>
   insuranceDocumentTypeLabels[value] ??
@@ -234,6 +236,11 @@ export const updateInsuranceInquiryStatus = async ({
     });
   }
 
+  const normalizedAssignedStaffId = normalizeOptionalWorkflowValue(assignedStaffId)
+  const normalizedPaymentDueAt = normalizeOptionalWorkflowValue(paymentDueAt)
+  const normalizedPolicyExpiryAt = normalizeOptionalWorkflowValue(policyExpiryAt)
+  const normalizedRenewalDueAt = normalizeOptionalWorkflowValue(renewalDueAt)
+
   return normalizeInsuranceInquiryForStaff(
     await request(`/api/insurance/inquiries/${inquiryId}/status`, {
       method: 'PATCH',
@@ -243,10 +250,10 @@ export const updateInsuranceInquiryStatus = async ({
         ...(documentStatus !== undefined ? { documentStatus } : {}),
         ...(paymentStatus !== undefined ? { paymentStatus } : {}),
         ...(renewalStatus !== undefined ? { renewalStatus } : {}),
-        ...(paymentDueAt !== undefined ? { paymentDueAt } : {}),
-        ...(policyExpiryAt !== undefined ? { policyExpiryAt } : {}),
-        ...(renewalDueAt !== undefined ? { renewalDueAt } : {}),
-        ...(assignedStaffId !== undefined ? { assignedStaffId } : {}),
+        ...(normalizedPaymentDueAt !== undefined ? { paymentDueAt: normalizedPaymentDueAt } : {}),
+        ...(normalizedPolicyExpiryAt !== undefined ? { policyExpiryAt: normalizedPolicyExpiryAt } : {}),
+        ...(normalizedRenewalDueAt !== undefined ? { renewalDueAt: normalizedRenewalDueAt } : {}),
+        ...(normalizedAssignedStaffId !== undefined ? { assignedStaffId: normalizedAssignedStaffId } : {}),
         reviewNotes: trimOrNull(reviewNotes) ?? undefined,
       },
     }),

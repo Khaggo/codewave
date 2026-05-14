@@ -6,6 +6,21 @@ export function formatStatusLabel(value) {
     .join(' ')
 }
 
+const TERMINAL_INQUIRY_STATUSES = ['closed', 'cancelled', 'rejected']
+const EDITABLE_WORKFLOW_FIELDS = [
+  'status',
+  'documentStatus',
+  'paymentStatus',
+  'renewalStatus',
+  'paymentDueAt',
+  'policyExpiryAt',
+  'renewalDueAt',
+  'assignedStaffId',
+  'reviewNotes',
+]
+
+const isTerminalInquiry = (inquiry) => TERMINAL_INQUIRY_STATUSES.includes(inquiry?.status)
+
 const countMatchingInquiries = (inquiries, predicate) =>
   inquiries.reduce((total, inquiry) => (predicate(inquiry) ? total + 1 : total), 0)
 
@@ -20,8 +35,9 @@ const buildLifecycleSummaryCards = (inquiries) => [
     value: countMatchingInquiries(
       inquiries,
       (inquiry) =>
-        inquiry?.status === 'payment_pending' ||
-        ['proof_submitted', 'verifying', 'overdue', 'unpaid'].includes(inquiry?.paymentStatus),
+        !isTerminalInquiry(inquiry) &&
+        (inquiry?.status === 'payment_pending' ||
+          ['proof_submitted', 'verifying', 'overdue', 'unpaid'].includes(inquiry?.paymentStatus)),
     ),
     sub: 'Cases needing payment follow-up',
   },
@@ -30,8 +46,9 @@ const buildLifecycleSummaryCards = (inquiries) => [
     value: countMatchingInquiries(
       inquiries,
       (inquiry) =>
-        inquiry?.status === 'for_renewal' ||
-        ['upcoming', 'quoted', 'awaiting_customer', 'expired'].includes(inquiry?.renewalStatus),
+        !isTerminalInquiry(inquiry) &&
+        (inquiry?.status === 'for_renewal' ||
+          ['upcoming', 'quoted', 'awaiting_customer', 'expired'].includes(inquiry?.renewalStatus)),
     ),
     sub: 'Cases due for renewal follow-up',
   },
@@ -83,8 +100,8 @@ export function getInsuranceSummaryCards(input = {}) {
     },
     {
       label: 'Editable Fields',
-      value: '2',
-      sub: 'status and review notes only',
+      value: String(EDITABLE_WORKFLOW_FIELDS.length),
+      sub: 'status, workflow tags, assignee, due dates, and review notes',
     },
   ]
 }
