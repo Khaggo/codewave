@@ -72,6 +72,12 @@ export const shouldShowCustomerInsuranceFollowUp = ({
   return false
 }
 
+export const shouldDeferCustomerInsuranceTrackingRefresh = ({
+  hasHydratedRememberedInquiryMappings = false,
+  knownInquiryId,
+} = {}) =>
+  !hasHydratedRememberedInquiryMappings && !String(knownInquiryId ?? '').trim()
+
 export const rememberInquiryForVehicle = ({ vehicleId, inquiryId } = {}) => {
   const normalizedVehicleId = String(vehicleId ?? '').trim()
   const normalizedInquiryId = String(inquiryId ?? '').trim()

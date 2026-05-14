@@ -11,6 +11,7 @@ import {
   hydrateRememberedInquiryMappings,
   rememberInquiryForVehicle,
   serializeRememberedInquiryMappings,
+  shouldDeferCustomerInsuranceTrackingRefresh,
   shouldShowCustomerInsuranceFollowUp,
 } from './insuranceModuleView.mjs'
 import {
@@ -200,6 +201,32 @@ test('remembered inquiry mappings can round-trip through persisted storage data'
   assert.equal(getRememberedInquiryForVehicle('vehicle-2'), 'inq-2')
 
   clearRememberedInquiryForVehicle('vehicle-2')
+})
+
+test('tracking refresh waits for remembered-inquiry hydration unless an inquiry id is already known', () => {
+  assert.equal(
+    shouldDeferCustomerInsuranceTrackingRefresh({
+      hasHydratedRememberedInquiryMappings: false,
+      knownInquiryId: null,
+    }),
+    true,
+  )
+
+  assert.equal(
+    shouldDeferCustomerInsuranceTrackingRefresh({
+      hasHydratedRememberedInquiryMappings: false,
+      knownInquiryId: 'inq-3',
+    }),
+    false,
+  )
+
+  assert.equal(
+    shouldDeferCustomerInsuranceTrackingRefresh({
+      hasHydratedRememberedInquiryMappings: true,
+      knownInquiryId: null,
+    }),
+    false,
+  )
 })
 
 test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for helper behavior', () => {

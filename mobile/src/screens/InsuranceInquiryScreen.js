@@ -40,6 +40,7 @@ import {
   isTerminalCustomerInquiryStatus,
   rememberInquiryForVehicle,
   serializeRememberedInquiryMappings,
+  shouldDeferCustomerInsuranceTrackingRefresh,
   shouldShowCustomerInsuranceFollowUp,
 } from './insuranceModuleView.mjs';
 import { colors, radius } from '../theme';
@@ -409,6 +410,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasHydratedRememberedInquiryMappings, setHasHydratedRememberedInquiryMappings] =
+    useState(false);
 
   const selectedVehicle =
     ownedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
@@ -545,24 +548,30 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   useEffect(() => {
     let isMounted = true;
 
+    setHasHydratedRememberedInquiryMappings(false);
+
     loadPersistedRememberedInquiryMappings().then(() => {
-      if (!isMounted || routeInquiryId) {
+      if (!isMounted) {
         return;
       }
 
-      const resumedInquiryId = getRememberedInquiryForVehicle(
-        routeVehicleId ?? selectedVehicleId ?? fallbackVehicleId,
-      );
+      if (!routeInquiryId) {
+        const resumedInquiryId = getRememberedInquiryForVehicle(
+          routeVehicleId ?? selectedVehicleId ?? fallbackVehicleId,
+        );
 
-      if (resumedInquiryId) {
-        setLatestInquiryId((currentInquiryId) => currentInquiryId ?? resumedInquiryId);
+        if (resumedInquiryId) {
+          setLatestInquiryId((currentInquiryId) => currentInquiryId ?? resumedInquiryId);
+        }
       }
+
+      setHasHydratedRememberedInquiryMappings(true);
     });
 
     return () => {
       isMounted = false;
     };
-  }, [fallbackVehicleId, routeInquiryId, routeVehicleId, selectedVehicleId]);
+  }, [fallbackVehicleId, routeInquiryId, routeVehicleId]);
 
   useEffect(() => {
     if (!routeVehicleId) {
@@ -570,8 +579,13 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
 
     setSelectedVehicleId(routeVehicleId);
-    setLatestInquiryId(routeInquiryId ?? getRememberedInquiryForVehicle(routeVehicleId));
-  }, [routeInquiryId, routeVehicleId]);
+    setLatestInquiryId(
+      routeInquiryId ??
+        (hasHydratedRememberedInquiryMappings
+          ? getRememberedInquiryForVehicle(routeVehicleId)
+          : null),
+    );
+  }, [hasHydratedRememberedInquiryMappings, routeInquiryId, routeVehicleId]);
 
   useEffect(() => {
     if (!selectedVehicleId) {
@@ -579,10 +593,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return;
     }
 
-    if (!routeInquiryId) {
-      setLatestInquiryId((currentInquiryId) => currentInquiryId ?? getRememberedInquiryForVehicle(selectedVehicleId));
+    if (!routeInquiryId && hasHydratedRememberedInquiryMappings) {
+      setLatestInquiryId((currentInquiryId) =>
+        currentInquiryId ?? getRememberedInquiryForVehicle(selectedVehicleId),
+      );
     }
-  }, [routeInquiryId, selectedVehicleId]);
+  }, [hasHydratedRememberedInquiryMappings, routeInquiryId, selectedVehicleId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -738,6 +754,16 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
 
     const knownInquiryId = inquiryIdOverride ?? latestInquiryId ?? null;
+
+    if (
+      shouldDeferCustomerInsuranceTrackingRefresh({
+        hasHydratedRememberedInquiryMappings,
+        knownInquiryId,
+      })
+    ) {
+      return;
+    }
+
     setIsRefreshing(true);
     setTrackingState('tracking_loading');
     setTrackingMessage('');
@@ -806,10 +832,24 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return;
     }
 
+    if (
+      shouldDeferCustomerInsuranceTrackingRefresh({
+        hasHydratedRememberedInquiryMappings,
+        knownInquiryId: latestInquiryId,
+      })
+    ) {
+      return;
+    }
+
     refreshTracking();
     // The screen should refresh when the selected vehicle changes or the session becomes valid.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSession, latestInquiryId, selectedVehicleId]);
+  }, [
+    hasHydratedRememberedInquiryMappings,
+    hasSession,
+    latestInquiryId,
+    selectedVehicleId,
+  ]);
 
   const handleDraftChange = (field, value) => {
     setDraft((currentDraft) => ({
