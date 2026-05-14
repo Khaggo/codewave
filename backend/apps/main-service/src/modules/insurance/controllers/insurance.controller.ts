@@ -1,8 +1,25 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
-import { Request } from 'express';
 import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { Request } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBody,
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiConsumes,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
@@ -10,6 +27,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -22,8 +40,14 @@ import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
 import { InsuranceInquiryResponseDto } from '../dto/insurance-inquiry-response.dto';
 import { InsuranceRecordResponseDto } from '../dto/insurance-record-response.dto';
+import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
+import { UploadInsuranceDocumentDto } from '../dto/upload-insurance-document.dto';
+import { UploadInsuranceDocumentResponseDto } from '../dto/upload-insurance-document-response.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
-import { InsuranceService } from '../services/insurance.service';
+import { InsuranceUploadFile, InsuranceService } from '../services/insurance.service';
+import { insuranceDocumentTypeEnum } from '../schemas/insurance.schema';
+
+const INSURANCE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 
 @ApiTags('insurance')
 @Controller()
@@ -46,6 +70,37 @@ export class InsuranceController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   create(@Body() payload: CreateInsuranceInquiryDto, @Req() request: Request) {
     return this.insuranceService.create(payload, request.user as { userId: string; role: string });
+  }
+
+  @Get('insurance/inquiries')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'List live insurance inquiries for staff with workflow filters.' })
+  @ApiBearerAuth('access-token')
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['submitted', 'needs_documents', 'under_review', 'for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed', 'rejected', 'cancelled'],
+  })
+  @ApiQuery({
+    name: 'paymentStatus',
+    required: false,
+    enum: ['not_required', 'unpaid', 'proof_submitted', 'verifying', 'paid', 'overdue'],
+  })
+  @ApiQuery({
+    name: 'renewalStatus',
+    required: false,
+    enum: ['not_applicable', 'upcoming', 'quoted', 'awaiting_customer', 'renewed', 'expired'],
+  })
+  @ApiOkResponse({
+    description: 'Insurance inquiries visible to staff, filtered by workflow state.',
+    type: InsuranceInquiryResponseDto,
+    isArray: true,
+  })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can list insurance inquiries.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  list(@Query() query: ListInsuranceInquiriesQueryDto, @Req() request: Request) {
+    return this.insuranceService.listForStaff(query, request.user as { userId: string; role: string });
   }
 
   @Get('insurance/inquiries/:id')
@@ -141,6 +196,59 @@ export class InsuranceController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   addDocument(@Param('id') id: string, @Body() payload: AddInsuranceDocumentDto, @Req() request: Request) {
     return this.insuranceService.addDocument(id, payload, request.user as { userId: string; role: string });
+  }
+
+  @Post('insurance/inquiries/:id/documents/upload')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize: INSURANCE_UPLOAD_MAX_BYTES,
+      },
+    }),
+  )
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Upload a PDF or image insurance document directly for an inquiry.' })
+  @ApiBearerAuth('access-token')
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({
+    name: 'id',
+    description: 'Insurance inquiry identifier.',
+    example: '4c559c0b-4d1b-492f-a11f-e61271f4a32d',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        documentType: { type: 'string', enum: insuranceDocumentTypeEnum.enumValues },
+        notes: { type: 'string' },
+      },
+      required: ['file', 'documentType'],
+    },
+  })
+  @ApiOkResponse({
+    description: 'The updated inquiry with the uploaded document and appended activity event.',
+    type: UploadInsuranceDocumentResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The insurance upload payload is invalid.' })
+  @ApiConflictResponse({ description: 'Closed or rejected inquiries cannot accept more documents.' })
+  @ApiForbiddenResponse({ description: 'Customers can only upload documents to their own inquiries.' })
+  @ApiNotFoundResponse({ description: 'Insurance inquiry not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  uploadDocument(
+    @Param('id') id: string,
+    @Body() payload: UploadInsuranceDocumentDto,
+    @UploadedFile() file: InsuranceUploadFile,
+    @Req() request: Request,
+  ) {
+    return this.insuranceService.uploadDocument(
+      id,
+      payload,
+      file,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @Get('vehicles/:id/insurance-records')

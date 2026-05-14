@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -7,11 +7,14 @@ import { AppDatabase } from '@shared/db/database.types';
 
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
+import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
 import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inquiry-workflow.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
+import { insuranceActivities } from '../schemas/insurance-activity.schema';
 import {
   insuranceDocuments,
   insuranceInquiries,
+  insuranceDocumentTypeEnum,
   insuranceInquiryStatusEnum,
   insuranceInquiryTypeEnum,
   insuranceRecords,
@@ -35,6 +38,13 @@ type UpdateInsuranceInquiryWorkflowPersistenceInput = Omit<
   renewalDueAt?: Date;
   reviewedByUserId: string;
   reviewedAt: Date;
+};
+
+type InsuranceActivityPersistenceInput = {
+  action: string;
+  actorUserId?: string | null;
+  documentType?: (typeof insuranceDocumentTypeEnum.enumValues)[number] | null;
+  notes?: string | null;
 };
 
 type UpsertInsuranceRecordInput = {
@@ -86,11 +96,17 @@ export class InsuranceRepository extends BaseRepository {
       },
     });
 
-    return this.assertFound(inquiry, 'Insurance inquiry not found');
+    const resolvedInquiry = this.assertFound(inquiry, 'Insurance inquiry not found');
+    const activities = await this.listActivitiesByInquiryId(id, db);
+
+    return {
+      ...resolvedInquiry,
+      activities,
+    };
   }
 
   async findByUserId(userId: string) {
-    return this.db.query.insuranceInquiries.findMany({
+    const inquiries = await this.db.query.insuranceInquiries.findMany({
       where: eq(insuranceInquiries.userId, userId),
       with: {
         documents: {
@@ -99,6 +115,39 @@ export class InsuranceRepository extends BaseRepository {
       },
       orderBy: desc(insuranceInquiries.createdAt),
     });
+
+    return this.attachActivitiesToInquiries(inquiries);
+  }
+
+  async listForStaff(query: ListInsuranceInquiriesQueryDto) {
+    const inquiries = await this.db.query.insuranceInquiries.findMany({
+      where: and(
+        query.status ? eq(insuranceInquiries.status, query.status) : undefined,
+        query.paymentStatus ? eq(insuranceInquiries.paymentStatus, query.paymentStatus) : undefined,
+        query.renewalStatus ? eq(insuranceInquiries.renewalStatus, query.renewalStatus) : undefined,
+      ),
+      with: {
+        user: {
+          with: {
+            profile: true,
+          },
+        },
+        vehicle: true,
+        documents: {
+          orderBy: desc(insuranceDocuments.createdAt),
+        },
+      },
+      orderBy: desc(insuranceInquiries.updatedAt),
+    });
+
+    const activitiesByInquiryId = await this.listActivitiesByInquiryIds(inquiries.map((inquiry) => inquiry.id));
+
+    return inquiries.map((inquiry) => ({
+      ...inquiry,
+      customerDisplayName: this.buildCustomerDisplayName(inquiry.user?.profile),
+      vehicleLabel: this.buildVehicleLabel(inquiry.vehicle),
+      activities: activitiesByInquiryId.get(inquiry.id) ?? [],
+    }));
   }
 
   async updateStatus(id: string, payload: UpdateInsuranceInquiryStatusPersistenceInput) {
@@ -159,6 +208,31 @@ export class InsuranceRepository extends BaseRepository {
     return this.findById(id);
   }
 
+  async appendActivity(inquiryId: string, payload: InsuranceActivityPersistenceInput) {
+    const [activity] = await this.db
+      .insert(insuranceActivities)
+      .values({
+        inquiryId,
+        action: payload.action,
+        actorUserId: payload.actorUserId ?? null,
+        documentType: payload.documentType ?? null,
+        notes: payload.notes ?? null,
+      })
+      .returning();
+
+    return this.assertFound(activity, 'Insurance activity not found');
+  }
+
+  async listActivitiesByInquiryId(inquiryId: string, db: AppDatabase = this.db) {
+    const activities = await db
+      .select()
+      .from(insuranceActivities)
+      .where(eq(insuranceActivities.inquiryId, inquiryId))
+      .orderBy(insuranceActivities.createdAt);
+
+    return activities;
+  }
+
   async upsertRecordFromInquiry(payload: UpsertInsuranceRecordInput) {
     const existingRecord = await this.db.query.insuranceRecords.findFirst({
       where: eq(insuranceRecords.inquiryId, payload.inquiryId),
@@ -211,5 +285,77 @@ export class InsuranceRepository extends BaseRepository {
       },
       orderBy: [desc(insuranceInquiries.createdAt), desc(insuranceInquiries.id)],
     });
+  }
+
+  private async listActivitiesByInquiryIds(inquiryIds: string[], db: AppDatabase = this.db) {
+    if (!inquiryIds.length) {
+      return new Map<string, Awaited<ReturnType<typeof this.listActivitiesByInquiryId>>>();
+    }
+
+    const activities = await db
+      .select()
+      .from(insuranceActivities)
+      .where(inArray(insuranceActivities.inquiryId, inquiryIds))
+      .orderBy(insuranceActivities.createdAt);
+
+    const activitiesByInquiryId = new Map<string, typeof activities>();
+
+    activities.forEach((activity) => {
+      const currentActivities = activitiesByInquiryId.get(activity.inquiryId) ?? [];
+      currentActivities.push(activity);
+      activitiesByInquiryId.set(activity.inquiryId, currentActivities);
+    });
+
+    return activitiesByInquiryId;
+  }
+
+  private async attachActivitiesToInquiries<T extends { id: string }>(inquiries: T[]) {
+    const activitiesByInquiryId = await this.listActivitiesByInquiryIds(
+      inquiries.map((inquiry) => inquiry.id),
+    );
+
+    return inquiries.map((inquiry) => ({
+      ...inquiry,
+      activities: activitiesByInquiryId.get(inquiry.id) ?? [],
+    }));
+  }
+
+  private buildCustomerDisplayName(
+    profile:
+      | {
+          firstName: string;
+          lastName: string;
+        }
+      | {
+          firstName: string;
+          lastName: string;
+        }[]
+      | null
+      | undefined,
+  ) {
+    const resolvedProfile = Array.isArray(profile) ? profile[0] ?? null : profile;
+
+    if (!resolvedProfile) {
+      return 'Unknown customer';
+    }
+
+    return `${resolvedProfile.firstName} ${resolvedProfile.lastName}`.trim();
+  }
+
+  private buildVehicleLabel(
+    vehicle:
+      | {
+          make: string;
+          model: string;
+          plateNumber: string;
+        }
+      | null
+      | undefined,
+  ) {
+    if (!vehicle) {
+      return 'Unknown vehicle';
+    }
+
+    return `${vehicle.make} ${vehicle.model} (${vehicle.plateNumber})`;
   }
 }

@@ -14,14 +14,23 @@ import { createNotificationTrigger } from '@shared/events/contracts/notification
 
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
+import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
+import { UploadInsuranceDocumentDto } from '../dto/upload-insurance-document.dto';
 import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inquiry-workflow.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
 import { InsuranceRepository } from '../repositories/insurance.repository';
 import { insuranceInquiryStatusEnum } from '../schemas/insurance.schema';
+import { InsuranceDocumentStorageService } from './insurance-document-storage.service';
 
 type InsuranceActor = {
   userId: string;
   role: string;
+};
+
+export type InsuranceUploadFile = {
+  originalname: string;
+  mimetype?: string;
+  buffer: Buffer;
 };
 
 type InsuranceInquiryStatus = (typeof insuranceInquiryStatusEnum.enumValues)[number];
@@ -54,12 +63,24 @@ const notificationEligibleStatuses: InsuranceNotificationStatus[] = [
   'closed',
 ];
 
+type InsuranceActivityEvent = {
+  id: string;
+  inquiryId: string;
+  action: string;
+  actorUserId?: string | null;
+  documentType?: string | null;
+  notes?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 @Injectable()
 export class InsuranceService {
   constructor(
     private readonly insuranceRepository: InsuranceRepository,
     private readonly usersService: UsersService,
     private readonly vehiclesService: VehiclesService,
+    @Optional() private readonly insuranceDocumentStorage?: InsuranceDocumentStorageService,
     @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
@@ -95,6 +116,47 @@ export class InsuranceService {
     }
 
     return this.insuranceRepository.findByUserId(userId);
+  }
+
+  async listForStaff(query: ListInsuranceInquiriesQueryDto, actor: InsuranceActor) {
+    await this.assertStaffReviewer(actor.userId);
+
+    if (typeof this.insuranceRepository.listForStaff === 'function') {
+      return this.insuranceRepository.listForStaff(query);
+    }
+
+    const inquiries = await this.insuranceRepository.listForAnalytics();
+    const filteredInquiries = inquiries.filter((inquiry) => {
+      if (query.status && inquiry.status !== query.status) {
+        return false;
+      }
+
+      if (query.paymentStatus && inquiry.paymentStatus !== query.paymentStatus) {
+        return false;
+      }
+
+      if (query.renewalStatus && inquiry.renewalStatus !== query.renewalStatus) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return Promise.all(
+      filteredInquiries.map(async (inquiry) => {
+        const [user, vehicle] = await Promise.all([
+          this.usersService.findById(inquiry.userId),
+          this.vehiclesService.findById(inquiry.vehicleId),
+        ]);
+
+        return {
+          ...inquiry,
+          customerDisplayName: this.buildCustomerDisplayName(user?.profile),
+          vehicleLabel: this.buildVehicleLabel(vehicle),
+          activities: (inquiry as { activities?: InsuranceActivityEvent[] }).activities ?? [],
+        };
+      }),
+    );
   }
 
   async updateStatus(id: string, payload: UpdateInsuranceInquiryStatusDto, actor: InsuranceActor) {
@@ -165,6 +227,59 @@ export class InsuranceService {
     }
 
     return this.insuranceRepository.addDocument(id, payload, actor.userId);
+  }
+
+  async uploadDocument(
+    id: string,
+    payload: UploadInsuranceDocumentDto,
+    file: InsuranceUploadFile | undefined,
+    actor: InsuranceActor,
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Insurance document file is required');
+    }
+
+    const inquiry = await this.insuranceRepository.findById(id);
+    await this.assertCanAccessInquiry(inquiry.userId, actor);
+
+    if (['closed', 'rejected'].includes(inquiry.status)) {
+      throw new ConflictException('Closed or rejected insurance inquiries cannot accept new documents');
+    }
+
+    const savedDocument = await this.getInsuranceDocumentStorage().saveDocument({
+      inquiryId: id,
+      mimeType: file.mimetype,
+      originalName: file.originalname,
+      buffer: file.buffer,
+    });
+
+    const updatedInquiry = await this.insuranceRepository.addDocument(
+      id,
+      {
+        fileName: file.originalname,
+        fileUrl: savedDocument.fileUrl,
+        documentType: payload.documentType,
+        notes: payload.notes,
+      },
+      actor.userId,
+    );
+
+    const appendedActivity = await this.appendActivityEvent(id, {
+      action: 'document_uploaded',
+      actorUserId: actor.userId,
+      documentType: payload.documentType,
+      notes: payload.notes ?? null,
+    });
+
+    const persistedActivities = await this.listActivityEvents(id);
+
+    return {
+      ...updatedInquiry,
+      activities:
+        persistedActivities.length > 0
+          ? persistedActivities
+          : [...((updatedInquiry as { activities?: InsuranceActivityEvent[] }).activities ?? []), appendedActivity],
+    };
   }
 
   async findRecordsByVehicleId(vehicleId: string, actor: InsuranceActor) {
@@ -241,6 +356,99 @@ export class InsuranceService {
     }
 
     return user;
+  }
+
+  private getInsuranceDocumentStorage() {
+    return this.insuranceDocumentStorage ?? new InsuranceDocumentStorageService();
+  }
+
+  private async appendActivityEvent(
+    inquiryId: string,
+    payload: {
+      action: string;
+      actorUserId?: string | null;
+      documentType?: string | null;
+      notes?: string | null;
+    },
+  ) {
+    const activityRepository = this.insuranceRepository as InsuranceRepository & {
+      appendActivity?: (
+        inquiryId: string,
+        payload: {
+          action: string;
+          actorUserId?: string | null;
+          documentType?: string | null;
+          notes?: string | null;
+        },
+      ) => Promise<InsuranceActivityEvent>;
+    };
+
+    if (typeof activityRepository.appendActivity === 'function') {
+      return activityRepository.appendActivity(inquiryId, payload);
+    }
+
+    const now = new Date();
+    return {
+      id: `synthetic-${now.getTime()}`,
+      inquiryId,
+      action: payload.action,
+      actorUserId: payload.actorUserId ?? null,
+      documentType: payload.documentType ?? null,
+      notes: payload.notes ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  private async listActivityEvents(inquiryId: string) {
+    const activityRepository = this.insuranceRepository as InsuranceRepository & {
+      listActivitiesByInquiryId?: (inquiryId: string) => Promise<InsuranceActivityEvent[]>;
+    };
+
+    if (typeof activityRepository.listActivitiesByInquiryId === 'function') {
+      return activityRepository.listActivitiesByInquiryId(inquiryId);
+    }
+
+    return [];
+  }
+
+  private buildCustomerDisplayName(
+    profile:
+      | {
+          firstName: string;
+          lastName: string;
+        }
+      | {
+          firstName: string;
+          lastName: string;
+        }[]
+      | null
+      | undefined,
+  ) {
+    const resolvedProfile = Array.isArray(profile) ? profile[0] ?? null : profile;
+
+    if (!resolvedProfile) {
+      return 'Unknown customer';
+    }
+
+    return `${resolvedProfile.firstName} ${resolvedProfile.lastName}`.trim();
+  }
+
+  private buildVehicleLabel(
+    vehicle:
+      | {
+          make: string;
+          model: string;
+          plateNumber: string;
+        }
+      | null
+      | undefined,
+  ) {
+    if (!vehicle) {
+      return 'Unknown vehicle';
+    }
+
+    return `${vehicle.make} ${vehicle.model} (${vehicle.plateNumber})`;
   }
 
   private assertAllowedWorkflowTransition(

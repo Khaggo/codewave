@@ -1,6 +1,38 @@
+import { rm } from 'fs/promises';
+import { join } from 'path';
+
 import request from 'supertest';
 
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
+import { InsuranceRepository } from '../src/modules/insurance/repositories/insurance.repository';
+
+const insuranceUploadRuntimeDirectory = join(
+  process.cwd(),
+  '.runtime',
+  'uploads',
+  'insurance-documents',
+);
+
+function seedInsuranceInquiryWorkflowState(
+  app: Awaited<ReturnType<typeof createMainServiceTestApp>>['app'],
+  inquiryId: string,
+  patch: Record<string, unknown>,
+) {
+  const insuranceRepository = app.get(InsuranceRepository) as {
+    inquiries?: Map<string, Record<string, unknown>>;
+  };
+  const inquiry = insuranceRepository.inquiries?.get(inquiryId);
+
+  if (!insuranceRepository.inquiries || !inquiry) {
+    throw new Error(`Unable to seed insurance inquiry workflow state for ${inquiryId}`);
+  }
+
+  insuranceRepository.inquiries.set(inquiryId, {
+    ...inquiry,
+    ...patch,
+    updatedAt: new Date(),
+  });
+}
 
 describe('InsuranceController integration', () => {
   it('creates an inquiry, links documents, updates review state, and exposes vehicle insurance records', async () => {
@@ -246,6 +278,158 @@ describe('InsuranceController integration', () => {
       expect(foreignVehicleRecordsResponse.status).toBe(403);
     } finally {
       await app.close();
+    }
+  });
+
+  it('lists insurance cases for staff with workflow filters', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.queue@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5103',
+      });
+
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.queue@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110C',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const filteredInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Proof of payment follow-up',
+          description: 'Customer has submitted payment proof and needs staff review.',
+        });
+      expect(filteredInquiryResponse.status).toBe(201);
+
+      const nonMatchingInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'ctpl',
+          subject: 'Fresh inquiry',
+          description: 'This inquiry should not match the workflow filter.',
+        });
+      expect(nonMatchingInquiryResponse.status).toBe(201);
+
+      seedInsuranceInquiryWorkflowState(app, filteredInquiryResponse.body.id, {
+        status: 'payment_pending',
+        documentStatus: 'complete',
+        paymentStatus: 'proof_submitted',
+        renewalStatus: 'upcoming',
+      });
+
+      const listResponse = await request(app.getHttpServer())
+        .get('/api/insurance/inquiries?status=payment_pending&paymentStatus=proof_submitted')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
+
+      expect(listResponse.status).toBe(200);
+      expect(listResponse.body).toHaveLength(1);
+      expect(listResponse.body[0]).toEqual(
+        expect.objectContaining({
+          id: filteredInquiryResponse.body.id,
+          status: 'payment_pending',
+          paymentStatus: 'proof_submitted',
+          customerDisplayName: 'Casey Customer',
+          vehicleLabel: 'Toyota Vios (INS110C)',
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('uploads an insurance PDF and stores an activity event', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.upload@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110D',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const createInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Need to upload payment proof',
+          description: 'Customer is ready to upload the proof of payment PDF.',
+        });
+      expect(createInquiryResponse.status).toBe(201);
+
+      const uploadResponse = await request(app.getHttpServer())
+        .post(`/api/insurance/inquiries/${createInquiryResponse.body.id}/documents/upload`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .field('documentType', 'proof_of_payment')
+        .attach('file', Buffer.from('%PDF-1.4 test proof'), 'proof-of-payment.pdf');
+
+      expect(uploadResponse.status).toBe(200);
+      expect(uploadResponse.body.documents[0]).toEqual(
+        expect.objectContaining({
+          documentType: 'proof_of_payment',
+          fileName: 'proof-of-payment.pdf',
+          fileUrl: expect.stringMatching(/^upload:\/\/insurance\//),
+        }),
+      );
+      expect(uploadResponse.body.activities.at(-1)).toEqual(
+        expect.objectContaining({
+          action: 'document_uploaded',
+          documentType: 'proof_of_payment',
+        }),
+      );
+    } finally {
+      await app.close();
+      await rm(insuranceUploadRuntimeDirectory, { recursive: true, force: true });
     }
   });
 });
