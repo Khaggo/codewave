@@ -51,7 +51,8 @@ Key relations:
 - track inquiry state from submission through document follow-up, review, approval, payment, renewal, and closure
 - expose staff list and customer-history reads for internal workflow operations
 - automatically upsert follow-on `insurance_records` for vehicle tracking when an inquiry transitions to `closed`
-- expose a live staff PATCH route that currently accepts only `status` and optional `reviewNotes`, even though broader phase-1 workflow metadata exists in service/design code
+- expose a narrow live staff PATCH route for `status` plus optional `reviewNotes` on the general phase-1 review page
+- expose a broader live adviser/admin workflow PATCH route for collections metadata and future follow-up fields
 - expose inquiry updates to notifications and lifecycle modules
 - keep direct insurer integration out of assumed scope unless explicitly added later
 
@@ -59,9 +60,10 @@ Key relations:
 
 1. Customer or authorized staff submits an insurance inquiry for a customer-owned vehicle.
 2. Required metadata is recorded and supporting documents can be attached while the inquiry remains open through either the reference-document route or the binary upload route.
-3. Staff lists inquiries, filters by workflow tags, reviews one inquiry in detail, and uses the live PATCH route for status changes plus optional review notes. Broader workflow metadata remains part of the intended phase-1 workflow model, but the current controller contract is not yet aligned with that richer edit payload.
-4. Follow-on `insurance_records` support vehicle-level tracking records; the current service implementation upserts that record layer when an inquiry is moved to `closed`.
-5. Notifications and lifecycle updates are generated later as dependent integrations.
+3. Staff lists inquiries, filters by workflow tags, reviews one inquiry in detail, and uses `PATCH /insurance/inquiries/:id/status` for narrow status changes plus optional review notes on the general phase-1 review page.
+4. Staff collections work happens in the dedicated `/insurance/collections` workspace, which uses `PATCH /insurance/inquiries/:id/workflow` for payment metadata, due-date handling, overdue tagging, and later follow-up fields. Same-status workflow updates are allowed there so metadata-only edits can persist without forcing a status transition.
+5. Follow-on `insurance_records` support vehicle-level tracking records; the current service implementation upserts that record layer when an inquiry is moved to `closed`.
+6. Notifications and lifecycle updates are generated later as dependent integrations.
 
 ## Use Cases
 
@@ -79,6 +81,7 @@ Key relations:
 - `GET /insurance/inquiries/:id`
 - `GET /users/:id/insurance-inquiries`
 - `PATCH /insurance/inquiries/:id/status`
+- `PATCH /insurance/inquiries/:id/workflow`
 - `POST /insurance/inquiries/:id/documents/upload`
 - `POST /insurance/inquiries/:id/documents`
 - `GET /vehicles/:id/insurance-records`
@@ -91,7 +94,8 @@ Key relations:
 - customer attempts to read a foreign insurance inquiry or vehicle insurance record
 - closed or rejected inquiries receive more document uploads
 - workflow filters return no staff-visible cases
-- the shipped web save payload includes broader workflow metadata fields that the live PATCH controller currently rejects
+- collections staff need to persist payment metadata without changing the main inquiry status
+- overdue or due-soon follow-up requires customer-safe messaging that reflects `paymentStatus` and `paymentDueAt`
 - phase-1 clients still contain legacy wording that should not be treated as canonical lifecycle status
 - users expect direct insurer integration when the module only tracks internal workflow
 - inquiry closes without clear record linkage

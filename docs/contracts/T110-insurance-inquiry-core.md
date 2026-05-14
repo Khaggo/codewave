@@ -20,6 +20,7 @@
 | `GET /api/insurance/inquiries/:id` | `live` | Swagger/controller |
 | `GET /api/users/:id/insurance-inquiries` | `live` | Swagger/controller |
 | `PATCH /api/insurance/inquiries/:id/status` | `live` | Swagger/controller |
+| `PATCH /api/insurance/inquiries/:id/workflow` | `live` | Swagger/controller |
 | `POST /api/insurance/inquiries/:id/documents/upload` | `live` | Swagger/controller |
 | `POST /api/insurance/inquiries/:id/documents` | `live` | Swagger/controller |
 | `GET /api/vehicles/:id/insurance-records` | `live` | Swagger/controller |
@@ -44,6 +45,11 @@
 
 ## Notes
 
+- Phase-2 collections contract checklist:
+  - live `PATCH /api/insurance/inquiries/:id/status` remains narrow and accepts `status` plus optional `reviewNotes`
+  - live `PATCH /api/insurance/inquiries/:id/workflow` is the broader adviser/admin workflow route for collections metadata and later staff follow-up fields
+  - the general phase-1 web review page stays aligned to the narrow status route, while the collections workspace uses the broader workflow route
+  - customer mobile remains upload-driven and customer-safe
 - The inquiry flow is internal workflow tracking only.
 - Frontend copy should not imply direct insurer integration or automated claim approval.
 - Inquiry creation and document upload are available to the owning customer and authorized staff.
@@ -55,7 +61,8 @@
   - `renewalStatus`: `not_applicable`, `upcoming`, `quoted`, `awaiting_customer`, `renewed`, `expired`
 - `GET /api/insurance/inquiries` is the live staff list route and accepts optional `status`, `paymentStatus`, and `renewalStatus` filters.
 - `GET /api/users/:id/insurance-inquiries` is the live staff-only customer history route.
-- `PATCH /api/insurance/inquiries/:id/status` remains the live staff edit route, but the controller currently binds to `UpdateInsuranceInquiryStatusDto` only. With whitelist + `forbidNonWhitelisted`, the live contract accepts `status` and optional `reviewNotes`, and rejects extra workflow fields.
-- Broader workflow metadata (`documentStatus`, `paymentStatus`, `renewalStatus`, `paymentDueAt`, `policyExpiryAt`, `renewalDueAt`, `assignedStaffId`) exists in the phase-1 service/design layer, but it is not exposed by the live controller DTO on this route today.
-- The shipped web phase-1 surface currently submits those broader workflow fields anyway, so there is an active web-to-backend contract mismatch until the controller/DTO are aligned.
+- `PATCH /api/insurance/inquiries/:id/status` is the live narrow staff edit route for `status` and optional `reviewNotes`, and it powers the general phase-1 web review page.
+- `PATCH /api/insurance/inquiries/:id/workflow` is the live broader adviser/admin workflow route for collections metadata such as `documentStatus`, `paymentStatus`, `renewalStatus`, `paymentDueAt`, `policyExpiryAt`, `renewalDueAt`, `assignedStaffId`, and `reviewNotes`.
+- The workflow route allows same-status updates so collections metadata can persist without forcing a status transition.
+- The dedicated collections workspace lives at `/insurance/collections` and uses the broader workflow route, keeping the phase-1 review page aligned with the narrow `/status` contract.
 - `POST /api/insurance/inquiries/:id/documents/upload` is the live binary upload route for PDF/image files. `POST /api/insurance/inquiries/:id/documents` remains available for metadata/reference-style document attachment.

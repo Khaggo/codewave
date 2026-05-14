@@ -22,7 +22,8 @@
 | `GET /api/insurance/inquiries` | `live` | controller + web client | load the live staff table/list with optional workflow filters |
 | `GET /api/insurance/inquiries/:id` | `live` | Swagger/controller | refresh one known insurance inquiry before staff action |
 | `GET /api/users/:id/insurance-inquiries` | `live` | controller + staff client | load staff-side customer insurance history when needed |
-| `PATCH /api/insurance/inquiries/:id/status` | `live` | controller + shipped web client | live backend accepts only `status` and optional `reviewNotes`, while the shipped web surface currently submits a broader phase-1 workflow payload |
+| `PATCH /api/insurance/inquiries/:id/status` | `live` | controller + shipped web client | narrow phase-1 review save route for `status` and optional `reviewNotes` |
+| `PATCH /api/insurance/inquiries/:id/workflow` | `live` | controller + collections web client | broader adviser/admin workflow route for collections metadata and later staff follow-up fields |
 | `POST /api/insurance/inquiries/:id/documents/upload` | `live` | Swagger/controller | accept PDF/image uploads for inquiry evidence |
 | `POST /api/insurance/inquiries/:id/documents` | `live` | Swagger/controller | keep legacy reference-document attachment available |
 
@@ -32,10 +33,9 @@
 - the live workspace is driven by:
   - `GET /api/insurance/inquiries` for the staff list and summary filters
   - `GET /api/insurance/inquiries/:id` for detail refresh
-  - `PATCH /api/insurance/inquiries/:id/status` for workflow edits
-- the shipped web client drafts broader workflow fields, but the live controller still binds this route to `UpdateInsuranceInquiryStatusDto`
-- because global validation uses whitelist + `forbidNonWhitelisted`, the live patch contract currently accepts only `status` and optional `reviewNotes`; extra workflow fields are not part of the exposed route contract today
-- this creates an active mismatch between the current web save payload and the live PATCH contract
+  - `PATCH /api/insurance/inquiries/:id/status` for the general phase-1 review page save
+- the dedicated collections workspace lives at `/insurance/collections` and uses `PATCH /api/insurance/inquiries/:id/workflow` for broader payment metadata updates
+- the workflow route allows same-status updates so advisers can persist payment metadata and follow-up notes without forcing a status transition
 
 ## Staff Review List States
 
@@ -53,8 +53,8 @@
 | --- | --- |
 | `status_update_ready` | the selected inquiry is ready for a valid transition |
 | `status_update_submitting` | the live status update request is in flight |
-| `status_update_contract_aligned_saved` | a save would succeed only when the request is limited to the backend-supported subset of `status` and optional `reviewNotes`; the current shipped screen does not emit that narrower payload |
-| `status_update_payload_mismatch` | the shipped web save payload includes unsupported workflow fields, so the live backend rejects the request before a normal saved state is reached |
+| `status_update_saved` | the general phase-1 review page saved a valid `status` plus optional `reviewNotes` update through the narrow live route |
+| `collections_workflow_saved` | the collections workspace saved payment metadata or follow-up fields through the broader workflow route, including same-status metadata-only updates |
 | `forbidden_role` | the current role cannot update insurance review status |
 | `inquiry_not_found` | the selected inquiry no longer exists |
 | `invalid_transition` | the requested next status is not valid for the inquiry's current backend state |
@@ -73,11 +73,13 @@
 - only `service_adviser` and `super_admin` may use the staff insurance review workspace
 - the live list route accepts optional `status`, `paymentStatus`, and `renewalStatus` filters
 - the web workspace shows summary cards, a live table/list, workflow detail, payment and renewal tags, staff notes, and activity visibility from the current inquiry payload
-- the live patch route currently persists only:
+- the live `PATCH /api/insurance/inquiries/:id/status` route persists only:
   - `status`
   - `reviewNotes`
-- broader workflow metadata exists in the backend phase-1 service/design layer, but it is not exposed by the live controller DTO on `PATCH /api/insurance/inquiries/:id/status` today
-- the shipped phase-1 UX still presents broader workflow metadata editing, but that portion of the save flow is not yet aligned with the live backend contract
+- the general phase-1 review page is contract-aligned to that narrow route and keeps broader workflow fields read-only in the detail tabs
+- the live `PATCH /api/insurance/inquiries/:id/workflow` route persists broader workflow metadata including `documentStatus`, `paymentStatus`, `renewalStatus`, `paymentDueAt`, `policyExpiryAt`, `renewalDueAt`, `assignedStaffId`, and optional `reviewNotes`
+- the collections workspace at `/insurance/collections` uses the workflow route for payment verification, due-date handling, overdue marking, and future staff follow-up fields
+- same-status workflow updates are valid on the workflow route so metadata-only collections changes can save without a main status transition
 - customer intake fields such as subject, description, provider, policy number, and notes are read-only in this workspace
 - role failures, missing records, and invalid transitions must remain distinct states in both contract packs and UI messaging
 - this slice does not add insurer payout, settlement, or third-party integration behavior
@@ -89,8 +91,8 @@
 - queue loaded
 - queue empty
 - detail loaded
-- contract-aligned status update could succeed for backend-supported fields
-- shipped web payload currently mismatches the live PATCH contract
+- contract-aligned phase-1 status update saved through the narrow route
+- collections workflow update saved through the broader route
 - forbidden role
 - inquiry not found
 - invalid transition
@@ -102,4 +104,4 @@
 - This slice upgrades the staff/admin insurance page from placeholder content into a contract-aware review workspace.
 - The current web screen is already backed by the live staff list route rather than a mock review queue.
 - The customer-history route exists for staff drill-down, but the shipped phase-1 page is centered on the live list/detail workspace.
-- The happy path is currently accurate only for the subset the backend PATCH route accepts today. Broader phase-1 workflow metadata editing remains intended UX, but it is still incompatible with the live controller contract.
+- The main review page now stays aligned to the narrow `/status` contract, while the shipped collections workspace at `/insurance/collections` handles broader payment workflow edits through `/workflow`.
