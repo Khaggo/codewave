@@ -83,8 +83,10 @@ export interface UpdateInsuranceInquiryWorkflowRequest {
   reviewNotes?: string;
 }
 
-export interface UpdateInsuranceInquiryStatusRequest
-  extends UpdateInsuranceInquiryWorkflowRequest {}
+export interface UpdateInsuranceInquiryStatusRequest {
+  status: InsuranceInquiryStatus;
+  reviewNotes?: string;
+}
 
 export interface UploadInsuranceDocumentRequest {
   fileName: string;

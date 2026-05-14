@@ -290,9 +290,6 @@ export const insuranceStatusUpdateDraftTemplate: StaffInsuranceStatusUpdateDraft
   inquiryId: 'insurance-inquiry-id',
   request: {
     status: 'under_review',
-    documentStatus: 'under_verification',
-    paymentStatus: 'not_required',
-    renewalStatus: 'not_applicable',
     reviewNotes: 'Checking the submitted files before the next review action.',
   },
   editableFields: [
