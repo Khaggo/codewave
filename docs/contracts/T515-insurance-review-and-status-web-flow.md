@@ -14,6 +14,8 @@
 - live controller: `backend/apps/main-service/src/modules/insurance/controllers/insurance.controller.ts`
 - web helper: `frontend/src/lib/insuranceStaffClient.js`
 - web surface: `frontend/src/app/insurance/InsuranceContent.js`
+- collections surface: `frontend/src/app/insurance/collections/CollectionsContent.js`
+- collections helpers: `frontend/src/app/insurance/collections/insuranceCollectionsView.mjs`
 
 ## Route Status
 
@@ -67,6 +69,9 @@
 - `frontend/src/mocks/insurance/mocks.ts`
 - `frontend/src/lib/insuranceStaffClient.js`
 - `frontend/src/app/insurance/InsuranceContent.js`
+- `frontend/src/app/insurance/collections/CollectionsContent.js`
+- `frontend/src/app/insurance/collections/CollectionsPanels.js`
+- `frontend/src/app/insurance/collections/insuranceCollectionsView.mjs`
 
 ## Contract Rules
 
