@@ -18,7 +18,7 @@ const buildInquiryFixture = (overrides = {}) => ({
   ...overrides,
 })
 
-test('getRenewalsSummaryCards counts due windows, overdue cases, and awaiting-customer renewals', () => {
+test('getRenewalsSummaryCards keeps awaiting-customer coverage and collapses later dates into the approved window labels', () => {
   assert.deepEqual(
     getRenewalsSummaryCards({
       now: '2026-05-14T00:00:00.000Z',
@@ -44,7 +44,7 @@ test('getRenewalsSummaryCards counts due windows, overdue cases, and awaiting-cu
       ],
     }).map((card) => [card.label, card.value]),
     [
-      ['Due in 30 Days', 1],
+      ['Due in 30 Days', 2],
       ['Due in 15 Days', 2],
       ['Due in 7 Days', 1],
       ['Overdue', 1],
@@ -61,6 +61,16 @@ test('getRenewalTimeWindow falls back to policyExpiryAt when renewalDueAt is mis
       now: '2026-05-14T00:00:00.000Z',
     }),
     'Due in 7 Days',
+  )
+})
+
+test('getRenewalTimeWindow returns only approved window labels for dates beyond 30 days', () => {
+  assert.equal(
+    getRenewalTimeWindow({
+      renewalDueAt: '2026-07-20T00:00:00.000Z',
+      now: '2026-05-14T00:00:00.000Z',
+    }),
+    'Due in 30 Days',
   )
 })
 

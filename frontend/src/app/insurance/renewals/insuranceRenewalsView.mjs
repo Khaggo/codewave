@@ -28,7 +28,7 @@ export function getRenewalTimeWindow({ renewalDueAt, policyExpiryAt, now } = {})
   const currentDay = toUtcStartOfDay(now) ?? toUtcStartOfDay(new Date())
 
   if (targetDay === null || currentDay === null) {
-    return 'No Target Date'
+    return 'Due in 30 Days'
   }
 
   const diffDays = Math.floor((targetDay - currentDay) / MS_PER_DAY)
@@ -49,7 +49,7 @@ export function getRenewalTimeWindow({ renewalDueAt, policyExpiryAt, now } = {})
     return 'Due in 30 Days'
   }
 
-  return 'Later'
+  return 'Due in 30 Days'
 }
 
 const countRenewalsByWindow = (inquiries, timeWindow, now) =>
