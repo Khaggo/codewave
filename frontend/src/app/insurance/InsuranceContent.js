@@ -31,6 +31,7 @@ import {
   getInsuranceDetailTabs,
   getNextInsuranceWorkspaceViewState,
   getInsuranceSummaryCards,
+  shouldApplyInsuranceAsyncResult,
 } from './insuranceView.mjs'
 
 const INQUIRY_STATUS_OPTIONS = [
@@ -402,6 +403,7 @@ export default function InsuranceContent() {
   const [updateDraft, setUpdateDraft] = useState(DEFAULT_UPDATE_DRAFT)
   const [reloadTick, setReloadTick] = useState(0)
   const previousSelectedInquiryIdRef = useRef('')
+  const selectedInquiryIdRef = useRef('')
   const workspaceStateRef = useRef({
     activeDetailTab: 'overview',
     detailMessage: '',
@@ -419,6 +421,7 @@ export default function InsuranceContent() {
     updateMessage,
     updateState,
   }
+  selectedInquiryIdRef.current = selectedInquiryId
 
   const detailTabs = useMemo(() => getInsuranceDetailTabs(), [])
 
@@ -563,21 +566,39 @@ export default function InsuranceContent() {
       return
     }
 
+    const requestInquiryId = selectedInquiry.id
+
     setDetailState('loading')
     setDetailMessage('')
 
     try {
       const liveInquiry = await getInsuranceInquiryById({
-        inquiryId: selectedInquiry.id,
+        inquiryId: requestInquiryId,
         accessToken: user.accessToken,
       })
 
       setInquiries((currentInquiries) =>
         currentInquiries.map((inquiry) => (inquiry.id === liveInquiry.id ? liveInquiry : inquiry)),
       )
-      setDetailState('detail_loaded')
-      setDetailMessage('Live insurance detail refreshed from the backend.')
+      if (
+        shouldApplyInsuranceAsyncResult({
+          requestInquiryId,
+          selectedInquiryId: selectedInquiryIdRef.current,
+        })
+      ) {
+        setDetailState('detail_loaded')
+        setDetailMessage('Live insurance detail refreshed from the backend.')
+      }
     } catch (error) {
+      if (
+        !shouldApplyInsuranceAsyncResult({
+          requestInquiryId,
+          selectedInquiryId: selectedInquiryIdRef.current,
+        })
+      ) {
+        return
+      }
+
       if (error instanceof ApiError && error.status === 404) {
         setDetailState('inquiry_not_found')
       } else if (error instanceof ApiError && error.status === 403) {
@@ -603,12 +624,14 @@ export default function InsuranceContent() {
       return
     }
 
+    const requestInquiryId = selectedInquiry.id
+
     setUpdateState('status_update_submitting')
     setUpdateMessage('')
 
     try {
       const updatedInquiry = await updateInsuranceInquiryStatus({
-        inquiryId: selectedInquiry.id,
+        inquiryId: requestInquiryId,
         status: updateDraft.status,
         documentStatus: updateDraft.documentStatus,
         paymentStatus: updateDraft.paymentStatus,
@@ -624,9 +647,25 @@ export default function InsuranceContent() {
       setInquiries((currentInquiries) =>
         currentInquiries.map((inquiry) => (inquiry.id === updatedInquiry.id ? updatedInquiry : inquiry)),
       )
-      setUpdateState('status_update_saved')
-      setUpdateMessage(`Insurance workflow updated to ${formatStatusLabel(updatedInquiry.status)}.`)
+      if (
+        shouldApplyInsuranceAsyncResult({
+          requestInquiryId,
+          selectedInquiryId: selectedInquiryIdRef.current,
+        })
+      ) {
+        setUpdateState('status_update_saved')
+        setUpdateMessage(`Insurance workflow updated to ${formatStatusLabel(updatedInquiry.status)}.`)
+      }
     } catch (error) {
+      if (
+        !shouldApplyInsuranceAsyncResult({
+          requestInquiryId,
+          selectedInquiryId: selectedInquiryIdRef.current,
+        })
+      ) {
+        return
+      }
+
       if (error instanceof ApiError && error.status === 404) {
         setUpdateState('inquiry_not_found')
       } else if (error instanceof ApiError && error.status === 403) {

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   buildInsuranceTableRow,
   getNextInsuranceWorkspaceViewState,
+  shouldApplyInsuranceAsyncResult,
   formatStatusLabel,
   getInsuranceDetailTabs,
   getInsuranceSummaryCards,
@@ -203,6 +204,32 @@ test('getNextInsuranceWorkspaceViewState resets tab and hydrates draft when the 
       updateMessage: '',
       updateState: 'status_update_ready',
     },
+  )
+})
+
+test('shouldApplyInsuranceAsyncResult only applies async UI state when the same inquiry is still selected', () => {
+  assert.equal(
+    shouldApplyInsuranceAsyncResult({
+      requestInquiryId: 'inq-1',
+      selectedInquiryId: 'inq-1',
+    }),
+    true,
+  )
+
+  assert.equal(
+    shouldApplyInsuranceAsyncResult({
+      requestInquiryId: 'inq-1',
+      selectedInquiryId: 'inq-2',
+    }),
+    false,
+  )
+
+  assert.equal(
+    shouldApplyInsuranceAsyncResult({
+      requestInquiryId: 'inq-1',
+      selectedInquiryId: '',
+    }),
+    false,
   )
 })
 

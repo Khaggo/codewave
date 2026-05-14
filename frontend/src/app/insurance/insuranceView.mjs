@@ -198,3 +198,7 @@ export function getNextInsuranceWorkspaceViewState({
     updateState: 'status_update_ready',
   }
 }
+
+export function shouldApplyInsuranceAsyncResult({ requestInquiryId, selectedInquiryId } = {}) {
+  return Boolean(requestInquiryId) && requestInquiryId === selectedInquiryId
+}
