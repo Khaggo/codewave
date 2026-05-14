@@ -53,7 +53,8 @@
 | --- | --- |
 | `status_update_ready` | the selected inquiry is ready for a valid transition |
 | `status_update_submitting` | the live status update request is in flight |
-| `status_update_saved` | the backend accepted the status change and returned canonical inquiry state |
+| `status_update_contract_aligned_saved` | a save would succeed only when the request is limited to the backend-supported subset of `status` and optional `reviewNotes`; the current shipped screen does not emit that narrower payload |
+| `status_update_payload_mismatch` | the shipped web save payload includes unsupported workflow fields, so the live backend rejects the request before a normal saved state is reached |
 | `forbidden_role` | the current role cannot update insurance review status |
 | `inquiry_not_found` | the selected inquiry no longer exists |
 | `invalid_transition` | the requested next status is not valid for the inquiry's current backend state |
@@ -88,7 +89,8 @@
 - queue loaded
 - queue empty
 - detail loaded
-- status update saved for backend-supported fields
+- contract-aligned status update could succeed for backend-supported fields
+- shipped web payload currently mismatches the live PATCH contract
 - forbidden role
 - inquiry not found
 - invalid transition
