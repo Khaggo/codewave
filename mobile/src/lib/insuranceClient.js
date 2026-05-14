@@ -1,22 +1,31 @@
-import { ApiError, getApiBaseUrl } from './authClient';
-
-const API_BASE_URL = getApiBaseUrl();
 const INSURANCE_REQUEST_TIMEOUT_MS = 8000;
+const INSURANCE_CLIENT_RUNTIME_KEY = '__insuranceClientRuntime';
+
+let insuranceClientRuntimePromise = null;
 
 const customerInsuranceStatusHints = {
   submitted: 'Your inquiry is recorded and waiting for staff review.',
   under_review: 'A service adviser is currently reviewing the insurance request.',
   needs_documents: 'More documents are needed before staff can continue the request.',
+  for_approval: 'The request is waiting for final staff approval.',
+  approved: 'The request is approved and moving to the next insurance step.',
+  payment_pending: 'A payment-related step is blocking completion of the request.',
+  active: 'The policy or insurance workflow is currently active.',
+  for_renewal: 'A renewal follow-up is now due for this insurance request.',
   approved_for_record: 'The inquiry is approved for internal record tracking.',
   rejected: 'The inquiry cannot continue in its current state.',
   closed: 'The inquiry is closed and no longer accepting changes.',
+  cancelled: 'The inquiry was cancelled and is no longer active.',
 };
 
 const customerInsuranceDocumentTypeLabels = {
   or_cr: 'OR/CR',
   policy: 'Policy copy',
+  valid_id: 'Valid ID',
+  police_report: 'Police report',
   photo: 'Damage photo',
   estimate: 'Repair estimate',
+  proof_of_payment: 'Proof of payment',
   other: 'Other document',
 };
 
@@ -36,7 +45,21 @@ const trimOrNull = (value) => {
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
+const getInsuranceClientRuntime = async () => {
+  if (globalThis[INSURANCE_CLIENT_RUNTIME_KEY]) {
+    return globalThis[INSURANCE_CLIENT_RUNTIME_KEY];
+  }
+
+  if (!insuranceClientRuntimePromise) {
+    insuranceClientRuntimePromise = import('./authClient.js');
+  }
+
+  return insuranceClientRuntimePromise;
+};
+
 const request = async (path, options = {}) => {
+  const { ApiError, getApiBaseUrl } = await getInsuranceClientRuntime();
+  const API_BASE_URL = getApiBaseUrl();
   const {
     body,
     headers,
@@ -53,14 +76,17 @@ const request = async (path, options = {}) => {
 
   try {
     const runRequest = async () => {
+      const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
       const response = await fetch(`${API_BASE_URL}${path}`, {
         ...rest,
         signal: abortController?.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(headers ?? {}),
-        },
-        body: body ? JSON.stringify(body) : undefined,
+        headers: isFormData
+          ? { ...(headers ?? {}) }
+          : {
+              'Content-Type': 'application/json',
+              ...(headers ?? {}),
+            },
+        body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
       });
 
       const rawText = await response.text();
@@ -226,15 +252,25 @@ export const normalizeCustomerInsuranceInquiry = (inquiry) => {
     vehicleId: inquiry.vehicleId ?? null,
     inquiryType: inquiry.inquiryType ?? 'comprehensive',
     inquiryTypeLabel: humanizeInquiryType(inquiry.inquiryType),
+    purpose: inquiry.purpose ?? null,
     subject: String(inquiry.subject ?? '').trim(),
     description: String(inquiry.description ?? '').trim(),
     status: inquiry.status ?? 'submitted',
     statusHint: buildCustomerInsuranceStatusHint(inquiry.status),
+    documentStatus: inquiry.documentStatus ?? 'incomplete',
+    paymentStatus: inquiry.paymentStatus ?? 'not_required',
+    renewalStatus: inquiry.renewalStatus ?? 'not_applicable',
     providerName: trimOrNull(inquiry.providerName),
     policyNumber: trimOrNull(inquiry.policyNumber),
     notes: trimOrNull(inquiry.notes),
+    paymentDueAt: inquiry.paymentDueAt ?? null,
+    policyExpiryAt: inquiry.policyExpiryAt ?? null,
+    renewalDueAt: inquiry.renewalDueAt ?? null,
+    assignedStaffId: inquiry.assignedStaffId ?? null,
+    reviewNotes: trimOrNull(inquiry.reviewNotes),
     documentCount: documents.length,
     documents,
+    activities: asArray(inquiry.activities),
     canAttachDocuments: !closedDocumentUploadStatuses.includes(inquiry.status),
     createdAt: inquiry.createdAt ?? null,
     updatedAt: inquiry.updatedAt ?? null,
@@ -302,6 +338,8 @@ export const createInsuranceInquiry = async ({
   notes,
   accessToken,
 }) => {
+  const { ApiError } = await getInsuranceClientRuntime();
+
   if (!userId) {
     throw new ApiError(
       'You need an active customer session before starting an insurance inquiry.',
@@ -337,6 +375,8 @@ export const createInsuranceInquiry = async ({
 };
 
 export const getInsuranceInquiryById = async ({ inquiryId, accessToken }) => {
+  const { ApiError } = await getInsuranceClientRuntime();
+
   if (!inquiryId) {
     throw new ApiError('A known inquiry id is required before loading claim status.', 400, {
       path: '/api/insurance/inquiries/:id',
@@ -401,7 +441,59 @@ export const addInsuranceInquiryDocument = async ({
   );
 };
 
+export const uploadInsuranceInquiryDocumentFile = async ({
+  inquiryId,
+  documentType,
+  file,
+  notes,
+  accessToken,
+}) => {
+  const { ApiError } = await getInsuranceClientRuntime();
+  const normalizedInquiryId = String(inquiryId ?? '').trim();
+  const normalizedDocumentType = String(documentType ?? '').trim();
+
+  if (!normalizedInquiryId) {
+    throw new ApiError('Submit or select an insurance inquiry before attaching a document.', 400, {
+      path: '/api/insurance/inquiries/:id/documents/upload',
+    });
+  }
+
+  if (!customerInsuranceDocumentTypeLabels[normalizedDocumentType]) {
+    throw new ApiError(
+      'Choose a valid document type before uploading a supporting file.',
+      400,
+      {
+        path: '/api/insurance/inquiries/:id/documents/upload',
+        documentType,
+      },
+    );
+  }
+
+  if (!file) {
+    throw new ApiError('Choose a file before uploading an insurance document.', 400, {
+      path: '/api/insurance/inquiries/:id/documents/upload',
+    });
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('documentType', normalizedDocumentType);
+  if (trimOrNull(notes)) {
+    formData.append('notes', trimOrNull(notes));
+  }
+
+  return normalizeCustomerInsuranceInquiry(
+    await request(`/api/insurance/inquiries/${normalizedInquiryId}/documents/upload`, {
+      method: 'POST',
+      headers: buildAuthHeaders(accessToken),
+      body: formData,
+    }),
+  );
+};
+
 export const listVehicleInsuranceRecords = async ({ vehicleId, accessToken }) => {
+  const { ApiError } = await getInsuranceClientRuntime();
+
   if (!vehicleId) {
     throw new ApiError(
       'Select an owned vehicle before loading insurance tracking updates.',
