@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   buildCollectionsTableRow,
+  getCollectionsActionState,
   getCollectionsSummaryCards,
 } from './insuranceCollectionsView.mjs'
 
@@ -94,6 +95,43 @@ test('buildCollectionsTableRow shows proof of payment when a proof document is a
       paymentDueAt: '2026-05-18T00:00:00.000Z',
       daysOverdue: 0,
       hasProofOfPayment: true,
+    },
+  )
+})
+
+test('getCollectionsActionState enables payment reminders for overdue unpaid cases', () => {
+  assert.deepEqual(
+    getCollectionsActionState(buildInquiryFixture(), {
+      now: '2026-05-14T12:00:00.000Z',
+    }),
+    {
+      canSendPaymentReminder: true,
+      canReviewProofOfPayment: false,
+      canMarkAsPaid: false,
+    },
+  )
+})
+
+test('getCollectionsActionState enables proof review and mark-paid actions only when proof exists', () => {
+  assert.deepEqual(
+    getCollectionsActionState(
+      buildInquiryFixture({
+        paymentStatus: 'verifying',
+        documents: [
+          {
+            id: 'doc-1',
+            documentType: 'proof_of_payment',
+          },
+        ],
+      }),
+      {
+        now: '2026-05-14T12:00:00.000Z',
+      },
+    ),
+    {
+      canSendPaymentReminder: false,
+      canReviewProofOfPayment: true,
+      canMarkAsPaid: true,
     },
   )
 })

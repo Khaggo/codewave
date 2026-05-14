@@ -28,6 +28,8 @@ export const getDaysOverdue = (paymentDueAt, now) => {
 const hasProofOfPaymentDocument = (documents = []) =>
   documents.some((document) => document?.documentType === 'proof_of_payment')
 
+const isReminderEligiblePaymentStatus = (paymentStatus) => ['unpaid', 'overdue'].includes(paymentStatus)
+
 const isSameWeek = (date, now) => {
   const currentDate = toDate(now) ?? new Date()
   const targetDate = toDate(date)
@@ -55,6 +57,20 @@ const countPaidThisWeek = (inquiries, now) =>
     (inquiry) =>
       inquiry?.paymentStatus === 'paid' && isSameWeek(inquiry?.paidAt ?? inquiry?.updatedAt, now),
   )
+
+export function getCollectionsActionState(inquiry, { now } = {}) {
+  const paymentStatus = inquiry?.paymentStatus ?? ''
+  const hasProofOfPayment = hasProofOfPaymentDocument(inquiry?.documents ?? [])
+  const daysOverdue = getDaysOverdue(inquiry?.paymentDueAt, now)
+
+  return {
+    canSendPaymentReminder:
+      paymentStatus !== 'paid' &&
+      (isReminderEligiblePaymentStatus(paymentStatus) || (paymentStatus === 'unpaid' && daysOverdue > 0)),
+    canReviewProofOfPayment: hasProofOfPayment && ['proof_submitted', 'verifying'].includes(paymentStatus),
+    canMarkAsPaid: hasProofOfPayment && paymentStatus === 'verifying',
+  }
+}
 
 export function buildCollectionsTableRow(inquiry, { now } = {}) {
   return {
