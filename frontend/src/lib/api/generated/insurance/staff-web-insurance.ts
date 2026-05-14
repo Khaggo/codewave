@@ -128,7 +128,7 @@ export const insuranceStatusTransitions: Record<
   closed: [],
 };
 
-export const staffInsuranceQueueRoute: RouteContract = insuranceRoutes.listInquiries;
+export const staffInsuranceQueueRoute: RouteContract = insuranceRoutes.listInsuranceInquiries;
 
 export const staffInsuranceQueueStateRules: StaffInsuranceQueueStateRule[] = [
   {

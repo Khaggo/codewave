@@ -105,7 +105,7 @@ export const insuranceRoutes: Record<string, RouteContract> = {
     status: 'live',
     source: 'swagger',
   },
-  listInquiries: {
+  listInsuranceInquiries: {
     method: 'GET',
     path: '/api/insurance/inquiries',
     status: 'live',
