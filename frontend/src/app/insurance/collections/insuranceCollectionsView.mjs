@@ -1,0 +1,100 @@
+import { formatStatusLabel } from '../insuranceView.mjs'
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+const countMatchingInquiries = (inquiries, predicate) =>
+  inquiries.reduce((total, inquiry) => (predicate(inquiry) ? total + 1 : total), 0)
+
+const toDate = (value) => {
+  if (!value) {
+    return null
+  }
+
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+export const getDaysOverdue = (paymentDueAt, now) => {
+  const dueDate = toDate(paymentDueAt)
+  const currentDate = toDate(now) ?? new Date()
+
+  if (!dueDate || dueDate >= currentDate) {
+    return 0
+  }
+
+  return Math.floor((currentDate.getTime() - dueDate.getTime()) / MS_PER_DAY)
+}
+
+const hasProofOfPaymentDocument = (documents = []) =>
+  documents.some((document) => document?.documentType === 'proof_of_payment')
+
+const isSameWeek = (date, now) => {
+  const currentDate = toDate(now) ?? new Date()
+  const targetDate = toDate(date)
+
+  if (!targetDate) {
+    return false
+  }
+
+  const startOfWeek = new Date(currentDate)
+  startOfWeek.setUTCHours(0, 0, 0, 0)
+  startOfWeek.setUTCDate(currentDate.getUTCDate() - currentDate.getUTCDay())
+
+  const endOfWeek = new Date(startOfWeek)
+  endOfWeek.setUTCDate(startOfWeek.getUTCDate() + 7)
+
+  return targetDate >= startOfWeek && targetDate < endOfWeek
+}
+
+const countByPaymentStatus = (inquiries, paymentStatus) =>
+  countMatchingInquiries(inquiries, (inquiry) => inquiry?.paymentStatus === paymentStatus)
+
+const countPaidThisWeek = (inquiries, now) =>
+  countMatchingInquiries(
+    inquiries,
+    (inquiry) =>
+      inquiry?.paymentStatus === 'paid' && isSameWeek(inquiry?.paidAt ?? inquiry?.updatedAt, now),
+  )
+
+export function buildCollectionsTableRow(inquiry, { now } = {}) {
+  return {
+    key: inquiry?.id ?? '',
+    customer: inquiry?.customerDisplayName || 'Unknown customer',
+    vehicle: inquiry?.vehicleLabel || 'Unknown vehicle',
+    status: formatStatusLabel(inquiry?.status),
+    paymentStatus: formatStatusLabel(inquiry?.paymentStatus),
+    paymentDueAt: inquiry?.paymentDueAt ?? null,
+    daysOverdue: getDaysOverdue(inquiry?.paymentDueAt, now),
+    hasProofOfPayment: hasProofOfPaymentDocument(inquiry?.documents ?? []),
+  }
+}
+
+export function getCollectionsSummaryCards({ inquiries = [], now } = {}) {
+  return [
+    {
+      label: 'Unpaid',
+      value: countByPaymentStatus(inquiries, 'unpaid'),
+      sub: 'Cases still waiting for payment',
+    },
+    {
+      label: 'Proof Submitted',
+      value: countByPaymentStatus(inquiries, 'proof_submitted'),
+      sub: 'Cases with proof ready for review',
+    },
+    {
+      label: 'Verifying',
+      value: countByPaymentStatus(inquiries, 'verifying'),
+      sub: 'Cases under payment validation',
+    },
+    {
+      label: 'Overdue',
+      value: countByPaymentStatus(inquiries, 'overdue'),
+      sub: 'Cases past the payment deadline',
+    },
+    {
+      label: 'Paid This Week',
+      value: countPaidThisWeek(inquiries, now),
+      sub: 'Payments confirmed this week',
+    },
+  ]
+}
