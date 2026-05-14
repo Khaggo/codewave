@@ -72,9 +72,9 @@
 ## Customer-Safe Rules
 
 - vehicle ownership remains the backend gate for inquiry creation
-- mobile must show backend-owned insurance statuses and must not invent alternate lifecycle enums
+- the canonical phase-1 lifecycle contract comes from the live backend statuses: `submitted`, `needs_documents`, `under_review`, `for_approval`, `approved`, `payment_pending`, `active`, `for_renewal`, `closed`, `rejected`, `cancelled`
+- the shipped mobile surface still contains some legacy `approved_for_record` copy/handling; treat that as legacy client wording rather than canonical backend contract
 - customer mobile must not expose `reviewNotes`, `reviewedByUserId`, or other staff-only review metadata
-- phase-1 inquiry statuses visible to customers come from the live backend workflow: `submitted`, `needs_documents`, `under_review`, `for_approval`, `approved`, `payment_pending`, `active`, `for_renewal`, `closed`, `rejected`, `cancelled`
 - customer-safe tags also surface `documentStatus`, `paymentStatus`, and `renewalStatus`
 - binary uploads are the primary phase-1 document path; the reference-document route remains a compatibility path
 - vehicle-level insurance records are customer-safe follow-on tracking records; they are not a replacement for staff review workflows
@@ -100,4 +100,4 @@
 - This slice upgrades the real customer mobile route instead of leaving `InsuranceInquiryScreen` as a placeholder module.
 - Dashboard quick actions now link into the live insurance inquiry screen.
 - The mobile client intentionally treats inquiry tracking as a known-id flow plus vehicle-record history; it does not call the live staff-only customer history route.
-- Legacy `approved_for_record` wording should not be treated as the phase-1 lifecycle contract. Vehicle records are follow-on history, not a separate customer-facing inquiry status.
+- Legacy `approved_for_record` wording in the mobile client should not be treated as the phase-1 lifecycle contract. Vehicle records are follow-on history, not a separate customer-facing inquiry status.

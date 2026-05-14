@@ -33,7 +33,8 @@
   - `GET /api/insurance/inquiries` for the staff list and summary filters
   - `GET /api/insurance/inquiries/:id` for detail refresh
   - `PATCH /api/insurance/inquiries/:id/status` for workflow edits
-- Swagger naming around the patch route still reads like a narrow status update, but the shipped web client and backend workflow behavior use it for broader phase-1 workflow fields
+- the shipped web client drafts broader workflow fields, but the live controller still binds this route to `UpdateInsuranceInquiryStatusDto`
+- because global validation uses whitelist + `forbidNonWhitelisted`, the live patch contract currently accepts only `status` and optional `reviewNotes`; extra workflow fields are not part of the exposed route contract today
 
 ## Staff Review List States
 
@@ -70,16 +71,10 @@
 - only `service_adviser` and `super_admin` may use the staff insurance review workspace
 - the live list route accepts optional `status`, `paymentStatus`, and `renewalStatus` filters
 - the web workspace shows summary cards, a live table/list, workflow detail, payment and renewal tags, staff notes, and activity visibility from the current inquiry payload
-- shipped phase-1 staff edits on `PATCH /api/insurance/inquiries/:id/status` include:
+- the live patch route currently persists only:
   - `status`
-  - `documentStatus`
-  - `paymentStatus`
-  - `renewalStatus`
-  - `paymentDueAt`
-  - `policyExpiryAt`
-  - `renewalDueAt`
-  - `assignedStaffId`
   - `reviewNotes`
+- broader workflow metadata exists in the backend phase-1 service/design layer, but it is not exposed by the live controller DTO on `PATCH /api/insurance/inquiries/:id/status` today
 - customer intake fields such as subject, description, provider, policy number, and notes are read-only in this workspace
 - role failures, missing records, and invalid transitions must remain distinct states in both contract packs and UI messaging
 - this slice does not add insurer payout, settlement, or third-party integration behavior

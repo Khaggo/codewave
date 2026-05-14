@@ -50,7 +50,7 @@ Key relations:
 - store supporting document metadata, uploaded file references, and review state
 - track inquiry state from submission through document follow-up, review, approval, payment, renewal, and closure
 - expose staff list and customer-history reads for internal workflow operations
-- create optional follow-on `insurance_records` for vehicle tracking when the workflow is published into that record layer
+- automatically upsert follow-on `insurance_records` for vehicle tracking when an inquiry transitions to `closed`
 - expose inquiry updates to notifications and lifecycle modules
 - keep direct insurer integration out of assumed scope unless explicitly added later
 
@@ -69,7 +69,7 @@ Key relations:
 - customer uploads payment proof or missing requirements after submission
 - staff reviews uploaded documents
 - service adviser or super admin filters, assigns, annotates, and advances inquiry workflow
-- customer reads vehicle-level insurance records after staff publish follow-on tracking data
+- customer reads vehicle-level insurance records after the inquiry closes and the follow-on record is upserted automatically
 
 ## API Surface
 
