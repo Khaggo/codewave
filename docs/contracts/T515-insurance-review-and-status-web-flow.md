@@ -19,26 +19,28 @@
 
 | Route | Status | Source | Web Purpose |
 | --- | --- | --- | --- |
-| `GET /api/insurance/review-queue` | `planned` | task contract | future staff queue read model for adviser/admin review |
+| `GET /api/insurance/inquiries` | `live` | controller + web client | load the live staff table/list with optional workflow filters |
 | `GET /api/insurance/inquiries/:id` | `live` | Swagger/controller | refresh one known insurance inquiry before staff action |
-| `PATCH /api/insurance/inquiries/:id/status` | `live` | Swagger/controller | update inquiry status and review notes from the staff web surface |
-| `POST /api/insurance/inquiries/:id/documents` | `live` | Swagger/controller | reference route for downstream evidence additions after review asks for more files |
+| `GET /api/users/:id/insurance-inquiries` | `live` | controller + staff client | load staff-side customer insurance history when needed |
+| `PATCH /api/insurance/inquiries/:id/status` | `live` | controller + shipped web client | update inquiry status plus phase-1 workflow metadata from the staff web surface |
+| `POST /api/insurance/inquiries/:id/documents/upload` | `live` | Swagger/controller | accept PDF/image uploads for inquiry evidence |
+| `POST /api/insurance/inquiries/:id/documents` | `live` | Swagger/controller | keep legacy reference-document attachment available |
 
 ## Important Contract Constraint
 
-- there is **no live staff queue list route** in the current backend Swagger surface
-- this slice must not pretend that the queue is already live
-- current web behavior therefore splits into:
-  - planned queue cards backed by task-approved mocks
-  - live detail loading through `GET /api/insurance/inquiries/:id`
-  - live status updates through `PATCH /api/insurance/inquiries/:id/status`
+- the phase-1 web page no longer depends on a planned mock queue contract
+- the live workspace is driven by:
+  - `GET /api/insurance/inquiries` for the staff list and summary filters
+  - `GET /api/insurance/inquiries/:id` for detail refresh
+  - `PATCH /api/insurance/inquiries/:id/status` for workflow edits
+- Swagger naming around the patch route still reads like a narrow status update, but the shipped web client and backend workflow behavior use it for broader phase-1 workflow fields
 
-## Staff Review Queue States
+## Staff Review List States
 
 | State | Meaning |
 | --- | --- |
-| `queue_loaded` | mock-backed queue cards exist for adviser/admin review |
-| `queue_empty` | the planned queue has no review items |
+| `queue_loaded` | live staff cases are visible in the table/list workspace |
+| `queue_empty` | the live list has no cases for the current filters |
 | `detail_loaded` | the selected inquiry detail is available for staff review |
 | `forbidden_role` | the current portal role must not access the insurance review workspace |
 | `load_failed` | a non-classified API or network failure blocked detail loading |
@@ -66,13 +68,23 @@
 ## Contract Rules
 
 - only `service_adviser` and `super_admin` may use the staff insurance review workspace
-- queue cards are a planned read model and must stay clearly labeled as such until the backend exposes a live list route
-- live staff edits are limited to the backend DTO fields:
+- the live list route accepts optional `status`, `paymentStatus`, and `renewalStatus` filters
+- the web workspace shows summary cards, a live table/list, workflow detail, payment and renewal tags, staff notes, and activity visibility from the current inquiry payload
+- shipped phase-1 staff edits on `PATCH /api/insurance/inquiries/:id/status` include:
   - `status`
+  - `documentStatus`
+  - `paymentStatus`
+  - `renewalStatus`
+  - `paymentDueAt`
+  - `policyExpiryAt`
+  - `renewalDueAt`
+  - `assignedStaffId`
   - `reviewNotes`
 - customer intake fields such as subject, description, provider, policy number, and notes are read-only in this workspace
 - role failures, missing records, and invalid transitions must remain distinct states in both contract packs and UI messaging
 - this slice does not add insurer payout, settlement, or third-party integration behavior
+- live phase-1 statuses are `submitted`, `needs_documents`, `under_review`, `for_approval`, `approved`, `payment_pending`, `active`, `for_renewal`, `closed`, `rejected`, and `cancelled`
+- live workflow tags are `documentStatus`, `paymentStatus`, and `renewalStatus`; they complement the main inquiry status instead of replacing it
 
 ## Acceptance States
 
@@ -89,5 +101,5 @@
 ## Notes
 
 - This slice upgrades the staff/admin insurance page from placeholder content into a contract-aware review workspace.
-- The queue stays honest about its current status: planned read model today, live detail and status update routes right now.
-- The next backend improvement for this surface is a real adviser/admin review-queue endpoint so the web page can drop the mock-backed queue layer.
+- The current web screen is already backed by the live staff list route rather than a mock review queue.
+- The customer-history route exists for staff drill-down, but the shipped phase-1 page is centered on the live list/detail workspace.
