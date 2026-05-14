@@ -75,8 +75,12 @@ export const shouldShowCustomerInsuranceFollowUp = ({
 export const shouldDeferCustomerInsuranceTrackingRefresh = ({
   hasHydratedRememberedInquiryMappings = false,
   knownInquiryId,
+  settledRememberedInquiryIdForSelectedVehicle,
 } = {}) =>
-  !hasHydratedRememberedInquiryMappings && !String(knownInquiryId ?? '').trim()
+  !String(knownInquiryId ?? '').trim() &&
+  (!hasHydratedRememberedInquiryMappings ||
+    settledRememberedInquiryIdForSelectedVehicle === undefined ||
+    String(settledRememberedInquiryIdForSelectedVehicle ?? '').trim().length > 0)
 
 export const rememberInquiryForVehicle = ({ vehicleId, inquiryId } = {}) => {
   const normalizedVehicleId = String(vehicleId ?? '').trim()

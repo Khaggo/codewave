@@ -203,7 +203,7 @@ test('remembered inquiry mappings can round-trip through persisted storage data'
   clearRememberedInquiryForVehicle('vehicle-2')
 })
 
-test('tracking refresh waits for remembered-inquiry hydration unless an inquiry id is already known', () => {
+test('tracking refresh waits until the selected vehicle remembered-inquiry lookup has settled', () => {
   assert.equal(
     shouldDeferCustomerInsuranceTrackingRefresh({
       hasHydratedRememberedInquiryMappings: false,
@@ -223,6 +223,25 @@ test('tracking refresh waits for remembered-inquiry hydration unless an inquiry 
   assert.equal(
     shouldDeferCustomerInsuranceTrackingRefresh({
       hasHydratedRememberedInquiryMappings: true,
+      settledRememberedInquiryIdForSelectedVehicle: undefined,
+      knownInquiryId: null,
+    }),
+    true,
+  )
+
+  assert.equal(
+    shouldDeferCustomerInsuranceTrackingRefresh({
+      hasHydratedRememberedInquiryMappings: true,
+      settledRememberedInquiryIdForSelectedVehicle: 'inq-4',
+      knownInquiryId: null,
+    }),
+    true,
+  )
+
+  assert.equal(
+    shouldDeferCustomerInsuranceTrackingRefresh({
+      hasHydratedRememberedInquiryMappings: true,
+      settledRememberedInquiryIdForSelectedVehicle: null,
       knownInquiryId: null,
     }),
     false,

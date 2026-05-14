@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -412,6 +412,10 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasHydratedRememberedInquiryMappings, setHasHydratedRememberedInquiryMappings] =
     useState(false);
+  const rememberedInquiryLookupByVehicleRef = useRef({
+    vehicleId: null,
+    inquiryId: routeInquiryId ?? undefined,
+  });
 
   const selectedVehicle =
     ownedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
@@ -520,6 +524,15 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       selectedVehicle,
     ],
   );
+  const getSettledRememberedInquiryIdForSelectedVehicle = () => {
+    if (!selectedVehicleId) {
+      return undefined;
+    }
+
+    return rememberedInquiryLookupByVehicleRef.current.vehicleId === selectedVehicleId
+      ? rememberedInquiryLookupByVehicleRef.current.inquiryId
+      : undefined;
+  };
 
   useEffect(() => {
     const hasInvalidVehicleParam = route?.params?.vehicleId && !routeVehicleId;
@@ -578,25 +591,44 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return;
     }
 
+    const rememberedInquiryId = hasHydratedRememberedInquiryMappings
+      ? getRememberedInquiryForVehicle(routeVehicleId)
+      : null;
+    rememberedInquiryLookupByVehicleRef.current = {
+      vehicleId: routeVehicleId,
+      inquiryId: routeInquiryId ?? (hasHydratedRememberedInquiryMappings ? rememberedInquiryId : undefined),
+    };
     setSelectedVehicleId(routeVehicleId);
     setLatestInquiryId(
-      routeInquiryId ??
-        (hasHydratedRememberedInquiryMappings
-          ? getRememberedInquiryForVehicle(routeVehicleId)
-          : null),
+      routeInquiryId ?? (hasHydratedRememberedInquiryMappings ? rememberedInquiryId : null),
     );
   }, [hasHydratedRememberedInquiryMappings, routeInquiryId, routeVehicleId]);
 
   useEffect(() => {
     if (!selectedVehicleId) {
+      rememberedInquiryLookupByVehicleRef.current = {
+        vehicleId: null,
+        inquiryId: undefined,
+      };
       setLatestInquiryId(null);
       return;
     }
 
-    if (!routeInquiryId && hasHydratedRememberedInquiryMappings) {
-      setLatestInquiryId((currentInquiryId) =>
-        currentInquiryId ?? getRememberedInquiryForVehicle(selectedVehicleId),
-      );
+    if (!routeInquiryId) {
+      if (!hasHydratedRememberedInquiryMappings) {
+        rememberedInquiryLookupByVehicleRef.current = {
+          vehicleId: selectedVehicleId,
+          inquiryId: undefined,
+        };
+        return;
+      }
+
+      const rememberedInquiryId = getRememberedInquiryForVehicle(selectedVehicleId);
+      rememberedInquiryLookupByVehicleRef.current = {
+        vehicleId: selectedVehicleId,
+        inquiryId: rememberedInquiryId ?? null,
+      };
+      setLatestInquiryId((currentInquiryId) => currentInquiryId ?? rememberedInquiryId ?? null);
     }
   }, [hasHydratedRememberedInquiryMappings, routeInquiryId, selectedVehicleId]);
 
@@ -759,6 +791,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       shouldDeferCustomerInsuranceTrackingRefresh({
         hasHydratedRememberedInquiryMappings,
         knownInquiryId,
+        settledRememberedInquiryIdForSelectedVehicle:
+          getSettledRememberedInquiryIdForSelectedVehicle(),
       })
     ) {
       return;
@@ -836,6 +870,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       shouldDeferCustomerInsuranceTrackingRefresh({
         hasHydratedRememberedInquiryMappings,
         knownInquiryId: latestInquiryId,
+        settledRememberedInquiryIdForSelectedVehicle:
+          getSettledRememberedInquiryIdForSelectedVehicle(),
       })
     ) {
       return;
