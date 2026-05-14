@@ -82,6 +82,48 @@ export const shouldDeferCustomerInsuranceTrackingRefresh = ({
     settledRememberedInquiryIdForSelectedVehicle === undefined ||
     String(settledRememberedInquiryIdForSelectedVehicle ?? '').trim().length > 0)
 
+export const getVehicleScopedCustomerInquiryId = ({
+  selectedVehicleId,
+  routeInquiryId,
+  latestInquiryId,
+  latestInquiryVehicleId,
+  rememberedInquiryId,
+} = {}) => {
+  const normalizedRouteInquiryId = String(routeInquiryId ?? '').trim()
+
+  if (normalizedRouteInquiryId) {
+    return normalizedRouteInquiryId
+  }
+
+  const normalizedSelectedVehicleId = String(selectedVehicleId ?? '').trim()
+  const normalizedLatestInquiryId = String(latestInquiryId ?? '').trim()
+  const normalizedLatestInquiryVehicleId = String(latestInquiryVehicleId ?? '').trim()
+
+  if (
+    normalizedSelectedVehicleId &&
+    normalizedLatestInquiryId &&
+    normalizedLatestInquiryVehicleId === normalizedSelectedVehicleId
+  ) {
+    return normalizedLatestInquiryId
+  }
+
+  return rememberedInquiryId ?? null
+}
+
+export const doesCustomerInsuranceInquiryMatchVehicle = ({
+  inquiry,
+  vehicleId,
+} = {}) => {
+  const normalizedInquiryVehicleId = String(inquiry?.vehicleId ?? '').trim()
+  const normalizedVehicleId = String(vehicleId ?? '').trim()
+
+  if (!normalizedInquiryVehicleId || !normalizedVehicleId) {
+    return false
+  }
+
+  return normalizedInquiryVehicleId === normalizedVehicleId
+}
+
 export const rememberInquiryForVehicle = ({ vehicleId, inquiryId } = {}) => {
   const normalizedVehicleId = String(vehicleId ?? '').trim()
   const normalizedInquiryId = String(inquiryId ?? '').trim()

@@ -33,6 +33,8 @@ import {
   buildRequirementsChecklist,
   clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
+  doesCustomerInsuranceInquiryMatchVehicle,
+  getVehicleScopedCustomerInquiryId,
   getRememberedInquiryForVehicle,
   getCustomerInsuranceTimeline,
   getInsuranceHomeCards,
@@ -412,6 +414,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasHydratedRememberedInquiryMappings, setHasHydratedRememberedInquiryMappings] =
     useState(false);
+  const latestInquiryVehicleIdRef = useRef(routeVehicleId ?? initialVehicleId ?? null);
   const rememberedInquiryLookupByVehicleRef = useRef({
     vehicleId: null,
     inquiryId: routeInquiryId ?? undefined,
@@ -533,6 +536,21 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       ? rememberedInquiryLookupByVehicleRef.current.inquiryId
       : undefined;
   };
+  const getVehicleScopedLatestInquiryId = ({
+    inquiryIdOverride = null,
+    vehicleIdOverride = selectedVehicleId,
+  } = {}) =>
+    String(inquiryIdOverride ?? '').trim() ||
+    getVehicleScopedCustomerInquiryId({
+      selectedVehicleId: vehicleIdOverride,
+      routeInquiryId,
+      latestInquiryId,
+      latestInquiryVehicleId: latestInquiryVehicleIdRef.current,
+      rememberedInquiryId:
+        rememberedInquiryLookupByVehicleRef.current.vehicleId === vehicleIdOverride
+          ? rememberedInquiryLookupByVehicleRef.current.inquiryId
+          : undefined,
+    });
 
   useEffect(() => {
     const hasInvalidVehicleParam = route?.params?.vehicleId && !routeVehicleId;
@@ -574,6 +592,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         );
 
         if (resumedInquiryId) {
+          latestInquiryVehicleIdRef.current = routeVehicleId ?? selectedVehicleId ?? fallbackVehicleId;
           setLatestInquiryId((currentInquiryId) => currentInquiryId ?? resumedInquiryId);
         }
       }
@@ -599,6 +618,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       inquiryId: routeInquiryId ?? (hasHydratedRememberedInquiryMappings ? rememberedInquiryId : undefined),
     };
     setSelectedVehicleId(routeVehicleId);
+    latestInquiryVehicleIdRef.current = routeVehicleId;
     setLatestInquiryId(
       routeInquiryId ?? (hasHydratedRememberedInquiryMappings ? rememberedInquiryId : null),
     );
@@ -610,6 +630,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         vehicleId: null,
         inquiryId: undefined,
       };
+      latestInquiryVehicleIdRef.current = null;
+      setLatestInquiry(null);
       setLatestInquiryId(null);
       return;
     }
@@ -628,9 +650,23 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         vehicleId: selectedVehicleId,
         inquiryId: rememberedInquiryId ?? null,
       };
-      setLatestInquiryId((currentInquiryId) => currentInquiryId ?? rememberedInquiryId ?? null);
+      if (
+        !doesCustomerInsuranceInquiryMatchVehicle({
+          inquiry: latestInquiry,
+          vehicleId: selectedVehicleId,
+        })
+      ) {
+        setLatestInquiry(null);
+      }
+      latestInquiryVehicleIdRef.current = rememberedInquiryId ? selectedVehicleId : null;
+      setLatestInquiryId(rememberedInquiryId ?? null);
     }
-  }, [hasHydratedRememberedInquiryMappings, routeInquiryId, selectedVehicleId]);
+  }, [
+    hasHydratedRememberedInquiryMappings,
+    latestInquiry,
+    routeInquiryId,
+    selectedVehicleId,
+  ]);
 
   useEffect(() => {
     let isMounted = true;
@@ -785,7 +821,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return;
     }
 
-    const knownInquiryId = inquiryIdOverride ?? latestInquiryId ?? null;
+    const knownInquiryId = getVehicleScopedLatestInquiryId({
+      inquiryIdOverride,
+    });
 
     if (
       shouldDeferCustomerInsuranceTrackingRefresh({
@@ -812,6 +850,15 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             inquiryId: knownInquiryId,
             accessToken,
           });
+          if (
+            !doesCustomerInsuranceInquiryMatchVehicle({
+              inquiry: nextInquiry,
+              vehicleId: selectedVehicleId,
+            })
+          ) {
+            inquiryNotFound = true;
+            nextInquiry = null;
+          }
         } catch (error) {
           if (error instanceof ApiError && error.status === 404) {
             inquiryNotFound = true;
@@ -828,6 +875,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       });
 
       await syncRememberedInquiry(selectedVehicleId, nextInquiry ?? null);
+      latestInquiryVehicleIdRef.current = nextInquiry?.vehicleId ?? null;
       setLatestInquiry(nextInquiry ?? null);
       setClaimStatusUpdates(nextRecords);
       setLatestInquiryId(
@@ -869,7 +917,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     if (
       shouldDeferCustomerInsuranceTrackingRefresh({
         hasHydratedRememberedInquiryMappings,
-        knownInquiryId: latestInquiryId,
+        knownInquiryId: getVehicleScopedLatestInquiryId(),
         settledRememberedInquiryIdForSelectedVehicle:
           getSettledRememberedInquiryIdForSelectedVehicle(),
       })
@@ -911,6 +959,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const handleSelectVehicle = (vehicleId) => {
     setSelectedVehicleId(vehicleId);
     setTrackingMessage('');
+    latestInquiryVehicleIdRef.current = vehicleId;
     setLatestInquiry(null);
     setLatestInquiryId(getRememberedInquiryForVehicle(vehicleId));
     setClaimStatusUpdates([]);
@@ -1076,6 +1125,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       });
 
       setLatestInquiry(createdInquiry);
+      latestInquiryVehicleIdRef.current = createdInquiry?.vehicleId ?? selectedVehicle.id;
       setLatestInquiryId(createdInquiry?.id ?? null);
       await syncRememberedInquiry(selectedVehicle.id, createdInquiry);
       setIntakeState('submitted_inquiry');
@@ -1150,6 +1200,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       });
 
       setLatestInquiry(updatedInquiry);
+      latestInquiryVehicleIdRef.current = updatedInquiry?.vehicleId ?? selectedVehicleId;
       setLatestInquiryId(updatedInquiry?.id ?? null);
       await syncRememberedInquiry(selectedVehicleId, updatedInquiry);
       setTrackingState(

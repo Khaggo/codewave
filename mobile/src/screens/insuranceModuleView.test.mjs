@@ -5,6 +5,8 @@ import {
   buildRequirementsChecklist,
   clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
+  doesCustomerInsuranceInquiryMatchVehicle,
+  getVehicleScopedCustomerInquiryId,
   getRememberedInquiryForVehicle,
   getCustomerInsuranceTimeline,
   getInsuranceHomeCards,
@@ -245,6 +247,63 @@ test('tracking refresh waits until the selected vehicle remembered-inquiry looku
       knownInquiryId: null,
     }),
     false,
+  )
+})
+
+test('vehicle-scoped inquiry identity drops stale inquiry ids from a different vehicle', () => {
+  assert.equal(
+    getVehicleScopedCustomerInquiryId({
+      selectedVehicleId: 'vehicle-b',
+      latestInquiryId: 'inq-a',
+      latestInquiryVehicleId: 'vehicle-a',
+      rememberedInquiryId: null,
+    }),
+    null,
+  )
+
+  assert.equal(
+    getVehicleScopedCustomerInquiryId({
+      selectedVehicleId: 'vehicle-b',
+      latestInquiryId: 'inq-a',
+      latestInquiryVehicleId: 'vehicle-a',
+      rememberedInquiryId: 'inq-b',
+    }),
+    'inq-b',
+  )
+
+  assert.equal(
+    getVehicleScopedCustomerInquiryId({
+      selectedVehicleId: 'vehicle-b',
+      routeInquiryId: 'inq-route',
+      latestInquiryId: 'inq-a',
+      latestInquiryVehicleId: 'vehicle-a',
+      rememberedInquiryId: null,
+    }),
+    'inq-route',
+  )
+})
+
+test('vehicle matching rejects inquiries that belong to a different vehicle context', () => {
+  assert.equal(
+    doesCustomerInsuranceInquiryMatchVehicle({
+      inquiry: {
+        id: 'inq-a',
+        vehicleId: 'vehicle-a',
+      },
+      vehicleId: 'vehicle-b',
+    }),
+    false,
+  )
+
+  assert.equal(
+    doesCustomerInsuranceInquiryMatchVehicle({
+      inquiry: {
+        id: 'inq-b',
+        vehicleId: 'vehicle-b',
+      },
+      vehicleId: 'vehicle-b',
+    }),
+    true,
   )
 })
 
