@@ -1,7 +1,7 @@
 import { formatStatusLabel } from '../insuranceView.mjs'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
-const NON_ACTIVE_RENEWAL_STATUSES = ['renewed', 'cancelled', 'not_applicable']
+const NON_ACTIVE_RENEWAL_STATUSES = ['renewed', 'cancelled', 'not_applicable', 'expired']
 const TERMINAL_INQUIRY_STATUSES = ['closed', 'cancelled', 'rejected']
 
 const toDate = (value) => {

@@ -103,6 +103,11 @@ test('getRenewalsSummaryCards excludes completed and non-active renewal statuses
           renewalStatus: 'not_applicable',
           renewalDueAt: '2026-06-13T00:00:00.000Z',
         }),
+        buildInquiryFixture({
+          id: 'expired-ignored',
+          renewalStatus: 'expired',
+          renewalDueAt: '2026-05-20T00:00:00.000Z',
+        }),
       ],
     }).map((card) => [card.label, card.value]),
     [
