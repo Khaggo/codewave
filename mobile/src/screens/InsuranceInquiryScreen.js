@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -28,6 +29,7 @@ import {
 } from '../lib/insuranceClient';
 import {
   buildRequirementsChecklist,
+  createPickedInsuranceDocumentDraft,
   getCustomerInsuranceTimeline,
   getInsuranceHomeCards,
 } from './insuranceModuleView.mjs';
@@ -79,6 +81,7 @@ const buildInitialDocumentUploadDraft = () => ({
   fileUri: '',
   mimeType: 'application/pdf',
   notes: '',
+  fileSizeLabel: null,
 });
 
 const inferMimeType = (fileName, fallbackType = 'application/pdf') => {
@@ -736,6 +739,68 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
   };
 
+  const handlePickDocument = async () => {
+    if (!latestInquiry?.id) {
+      setDocumentUploadState('document_missing_inquiry');
+      setDocumentUploadMessage('Submit a request first, then select a document for upload.');
+      return;
+    }
+
+    if (!latestInquiryCanAcceptDocuments) {
+      setDocumentUploadState('document_closed');
+      setDocumentUploadMessage(
+        'This inquiry is already closed or rejected, so the backend will not accept more documents.',
+      );
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: ['application/pdf', 'image/*'],
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const asset = result.assets?.[0];
+
+      if (!asset) {
+        setDocumentUploadState('document_validation_error');
+        setDocumentUploadMessage('We could not read the selected document. Try choosing the file again.');
+        return;
+      }
+
+      setDocumentDraft((currentDraft) => ({
+        ...currentDraft,
+        ...createPickedInsuranceDocumentDraft({
+          documentType: currentDraft.documentType,
+          asset,
+        }),
+        notes: currentDraft.notes,
+      }));
+      setDocumentUploadState('document_ready');
+      setDocumentUploadMessage(`Selected ${asset.name}. Ready to upload when you are.`);
+    } catch (error) {
+      setDocumentUploadState('document_failed');
+      setDocumentUploadMessage(
+        buildCustomerErrorMessage(error, 'We could not open the document picker right now.'),
+      );
+    }
+  };
+
+  const handleClearPickedDocument = () => {
+    setDocumentDraft((currentDraft) => ({
+      ...buildInitialDocumentUploadDraft(),
+      documentType: currentDraft.documentType,
+      notes: currentDraft.notes,
+    }));
+    setDocumentUploadState('document_ready');
+    setDocumentUploadMessage('Selected file cleared. Choose another document when you are ready.');
+  };
+
   const handleHomeCardPress = async (cardKey) => {
     if (cardKey === 'start') {
       setIntakeMessage('Complete the request form below to start a new insurance case.');
@@ -878,7 +943,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
     if (!String(documentDraft.fileName ?? '').trim() || !String(documentDraft.fileUri ?? '').trim()) {
       setDocumentUploadState('document_validation_error');
-      setDocumentUploadMessage('Document name and file URI are required before upload.');
+      setDocumentUploadMessage('Select a PDF or image document before upload.');
       return;
     }
 
@@ -1422,37 +1487,73 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                       })}
                     </View>
 
-                    <Text style={styles.fieldLabel}>Document name</Text>
-                    <TextInput
-                      value={documentDraft.fileName}
-                      onChangeText={(value) => handleDocumentDraftChange('fileName', value)}
-                      placeholder={documentDraft.documentType === 'proof_of_payment' ? 'proof-of-payment.pdf' : 'or-cr-scan.pdf'}
-                      placeholderTextColor={colors.mutedText}
-                      style={styles.input}
-                      editable={latestInquiryCanAcceptDocuments && !isUploadingDocument}
-                    />
+                    <Text style={styles.fieldLabel}>Selected document</Text>
+                    {documentDraft.fileName ? (
+                      <View style={styles.selectedDocumentCard}>
+                        <View style={styles.selectedDocumentHeader}>
+                          <View style={styles.selectedDocumentIconWrap}>
+                            <MaterialCommunityIcons
+                              name={
+                                documentDraft.mimeType.startsWith('image/')
+                                  ? 'file-image-outline'
+                                  : 'file-pdf-box'
+                              }
+                              size={18}
+                              color={colors.primary}
+                            />
+                          </View>
+                          <View style={styles.selectedDocumentCopy}>
+                            <Text style={styles.selectedDocumentTitle}>{documentDraft.fileName}</Text>
+                            <Text style={styles.selectedDocumentMeta}>
+                              {[documentDraft.mimeType, documentDraft.fileSizeLabel].filter(Boolean).join(' • ')}
+                            </Text>
+                          </View>
+                        </View>
 
-                    <Text style={styles.fieldLabel}>Local file URI</Text>
-                    <TextInput
-                      value={documentDraft.fileUri}
-                      onChangeText={(value) => handleDocumentDraftChange('fileUri', value)}
-                      placeholder="file:///storage/emulated/0/Download/or-cr-scan.pdf"
-                      placeholderTextColor={colors.mutedText}
-                      style={styles.input}
-                      autoCapitalize="none"
-                      editable={latestInquiryCanAcceptDocuments && !isUploadingDocument}
-                    />
+                        <View style={styles.selectedDocumentActions}>
+                          <TouchableOpacity
+                            style={styles.secondaryButton}
+                            onPress={handlePickDocument}
+                            activeOpacity={0.88}
+                            disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
+                          >
+                            <MaterialCommunityIcons name="file-replace-outline" size={18} color={colors.text} />
+                            <Text style={styles.secondaryButtonText}>Replace</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.secondaryButton}
+                            onPress={handleClearPickedDocument}
+                            activeOpacity={0.88}
+                            disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
+                          >
+                            <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.text} />
+                            <Text style={styles.secondaryButtonText}>Clear</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.emptyDocumentCard}>
+                        <Text style={styles.emptyDocumentTitle}>No file selected yet</Text>
+                        <Text style={styles.emptyDocumentText}>
+                          Choose a PDF or image file from your device, then upload it to the current insurance request.
+                        </Text>
+                      </View>
+                    )}
 
-                    <Text style={styles.fieldLabel}>MIME type</Text>
-                    <TextInput
-                      value={documentDraft.mimeType}
-                      onChangeText={(value) => handleDocumentDraftChange('mimeType', value)}
-                      placeholder="application/pdf"
-                      placeholderTextColor={colors.mutedText}
-                      style={styles.input}
-                      autoCapitalize="none"
-                      editable={latestInquiryCanAcceptDocuments && !isUploadingDocument}
-                    />
+                    <TouchableOpacity
+                      style={[
+                        styles.secondaryActionButton,
+                        (!latestInquiryCanAcceptDocuments || isUploadingDocument) && styles.primaryButtonDisabled,
+                      ]}
+                      onPress={handlePickDocument}
+                      disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
+                      activeOpacity={0.88}
+                    >
+                      <MaterialCommunityIcons name="file-search-outline" size={18} color={colors.primary} />
+                      <Text style={styles.secondaryActionButtonText}>
+                        {documentDraft.fileName ? 'Select another document' : 'Select document'}
+                      </Text>
+                    </TouchableOpacity>
 
                     <Text style={styles.fieldLabel}>Document notes</Text>
                     <TextInput
@@ -1763,6 +1864,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  secondaryActionButton: {
+    minHeight: 48,
+    paddingHorizontal: 14,
+    borderRadius: radius.medium,
+    borderWidth: 1,
+    borderColor: colors.primaryGlow,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  secondaryActionButtonText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '800',
+  },
   homeCardGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1902,6 +2021,47 @@ const styles = StyleSheet.create({
   },
   documentUploadForm: {
     marginTop: 2,
+  },
+  selectedDocumentCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.medium,
+    padding: 14,
+    marginBottom: 14,
+  },
+  selectedDocumentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  selectedDocumentIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedDocumentCopy: {
+    flex: 1,
+  },
+  selectedDocumentTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  selectedDocumentMeta: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  selectedDocumentActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
   },
   checklistHeading: {
     color: colors.labelText,

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   buildRequirementsChecklist,
+  createPickedInsuranceDocumentDraft,
   getCustomerInsuranceTimeline,
   getInsuranceHomeCards,
 } from './insuranceModuleView.mjs'
@@ -111,6 +112,28 @@ test('customer timeline includes payment pending and renewal prompts', () => {
       renewalStatus: 'upcoming',
     }).map((step) => step.key),
     ['submitted', 'review', 'payment', 'renewal'],
+  )
+})
+
+test('createPickedInsuranceDocumentDraft maps a selected asset into upload-ready fields', () => {
+  assert.deepEqual(
+    createPickedInsuranceDocumentDraft({
+      documentType: 'proof_of_payment',
+      asset: {
+        name: 'receipt.jpg',
+        uri: 'file:///receipt.jpg',
+        mimeType: 'image/jpeg',
+        size: 245760,
+      },
+    }),
+    {
+      documentType: 'proof_of_payment',
+      fileName: 'receipt.jpg',
+      fileUri: 'file:///receipt.jpg',
+      mimeType: 'image/jpeg',
+      notes: '',
+      fileSizeLabel: '240 KB',
+    },
   )
 })
 

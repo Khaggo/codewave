@@ -14,11 +14,35 @@ const OPTIONAL_DOCUMENT_TYPES = [
 
 const hasUploadedType = (uploadedTypes, type) => uploadedTypes.includes(type)
 
+const formatFileSizeLabel = (size) => {
+  if (!Number.isFinite(size) || size <= 0) {
+    return null
+  }
+
+  if (size >= 1024 * 1024) {
+    return `${Math.round((size / (1024 * 1024)) * 10) / 10} MB`
+  }
+
+  return `${Math.round(size / 1024)} KB`
+}
+
 const buildChecklistGroup = (documentTypes, uploadedTypes) =>
   documentTypes.map((documentType) => ({
     ...documentType,
     complete: hasUploadedType(uploadedTypes, documentType.type),
   }))
+
+export const createPickedInsuranceDocumentDraft = ({
+  documentType = 'photo',
+  asset,
+} = {}) => ({
+  documentType,
+  fileName: String(asset?.name ?? '').trim(),
+  fileUri: String(asset?.uri ?? '').trim(),
+  mimeType: String(asset?.mimeType ?? '').trim() || 'application/pdf',
+  notes: '',
+  fileSizeLabel: formatFileSizeLabel(asset?.size),
+})
 
 export const getInsuranceHomeCards = ({ hasActiveRequest } = {}) => [
   { key: 'start', label: 'Start New Request' },
