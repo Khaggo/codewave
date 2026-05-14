@@ -42,7 +42,7 @@ export interface StaffInsuranceStatusUpdateStateRule {
   state: StaffInsuranceStatusUpdateState;
   surface: 'staff-admin-web';
   truth: 'synchronous-insurance-record' | 'client-guard';
-  routeKey: 'updateInquiryStatus';
+  routeKey: 'updateInquiryStatus' | 'updateInquiryWorkflow';
   allowedRoles: StaffPortalRole[];
   description: string;
 }
@@ -312,5 +312,6 @@ export const staffInsuranceContractSources = {
   queue: staffInsuranceQueueRoute,
   detail: insuranceRoutes.getInquiryById,
   update: insuranceRoutes.updateInquiryStatus,
+  workflowUpdate: insuranceRoutes.updateInquiryWorkflow,
   documents: insuranceRoutes.uploadInquiryDocumentFile,
 } as const;

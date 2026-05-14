@@ -9,7 +9,10 @@ import {
   getInsuranceDetailTabs,
   getInsuranceSummaryCards,
 } from './insuranceView.mjs'
-import { updateInsuranceInquiryStatus } from '../../lib/insuranceStaffClient.js'
+import {
+  updateInsuranceInquiryStatus,
+  updateInsuranceInquiryWorkflow,
+} from '../../lib/insuranceStaffClient.js'
 
 const buildInquiryFixture = (overrides = {}) => ({
   id: 'inq-1',
@@ -42,8 +45,8 @@ test('getInsuranceSummaryCards returns queue and active inquiry summary values',
       { label: 'Selected Inquiry', value: 'Under Review', sub: 'Bumper damage' },
       {
         label: 'Editable Fields',
-        value: '9',
-        sub: 'status, workflow tags, assignee, due dates, and review notes',
+        value: '2',
+        sub: 'status and review notes only',
       },
     ],
   )
@@ -117,13 +120,6 @@ test('getInsuranceDetailTabs exposes overview, documents, timeline, payment, and
 test('getNextInsuranceWorkspaceViewState preserves tab, feedback, and dirty draft when the same inquiry refreshes', () => {
   const draftInProgress = {
     status: 'payment_pending',
-    documentStatus: 'complete',
-    paymentStatus: 'proof_submitted',
-    renewalStatus: 'upcoming',
-    paymentDueAt: '2026-05-30',
-    policyExpiryAt: '2026-08-15',
-    renewalDueAt: '2026-07-15',
-    assignedStaffId: 'adviser-1',
     reviewNotes: 'Call customer before approval.',
   }
 
@@ -162,10 +158,6 @@ test('getNextInsuranceWorkspaceViewState resets tab and hydrates draft when the 
         documentStatus: 'complete',
         paymentStatus: 'proof_submitted',
         renewalStatus: 'upcoming',
-        paymentDueAt: '2026-05-30',
-        policyExpiryAt: '2026-08-15',
-        renewalDueAt: '2026-07-15',
-        assignedStaffId: 'adviser-1',
         reviewNotes: 'Dirty draft',
       },
       currentUpdateMessage: 'Old update message',
@@ -192,13 +184,6 @@ test('getNextInsuranceWorkspaceViewState resets tab and hydrates draft when the 
       detailState: 'detail_loaded',
       updateDraft: {
         status: 'for_approval',
-        documentStatus: 'under_verification',
-        paymentStatus: 'not_required',
-        renewalStatus: 'not_applicable',
-        paymentDueAt: '',
-        policyExpiryAt: '',
-        renewalDueAt: '',
-        assignedStaffId: '',
         reviewNotes: '',
       },
       updateMessage: '',
@@ -278,11 +263,6 @@ test('updateInsuranceInquiryStatus omits blank optional workflow fields from the
     await updateInsuranceInquiryStatus({
       inquiryId: 'inq-1',
       status: 'under_review',
-      documentStatus: 'complete',
-      paymentDueAt: '   ',
-      policyExpiryAt: '',
-      renewalDueAt: ' \n ',
-      assignedStaffId: '   ',
       reviewNotes: ' Ready for review ',
       accessToken: 'token-1',
     })
@@ -293,7 +273,88 @@ test('updateInsuranceInquiryStatus omits blank optional workflow fields from the
   assert.equal(calls.length, 1)
   assert.deepEqual(JSON.parse(calls[0].options.body), {
     status: 'under_review',
-    documentStatus: 'complete',
     reviewNotes: 'Ready for review',
+  })
+})
+
+test('updateInsuranceInquiryWorkflow posts trimmed workflow metadata to the workflow route', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({
+      url,
+      options: {
+        ...options,
+        body: options.body,
+      },
+    })
+
+    return new Response(
+      JSON.stringify({
+        id: 'inq-1',
+        userId: 'user-1',
+        vehicleId: 'vehicle-1',
+        inquiryType: 'comprehensive',
+        purpose: 'quotation',
+        subject: 'Bumper damage',
+        description: 'Customer inquiry',
+        status: 'payment_pending',
+        documentStatus: 'complete',
+        paymentStatus: 'proof_submitted',
+        renewalStatus: 'upcoming',
+        assignedStaffId: 'adviser-2',
+        paymentDueAt: '2026-05-30T00:00:00.000Z',
+        policyExpiryAt: '2026-08-15T00:00:00.000Z',
+        renewalDueAt: '2026-07-15T00:00:00.000Z',
+        reviewNotes: 'Waiting for accounting confirmation.',
+        createdByUserId: 'staff-1',
+        createdAt: '2026-05-14T00:00:00.000Z',
+        updatedAt: '2026-05-14T00:00:00.000Z',
+        documents: [],
+        activities: [],
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }
+
+  let result
+
+  try {
+    result = await updateInsuranceInquiryWorkflow({
+      inquiryId: 'inq-1',
+      status: 'payment_pending',
+      documentStatus: 'complete',
+      paymentStatus: 'proof_submitted',
+      renewalStatus: 'upcoming',
+      paymentDueAt: ' 2026-05-30T00:00:00.000Z ',
+      policyExpiryAt: '',
+      renewalDueAt: '\n2026-07-15T00:00:00.000Z  ',
+      assignedStaffId: ' adviser-2 ',
+      reviewNotes: ' Waiting for accounting confirmation. ',
+      accessToken: 'token-1',
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'http://127.0.0.1:3000/api/insurance/inquiries/inq-1/workflow')
+  assert.equal(result?.status, 'payment_pending')
+  assert.equal(result?.assignedStaffId, 'adviser-2')
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    status: 'payment_pending',
+    documentStatus: 'complete',
+    paymentStatus: 'proof_submitted',
+    renewalStatus: 'upcoming',
+    paymentDueAt: '2026-05-30T00:00:00.000Z',
+    renewalDueAt: '2026-07-15T00:00:00.000Z',
+    assignedStaffId: 'adviser-2',
+    reviewNotes: 'Waiting for accounting confirmation.',
   })
 })

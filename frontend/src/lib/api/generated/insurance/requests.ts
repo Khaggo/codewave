@@ -124,6 +124,13 @@ export const insuranceRoutes: Record<string, RouteContract> = {
     source: 'swagger',
     notes: 'Only service advisers and super admins can advance inquiry workflow and follow-up tags.',
   },
+  updateInquiryWorkflow: {
+    method: 'PATCH',
+    path: '/api/insurance/inquiries/:id/workflow',
+    status: 'live',
+    source: 'swagger',
+    notes: 'Broader workflow update route for collections and future staff follow-up metadata changes.',
+  },
   uploadInquiryDocument: {
     method: 'POST',
     path: '/api/insurance/inquiries/:id/documents',

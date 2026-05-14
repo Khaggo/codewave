@@ -220,6 +220,30 @@ export const listInsuranceInquiriesByUserId = async ({ userId, accessToken }) =>
 export const updateInsuranceInquiryStatus = async ({
   inquiryId,
   status,
+  reviewNotes,
+  accessToken,
+}) => {
+  if (!inquiryId) {
+    throw new ApiError('Select an insurance inquiry before saving a status update.', 400, {
+      path: '/api/insurance/inquiries/:id/status',
+    });
+  }
+
+  return normalizeInsuranceInquiryForStaff(
+    await request(`/api/insurance/inquiries/${inquiryId}/status`, {
+      method: 'PATCH',
+      headers: buildAuthorizedHeaders(accessToken),
+      body: {
+        status,
+        reviewNotes: trimOrNull(reviewNotes) ?? undefined,
+      },
+    }),
+  );
+};
+
+export const updateInsuranceInquiryWorkflow = async ({
+  inquiryId,
+  status,
   documentStatus,
   paymentStatus,
   renewalStatus,
@@ -231,18 +255,18 @@ export const updateInsuranceInquiryStatus = async ({
   accessToken,
 }) => {
   if (!inquiryId) {
-    throw new ApiError('Select an insurance inquiry before saving a status update.', 400, {
-      path: '/api/insurance/inquiries/:id/status',
+    throw new ApiError('Select an insurance inquiry before saving a workflow update.', 400, {
+      path: '/api/insurance/inquiries/:id/workflow',
     });
   }
 
-  const normalizedAssignedStaffId = normalizeOptionalWorkflowValue(assignedStaffId)
-  const normalizedPaymentDueAt = normalizeOptionalWorkflowValue(paymentDueAt)
-  const normalizedPolicyExpiryAt = normalizeOptionalWorkflowValue(policyExpiryAt)
-  const normalizedRenewalDueAt = normalizeOptionalWorkflowValue(renewalDueAt)
+  const normalizedAssignedStaffId = normalizeOptionalWorkflowValue(assignedStaffId);
+  const normalizedPaymentDueAt = normalizeOptionalWorkflowValue(paymentDueAt);
+  const normalizedPolicyExpiryAt = normalizeOptionalWorkflowValue(policyExpiryAt);
+  const normalizedRenewalDueAt = normalizeOptionalWorkflowValue(renewalDueAt);
 
   return normalizeInsuranceInquiryForStaff(
-    await request(`/api/insurance/inquiries/${inquiryId}/status`, {
+    await request(`/api/insurance/inquiries/${inquiryId}/workflow`, {
       method: 'PATCH',
       headers: buildAuthorizedHeaders(accessToken),
       body: {
