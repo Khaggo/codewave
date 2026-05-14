@@ -38,6 +38,7 @@ import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
+import { CreateRenewalFollowUpDto } from '../dto/create-renewal-follow-up.dto';
 import { InsuranceInquiryResponseDto } from '../dto/insurance-inquiry-response.dto';
 import { InsuranceRecordResponseDto } from '../dto/insurance-record-response.dto';
 import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
@@ -73,11 +74,37 @@ export class InsuranceController {
     return this.insuranceService.create(payload, request.user as { userId: string; role: string });
   }
 
+  @Post('insurance/renewals/follow-ups')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Create a staff-only manual insurance renewal follow-up.' })
+  @ApiBearerAuth('access-token')
+  @ApiCreatedResponse({
+    description: 'The renewal follow-up was created successfully.',
+    type: InsuranceInquiryResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The renewal follow-up payload is invalid.' })
+  @ApiConflictResponse({ description: 'The submitted customer and vehicle lineage is invalid.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can create renewal follow-ups.' })
+  @ApiNotFoundResponse({ description: 'Customer or vehicle not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  createRenewalFollowUp(@Body() payload: CreateRenewalFollowUpDto, @Req() request: Request) {
+    return this.insuranceService.createRenewalFollowUp(
+      payload,
+      request.user as { userId: string; role: string },
+    );
+  }
+
   @Get('insurance/inquiries')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'List live insurance inquiries for staff with workflow filters.' })
   @ApiBearerAuth('access-token')
+  @ApiQuery({
+    name: 'purpose',
+    required: false,
+    enum: ['new_application', 'renewal', 'claim', 'quotation'],
+  })
   @ApiQuery({
     name: 'status',
     required: false,
@@ -91,7 +118,7 @@ export class InsuranceController {
   @ApiQuery({
     name: 'renewalStatus',
     required: false,
-    enum: ['not_applicable', 'upcoming', 'quoted', 'awaiting_customer', 'renewed', 'expired'],
+    enum: ['not_applicable', 'upcoming', 'quote_preparing', 'quoted', 'awaiting_customer', 'renewed', 'expired', 'cancelled'],
   })
   @ApiOkResponse({
     description: 'Insurance inquiries visible to staff, filtered by workflow state.',

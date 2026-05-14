@@ -65,10 +65,12 @@ export const insurancePaymentStatusEnum = pgEnum('insurance_payment_status', [
 export const insuranceRenewalStatusEnum = pgEnum('insurance_renewal_status', [
   'not_applicable',
   'upcoming',
+  'quote_preparing',
   'quoted',
   'awaiting_customer',
   'renewed',
   'expired',
+  'cancelled',
 ]);
 
 export const insuranceInquiries = pgTable('insurance_inquiries', {

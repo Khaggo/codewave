@@ -166,6 +166,75 @@ describe('InsuranceService', () => {
     );
   });
 
+  it('appends renewal_quote_preparing activity when workflow moves a renewal case to quote_preparing', async () => {
+    const insuranceRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        status: 'for_renewal',
+        renewalStatus: 'upcoming',
+      }),
+      updateWorkflow: jest.fn().mockResolvedValue({
+        id: 'insurance-inquiry-1',
+        status: 'for_renewal',
+        renewalStatus: 'quote_preparing',
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    await service.updateWorkflow(
+      'insurance-inquiry-1',
+      {
+        status: 'for_renewal',
+        renewalStatus: 'quote_preparing',
+        reviewNotes: 'Preparing the updated renewal quote now.',
+      },
+      {
+        userId: 'adviser-1',
+        role: 'service_adviser',
+      },
+    );
+
+    expect(insuranceRepository.updateWorkflow).toHaveBeenCalledWith(
+      'insurance-inquiry-1',
+      expect.objectContaining({
+        status: 'for_renewal',
+        renewalStatus: 'quote_preparing',
+      }),
+      [
+        {
+          action: 'renewal_quote_preparing',
+          actorUserId: 'adviser-1',
+          notes: 'Preparing the updated renewal quote now.',
+        },
+      ],
+      undefined,
+    );
+  });
+
   it('appends payment_marked_paid activity when workflow marks a case as paid', async () => {
     const insuranceRepository = {
       findById: jest.fn().mockResolvedValue({

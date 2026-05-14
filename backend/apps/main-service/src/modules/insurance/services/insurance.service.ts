@@ -15,6 +15,7 @@ import { createNotificationTrigger } from '@shared/events/contracts/notification
 
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
+import { CreateRenewalFollowUpDto } from '../dto/create-renewal-follow-up.dto';
 import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
 import { UploadInsuranceDocumentDto } from '../dto/upload-insurance-document.dto';
 import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inquiry-workflow.dto';
@@ -47,6 +48,14 @@ type PaymentActivityAction =
   | 'payment_marked_overdue'
   | 'payment_verification_started'
   | 'payment_due_date_updated';
+type RenewalActivityAction =
+  | 'renewal_follow_up_created'
+  | 'renewal_quote_preparing'
+  | 'renewal_quoted'
+  | 'renewal_awaiting_customer'
+  | 'renewal_renewed'
+  | 'renewal_expired'
+  | 'renewal_cancelled';
 
 const allowedStatusTransitions: Record<InsuranceInquiryStatus, InsuranceInquiryStatus[]> = {
   submitted: ['needs_documents', 'under_review', 'for_approval', 'approved', 'rejected', 'cancelled'],
@@ -97,6 +106,58 @@ export class InsuranceService {
       documentStatus: inquiry.documentStatus ?? 'incomplete',
       paymentStatus: inquiry.paymentStatus ?? 'not_required',
       renewalStatus: inquiry.renewalStatus ?? 'not_applicable',
+    };
+  }
+
+  async createRenewalFollowUp(payload: CreateRenewalFollowUpDto, actor: InsuranceActor) {
+    await this.assertStaffReviewer(actor.userId);
+    await this.assertCustomerAndVehicle(payload.userId, payload.vehicleId);
+
+    const activity = {
+      action: 'renewal_follow_up_created' as const,
+      actorUserId: actor.userId,
+      notes: payload.notes ?? null,
+    };
+
+    if (typeof this.insuranceRepository.createRenewalFollowUp === 'function') {
+      return this.insuranceRepository.createRenewalFollowUp(
+        {
+          ...payload,
+          createdByUserId: actor.userId,
+        },
+        activity,
+      );
+    }
+
+    const createdInquiry = await this.insuranceRepository.create({
+      ...payload,
+      purpose: 'renewal',
+      createdByUserId: actor.userId,
+    });
+
+    const updatedInquiry = await this.insuranceRepository.updateWorkflow(
+      createdInquiry.id,
+      {
+        purpose: 'renewal',
+        status: 'for_renewal',
+        paymentStatus: 'not_required',
+        renewalStatus: 'upcoming',
+        ...(payload.assignedStaffId !== undefined ? { assignedStaffId: payload.assignedStaffId } : {}),
+        ...(payload.policyExpiryAt !== undefined ? { policyExpiryAt: new Date(payload.policyExpiryAt) } : {}),
+        renewalDueAt: new Date(payload.renewalDueAt),
+        reviewedByUserId: actor.userId,
+        reviewedAt: new Date(),
+      } as InsuranceWorkflowUpdatePayload & { purpose: 'renewal' },
+      [activity],
+      undefined,
+    );
+
+    return {
+      ...updatedInquiry,
+      purpose: updatedInquiry.purpose ?? 'renewal',
+      paymentStatus: updatedInquiry.paymentStatus ?? 'not_required',
+      renewalStatus: updatedInquiry.renewalStatus ?? 'upcoming',
+      renewalDueAt: updatedInquiry.renewalDueAt ?? new Date(payload.renewalDueAt),
     };
   }
 
@@ -195,11 +256,11 @@ export class InsuranceService {
       reviewedAt: new Date(),
     };
 
-    const paymentActivities = this.buildPaymentWorkflowActivities(inquiry, payload, actor.userId);
+    const workflowActivities = this.buildWorkflowActivities(inquiry, payload, actor.userId);
     const updatedInquiry = await this.insuranceRepository.updateWorkflow(
       id,
       workflowPatch,
-      paymentActivities,
+      workflowActivities,
       this.buildCloseRecordUpsert(inquiry, payload.status),
     );
     await this.emitWorkflowStatusNotification(updatedInquiry);
@@ -343,19 +404,32 @@ export class InsuranceService {
     return this.insuranceDocumentStorage ?? new InsuranceDocumentStorageService();
   }
 
-  private buildPaymentWorkflowActivities(
+  private buildWorkflowActivities(
     inquiry: {
       paymentStatus?: string | null;
       paymentDueAt?: Date | string | null;
+      renewalStatus?: string | null;
     },
     payload: UpdateInsuranceInquiryWorkflowDto,
     actorUserId: string,
   ) {
-    const activities: { action: PaymentActivityAction; actorUserId: string; notes: string | null }[] = [];
+    const activities: Array<{
+      action: PaymentActivityAction | RenewalActivityAction;
+      actorUserId: string;
+      notes: string | null;
+    }> = [];
     const paymentStatusActionByStatus: Partial<Record<NonNullable<typeof payload.paymentStatus>, PaymentActivityAction>> = {
       paid: 'payment_marked_paid',
       overdue: 'payment_marked_overdue',
       verifying: 'payment_verification_started',
+    };
+    const renewalStatusActionByStatus: Partial<Record<NonNullable<typeof payload.renewalStatus>, RenewalActivityAction>> = {
+      quote_preparing: 'renewal_quote_preparing',
+      quoted: 'renewal_quoted',
+      awaiting_customer: 'renewal_awaiting_customer',
+      renewed: 'renewal_renewed',
+      expired: 'renewal_expired',
+      cancelled: 'renewal_cancelled',
     };
 
     if (payload.paymentStatus && payload.paymentStatus !== inquiry.paymentStatus) {
@@ -363,6 +437,17 @@ export class InsuranceService {
       if (paymentActivityAction) {
         activities.push({
           action: paymentActivityAction,
+          actorUserId,
+          notes: payload.reviewNotes ?? null,
+        });
+      }
+    }
+
+    if (payload.renewalStatus && payload.renewalStatus !== inquiry.renewalStatus) {
+      const renewalActivityAction = renewalStatusActionByStatus[payload.renewalStatus];
+      if (renewalActivityAction) {
+        activities.push({
+          action: renewalActivityAction,
           actorUserId,
           notes: payload.reviewNotes ?? null,
         });

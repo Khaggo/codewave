@@ -2,12 +2,21 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional } from 'class-validator';
 
 import {
+  insuranceCasePurposeEnum,
   insuranceInquiryStatusEnum,
   insurancePaymentStatusEnum,
   insuranceRenewalStatusEnum,
 } from '../schemas/insurance.schema';
 
 export class ListInsuranceInquiriesQueryDto {
+  @ApiPropertyOptional({
+    enum: insuranceCasePurposeEnum.enumValues,
+    example: 'renewal',
+  })
+  @IsOptional()
+  @IsEnum(insuranceCasePurposeEnum.enumValues)
+  purpose?: (typeof insuranceCasePurposeEnum.enumValues)[number];
+
   @ApiPropertyOptional({
     enum: insuranceInquiryStatusEnum.enumValues,
     example: 'payment_pending',

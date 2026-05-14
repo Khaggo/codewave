@@ -504,6 +504,81 @@ describe('InsuranceController integration', () => {
     }
   });
 
+  it('creates a manual renewal follow-up through POST /api/insurance/renewals/follow-ups', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      installInsuranceWorkflowRepositoryContract(app);
+
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.renewals@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5103A',
+      });
+
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.renewals@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110CA',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const createFollowUpResponse = await request(app.getHttpServer())
+        .post('/api/insurance/renewals/follow-ups')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Renewal due next month',
+          description: 'Customer should receive a renewal quote before the current policy expires.',
+          renewalDueAt: '2026-06-15T00:00:00.000Z',
+          policyExpiryAt: '2026-06-20T00:00:00.000Z',
+        });
+
+      expect(createFollowUpResponse.status).toBe(201);
+      expect(createFollowUpResponse.body).toEqual(
+        expect.objectContaining({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          purpose: 'renewal',
+          status: 'for_renewal',
+          renewalStatus: 'upcoming',
+          renewalDueAt: '2026-06-15T00:00:00.000Z',
+          policyExpiryAt: '2026-06-20T00:00:00.000Z',
+          paymentStatus: 'not_required',
+        }),
+      );
+      expect(createFollowUpResponse.body.activities).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'renewal_follow_up_created',
+            actorUserId: adviser.id,
+          }),
+        ]),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
   it('allows an adviser to patch the broader insurance workflow route for collections fields', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 

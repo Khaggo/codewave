@@ -7,6 +7,7 @@ import { AppDatabase } from '@shared/db/database.types';
 
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
+import { CreateRenewalFollowUpDto } from '../dto/create-renewal-follow-up.dto';
 import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
 import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inquiry-workflow.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
@@ -21,6 +22,10 @@ import {
 } from '../schemas/insurance.schema';
 
 type CreateInsuranceInquiryPersistenceInput = CreateInsuranceInquiryDto & {
+  createdByUserId: string;
+};
+
+type CreateRenewalFollowUpPersistenceInput = CreateRenewalFollowUpDto & {
   createdByUserId: string;
 };
 
@@ -92,6 +97,46 @@ export class InsuranceRepository extends BaseRepository {
     return this.findById(createdInquiry.id);
   }
 
+  async createRenewalFollowUp(
+    payload: CreateRenewalFollowUpPersistenceInput,
+    activity: InsuranceActivityPersistenceInput,
+  ) {
+    return this.db.transaction(async (tx) => {
+      const [createdInquiry] = await tx
+        .insert(insuranceInquiries)
+        .values({
+          userId: payload.userId,
+          vehicleId: payload.vehicleId,
+          inquiryType: payload.inquiryType,
+          purpose: 'renewal',
+          subject: payload.subject,
+          description: payload.description,
+          providerName: payload.providerName ?? null,
+          policyNumber: payload.policyNumber ?? null,
+          notes: payload.notes ?? null,
+          status: 'for_renewal',
+          documentStatus: 'incomplete',
+          paymentStatus: 'not_required',
+          renewalStatus: 'upcoming',
+          assignedStaffId: payload.assignedStaffId ?? null,
+          policyExpiryAt: payload.policyExpiryAt ? new Date(payload.policyExpiryAt) : null,
+          renewalDueAt: new Date(payload.renewalDueAt),
+          createdByUserId: payload.createdByUserId,
+        })
+        .returning();
+
+      await tx.insert(insuranceActivities).values({
+        inquiryId: createdInquiry.id,
+        action: activity.action,
+        actorUserId: activity.actorUserId ?? null,
+        documentType: activity.documentType ?? null,
+        notes: activity.notes ?? null,
+      });
+
+      return this.findById(createdInquiry.id, tx);
+    });
+  }
+
   async findById(id: string, db: AppDatabase = this.db) {
     const inquiry = await db.query.insuranceInquiries.findFirst({
       where: eq(insuranceInquiries.id, id),
@@ -128,6 +173,7 @@ export class InsuranceRepository extends BaseRepository {
   async listForStaff(query: ListInsuranceInquiriesQueryDto) {
     const inquiries = await this.db.query.insuranceInquiries.findMany({
       where: and(
+        query.purpose ? eq(insuranceInquiries.purpose, query.purpose) : undefined,
         query.status ? eq(insuranceInquiries.status, query.status) : undefined,
         query.paymentStatus ? eq(insuranceInquiries.paymentStatus, query.paymentStatus) : undefined,
         query.renewalStatus ? eq(insuranceInquiries.renewalStatus, query.renewalStatus) : undefined,
