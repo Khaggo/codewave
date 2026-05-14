@@ -7,15 +7,9 @@ const customerInsuranceStatusHints = {
   submitted: 'Your inquiry is recorded and waiting for staff review.',
   under_review: 'A service adviser is currently reviewing the insurance request.',
   needs_documents: 'More documents are needed before staff can continue the request.',
-  for_approval: 'The request is waiting for final staff approval.',
-  approved: 'The request is approved and moving to the next insurance step.',
-  payment_pending: 'A payment-related step is blocking completion of the request.',
-  active: 'The policy or insurance workflow is currently active.',
-  for_renewal: 'A renewal follow-up is now due for this insurance request.',
   approved_for_record: 'The inquiry is approved for internal record tracking.',
   rejected: 'The inquiry cannot continue in its current state.',
   closed: 'The inquiry is closed and no longer accepting changes.',
-  cancelled: 'The inquiry was cancelled and is no longer active.',
 };
 
 const customerInsuranceDocumentTypeLabels = {
@@ -252,25 +246,15 @@ export const normalizeCustomerInsuranceInquiry = (inquiry) => {
     vehicleId: inquiry.vehicleId ?? null,
     inquiryType: inquiry.inquiryType ?? 'comprehensive',
     inquiryTypeLabel: humanizeInquiryType(inquiry.inquiryType),
-    purpose: inquiry.purpose ?? null,
     subject: String(inquiry.subject ?? '').trim(),
     description: String(inquiry.description ?? '').trim(),
     status: inquiry.status ?? 'submitted',
     statusHint: buildCustomerInsuranceStatusHint(inquiry.status),
-    documentStatus: inquiry.documentStatus ?? 'incomplete',
-    paymentStatus: inquiry.paymentStatus ?? 'not_required',
-    renewalStatus: inquiry.renewalStatus ?? 'not_applicable',
     providerName: trimOrNull(inquiry.providerName),
     policyNumber: trimOrNull(inquiry.policyNumber),
     notes: trimOrNull(inquiry.notes),
-    paymentDueAt: inquiry.paymentDueAt ?? null,
-    policyExpiryAt: inquiry.policyExpiryAt ?? null,
-    renewalDueAt: inquiry.renewalDueAt ?? null,
-    assignedStaffId: inquiry.assignedStaffId ?? null,
-    reviewNotes: trimOrNull(inquiry.reviewNotes),
     documentCount: documents.length,
     documents,
-    activities: asArray(inquiry.activities),
     canAttachDocuments: !closedDocumentUploadStatuses.includes(inquiry.status),
     createdAt: inquiry.createdAt ?? null,
     updatedAt: inquiry.updatedAt ?? null,
@@ -399,6 +383,7 @@ export const addInsuranceInquiryDocument = async ({
   notes,
   accessToken,
 }) => {
+  const { ApiError } = await getInsuranceClientRuntime();
   const normalizedInquiryId = String(inquiryId ?? '').trim();
   const normalizedDocumentType = String(documentType ?? '').trim();
   const normalizedFileName = String(fileName ?? '').trim();
