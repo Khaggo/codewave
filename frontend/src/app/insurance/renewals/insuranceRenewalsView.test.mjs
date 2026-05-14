@@ -79,6 +79,42 @@ test('getRenewalsSummaryCards keeps awaiting-customer coverage, ignores undated 
   )
 })
 
+test('getRenewalsSummaryCards excludes completed and non-active renewal statuses from urgency buckets', () => {
+  assert.deepEqual(
+    getRenewalsSummaryCards({
+      now: '2026-05-14T00:00:00.000Z',
+      inquiries: [
+        buildInquiryFixture({ id: 'active-30', renewalStatus: 'upcoming', renewalDueAt: '2026-06-13T00:00:00.000Z' }),
+        buildInquiryFixture({ id: 'active-15', renewalStatus: 'quoted', renewalDueAt: '2026-05-29T00:00:00.000Z' }),
+        buildInquiryFixture({
+          id: 'active-7',
+          renewalStatus: 'awaiting_customer',
+          renewalDueAt: '2026-05-20T00:00:00.000Z',
+        }),
+        buildInquiryFixture({ id: 'active-overdue', renewalStatus: 'quote_preparing', renewalDueAt: '2026-05-13T00:00:00.000Z' }),
+        buildInquiryFixture({ id: 'renewed-ignored', renewalStatus: 'renewed', renewalDueAt: '2026-05-20T00:00:00.000Z' }),
+        buildInquiryFixture({
+          id: 'cancelled-ignored',
+          renewalStatus: 'cancelled',
+          renewalDueAt: '2026-05-29T00:00:00.000Z',
+        }),
+        buildInquiryFixture({
+          id: 'not-applicable-ignored',
+          renewalStatus: 'not_applicable',
+          renewalDueAt: '2026-06-13T00:00:00.000Z',
+        }),
+      ],
+    }).map((card) => [card.label, card.value]),
+    [
+      ['Due in 30 Days', 1],
+      ['Due in 15 Days', 1],
+      ['Due in 7 Days', 1],
+      ['Overdue', 1],
+      ['Awaiting Customer', 1],
+    ],
+  )
+})
+
 test('getRenewalTimeWindow falls back to policyExpiryAt when renewalDueAt is missing', () => {
   assert.equal(
     getRenewalTimeWindow({

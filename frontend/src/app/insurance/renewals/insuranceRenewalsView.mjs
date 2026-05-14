@@ -1,6 +1,7 @@
 import { formatStatusLabel } from '../insuranceView.mjs'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
+const NON_ACTIVE_RENEWAL_STATUSES = ['renewed', 'cancelled', 'not_applicable']
 
 const toDate = (value) => {
   if (!value) {
@@ -60,11 +61,14 @@ export function getRenewalTimeWindow({ renewalDueAt, policyExpiryAt, now } = {})
   return 'Due in 30 Days'
 }
 
+const isActiveRenewalForUrgency = (inquiry) => !NON_ACTIVE_RENEWAL_STATUSES.includes(inquiry?.renewalStatus)
+
 const countRenewalsByWindow = (inquiries, timeWindow, now) =>
   inquiries.reduce(
     (total, inquiry) =>
       total +
-      (getRenewalTimeWindow({
+      (isActiveRenewalForUrgency(inquiry) &&
+      getRenewalTimeWindow({
         renewalDueAt: inquiry?.renewalDueAt,
         policyExpiryAt: inquiry?.policyExpiryAt,
         now,
@@ -120,5 +124,3 @@ export function buildRenewalsTableRow(inquiry, { now } = {}) {
     }),
   }
 }
-
-export { formatStatusLabel }
