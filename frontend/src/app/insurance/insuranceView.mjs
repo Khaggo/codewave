@@ -6,7 +6,65 @@ export function formatStatusLabel(value) {
     .join(' ')
 }
 
-export function getInsuranceSummaryCards({ queueItems, queueState, activeInquiry }) {
+const countMatchingInquiries = (inquiries, predicate) =>
+  inquiries.reduce((total, inquiry) => (predicate(inquiry) ? total + 1 : total), 0)
+
+const buildLifecycleSummaryCards = (inquiries) => [
+  {
+    label: 'New Inquiries',
+    value: countMatchingInquiries(inquiries, (inquiry) => inquiry?.status === 'submitted'),
+    sub: 'Fresh customer intake waiting for review',
+  },
+  {
+    label: 'Payment Pending',
+    value: countMatchingInquiries(
+      inquiries,
+      (inquiry) =>
+        inquiry?.status === 'payment_pending' ||
+        ['proof_submitted', 'verifying', 'overdue', 'unpaid'].includes(inquiry?.paymentStatus),
+    ),
+    sub: 'Cases needing payment follow-up',
+  },
+  {
+    label: 'For Renewal',
+    value: countMatchingInquiries(
+      inquiries,
+      (inquiry) =>
+        inquiry?.status === 'for_renewal' ||
+        ['upcoming', 'quoted', 'awaiting_customer', 'expired'].includes(inquiry?.renewalStatus),
+    ),
+    sub: 'Cases due for renewal follow-up',
+  },
+  {
+    label: 'Needs Documents',
+    value: countMatchingInquiries(inquiries, (inquiry) => inquiry?.status === 'needs_documents'),
+    sub: 'Cases waiting on document completion',
+  },
+]
+
+export function buildInsuranceTableRow(inquiry) {
+  return {
+    key: inquiry?.id ?? '',
+    customer: inquiry?.customerDisplayName || 'Unknown customer',
+    vehicle: inquiry?.vehicleLabel || 'Unknown vehicle',
+    status: formatStatusLabel(inquiry?.status),
+    documentStatus: formatStatusLabel(inquiry?.documentStatus),
+    paymentStatus: formatStatusLabel(inquiry?.paymentStatus),
+    ...(inquiry?.renewalStatus
+      ? {
+          renewalStatus: formatStatusLabel(inquiry.renewalStatus),
+        }
+      : {}),
+  }
+}
+
+export function getInsuranceSummaryCards(input = {}) {
+  if (Array.isArray(input.inquiries)) {
+    return buildLifecycleSummaryCards(input.inquiries)
+  }
+
+  const { queueItems = [], queueState, activeInquiry } = input
+
   return [
     {
       label: 'Review Queue',

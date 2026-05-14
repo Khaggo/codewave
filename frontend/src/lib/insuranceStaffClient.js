@@ -4,18 +4,26 @@ const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:
 
 const insuranceStatusHints = {
   submitted: 'New customer intake waiting for staff review.',
-  under_review: 'A service adviser is currently validating the inquiry and evidence.',
   needs_documents: 'The customer must add more supporting files before the inquiry can continue.',
-  approved_for_record: 'The inquiry is approved for internal tracking record creation.',
+  under_review: 'A service adviser is currently validating the inquiry and evidence.',
+  for_approval: 'The case is ready for approval review.',
+  approved: 'The case is approved and may move into payment or active servicing.',
+  payment_pending: 'The case is waiting for payment confirmation or proof review.',
+  active: 'The policy or case is actively being serviced.',
+  for_renewal: 'The case requires renewal follow-up soon.',
   rejected: 'The inquiry cannot continue in its current form.',
+  cancelled: 'The inquiry was cancelled before completion.',
   closed: 'The inquiry is closed and no longer accepts workflow updates.',
 };
 
 const insuranceDocumentTypeLabels = {
   or_cr: 'OR/CR',
   policy: 'Policy copy',
+  valid_id: 'Valid ID',
+  police_report: 'Police report',
   photo: 'Damage photo',
   estimate: 'Repair estimate',
+  proof_of_payment: 'Proof of payment',
   other: 'Other document',
 };
 
@@ -31,6 +39,19 @@ const formatDocumentTypeLabel = (value) =>
     .filter(Boolean)
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(' ');
+
+const appendQuery = (path, query = {}) => {
+  const params = new URLSearchParams();
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.set(key, value);
+    }
+  });
+
+  const queryString = params.toString();
+  return queryString ? `${path}?${queryString}` : path;
+};
 
 const normalizeInsuranceDocumentForStaff = (document) => {
   if (!document || typeof document !== 'object') {
@@ -51,10 +72,27 @@ const normalizeInsuranceDocumentForStaff = (document) => {
   };
 };
 
+const normalizeInsuranceActivityForStaff = (activity) => {
+  if (!activity || typeof activity !== 'object') {
+    return null;
+  }
+
+  return {
+    id: activity.id ?? null,
+    action: String(activity.action ?? '').trim(),
+    documentType: activity.documentType ?? null,
+    actorUserId: activity.actorUserId ?? null,
+    notes: trimOrNull(activity.notes),
+    createdAt: activity.createdAt ?? null,
+    updatedAt: activity.updatedAt ?? null,
+  };
+};
+
 const request = async (path, options = {}) => {
-  const { body, headers, ...rest } = options;
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const { body, headers, method = 'GET', query, ...rest } = options;
+  const response = await fetch(`${API_BASE_URL}${appendQuery(path, query)}`, {
     ...rest,
+    method,
     headers: {
       'Content-Type': 'application/json',
       ...(headers ?? {}),
@@ -92,27 +130,57 @@ export const normalizeInsuranceInquiryForStaff = (inquiry) => {
   const documents = Array.isArray(inquiry.documents)
     ? inquiry.documents.map(normalizeInsuranceDocumentForStaff).filter(Boolean)
     : [];
+  const activities = Array.isArray(inquiry.activities)
+    ? inquiry.activities.map(normalizeInsuranceActivityForStaff).filter(Boolean)
+    : [];
 
   return {
     id: inquiry.id ?? null,
     userId: inquiry.userId ?? null,
     vehicleId: inquiry.vehicleId ?? null,
     inquiryType: inquiry.inquiryType ?? 'comprehensive',
+    purpose: inquiry.purpose ?? 'quotation',
     subject: String(inquiry.subject ?? '').trim(),
     description: String(inquiry.description ?? '').trim(),
+    customerDisplayName: trimOrNull(inquiry.customerDisplayName) ?? 'Unknown customer',
+    vehicleLabel: trimOrNull(inquiry.vehicleLabel) ?? 'Unknown vehicle',
     status: inquiry.status ?? 'submitted',
+    documentStatus: inquiry.documentStatus ?? 'incomplete',
+    paymentStatus: inquiry.paymentStatus ?? 'not_required',
+    renewalStatus: inquiry.renewalStatus ?? 'not_applicable',
     statusHint: insuranceStatusHints[inquiry.status] ?? 'Insurance inquiry is available for review.',
     providerName: trimOrNull(inquiry.providerName),
     policyNumber: trimOrNull(inquiry.policyNumber),
     notes: trimOrNull(inquiry.notes),
     reviewNotes: trimOrNull(inquiry.reviewNotes),
+    assignedStaffId: inquiry.assignedStaffId ?? null,
     documentCount: documents.length,
     documents,
+    activities,
     createdAt: inquiry.createdAt ?? null,
     updatedAt: inquiry.updatedAt ?? null,
     reviewedAt: inquiry.reviewedAt ?? null,
     reviewedByUserId: inquiry.reviewedByUserId ?? null,
+    paymentDueAt: inquiry.paymentDueAt ?? null,
+    policyExpiryAt: inquiry.policyExpiryAt ?? null,
+    renewalDueAt: inquiry.renewalDueAt ?? null,
   };
+};
+
+export const listInsuranceInquiries = async ({ accessToken, status, paymentStatus, renewalStatus } = {}) => {
+  const inquiries = await request('/api/insurance/inquiries', {
+    method: 'GET',
+    headers: buildAuthorizedHeaders(accessToken),
+    query: {
+      status,
+      paymentStatus,
+      renewalStatus,
+    },
+  });
+
+  return Array.isArray(inquiries)
+    ? inquiries.map((inquiry) => normalizeInsuranceInquiryForStaff(inquiry)).filter(Boolean)
+    : [];
 };
 
 export const getInsuranceInquiryById = async ({ inquiryId, accessToken }) => {
@@ -150,6 +218,13 @@ export const listInsuranceInquiriesByUserId = async ({ userId, accessToken }) =>
 export const updateInsuranceInquiryStatus = async ({
   inquiryId,
   status,
+  documentStatus,
+  paymentStatus,
+  renewalStatus,
+  paymentDueAt,
+  policyExpiryAt,
+  renewalDueAt,
+  assignedStaffId,
   reviewNotes,
   accessToken,
 }) => {
@@ -165,6 +240,13 @@ export const updateInsuranceInquiryStatus = async ({
       headers: buildAuthorizedHeaders(accessToken),
       body: {
         status,
+        ...(documentStatus !== undefined ? { documentStatus } : {}),
+        ...(paymentStatus !== undefined ? { paymentStatus } : {}),
+        ...(renewalStatus !== undefined ? { renewalStatus } : {}),
+        ...(paymentDueAt !== undefined ? { paymentDueAt } : {}),
+        ...(policyExpiryAt !== undefined ? { policyExpiryAt } : {}),
+        ...(renewalDueAt !== undefined ? { renewalDueAt } : {}),
+        ...(assignedStaffId !== undefined ? { assignedStaffId } : {}),
         reviewNotes: trimOrNull(reviewNotes) ?? undefined,
       },
     }),
