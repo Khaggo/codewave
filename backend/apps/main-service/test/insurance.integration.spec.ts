@@ -1061,6 +1061,51 @@ describe('InsuranceController integration', () => {
     }
   });
 
+  it('accepts a staff insurance broadcast send request and returns the route contract summary', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.broadcasts@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5404',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+
+      const sendResponse = await request(app.getHttpServer())
+        .post('/api/insurance/broadcasts/send')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          targetMode: 'selected_cases',
+          selectedIds: ['4c559c0b-4d1b-492f-a11f-e61271f4a32d'],
+          title: 'Insurance processing update',
+          message: 'Please review your insurance request in the app for the latest update.',
+        });
+
+      expect(sendResponse.status).toBe(200);
+      expect(sendResponse.body).toEqual(
+        expect.objectContaining({
+          targetedCaseCount: expect.any(Number),
+          eligibleCaseCount: expect.any(Number),
+          deduplicatedCustomerCount: expect.any(Number),
+          sentCount: expect.any(Number),
+          skippedCount: expect.any(Number),
+          failedCount: expect.any(Number),
+          results: expect.any(Array),
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
   it('keeps a close status transition successful when notification emission fails', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 

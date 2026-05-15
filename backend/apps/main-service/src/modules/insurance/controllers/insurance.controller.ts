@@ -42,6 +42,8 @@ import { CreateRenewalFollowUpDto } from '../dto/create-renewal-follow-up.dto';
 import { InsuranceInquiryResponseDto } from '../dto/insurance-inquiry-response.dto';
 import { InsuranceRecordResponseDto } from '../dto/insurance-record-response.dto';
 import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
+import { SendInsuranceBroadcastsDto } from '../dto/send-insurance-broadcasts.dto';
+import { SendInsuranceBroadcastsResponseDto } from '../dto/send-insurance-broadcasts-response.dto';
 import { SendInsuranceRemindersDto } from '../dto/send-insurance-reminders.dto';
 import { SendInsuranceRemindersResponseDto } from '../dto/send-insurance-reminders-response.dto';
 import { UploadInsuranceDocumentDto } from '../dto/upload-insurance-document.dto';
@@ -56,6 +58,13 @@ const INSURANCE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 type InsuranceReminderRouteService = {
   sendManualReminders: (
     payload: SendInsuranceRemindersDto,
+    actor: { userId: string; role: string },
+  ) => unknown;
+};
+
+type InsuranceBroadcastRouteService = {
+  sendManualBroadcasts: (
+    payload: SendInsuranceBroadcastsDto,
     actor: { userId: string; role: string },
   ) => unknown;
 };
@@ -119,6 +128,26 @@ export class InsuranceController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   sendReminders(@Body() payload: SendInsuranceRemindersDto, @Req() request: Request) {
     return (this.insuranceService as unknown as InsuranceReminderRouteService).sendManualReminders(
+      payload,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post('insurance/broadcasts/send')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Send a manual insurance broadcast to one or more staff-targeted cases.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'The insurance broadcast send request was accepted and summarized.',
+    type: SendInsuranceBroadcastsResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The insurance broadcast payload is invalid.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can send insurance broadcasts.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  sendBroadcasts(@Body() payload: SendInsuranceBroadcastsDto, @Req() request: Request) {
+    return (this.insuranceService as unknown as InsuranceBroadcastRouteService).sendManualBroadcasts(
       payload,
       request.user as { userId: string; role: string },
     );
