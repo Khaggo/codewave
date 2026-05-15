@@ -19,6 +19,38 @@ import {
 type NotificationCategory = (typeof notificationCategoryEnum.enumValues)[number];
 type NotificationChannel = (typeof notificationChannelEnum.enumValues)[number];
 type NotificationSourceType = (typeof notificationSourceTypeEnum.enumValues)[number];
+type InsuranceReminderState =
+  NotificationTriggerEnvelope<'insurance.inquiry_status_changed'>['payload']['customerReminderState'];
+
+const insuranceReminderCopy: Record<
+  InsuranceReminderState,
+  {
+    title: string;
+    message: string;
+  }
+> = {
+  needs_documents: {
+    title: 'Missing documents',
+    message: 'Please upload the required insurance documents so we can continue your request.',
+  },
+  payment_pending: {
+    title: 'Payment pending',
+    message: 'Your insurance request now needs payment action.',
+  },
+  payment_overdue: {
+    title: 'Payment overdue',
+    message:
+      'Your insurance request is overdue for payment. Upload proof after payment or contact staff for help.',
+  },
+  for_renewal: {
+    title: 'Renewal follow-up',
+    message: 'Your insurance renewal is coming up. Open your insurance request for the next step.',
+  },
+  renewal_awaiting_customer: {
+    title: 'Renewal waiting for you',
+    message: 'Your insurance renewal needs your response to continue.',
+  },
+};
 
 export type NotificationTriggerPlanAction =
   | {
@@ -163,25 +195,30 @@ export class NotificationTriggerPlannerService {
     }
 
     if (trigger.name === 'insurance.inquiry_status_changed') {
+      const reminderState = trigger.payload.customerReminderState;
+      const reminderCopy = reminderState ? insuranceReminderCopy[reminderState] : null;
+
       return {
         triggerName: trigger.name,
         sourceDomain: trigger.sourceDomain,
         dedupePolicy: 'stable-source-dedupe-v1',
         retryPolicy: 'bullmq-deliver-notification-v1',
-        actions: [
-          {
-            kind: 'enqueue_notification',
-            userId: trigger.payload.userId,
-            category: 'insurance_update',
-            channel: 'email',
-            sourceType: 'insurance_inquiry',
-            sourceId: trigger.payload.inquiryId,
-            title: 'Insurance inquiry update',
-            message: `Your insurance inquiry "${trigger.payload.subject}" is now ${trigger.payload.status.replace(/_/g, ' ')}.`,
-            dedupeKey: `notification:insurance.inquiry_status_changed:${trigger.payload.inquiryId}:${trigger.payload.status}`,
-            customerVisible: true,
-          },
-        ],
+        actions: reminderCopy
+          ? [
+              {
+                kind: 'enqueue_notification',
+                userId: trigger.payload.userId,
+                category: 'insurance_update',
+                channel: 'in_app',
+                sourceType: 'insurance_inquiry',
+                sourceId: trigger.payload.inquiryId,
+                title: reminderCopy.title,
+                message: reminderCopy.message,
+                dedupeKey: `notification:insurance.reminder:${trigger.payload.inquiryId}:${reminderState}:${trigger.payload.transitionedAt}`,
+                customerVisible: true,
+              },
+            ]
+          : [],
       };
     }
 
