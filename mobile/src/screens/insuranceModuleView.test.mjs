@@ -2,7 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  buildCustomerInsuranceActionCards,
+  buildCustomerInsuranceEntryState,
   buildCustomerInsuranceHomeFocus,
+  buildCustomerInsuranceHeroState,
+  buildCustomerInsuranceOverviewState,
+  buildCustomerInsuranceStatusState,
   buildRequirementsChecklist,
   clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
@@ -28,6 +33,261 @@ test('home cards prioritize start, upload, payment, and renewal actions', () => 
   assert.deepEqual(
     getInsuranceHomeCards({ hasActiveRequest: true }).map((card) => card.key),
     ['start', 'active', 'documents', 'payment', 'renewal', 'history'],
+  )
+})
+
+test('insurance hero falls back to start state when there is no active request', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceHeroState({
+      selectedVehicleLabel: '2024 Toyota Vios · DEMOREV001',
+      latestInquiry: null,
+      missingRequiredDocuments: [],
+      claimStatusUpdateCount: 0,
+    }),
+    {
+      eyebrow: 'Insurance',
+      title: 'Start a new request',
+      message: 'Use the selected vehicle to open a customer-safe insurance request.',
+      ctaLabel: 'Begin intake',
+      routeKey: 'request',
+      statusLabel: 'Ready',
+      tone: 'default',
+    },
+  )
+})
+
+test('insurance hero prioritizes document follow-up when files are still missing', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceHeroState({
+      selectedVehicleLabel: '2024 Toyota Vios · DEMOREV001',
+      latestInquiry: {
+        id: 'inq-7',
+        status: 'needs_documents',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [
+        { type: 'policy', label: 'Policy copy' },
+        { type: 'valid_id', label: 'Valid ID' },
+      ],
+      claimStatusUpdateCount: 0,
+    }),
+    {
+      eyebrow: 'Current request',
+      title: 'Upload required documents',
+      message: '2 required documents still need attention for this request.',
+      ctaLabel: 'Open documents',
+      routeKey: 'documents',
+      statusLabel: '2 missing',
+      tone: 'warning',
+    },
+  )
+})
+
+test('insurance hero routes payment-overdue requests into payment follow-up', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceHeroState({
+      selectedVehicleLabel: '2024 Toyota Vios Â· DEMOREV001',
+      latestInquiry: {
+        id: 'inq-9',
+        status: 'payment_pending',
+        paymentStatus: 'overdue',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [],
+      claimStatusUpdateCount: 0,
+    }),
+    {
+      eyebrow: 'Current request',
+      title: 'Payment is overdue',
+      message: 'Upload proof of payment or contact staff so the request can move forward.',
+      ctaLabel: 'Open payment',
+      routeKey: 'payment',
+      statusLabel: 'Overdue',
+      tone: 'danger',
+    },
+  )
+})
+
+test('insurance hero routes renewal follow-up requests into renewal review', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceHeroState({
+      selectedVehicleLabel: '2024 Toyota Vios Â· DEMOREV001',
+      latestInquiry: {
+        id: 'inq-10',
+        status: 'for_renewal',
+        paymentStatus: 'paid',
+        renewalStatus: 'awaiting_customer',
+      },
+      missingRequiredDocuments: [],
+      claimStatusUpdateCount: 0,
+    }),
+    {
+      eyebrow: 'Current request',
+      title: 'Review renewal follow-up',
+      message: 'Renewal follow-up is active for this vehicle.',
+      ctaLabel: 'Open renewal',
+      routeKey: 'renewal',
+      statusLabel: 'Awaiting Customer',
+      tone: 'default',
+    },
+  )
+})
+
+test('entry state keeps the app-level insurance tab lightweight', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceEntryState({
+      selectedVehicleLabel: '2024 Toyota Vios • DEMOREV001',
+      latestInquiry: null,
+      reminderCount: 2,
+    }),
+    {
+      title: 'Protection center',
+      summary: 'Open the dedicated insurance workspace for requests, documents, updates, and history.',
+      vehicleLabel: '2024 Toyota Vios • DEMOREV001',
+      statusLabel: 'Ready',
+      ctaLabel: 'Enter insurance mode',
+      reminderLabel: '2 reminders',
+      tone: 'default',
+    },
+  )
+})
+
+test('overview state routes users to the best next action inside insurance mode', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceOverviewState({
+      selectedVehicleLabel: '2024 Toyota Vios • DEMOREV001',
+      latestInquiry: {
+        id: 'inq-18',
+        status: 'needs_documents',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [{ type: 'valid_id', label: 'Valid ID' }],
+      historyCount: 0,
+    }),
+    {
+      title: 'Upload required documents',
+      message: 'One required file is blocking review for this request.',
+      ctaLabel: 'Open docs',
+      routeKey: 'documents',
+      routeRows: [
+        { key: 'request', label: 'Request', helper: 'Review the request details and customer-safe notes.' },
+        { key: 'documents', label: 'Documents', helper: 'Upload the missing file and review what is already on file.' },
+        { key: 'status', label: 'Status', helper: 'See the current blocker, timeline, and latest update.' },
+        { key: 'history', label: 'History', helper: 'Past completed insurance records for this vehicle.' },
+      ],
+    },
+  )
+})
+
+test('status state folds payment and renewal into one tracking model', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        status: 'payment_pending',
+        paymentStatus: 'awaiting_payment',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Payment instructions are ready.',
+    }),
+    {
+      title: 'Payment follow-up',
+      summary: 'Payment is the current blocker for this request.',
+      ctaLabel: 'Review payment',
+      ctaRouteKey: 'status',
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: true },
+        { key: 'renewal', label: 'Renewal', active: false },
+      ],
+    },
+  )
+})
+
+test('insurance action cards expose focused destinations for the hybrid home', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceActionCards({
+      latestInquiry: {
+        id: 'inq-8',
+        status: 'payment_pending',
+        paymentStatus: 'proof_submitted',
+        renewalStatus: 'upcoming',
+      },
+      requirementsChecklist: {
+        required: [
+          { type: 'or_cr', complete: true },
+          { type: 'policy', complete: false },
+          { type: 'valid_id', complete: false },
+        ],
+        optional: [],
+      },
+      claimStatusUpdateCount: 3,
+      paymentSummary: {
+        title: 'Proof submitted',
+        message: 'Proof of payment is on file and waiting for review.',
+        tone: 'default',
+      },
+      renewalSummary: {
+        title: 'Renewal reminder',
+        message: 'Your renewal window is coming up.',
+        tone: 'default',
+      },
+    }).map(({ key, title, routeKey, value }) => ({ key, title, routeKey, value })),
+    [
+      { key: 'documents', title: 'Documents', routeKey: 'documents', value: '1/3' },
+      { key: 'payment', title: 'Payment', routeKey: 'payment', value: 'Proof Submitted' },
+      { key: 'renewal', title: 'Renewal', routeKey: 'renewal', value: 'Upcoming' },
+      { key: 'history', title: 'History', routeKey: 'history', value: '3' },
+    ],
+  )
+})
+
+test('insurance action cards keep first-run documents guidance from sounding complete', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceActionCards({
+      latestInquiry: null,
+      requirementsChecklist: {
+        required: [],
+        optional: [],
+      },
+      claimStatusUpdateCount: 0,
+      paymentSummary: null,
+      renewalSummary: null,
+    }),
+    [
+      {
+        key: 'documents',
+        title: 'Documents',
+        routeKey: 'documents',
+        value: '0/0',
+        description: 'Start a request to see what documents will be required.',
+      },
+      {
+        key: 'payment',
+        title: 'Payment',
+        routeKey: 'payment',
+        value: 'Not required',
+        description: 'Payment follow-up will appear here when needed.',
+      },
+      {
+        key: 'renewal',
+        title: 'Renewal',
+        routeKey: 'renewal',
+        value: 'Not applicable',
+        description: 'Renewal follow-up will appear here when needed.',
+      },
+      {
+        key: 'history',
+        title: 'History',
+        routeKey: 'history',
+        value: '0',
+        description:
+          'Past insurance records will appear here after staff close and record them.',
+      },
+    ],
   )
 })
 

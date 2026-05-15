@@ -195,6 +195,297 @@ export const getInsuranceHomeCards = ({ hasActiveRequest } = {}) => [
   { key: 'history', label: 'History' },
 ]
 
+const formatWorkflowLabel = (value) =>
+  String(value ?? '')
+    .split('_')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ') || '--'
+
+export const INSURANCE_PANEL_KEYS = Object.freeze({
+  home: 'home',
+  request: 'request',
+  documents: 'documents',
+  payment: 'payment',
+  renewal: 'renewal',
+  history: 'history',
+})
+
+export const INSURANCE_MODE_SECTION_KEYS = Object.freeze({
+  overview: 'overview',
+  request: 'request',
+  documents: 'documents',
+  status: 'status',
+  history: 'history',
+})
+
+export const buildCustomerInsuranceHeroState = ({
+  selectedVehicleLabel,
+  latestInquiry = null,
+  missingRequiredDocuments = [],
+  claimStatusUpdateCount = 0,
+} = {}) => {
+  if (!latestInquiry?.id) {
+    return {
+      eyebrow: 'Insurance',
+      title: 'Start a new request',
+      message: selectedVehicleLabel
+        ? 'Use the selected vehicle to open a customer-safe insurance request.'
+        : 'Choose a vehicle before you start a customer-safe insurance request.',
+      ctaLabel: 'Begin intake',
+      routeKey: INSURANCE_PANEL_KEYS.request,
+      statusLabel: selectedVehicleLabel ? 'Ready' : 'Vehicle needed',
+      tone: selectedVehicleLabel ? 'default' : 'warning',
+    }
+  }
+
+  const requiredCount = Array.isArray(missingRequiredDocuments)
+    ? missingRequiredDocuments.length
+    : 0
+
+  if (requiredCount > 0) {
+    return {
+      eyebrow: 'Current request',
+      title: 'Upload required documents',
+      message: `${requiredCount} required document${requiredCount === 1 ? '' : 's'} still need attention for this request.`,
+      ctaLabel: 'Open documents',
+      routeKey: INSURANCE_PANEL_KEYS.documents,
+      statusLabel: `${requiredCount} missing`,
+      tone: 'warning',
+    }
+  }
+
+  if (latestInquiry.status === 'payment_pending' || latestInquiry.paymentStatus === 'overdue') {
+    return {
+      eyebrow: 'Current request',
+      title:
+        latestInquiry.paymentStatus === 'overdue'
+          ? 'Payment is overdue'
+          : 'Review payment follow-up',
+      message:
+        latestInquiry.paymentStatus === 'overdue'
+          ? 'Upload proof of payment or contact staff so the request can move forward.'
+          : 'Payment proof has been submitted and is waiting for review.',
+      ctaLabel: 'Open payment',
+      routeKey: INSURANCE_PANEL_KEYS.payment,
+      statusLabel: formatWorkflowLabel(latestInquiry.paymentStatus),
+      tone: latestInquiry.paymentStatus === 'overdue' ? 'danger' : 'default',
+    }
+  }
+
+  if (
+    latestInquiry.status === 'for_renewal' ||
+    latestInquiry.renewalStatus === 'awaiting_customer'
+  ) {
+    return {
+      eyebrow: 'Current request',
+      title: 'Review renewal follow-up',
+      message: 'Renewal follow-up is active for this vehicle.',
+      ctaLabel: 'Open renewal',
+      routeKey: INSURANCE_PANEL_KEYS.renewal,
+      statusLabel: formatWorkflowLabel(latestInquiry.renewalStatus),
+      tone: 'default',
+    }
+  }
+
+  return {
+    eyebrow: 'Current request',
+    title: 'Review current request',
+    message:
+      claimStatusUpdateCount > 0
+        ? 'Your latest request and vehicle history are both ready to review.'
+        : 'Your latest request is ready to review.',
+    ctaLabel: 'Check status',
+    routeKey: INSURANCE_PANEL_KEYS.history,
+    statusLabel: formatWorkflowLabel(latestInquiry.status),
+    tone: 'success',
+  }
+}
+
+export const buildCustomerInsuranceEntryState = ({
+  selectedVehicleLabel = '',
+  latestInquiry = null,
+  reminderCount = 0,
+} = {}) => ({
+  title: 'Protection center',
+  summary: 'Open the dedicated insurance workspace for requests, documents, updates, and history.',
+  vehicleLabel: selectedVehicleLabel || 'Choose a vehicle to continue',
+  statusLabel: latestInquiry?.id
+    ? formatWorkflowLabel(latestInquiry.status)
+    : selectedVehicleLabel
+    ? 'Ready'
+    : 'Vehicle needed',
+  ctaLabel: 'Enter insurance mode',
+  reminderLabel:
+    reminderCount > 0 ? `${reminderCount} reminder${reminderCount === 1 ? '' : 's'}` : 'No reminders',
+  tone: selectedVehicleLabel ? 'default' : 'warning',
+})
+
+export const buildCustomerInsuranceOverviewState = ({
+  latestInquiry = null,
+  missingRequiredDocuments = [],
+} = {}) => {
+  const missingCount = Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments.length : 0
+
+  const primary = !latestInquiry?.id
+    ? {
+        title: 'Start your first insurance request',
+        message: 'Use insurance mode to create a customer-safe request and track what happens next.',
+        ctaLabel: 'Open request',
+        routeKey: INSURANCE_MODE_SECTION_KEYS.request,
+      }
+    : missingCount > 0
+      ? {
+          title: 'Upload required documents',
+          message: 'One required file is blocking review for this request.',
+          ctaLabel: 'Open docs',
+          routeKey: INSURANCE_MODE_SECTION_KEYS.documents,
+        }
+      : {
+          title: 'Review current request',
+          message: 'See the latest status, payment follow-up, or renewal update in one place.',
+          ctaLabel: 'Open status',
+          routeKey: INSURANCE_MODE_SECTION_KEYS.status,
+        }
+
+  return {
+    ...primary,
+    routeRows: [
+      {
+        key: INSURANCE_MODE_SECTION_KEYS.request,
+        label: 'Request',
+        helper: 'Review the request details and customer-safe notes.',
+      },
+      {
+        key: INSURANCE_MODE_SECTION_KEYS.documents,
+        label: 'Documents',
+        helper: 'Upload the missing file and review what is already on file.',
+      },
+      {
+        key: INSURANCE_MODE_SECTION_KEYS.status,
+        label: 'Status',
+        helper: 'See the current blocker, timeline, and latest update.',
+      },
+      {
+        key: INSURANCE_MODE_SECTION_KEYS.history,
+        label: 'History',
+        helper: 'Past completed insurance records for this vehicle.',
+      },
+    ],
+  }
+}
+
+export const buildCustomerInsuranceStatusState = ({
+  latestInquiry = null,
+  missingRequiredDocuments = [],
+  latestUpdateLabel = '--',
+} = {}) => {
+  const missingCount = Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments.length : 0
+  const withLatestUpdateLabel = (state) =>
+    Object.defineProperty(state, 'latestUpdateLabel', {
+      value: latestUpdateLabel,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    })
+
+  if (missingCount > 0) {
+    return withLatestUpdateLabel({
+      title: 'Documents needed',
+      summary: 'Documents are the current blocker for this request.',
+      ctaLabel: 'Open docs',
+      ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.documents,
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents needed', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: false },
+        { key: 'renewal', label: 'Renewal', active: false },
+      ],
+    })
+  }
+
+  if (latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required') {
+    return withLatestUpdateLabel({
+      title: 'Payment follow-up',
+      summary: 'Payment is the current blocker for this request.',
+      ctaLabel: 'Review payment',
+      ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: true },
+        { key: 'renewal', label: 'Renewal', active: false },
+      ],
+    })
+  }
+
+  return withLatestUpdateLabel({
+    title: 'Current request status',
+    summary: 'Review the latest customer-safe update and next step.',
+    ctaLabel: 'Review status',
+    ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
+    timeline: [
+      { key: 'request', label: 'Request submitted', active: true },
+      { key: 'documents', label: 'Documents complete', active: true },
+      { key: 'payment', label: 'Payment follow-up', active: false },
+      { key: 'renewal', label: 'Renewal', active: false },
+    ],
+  })
+}
+
+export const buildCustomerInsuranceActionCards = ({
+  latestInquiry = null,
+  requirementsChecklist = { required: [], optional: [] },
+  claimStatusUpdateCount = 0,
+  paymentSummary = null,
+  renewalSummary = null,
+} = {}) => {
+  const requiredItems = Array.isArray(requirementsChecklist.required)
+    ? requirementsChecklist.required
+    : []
+  const completedRequiredCount = requiredItems.filter((item) => item.complete).length
+  const totalRequiredCount = requiredItems.length
+
+  return [
+    {
+      key: 'documents',
+      title: 'Documents',
+      routeKey: INSURANCE_PANEL_KEYS.documents,
+      value: `${completedRequiredCount}/${totalRequiredCount || 0}`,
+      description:
+        !latestInquiry?.id && totalRequiredCount === 0
+          ? 'Start a request to see what documents will be required.'
+          : totalRequiredCount > completedRequiredCount
+          ? 'See what is still missing and upload when ready.'
+          : 'Required files are complete. You can still add more later.',
+    },
+    {
+      key: 'payment',
+      title: 'Payment',
+      routeKey: INSURANCE_PANEL_KEYS.payment,
+      value: latestInquiry ? formatWorkflowLabel(latestInquiry.paymentStatus) : 'Not required',
+      description: paymentSummary?.message ?? 'Payment follow-up will appear here when needed.',
+    },
+    {
+      key: 'renewal',
+      title: 'Renewal',
+      routeKey: INSURANCE_PANEL_KEYS.renewal,
+      value: latestInquiry ? formatWorkflowLabel(latestInquiry.renewalStatus) : 'Not applicable',
+      description: renewalSummary?.message ?? 'Renewal follow-up will appear here when needed.',
+    },
+    {
+      key: 'history',
+      title: 'History',
+      routeKey: INSURANCE_PANEL_KEYS.history,
+      value: String(claimStatusUpdateCount),
+      description:
+        claimStatusUpdateCount > 0
+          ? 'Past insurance records are ready to review.'
+          : 'Past insurance records will appear here after staff close and record them.',
+    },
+  ]
+}
+
 export const buildCustomerInsuranceHomeFocus = ({
   latestInquiry = null,
   missingRequiredDocuments = [],
