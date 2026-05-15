@@ -30,7 +30,6 @@ import {
 import {
   REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
   buildCustomerInsuranceActionCards,
-  buildCustomerInsuranceEntryState,
   buildCustomerInsuranceHeroState,
   buildCustomerInsuranceOverviewState,
   buildCustomerInsuranceStatusState,
@@ -48,7 +47,6 @@ import {
   shouldDeferCustomerInsuranceTrackingRefresh,
 } from './insuranceModuleView.mjs';
 import InsuranceDocumentsPanel from './insurance/InsuranceDocumentsPanel';
-import InsuranceEntryPanel from './insurance/InsuranceEntryPanel';
 import InsuranceHomePanel from './insurance/InsuranceHomePanel';
 import InsuranceModeShell from './insurance/InsuranceModeShell';
 import { InsuranceSectionCard } from './insurance/InsurancePanelPrimitives';
@@ -182,26 +180,6 @@ const getLatestInsuranceRecord = (records) =>
     return currentValue > latestValue ? record : currentLatest;
   }, null);
 
-const buildHistoryRecordTitle = (record) => {
-  const statusLabel = formatWorkflowLabel(record?.status);
-
-  return record?.inquiryTypeLabel
-    ? `${record.inquiryTypeLabel} - ${statusLabel}`
-    : statusLabel;
-};
-
-const buildHistoryRecordSummary = (record) => {
-  const latestUpdateLabel = formatTimestampLabel(record?.updatedAt ?? record?.createdAt);
-  const summaryParts = [
-    record?.statusHint,
-    latestUpdateLabel !== '--' ? `Latest update: ${latestUpdateLabel}` : null,
-    record?.providerName ? `Provider: ${record.providerName}` : null,
-    record?.policyNumber ? `Policy no.: ${record.policyNumber}` : null,
-  ].filter(Boolean);
-
-  return summaryParts.join(' ') || 'Completed insurance record.';
-};
-
 function InsuranceStatePanel({
   icon,
   title,
@@ -274,8 +252,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const initialVehicleId = routeVehicleId ?? fallbackVehicleId;
   const [selectedVehicleId, setSelectedVehicleId] = useState(initialVehicleId);
   const [activePanel, setActivePanel] = useState('home');
-  const [isInInsuranceMode, setIsInInsuranceMode] = useState(false);
-  const [activeModeSection, setActiveModeSection] = useState('overview');
+  const [activeInsuranceTab, setActiveInsuranceTab] = useState('home');
+  const [, setIsVehiclePickerOpen] = useState(false);
   const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
   const [documentDraft, setDocumentDraft] = useState(buildInitialDocumentUploadDraft());
   const [intakeState, setIntakeState] = useState(initialSnapshot.intakeState);
@@ -300,22 +278,29 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     inquiryId: routeInquiryId ?? undefined,
   });
 
-  const openInsuranceMode = (section = 'overview') => {
-    setIsInInsuranceMode(true);
-    setActiveModeSection(section);
-  };
-
-  const closeInsuranceMode = () => {
-    setActivePanel('home');
-    setIsInInsuranceMode(false);
-    setActiveModeSection('overview');
-  };
-
   useEffect(() => {
     setActivePanel('home');
-    setIsInInsuranceMode(false);
-    setActiveModeSection('overview');
+    setActiveInsuranceTab('home');
   }, [selectedVehicleId]);
+
+  useEffect(() => {
+    if (activeInsuranceTab === 'request') {
+      setActivePanel('request');
+      return;
+    }
+
+    if (activeInsuranceTab === 'documents') {
+      setActivePanel('documents');
+      return;
+    }
+
+    if (activeInsuranceTab === 'status') {
+      setActivePanel('status');
+      return;
+    }
+
+    setActivePanel('home');
+  }, [activeInsuranceTab]);
 
   const selectedVehicle =
     ownedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
@@ -345,15 +330,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     [latestInquiry?.paymentDueAt, latestInquiry?.paymentStatus, latestInquiry?.status],
   );
   const renewalSummary = useMemo(() => buildRenewalPrompt(latestInquiry), [latestInquiry]);
-  const entryState = useMemo(
-    () =>
-      buildCustomerInsuranceEntryState({
-        selectedVehicleLabel,
-        latestInquiry,
-        reminderCount: claimStatusUpdates.length,
-      }),
-    [claimStatusUpdates.length, latestInquiry, selectedVehicleLabel],
-  );
   const overviewState = useMemo(
     () =>
       buildCustomerInsuranceOverviewState({
@@ -385,30 +361,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         latestUpdateLabel: latestStatusUpdateLabel,
       }),
     [latestInquiry, latestStatusUpdateLabel, missingRequiredDocuments],
-  );
-  const sortedHistoryRecords = useMemo(() => {
-    return [...claimStatusUpdates].sort((left, right) => {
-      const leftTimestamp = new Date(left?.updatedAt ?? left?.createdAt ?? 0).getTime();
-      const rightTimestamp = new Date(right?.updatedAt ?? right?.createdAt ?? 0).getTime();
-
-      return rightTimestamp - leftTimestamp;
-    });
-  }, [claimStatusUpdates]);
-  const historySummary = sortedHistoryRecords.length
-    ? `${sortedHistoryRecords.length} recorded insurance update${sortedHistoryRecords.length === 1 ? '' : 's'} ${sortedHistoryRecords.length === 1 ? 'is' : 'are'} already available for this vehicle.`
-    : 'Vehicle-level insurance records will appear here after staff close and record a customer-safe case.';
-  const latestHistoryRecord = sortedHistoryRecords[0] ?? null;
-  const historyLatestUpdateLabel =
-    latestHistoryRecord?.statusHint ??
-    formatTimestampLabel(latestHistoryRecord?.updatedAt ?? latestHistoryRecord?.createdAt);
-  const historyStatusState = useMemo(
-    () => ({
-      title: sortedHistoryRecords.length ? 'Completed records' : 'No history yet',
-      summary: historySummary,
-      latestUpdateLabel: historyLatestUpdateLabel,
-      timeline: [],
-    }),
-    [historyLatestUpdateLabel, historySummary, sortedHistoryRecords.length],
   );
   const heroState = useMemo(
     () =>
@@ -1149,32 +1101,22 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
     setActivePanel(panelKey);
   };
-  const handleChangeModeSection = (section) => {
-    setActiveModeSection(section);
-
-    if (section === 'overview') {
-      setActivePanel('home');
+  const handleOpenInsuranceHomeSection = (section) => {
+    if (section === 'history') {
+      setActiveInsuranceTab('status');
       return;
     }
 
-    if (section === 'documents') {
-      handleOpenPanel(section);
-      return;
-    }
-
-    setActivePanel(section);
+    setActiveInsuranceTab(section);
   };
 
   const heroSubtitle = hasSession
     ? 'Start a request quickly, upload the right documents, and follow review, payment, and renewal prompts without exposing staff-only workflow details.'
     : 'Sign in as a customer to start an insurance request and see customer-safe review, payment, and renewal updates.';
-  const insuranceModeUsesPanelScroll = isInInsuranceMode &&
-    (
-      activeModeSection === 'request' ||
-      activeModeSection === 'documents' ||
-      activeModeSection === 'status' ||
-      activeModeSection === 'history'
-    );
+  const insuranceModeUsesPanelScroll =
+    activeInsuranceTab === 'request' ||
+    activeInsuranceTab === 'documents' ||
+    activeInsuranceTab === 'status';
   const screenContent = (
     <View style={[styles.content, insuranceModeUsesPanelScroll && styles.fixedModeContent]}>
           <View style={styles.heroCard}>
@@ -1304,112 +1246,84 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 loading={trackingState === 'tracking_loading' || isRefreshing}
               />
             ) : null}
-            {!isInInsuranceMode ? (
-              <InsuranceEntryPanel
-                entryState={entryState}
-                onEnterMode={() => openInsuranceMode('overview')}
-              />
-            ) : (
-              <InsuranceModeShell
-                activeSection={activeModeSection}
-                onChangeSection={handleChangeModeSection}
-                onExitMode={closeInsuranceMode}
-                style={insuranceModeUsesPanelScroll ? styles.fixedModeShell : null}
-              >
-                {activeModeSection === 'overview' ? (
-                  <InsuranceHomePanel
-                    overviewState={overviewState}
-                    onOpenSection={handleChangeModeSection}
-                  />
-                ) : null}
+            <InsuranceModeShell
+              activeSection={activeInsuranceTab}
+              onChangeSection={setActiveInsuranceTab}
+              selectedVehicleLabel={selectedVehicleLabel}
+              onOpenVehiclePicker={() => setIsVehiclePickerOpen(true)}
+            >
+              {activeInsuranceTab === 'home' ? (
+                <InsuranceHomePanel
+                  overviewState={{
+                    ...overviewState,
+                    routeRows: overviewState.routeRows.filter((row) => row.key !== 'history'),
+                  }}
+                  onOpenSection={handleOpenInsuranceHomeSection}
+                />
+              ) : null}
 
-                {activeModeSection === 'request' ? (
-                  <InsuranceRequestPanel
-                    selectedVehicleLabel={selectedVehicleLabel}
-                    draft={draft}
-                    inquiryTypeOptions={inquiryTypeOptions}
-                    onChangeDraft={(patch) => {
-                      setDraft((current) => ({ ...current, ...patch }))
-                      handleDraftPatch()
-                    }}
-                    onSubmit={handleSubmitInquiry}
-                    isSubmitting={isSubmitting}
-                    intakeState={intakeState}
-                    intakeMessage={intakeMessage}
-                  />
-                ) : null}
+              {activeInsuranceTab === 'request' ? (
+                <InsuranceRequestPanel
+                  selectedVehicleLabel={selectedVehicleLabel}
+                  draft={draft}
+                  inquiryTypeOptions={inquiryTypeOptions}
+                  onChangeDraft={(patch) => {
+                    setDraft((current) => ({ ...current, ...patch }))
+                    handleDraftPatch()
+                  }}
+                  onSubmit={handleSubmitInquiry}
+                  isSubmitting={isSubmitting}
+                  intakeState={intakeState}
+                  intakeMessage={intakeMessage}
+                />
+              ) : null}
 
-                {activeModeSection === 'documents' ? (
-                  <InsuranceDocumentsPanel
-                    checklist={requirementsChecklist}
-                    latestInquiry={latestInquiry}
-                    onChangeDocumentDraft={(patch) => {
-                      setDocumentDraft((current) => ({ ...current, ...patch }))
-                      handleDocumentDraftPatch()
-                    }}
-                    onPickDocument={pickCustomerInsuranceDocument}
-                    onUploadDocument={handleUploadPickedDocument}
-                    isUploadingDocument={isUploadingDocument}
-                    documentDraft={documentDraft}
-                    documentTypeOptions={customerInsuranceDocumentTypeOptions}
-                    onClearPickedDocument={handleClearPickedDocument}
-                    uploadMessage={documentUploadMessage}
-                    uploadState={documentUploadState}
-                    canAcceptDocuments={Boolean(latestInquiry?.id && latestInquiryCanAcceptDocuments)}
-                  />
-                ) : null}
+              {activeInsuranceTab === 'documents' ? (
+                <InsuranceDocumentsPanel
+                  checklist={requirementsChecklist}
+                  latestInquiry={latestInquiry}
+                  onChangeDocumentDraft={(patch) => {
+                    setDocumentDraft((current) => ({ ...current, ...patch }))
+                    handleDocumentDraftPatch()
+                  }}
+                  onPickDocument={pickCustomerInsuranceDocument}
+                  onUploadDocument={handleUploadPickedDocument}
+                  isUploadingDocument={isUploadingDocument}
+                  documentDraft={documentDraft}
+                  documentTypeOptions={customerInsuranceDocumentTypeOptions}
+                  onClearPickedDocument={handleClearPickedDocument}
+                  uploadMessage={documentUploadMessage}
+                  uploadState={documentUploadState}
+                  canAcceptDocuments={Boolean(latestInquiry?.id && latestInquiryCanAcceptDocuments)}
+                />
+              ) : null}
 
-                {activeModeSection === 'status' ? (
-                  <InsuranceStatusDetailPanel
-                    eyebrow="Status"
-                    title="Current request status"
-                    subtitle="Review the current blocker, latest update, and next action in one place."
-                    statusState={statusState}
-                    footerLabel={statusState.ctaLabel}
-                    footerScrollTarget={statusState.ctaRouteKey === 'status' ? 'end' : null}
-                    onFooterPress={statusState.ctaRouteKey === 'documents' ? () => handleChangeModeSection('documents') : null}
-                  >
-                    {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
-                      <InsuranceSectionCard
-                        title="Payment"
-                        helper={paymentSummary.message}
-                      />
-                    ) : null}
+              {activeInsuranceTab === 'status' ? (
+                <InsuranceStatusDetailPanel
+                  eyebrow="Status"
+                  title="Current request status"
+                  subtitle="Review the current blocker, latest update, and next action in one place."
+                  statusState={statusState}
+                  footerLabel={statusState.ctaLabel}
+                  footerScrollTarget={statusState.ctaRouteKey === 'status' ? 'end' : null}
+                  onFooterPress={statusState.ctaRouteKey === 'documents' ? () => setActiveInsuranceTab('documents') : null}
+                >
+                  {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
+                    <InsuranceSectionCard
+                      title="Payment"
+                      helper={paymentSummary.message}
+                    />
+                  ) : null}
 
-                    {latestInquiry?.renewalStatus && latestInquiry.renewalStatus !== 'not_applicable' ? (
-                      <InsuranceSectionCard
-                        title="Renewal"
-                        helper={buildRenewalPrompt(latestInquiry).message}
-                      />
-                    ) : null}
-                  </InsuranceStatusDetailPanel>
-                ) : null}
-
-                {activeModeSection === 'history' ? (
-                  <InsuranceStatusDetailPanel
-                    eyebrow="History"
-                    title="Recorded vehicle updates"
-                    subtitle="Completed customer-safe insurance records for this vehicle."
-                    statusState={historyStatusState}
-                  >
-                    {sortedHistoryRecords.length ? (
-                      sortedHistoryRecords.map((record) => (
-                        <InsuranceSectionCard
-                          key={`${record.status}-${record.updatedAt ?? record.createdAt ?? record.id ?? record.policyNumber ?? record.inquiryTypeLabel ?? 'history'}`}
-                          title={buildHistoryRecordTitle(record)}
-                          helper={buildHistoryRecordSummary(record)}
-                        />
-                      ))
-                    ) : (
-                      <InsuranceSectionCard
-                        title="No completed records yet"
-                        helper="Completed insurance records will appear here after staff close and record them."
-                      />
-                    )}
-                  </InsuranceStatusDetailPanel>
-                ) : null}
-              </InsuranceModeShell>
-            )}
+                  {latestInquiry?.renewalStatus && latestInquiry.renewalStatus !== 'not_applicable' ? (
+                    <InsuranceSectionCard
+                      title="Renewal"
+                      helper={buildRenewalPrompt(latestInquiry).message}
+                    />
+                  ) : null}
+                </InsuranceStatusDetailPanel>
+              ) : null}
+            </InsuranceModeShell>
 
             {trackingState === 'tracking_loading' && !trackingMessage ? (
               <InsuranceStatePanel
@@ -1683,10 +1597,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 14,
     fontWeight: '800',
-  },
-  fixedModeShell: {
-    flex: 1,
-    minHeight: 0,
   },
   homeCardGrid: {
     flexDirection: 'row',

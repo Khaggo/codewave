@@ -1,54 +1,116 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { colors, radius } from '../../theme'
 
-const SECTION_ITEMS = [
-  { key: 'overview', label: 'Overview' },
+const TAB_ITEMS = [
+  { key: 'home', label: 'Home' },
   { key: 'request', label: 'Request' },
-  { key: 'documents', label: 'Docs' },
+  { key: 'documents', label: 'Documents' },
   { key: 'status', label: 'Status' },
-  { key: 'history', label: 'History' },
 ]
 
-export default function InsuranceModeShell({ activeSection, onChangeSection, onExitMode, children, style }) {
+export default function InsuranceModeShell({
+  activeSection,
+  onChangeSection,
+  selectedVehicleLabel,
+  onOpenVehiclePicker,
+  children,
+}) {
   return (
-    <View style={[styles.container, style]}>
-      <TouchableOpacity onPress={onExitMode} activeOpacity={0.85}>
-        <Text style={styles.backLink}>Back to insurance</Text>
-      </TouchableOpacity>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Insurance</Text>
+        <TouchableOpacity
+          style={styles.vehicleTrigger}
+          onPress={onOpenVehiclePicker}
+          activeOpacity={0.88}
+        >
+          <Text style={styles.vehicleTriggerText}>
+            {selectedVehicleLabel || 'Select vehicle'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-      <Text style={styles.eyebrow}>Customer insurance</Text>
-      <Text style={styles.title}>Insurance mode</Text>
-
-      <View style={styles.navRow}>
-        {SECTION_ITEMS.map(({ key, label }) => {
-          const active = activeSection === key
+      <View style={styles.tabRow}>
+        {TAB_ITEMS.map((item) => {
+          const active = item.key === activeSection
 
           return (
             <TouchableOpacity
-              key={key}
-              style={[styles.navButton, active && styles.navButtonActive]}
-              onPress={() => onChangeSection(key)}
+              key={item.key}
+              style={[styles.tabButton, active && styles.tabButtonActive]}
+              onPress={() => onChangeSection(item.key)}
               activeOpacity={0.88}
             >
-              <Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text>
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>{item.label}</Text>
             </TouchableOpacity>
           )
         })}
       </View>
 
-      {children}
+      <View style={styles.body}>{children}</View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 18, minHeight: 0 },
-  backLink: { color: colors.primary, fontSize: 14, fontWeight: '700' },
-  eyebrow: { color: colors.primary, fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.4 },
-  title: { color: colors.text, fontSize: 28, fontWeight: '900' },
-  navRow: { flexDirection: 'row', gap: 8, padding: 8, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  navButton: { flex: 1, borderRadius: radius.lg, paddingVertical: 12, alignItems: 'center' },
-  navButtonActive: { backgroundColor: colors.primary },
-  navText: { color: colors.mutedText, fontSize: 13, fontWeight: '700' },
-  navTextActive: { color: colors.onPrimary },
+  container: {
+    gap: 18,
+    minHeight: 0,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  title: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '900',
+  },
+  vehicleTrigger: {
+    maxWidth: '62%',
+    minHeight: 42,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceStrong,
+    justifyContent: 'center',
+  },
+  vehicleTriggerText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 8,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  tabButton: {
+    flex: 1,
+    borderRadius: radius.lg,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  tabButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  tabText: {
+    color: colors.mutedText,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tabTextActive: {
+    color: colors.onPrimary,
+  },
+  body: {
+    minHeight: 0,
+  },
 })
