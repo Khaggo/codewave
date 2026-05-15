@@ -70,3 +70,15 @@ test('insurance shell exposes direct-entry tabs and vehicle picker trigger', () 
   assert.doesNotMatch(source, /Insurance mode/)
   assert.doesNotMatch(source, /History/)
 })
+
+test('insurance shell uses a header-triggered vehicle picker instead of a body vehicle card', () => {
+  const source = read('./InsuranceInquiryScreen.js')
+  const shellSource = read('./insurance/InsuranceModeShell.js')
+
+  assert.match(shellSource, /onOpenVehiclePicker/)
+  assert.match(shellSource, /selectedVehicleLabel/)
+  assert.match(source, /const \[isVehiclePickerOpen, setIsVehiclePickerOpen\] = useState\(false\)/)
+  assert.match(source, /<Modal[\s\S]*?visible=\{isVehiclePickerOpen\}/)
+  assert.doesNotMatch(source, /Choose vehicle context/)
+  assert.doesNotMatch(source, /Select vehicle/)
+})

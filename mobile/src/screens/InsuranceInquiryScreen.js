@@ -5,7 +5,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -274,7 +276,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const [activePanel, setActivePanel] = useState('home');
   const [activeInsuranceTab, setActiveInsuranceTab] = useState('home');
   const [statusTabFocus, setStatusTabFocus] = useState('summary');
-  const [, setIsVehiclePickerOpen] = useState(false);
+  const [isVehiclePickerOpen, setIsVehiclePickerOpen] = useState(false);
   const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
   const [documentDraft, setDocumentDraft] = useState(buildInitialDocumentUploadDraft());
   const [intakeState, setIntakeState] = useState(initialSnapshot.intakeState);
@@ -1250,40 +1252,40 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
           ) : null}
 
           {hasSession && ownedVehicles.length ? (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <View>
-                  <Text style={styles.sectionTitle}>Select vehicle</Text>
-                  <Text style={styles.sectionSubtitle}>
-                    Vehicle ownership is the backend gate for insurance intake.
-                  </Text>
-                </View>
-              </View>
+            <Modal
+              animationType="slide"
+              transparent
+              visible={isVehiclePickerOpen}
+              onRequestClose={() => setIsVehiclePickerOpen(false)}
+            >
+              <Pressable
+                style={styles.sheetBackdrop}
+                onPress={() => setIsVehiclePickerOpen(false)}
+              >
+                <Pressable style={styles.sheetCard}>
+                  <Text style={styles.sheetTitle}>Choose vehicle</Text>
+                  {ownedVehicles.map((vehicle) => {
+                    const vehicleLabel = buildOwnedVehicleInsuranceLabel(vehicle);
+                    const selected = vehicle.id === selectedVehicleId;
 
-              <View style={styles.vehicleList}>
-                {ownedVehicles.map((vehicle) => {
-                  const isSelected = vehicle.id === selectedVehicleId;
-
-                  return (
-                    <TouchableOpacity
-                      key={vehicle.id}
-                      style={[styles.selectionChip, isSelected && styles.selectionChipSelected]}
-                      onPress={() => handleSelectVehicle(vehicle.id)}
-                      activeOpacity={0.88}
-                    >
-                      <Text
-                        style={[
-                          styles.selectionChipText,
-                          isSelected && styles.selectionChipTextSelected,
-                        ]}
+                    return (
+                      <TouchableOpacity
+                        key={vehicle.id}
+                        style={[styles.sheetRow, selected && styles.sheetRowSelected]}
+                        onPress={() => {
+                          handleSelectVehicle(vehicle.id);
+                          setIsVehiclePickerOpen(false);
+                        }}
+                        activeOpacity={0.88}
                       >
-                        {buildOwnedVehicleInsuranceLabel(vehicle)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
+                        <Text style={styles.sheetRowLabel}>{vehicleLabel}</Text>
+                        {selected ? <Text style={styles.sheetRowMeta}>Current</Text> : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </Pressable>
+              </Pressable>
+            </Modal>
           ) : null}
 
           <View
@@ -1547,30 +1549,43 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     maxWidth: 520,
   },
-  vehicleList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  sheetBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.38)',
+  },
+  sheetCard: {
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    backgroundColor: colors.surface,
+    padding: 20,
     gap: 10,
   },
-  selectionChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
+  sheetTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
   },
-  selectionChipSelected: {
-    borderColor: colors.primary,
+  sheetRow: {
+    minHeight: 52,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+    justifyContent: 'center',
+    paddingVertical: 10,
+  },
+  sheetRowSelected: {
     backgroundColor: colors.primarySoft,
   },
-  selectionChipText: {
+  sheetRowLabel: {
     color: colors.text,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
-  selectionChipTextSelected: {
+  sheetRowMeta: {
     color: colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
   },
   typeRow: {
     flexDirection: 'row',
