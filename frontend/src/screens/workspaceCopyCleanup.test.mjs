@@ -76,6 +76,20 @@ test('service flow workspaces use queue-first copy and remove bulky dashboard wo
   )
 })
 
+test('job orders workspace keeps queue before detail actions', () => {
+  const source = read('frontend/src/screens/JobOrderWorkbench.js')
+
+  const queueIndex = source.indexOf('Job Order Queue')
+  const detailIndex = source.indexOf('Selected Job Order')
+  const progressIndex = source.indexOf('Progress Updates')
+
+  assert.notEqual(queueIndex, -1)
+  assert.notEqual(detailIndex, -1)
+  assert.notEqual(progressIndex, -1)
+  assert.ok(queueIndex < detailIndex)
+  assert.ok(detailIndex < progressIndex)
+})
+
 test('intake workspace source keeps the guided front-desk section order', () => {
   const intakeScreen = read('frontend/src/screens/DigitalIntakeInspectionWorkspace.js')
   const sectionMarkers = [

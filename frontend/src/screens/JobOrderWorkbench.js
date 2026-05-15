@@ -257,7 +257,7 @@ export default function JobOrderWorkbench() {
   const [handoffCandidates, setHandoffCandidates] = useState([])
   const [handoffState, setHandoffState] = useState({
     status: 'handoff_empty',
-    message: 'Choose a schedule date and refresh to load confirmed bookings.',
+    message: 'Use the active work date to load the live queue for this schedule.',
   })
   const [selectedBookingId, setSelectedBookingId] = useState('')
   const [createDraft, setCreateDraft] = useState(emptyCreateDraft)
@@ -1364,12 +1364,8 @@ export default function JobOrderWorkbench() {
     <div className="ops-page-shell">
       <PageHeader
         eyebrow="Workshop Operations"
-        title="Job Order Workbench"
-        description={
-          isTechnician
-            ? 'Load your assigned job order, update execution status, add workshop progress, and attach evidence from one technician-focused control surface.'
-            : 'Move confirmed bookings into workshop execution, track progress and evidence, then finalize invoice-ready work from one guided control surface.'
-        }
+        title="Job Orders"
+        description="Review active work, update progress, and prepare jobs for QA."
         meta={(
           <>
             <span className="badge badge-gray">{formatDate(selectedDate)}</span>
@@ -1644,19 +1640,67 @@ export default function JobOrderWorkbench() {
       <section className="ops-panel">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="card-title">Active Job Order</p>
+            <p className="card-title">Job Order Queue</p>
+            <p className="mt-1 text-sm leading-6 text-ink-secondary">
+              Focus on the live execution queue first.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className={`badge ${workbenchScope === 'history' ? 'badge-blue' : 'badge-orange'}`}>
+              {workbenchScope === 'history' ? 'History queue' : 'Live queue'}
+            </span>
+            <span className="badge badge-gray">
+              {isTechnician
+                ? `${selectedDateJobOrders.length} assigned on this date`
+                : `${handoffCandidates.length} handoff source${handoffCandidates.length === 1 ? '' : 's'}`}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+              {isTechnician ? 'Assigned execution queue' : 'Booking handoff queue'}
+            </p>
+            <p className="mt-2 text-sm text-ink-primary">
+              {isTechnician
+                ? selectedDateJobOrders.length > 0
+                  ? 'Load assigned work from the selector above before updating details below.'
+                  : 'No assigned job orders are queued for the selected date yet.'
+                : handoffCandidates.length > 0
+                  ? 'Confirmed bookings on this date are ready for job-order creation and execution follow-through.'
+                  : 'No confirmed booking handoffs are queued for the selected date yet.'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+              Queue rule
+            </p>
+            <p className="mt-2 text-sm text-ink-primary">
+              {workbenchScope === 'history'
+                ? 'History stays available for review without mixing finalized work back into the live queue.'
+                : 'Use the queue and selector together so updates stay tied to known live records.'}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="ops-panel">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="card-title">Selected Job Order</p>
             <p className="mt-1 text-sm leading-6 text-ink-secondary">
               {isTechnician
-                ? 'The loaded technician assignment stays pinned above your controls so status, progress, and workshop evidence remain in view while you work.'
-                : 'The live workshop surface stays pinned above intake so status, assignments, evidence, and invoice readiness remain the primary context after a load or creation event.'}
+                ? 'Review the loaded assignment here before saving progress, evidence, or status changes.'
+                : 'Review the selected record here before saving assignments, progress, evidence, or finalization updates.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <span className={`badge ${isTechnician ? 'badge-orange' : 'badge-blue'}`}>
-              {isTechnician ? 'Technician live surface' : 'Pinned live surface'}
+              {isTechnician ? 'Technician detail' : 'Execution detail'}
             </span>
             <span className="badge badge-gray">
-              {activeJobOrder ? `JO-${activeJobOrder.id.slice(0, 8).toUpperCase()}` : 'Awaiting live detail'}
+              {activeJobOrder ? `JO-${activeJobOrder.id.slice(0, 8).toUpperCase()}` : 'Awaiting selected detail'}
             </span>
           </div>
         </div>
@@ -1967,11 +2011,11 @@ export default function JobOrderWorkbench() {
           <div className="space-y-5">
             <div className="ops-panel">
               <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-                <div>
-                  <p className="card-title">Progress & Evidence</p>
-                  <p className="text-xs text-ink-muted mt-1">
-                    Keep the workshop trail current with technician notes and reviewable media.
-                  </p>
+              <div>
+                <p className="card-title">Progress Updates</p>
+                <p className="text-xs text-ink-muted mt-1">
+                  Keep the workshop trail current with technician notes and reviewable media.
+                </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <span className="badge badge-gray">Progress: technician-owned</span>
@@ -2080,7 +2124,7 @@ export default function JobOrderWorkbench() {
                 </div>
 
                 <div className="rounded-xl border border-surface-border bg-surface-card p-4">
-                  <p className="text-sm font-bold text-ink-primary">Photo Evidence</p>
+                  <p className="text-sm font-bold text-ink-primary">Evidence</p>
                   <p className="text-xs text-ink-muted mt-1">
                     Upload images directly from a phone camera or desktop file picker so the next reviewer sees stored evidence instead of pasted links.
                   </p>
@@ -2175,7 +2219,7 @@ export default function JobOrderWorkbench() {
           <div className="ops-panel">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="card-title">Booking Handoff Queue</p>
+                <p className="card-title">Booking Handoff Sources</p>
                 <p className="text-xs text-ink-muted mt-1">
                   Select a confirmed booking, then create the matching workshop job order from the
                   guided surface on the right.
@@ -2510,7 +2554,7 @@ export default function JobOrderWorkbench() {
           <div className="ops-panel">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
               <div>
-                <p className="card-title">Progress & Evidence</p>
+                <p className="card-title">Progress Updates</p>
                 <p className="text-xs text-ink-muted mt-1">
                   Execution evidence stays job-order-owned so the workshop team can record work and
                   attach reviewable media without changing booking truth.
@@ -2624,7 +2668,7 @@ export default function JobOrderWorkbench() {
               </div>
 
               <div className="rounded-xl border border-surface-border bg-surface-card p-4">
-                <p className="text-sm font-bold text-ink-primary">Photo Evidence</p>
+                <p className="text-sm font-bold text-ink-primary">Evidence</p>
                 <p className="text-xs text-ink-muted mt-1">
                   Upload images directly from camera or desktop so QA and finalization reviewers can inspect stored evidence.
                 </p>
@@ -2715,7 +2759,7 @@ export default function JobOrderWorkbench() {
           <div className="ops-panel">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
               <div>
-                <p className="card-title">Finalize & Payment</p>
+                <p className="card-title">Finalize</p>
                 <p className="text-xs text-ink-muted mt-1">
                   Finalization, payment capture, and invoice export stay on one screen so advisers can see readiness blockers before they commit the release record.
                 </p>
