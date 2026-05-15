@@ -265,6 +265,10 @@ export function sanitizeProductInput(input = {}, { categoryId, categoryName } = 
     throw new Error('Product stock must be zero or greater.')
   }
 
+  if (!Number.isInteger(stock)) {
+    throw new Error('Product stock must be a whole number.')
+  }
+
   const createdAt = normalizeTimestamp(input.createdAt)
   const publishedAt =
     status === 'published' ? normalizeTimestamp(input.publishedAt ?? createdAt) : input.publishedAt ?? null
@@ -593,6 +597,10 @@ export function checkoutCart({ customerId, items }) {
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
       throw new Error('Quantity must be greater than zero.')
+    }
+
+    if (!Number.isInteger(quantity)) {
+      throw new Error('Quantity must be a whole number.')
     }
 
     const existing = aggregatedItems.get(product.id)

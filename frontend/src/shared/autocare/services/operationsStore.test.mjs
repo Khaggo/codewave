@@ -6,6 +6,7 @@ import {
   addInventoryAdjustment,
   addInventoryProduct,
   archiveInventoryProduct,
+  checkoutCart,
   getInventoryAdjustmentHistorySnapshot,
   getInventoryProductsSnapshot,
   getLowStockProducts,
@@ -128,6 +129,24 @@ test('adding inventory products rejects invalid low-stock thresholds', () => {
   )
 })
 
+test('adding inventory products rejects fractional stock counts', () => {
+  const [existingProduct] = getInventoryProductsSnapshot()
+
+  assert.throws(
+    () =>
+      addInventoryProduct({
+        name: 'Wheel Cleaner',
+        category: existingProduct.category,
+        price: 299,
+        stock: 12.5,
+        sku: 'WC-001',
+        description: 'Concentrated wheel cleaner.',
+        images: ['https://example.com/wheel-cleaner.jpg'],
+      }),
+    /whole number/i,
+  )
+})
+
 test('updating inventory products rejects invalid low-stock thresholds', () => {
   const existingProduct = getInventoryProductsSnapshot().find((product) => product.id === 'p2')
 
@@ -138,6 +157,19 @@ test('updating inventory products rejects invalid low-stock thresholds', () => {
         lowStockThreshold: Number.NaN,
       }),
     /low-stock threshold must be zero or greater/i,
+  )
+})
+
+test('updating inventory products rejects fractional stock counts', () => {
+  const existingProduct = getInventoryProductsSnapshot().find((product) => product.id === 'p2')
+
+  assert.throws(
+    () =>
+      updateInventoryProduct('p2', {
+        category: existingProduct.category,
+        stock: 8.25,
+      }),
+    /whole number/i,
   )
 })
 
@@ -172,4 +204,15 @@ test('stock adjustments stay separate from catalog publish visibility', () => {
   assert.equal(adjustedProduct.status, 'archived')
   assert.equal(adjustedProduct.stock, 5)
   assert.equal(adjustedProduct.stockState, 'low_stock')
+})
+
+test('checkout rejects fractional item quantities', () => {
+  assert.throws(
+    () =>
+      checkoutCart({
+        customerId: 'cust-1',
+        items: [{ productId: 'p2', quantity: 1.5 }],
+      }),
+    /whole number/i,
+  )
 })
