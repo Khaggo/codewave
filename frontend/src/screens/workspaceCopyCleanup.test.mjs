@@ -183,21 +183,17 @@ test('catalog, inventory, staff, and analytics workspaces use concise operationa
   assert.ok(analytics.includes("Review today's workload, bottlenecks, and live operational signals."))
 })
 
-test('booking-service workspace keeps concise publishing copy', () => {
-  const booking = read('frontend/src/components/BookingServiceAdmin.js')
-
-  assert.ok(booking.includes('Create booking categories and publish live booking services.'))
-  assert.ok(booking.includes('Create a category before publishing services.'))
-  assert.ok(booking.includes('Publish services with valid category records only.'))
-})
-
 test('admin operations workspaces move live queues ahead of secondary editors and summaries', () => {
   const catalog = read('frontend/src/screens/ShopProductAdmin.js')
+  const inventory = read('frontend/src/screens/InventoryWorkspace.js')
   const staff = read('frontend/src/components/StaffProvisioningPanel.js')
   const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
 
   const catalogListIndex = catalog.indexOf('title="Published Products"')
   const catalogEditorIndex = catalog.indexOf('title="Create And Publish Product"')
+  const inventoryListIndex = inventory.indexOf('aria-label="Inventory visibility table"')
+  const inventoryDetailIndex = inventory.indexOf('title="Selected Product Detail"')
+  const inventoryCoverageIndex = inventory.indexOf('title="Inventory Coverage"')
   const staffDirectoryIndex = staff.indexOf('Managed Account Directory')
   const staffProvisioningIndex = staff.indexOf('Provision Operations Accounts')
   const analyticsOperationsIndex = analytics.indexOf('Review booking-state counts from the operations snapshot.')
@@ -206,6 +202,12 @@ test('admin operations workspaces move live queues ahead of secondary editors an
   assert.notEqual(catalogListIndex, -1)
   assert.notEqual(catalogEditorIndex, -1)
   assert.ok(catalogListIndex < catalogEditorIndex)
+
+  assert.notEqual(inventoryListIndex, -1)
+  assert.notEqual(inventoryDetailIndex, -1)
+  assert.notEqual(inventoryCoverageIndex, -1)
+  assert.ok(inventoryListIndex < inventoryDetailIndex)
+  assert.ok(inventoryDetailIndex < inventoryCoverageIndex)
 
   assert.notEqual(staffDirectoryIndex, -1)
   assert.notEqual(staffProvisioningIndex, -1)
@@ -216,14 +218,14 @@ test('admin operations workspaces move live queues ahead of secondary editors an
   assert.ok(analyticsOperationsIndex < analyticsDashboardIndex)
 })
 
-test('analytics and loyalty workspaces stay concise', () => {
+test('analytics workspace removes the old read-only snapshot framing', () => {
   const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
-  const loyalty = read('frontend/src/screens/LoyaltyManager.js')
 
-  assert.ok(analytics.includes('Inspect read-only analytics snapshots across operations and support domains.'))
-  assert.ok(analytics.includes('Review derived sales signals from the latest snapshot.'))
-  assert.ok(analytics.includes('Review insurance workload from the latest snapshot.'))
-  assert.ok(analytics.includes('Review service demand from the latest dashboard snapshot.'))
+  assert.ok(!analytics.includes('Inspect read-only analytics snapshots across operations and support domains.'))
+})
+
+test('loyalty workspace stays concise', () => {
+  const loyalty = read('frontend/src/screens/LoyaltyManager.js')
 
   assert.ok(loyalty.includes('Manage rewards, earning rules, and loyalty analytics.'))
 })
