@@ -60,7 +60,7 @@ export default function ConfirmDialog({
               type="button"
               onClick={onCancel}
               disabled={submitting}
-              className="btn-ghost min-w-[132px] justify-center disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-ghost min-h-11 min-w-[132px] justify-center rounded-2xl font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {cancelLabel}
             </button>
@@ -69,7 +69,7 @@ export default function ConfirmDialog({
               type="button"
               onClick={onConfirm}
               disabled={submitting}
-              className={`${meta.confirmClassName} min-w-[132px] justify-center disabled:cursor-not-allowed disabled:opacity-50`}
+              className={`${meta.confirmClassName} min-h-11 min-w-[132px] justify-center rounded-2xl disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {confirmLabel}
             </button>
