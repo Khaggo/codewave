@@ -386,24 +386,29 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }),
     [latestInquiry, latestStatusUpdateLabel, missingRequiredDocuments],
   );
-  const historySummary = claimStatusUpdates.length
-    ? `${claimStatusUpdates.length} recorded insurance update${claimStatusUpdates.length === 1 ? '' : 's'} ${claimStatusUpdates.length === 1 ? 'is' : 'are'} already available for this vehicle.`
+  const sortedHistoryRecords = useMemo(() => {
+    return [...claimStatusUpdates].sort((left, right) => {
+      const leftTimestamp = new Date(left?.updatedAt ?? left?.createdAt ?? 0).getTime();
+      const rightTimestamp = new Date(right?.updatedAt ?? right?.createdAt ?? 0).getTime();
+
+      return rightTimestamp - leftTimestamp;
+    });
+  }, [claimStatusUpdates]);
+  const historySummary = sortedHistoryRecords.length
+    ? `${sortedHistoryRecords.length} recorded insurance update${sortedHistoryRecords.length === 1 ? '' : 's'} ${sortedHistoryRecords.length === 1 ? 'is' : 'are'} already available for this vehicle.`
     : 'Vehicle-level insurance records will appear here after staff close and record a customer-safe case.';
-  const latestHistoryRecord = useMemo(
-    () => getLatestInsuranceRecord(claimStatusUpdates),
-    [claimStatusUpdates],
-  );
+  const latestHistoryRecord = sortedHistoryRecords[0] ?? null;
   const historyLatestUpdateLabel =
     latestHistoryRecord?.statusHint ??
     formatTimestampLabel(latestHistoryRecord?.updatedAt ?? latestHistoryRecord?.createdAt);
   const historyStatusState = useMemo(
     () => ({
-      title: claimStatusUpdates.length ? 'Completed records' : 'No history yet',
+      title: sortedHistoryRecords.length ? 'Completed records' : 'No history yet',
       summary: historySummary,
       latestUpdateLabel: historyLatestUpdateLabel,
       timeline: [],
     }),
-    [claimStatusUpdates.length, historyLatestUpdateLabel, historySummary],
+    [historyLatestUpdateLabel, historySummary, sortedHistoryRecords.length],
   );
   const heroState = useMemo(
     () =>
@@ -1361,16 +1366,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                     subtitle="Review the current blocker, latest update, and next action in one place."
                     statusState={statusState}
                     footerLabel={statusState.ctaLabel}
-                    onFooterPress={() => {
-                      if (statusState.ctaRouteKey === 'documents') {
-                        handleChangeModeSection('documents');
-                        return;
-                      }
-
-                      if (statusState.ctaRouteKey && statusState.ctaRouteKey !== activeModeSection) {
-                        handleChangeModeSection(statusState.ctaRouteKey);
-                      }
-                    }}
+                    footerScrollTarget={statusState.ctaRouteKey === 'status' ? 'end' : null}
+                    onFooterPress={statusState.ctaRouteKey === 'documents' ? () => handleChangeModeSection('documents') : null}
                   >
                     {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
                       <InsuranceSectionCard
@@ -1395,8 +1392,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                     subtitle="Completed customer-safe insurance records for this vehicle."
                     statusState={historyStatusState}
                   >
-                    {claimStatusUpdates.length ? (
-                      claimStatusUpdates.map((record) => (
+                    {sortedHistoryRecords.length ? (
+                      sortedHistoryRecords.map((record) => (
                         <InsuranceSectionCard
                           key={`${record.status}-${record.updatedAt ?? record.createdAt ?? record.id ?? record.policyNumber ?? record.inquiryTypeLabel ?? 'history'}`}
                           title={buildHistoryRecordTitle(record)}

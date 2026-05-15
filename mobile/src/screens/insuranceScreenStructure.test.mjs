@@ -161,10 +161,14 @@ test('request and documents sections own scrolling when sticky footers are enabl
 test('status detail panel exposes a unified tracking surface with timeline and optional footer CTA', () => {
   const panelSource = read('./insurance/InsuranceStatusDetailPanel.js')
 
+  assert.match(panelSource, /import \{ useRef \} from 'react'/)
   assert.match(panelSource, /import \{ ScrollView, StyleSheet, Text, TouchableOpacity, View \} from 'react-native'/)
+  assert.match(panelSource, /const scrollViewRef = useRef\(null\)/)
+  assert.match(panelSource, /const handleFooterPress = \(\) => \{/)
+  assert.match(panelSource, /scrollViewRef\.current\?\.scrollToEnd\(\{ animated: true \}\)/)
   assert.match(panelSource, /statusState\.timeline\.map\(\(item\) => \(/)
   assert.match(panelSource, /title="Latest update"/)
-  assert.match(panelSource, /const showsFooter = Boolean\(footerLabel && onFooterPress\)/)
+  assert.match(panelSource, /const showsFooter = Boolean\(footerLabel && \(onFooterPress \|\| footerScrollTarget\)\)/)
   assert.match(panelSource, /\{showsFooter \? \(/)
   assert.match(panelSource, /paddingBottom:\s*140,/)
 })
@@ -202,12 +206,19 @@ test('task 4 follow-up keeps footer space constrained, restores attached files, 
     /const latestStatusUpdateLabel = useMemo\(\(\) => \{\s*if \(latestInquiry\?\.updatedAt\) \{\s*return formatTimestampLabel\(latestInquiry\.updatedAt\);/s,
   )
   assert.match(screenSource, /latestUpdateLabel: latestStatusUpdateLabel,/)
-  assert.match(screenSource, /const latestHistoryRecord = useMemo\(\s*\(\) => getLatestInsuranceRecord\(claimStatusUpdates\),/s)
+  assert.match(screenSource, /const sortedHistoryRecords = useMemo\(\(\) => \{/)
+  assert.match(screenSource, /return \[\.\.\.claimStatusUpdates\]\.sort\(\(left, right\) => \{/)
+  assert.match(screenSource, /const latestHistoryRecord = sortedHistoryRecords\[0\] \?\? null;/)
   assert.match(screenSource, /const historyStatusState = useMemo\(/)
   assert.match(screenSource, /footerLabel=\{statusState\.ctaLabel\}/)
   assert.match(
     screenSource,
-    /onFooterPress=\{\(\) => \{\s*if \(statusState\.ctaRouteKey === 'documents'\) \{\s*handleChangeModeSection\('documents'\);[\s\S]*?return;\s*\}[\s\S]*?if \(statusState\.ctaRouteKey && statusState\.ctaRouteKey !== activeModeSection\) \{\s*handleChangeModeSection\(statusState\.ctaRouteKey\);[\s\S]*?\}\s*}\}/s,
+    /footerScrollTarget=\{statusState\.ctaRouteKey === 'status' \? 'end' : null\}/,
   )
+  assert.match(
+    screenSource,
+    /onFooterPress=\{statusState\.ctaRouteKey === 'documents' \? \(\) => handleChangeModeSection\('documents'\) : null\}/,
+  )
+  assert.match(screenSource, /sortedHistoryRecords\.map\(\(record\) => \(/)
   assert.match(screenSource, /statusState=\{historyStatusState\}/)
 })

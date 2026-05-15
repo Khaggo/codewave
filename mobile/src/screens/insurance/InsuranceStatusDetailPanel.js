@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { InsurancePanelShell, InsuranceSectionCard } from './InsurancePanelPrimitives'
 import { colors, radius } from '../../theme'
@@ -8,14 +9,26 @@ export default function InsuranceStatusDetailPanel({
   subtitle,
   statusState,
   footerLabel,
+  footerScrollTarget,
   onFooterPress,
   children,
 }) {
-  const showsFooter = Boolean(footerLabel && onFooterPress)
+  const scrollViewRef = useRef(null)
+  const showsFooter = Boolean(footerLabel && (onFooterPress || footerScrollTarget))
+
+  const handleFooterPress = () => {
+    if (footerScrollTarget === 'end') {
+      scrollViewRef.current?.scrollToEnd({ animated: true })
+      return
+    }
+
+    onFooterPress?.()
+  }
 
   return (
     <View style={styles.root}>
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scroll}
         contentContainerStyle={[styles.content, showsFooter && styles.contentWithFooter]}
         showsVerticalScrollIndicator={false}
@@ -55,7 +68,7 @@ export default function InsuranceStatusDetailPanel({
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.footerButton}
-            onPress={onFooterPress}
+            onPress={handleFooterPress}
             activeOpacity={0.88}
           >
             <Text style={styles.footerButtonText}>{footerLabel}</Text>
