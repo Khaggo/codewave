@@ -10,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -30,8 +29,12 @@ import {
 } from '../lib/insuranceClient';
 import {
   REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
+  buildCustomerInsuranceActionCards,
+  buildCustomerInsuranceEntryState,
+  buildCustomerInsuranceHeroState,
+  buildCustomerInsuranceOverviewState,
+  buildCustomerInsuranceStatusState,
   buildRequirementsChecklist,
-  buildCustomerInsuranceHomeFocus,
   clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
   doesCustomerInsuranceInquiryMatchVehicle,
@@ -39,7 +42,6 @@ import {
   getVehicleScopedCustomerInquiryId,
   getRememberedInquiryForVehicle,
   getCustomerInsuranceTimeline,
-  getInsuranceHomeCards,
   hydrateRememberedInquiryMappings,
   isTerminalCustomerInquiryStatus,
   rememberInquiryForVehicle,
@@ -47,6 +49,12 @@ import {
   shouldDeferCustomerInsuranceTrackingRefresh,
   shouldShowCustomerInsuranceFollowUp,
 } from './insuranceModuleView.mjs';
+import InsuranceDocumentsPanel from './insurance/InsuranceDocumentsPanel';
+import InsuranceEntryPanel from './insurance/InsuranceEntryPanel';
+import InsuranceHomePanel from './insurance/InsuranceHomePanel';
+import InsuranceModeShell from './insurance/InsuranceModeShell';
+import InsuranceRequestPanel from './insurance/InsuranceRequestPanel';
+import InsuranceStatusDetailPanel from './insurance/InsuranceStatusDetailPanel';
 import { colors, radius } from '../theme';
 
 const inquiryTypeOptions = [
@@ -179,15 +187,6 @@ const buildRenewalPrompt = (inquiry) => {
   }
 };
 
-const homeCardIconByKey = {
-  start: 'shield-plus-outline',
-  active: 'clipboard-check-outline',
-  documents: 'file-document-edit-outline',
-  payment: 'cash-check',
-  renewal: 'calendar-clock-outline',
-  history: 'history',
-};
-
 function InsuranceStatePanel({
   icon,
   title,
@@ -268,51 +267,6 @@ function InsuranceRecordCard({ title, subtitle, status, metadata = [] }) {
   );
 }
 
-function InsuranceHomeCard({ icon, label, description, value, actionLabel, emphasized = false, onPress }) {
-  return (
-    <TouchableOpacity
-      style={[styles.homeCard, emphasized && styles.homeCardEmphasized]}
-      onPress={onPress}
-      activeOpacity={0.9}
-    >
-      <View style={styles.homeCardHeader}>
-        <View style={styles.homeCardIconWrap}>
-          <MaterialCommunityIcons name={icon} size={18} color={colors.primary} />
-        </View>
-        {value ? <InquiryStatusBadge value={value} /> : null}
-      </View>
-      <Text style={styles.homeCardTitle}>{label}</Text>
-      <Text style={styles.homeCardText}>{description}</Text>
-      <View style={styles.homeCardActionRow}>
-        <Text style={styles.homeCardActionText}>{actionLabel}</Text>
-        <MaterialCommunityIcons name="arrow-right" size={16} color={colors.primary} />
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-function ChecklistRow({ label, complete }) {
-  return (
-    <View style={styles.checklistRow}>
-      <View
-        style={[
-          styles.checklistIconWrap,
-          complete && styles.checklistIconWrapComplete,
-        ]}
-      >
-        <MaterialCommunityIcons
-          name={complete ? 'check' : 'minus'}
-          size={16}
-          color={complete ? colors.primary : colors.labelText}
-        />
-      </View>
-      <Text style={[styles.checklistRowText, complete && styles.checklistRowTextComplete]}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 function TimelineStepRow({ step, updatedAtLabel, stepIndex, stepCount }) {
   const isCurrent = step.state === 'current';
   const isDone = step.state === 'done';
@@ -343,7 +297,6 @@ function TimelineStepRow({ step, updatedAtLabel, stepIndex, stepCount }) {
     </View>
   );
 }
-
 export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const accessToken = account?.accessToken ?? null;
   const userId = account?.userId ?? null;
@@ -374,6 +327,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     normalizeRouteId(account?.primaryVehicleId) ?? normalizeRouteId(ownedVehicles[0]?.id);
   const initialVehicleId = routeVehicleId ?? fallbackVehicleId;
   const [selectedVehicleId, setSelectedVehicleId] = useState(initialVehicleId);
+  const [activePanel, setActivePanel] = useState('home');
+  const [isInInsuranceMode, setIsInInsuranceMode] = useState(false);
+  const [activeModeSection, setActiveModeSection] = useState('overview');
   const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
   const [documentDraft, setDocumentDraft] = useState(buildInitialDocumentUploadDraft());
   const [intakeState, setIntakeState] = useState(initialSnapshot.intakeState);
@@ -398,8 +354,27 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     inquiryId: routeInquiryId ?? undefined,
   });
 
+  const openInsuranceMode = (section = 'overview') => {
+    setIsInInsuranceMode(true);
+    setActiveModeSection(section);
+  };
+
+  const closeInsuranceMode = () => {
+    setIsInInsuranceMode(false);
+    setActiveModeSection('overview');
+  };
+
+  useEffect(() => {
+    setActivePanel('home');
+    setIsInInsuranceMode(false);
+    setActiveModeSection('overview');
+  }, [selectedVehicleId]);
+
   const selectedVehicle =
     ownedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const selectedVehicleLabel = selectedVehicle
+    ? buildOwnedVehicleInsuranceLabel(selectedVehicle)
+    : '';
   const latestInquiryCanAcceptDocuments = canAttachCustomerInsuranceDocument(latestInquiry);
   const requirementsChecklist = useMemo(
     () =>
@@ -422,15 +397,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     () => requirementsChecklist.required.filter((item) => !item.complete),
     [requirementsChecklist],
   );
-  const paymentPromptVisible = Boolean(
-    latestInquiry &&
-      shouldShowCustomerInsuranceFollowUp({
-        status: latestInquiry.status,
-        paymentStatus: latestInquiry.paymentStatus,
-        renewalStatus: latestInquiry.renewalStatus,
-        followUpType: 'payment',
-      }),
-  );
   const paymentSummary = useMemo(
     () =>
       getCustomerInsurancePaymentSummary({
@@ -440,95 +406,67 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }),
     [latestInquiry?.paymentDueAt, latestInquiry?.paymentStatus, latestInquiry?.status],
   );
-  const renewalPromptVisible = Boolean(
-    latestInquiry &&
-      shouldShowCustomerInsuranceFollowUp({
-        status: latestInquiry.status,
-        paymentStatus: latestInquiry.paymentStatus,
-        renewalStatus: latestInquiry.renewalStatus,
-        followUpType: 'renewal',
-      }),
-  );
-  const homeCards = useMemo(
+  const renewalSummary = useMemo(() => buildRenewalPrompt(latestInquiry), [latestInquiry]);
+  const entryState = useMemo(
     () =>
-      getInsuranceHomeCards({ hasActiveRequest: Boolean(latestInquiry?.id) }).map((card) => {
-        switch (card.key) {
-          case 'start':
-            return {
-              ...card,
-              description: selectedVehicle
-                ? `Start a request for ${buildOwnedVehicleInsuranceLabel(selectedVehicle)} with just the key concern first.`
-                : 'Choose a vehicle first, then begin a request with a short concern summary.',
-              value: draft.inquiryType === 'ctpl' ? 'CTPL' : 'Comprehensive',
-              actionLabel: 'Begin intake',
-            };
-          case 'active':
-            return {
-              ...card,
-              description: latestInquiry
-                ? latestInquiry.statusHint
-                : 'Your current request will appear here once you submit one.',
-              value: latestInquiry ? formatWorkflowLabel(latestInquiry.status) : 'No request',
-              actionLabel: latestInquiry ? 'Review timeline' : 'Check status',
-            };
-          case 'documents':
-            return {
-              ...card,
-              description: latestInquiry
-                ? `${missingRequiredDocuments.length} required item${missingRequiredDocuments.length === 1 ? '' : 's'} still need attention.`
-                : 'See the checklist now so you know what files to prepare after submission.',
-              value: `${requirementsChecklist.required.filter((item) => item.complete).length}/${requirementsChecklist.required.length}`,
-              actionLabel: latestInquiry ? 'Prepare upload' : 'View checklist',
-            };
-          case 'payment':
-            return {
-              ...card,
-              description: paymentPromptVisible
-                ? paymentSummary.message
-                : 'Payment instructions and proof-of-payment follow-up will surface here when needed.',
-              value: latestInquiry ? formatWorkflowLabel(latestInquiry.paymentStatus) : 'Not required',
-              actionLabel: paymentPromptVisible ? 'Review payment' : 'Wait for update',
-            };
-          case 'renewal':
-            return {
-              ...card,
-              description: renewalPromptVisible
-                ? buildRenewalPrompt(latestInquiry).message
-                : 'Renewal reminders will appear here when staff flag an upcoming follow-up.',
-              value: latestInquiry ? formatWorkflowLabel(latestInquiry.renewalStatus) : 'Not applicable',
-              actionLabel: renewalPromptVisible ? 'Review renewal' : 'Stay ready',
-            };
-          default:
-            return {
-              ...card,
-              description: claimStatusUpdates.length
-                ? `${claimStatusUpdates.length} vehicle insurance record${claimStatusUpdates.length === 1 ? '' : 's'} are available to review.`
-                : 'Vehicle insurance history will appear here once staff close the request and record it for tracking.',
-              value: String(claimStatusUpdates.length),
-              actionLabel: claimStatusUpdates.length ? 'Review history' : 'Watch for history',
-            };
-        }
+      buildCustomerInsuranceEntryState({
+        selectedVehicleLabel,
+        latestInquiry,
+        reminderCount: claimStatusUpdates.length,
       }),
-    [
-      claimStatusUpdates.length,
-      draft.inquiryType,
-      latestInquiry,
-      missingRequiredDocuments.length,
-      paymentPromptVisible,
-      paymentSummary.message,
-      renewalPromptVisible,
-      requirementsChecklist,
-      selectedVehicle,
-    ],
+    [claimStatusUpdates.length, latestInquiry, selectedVehicleLabel],
   );
-  const homeFocus = useMemo(
+  const overviewState = useMemo(
     () =>
-      buildCustomerInsuranceHomeFocus({
+      buildCustomerInsuranceOverviewState({
+        selectedVehicleLabel,
+        latestInquiry,
+        missingRequiredDocuments,
+        historyCount: claimStatusUpdates.length,
+      }),
+    [claimStatusUpdates.length, latestInquiry, missingRequiredDocuments, selectedVehicleLabel],
+  );
+  const timeline = claimStatusUpdates;
+  const statusState = useMemo(
+    () =>
+      buildCustomerInsuranceStatusState({
+        latestInquiry,
+        missingRequiredDocuments,
+        latestUpdateLabel: timeline[0]?.message ?? '--',
+      }),
+    [latestInquiry, missingRequiredDocuments, timeline],
+  );
+  const heroState = useMemo(
+    () =>
+      buildCustomerInsuranceHeroState({
+        selectedVehicleLabel,
         latestInquiry,
         missingRequiredDocuments,
         claimStatusUpdateCount: claimStatusUpdates.length,
       }),
-    [claimStatusUpdates.length, latestInquiry, missingRequiredDocuments],
+    [
+      claimStatusUpdates.length,
+      latestInquiry,
+      missingRequiredDocuments,
+      selectedVehicleLabel,
+    ],
+  );
+  const actionCards = useMemo(
+    () =>
+      buildCustomerInsuranceActionCards({
+        latestInquiry,
+        requirementsChecklist,
+        claimStatusUpdateCount: claimStatusUpdates.length,
+        paymentSummary,
+        renewalSummary,
+      }),
+    [
+      claimStatusUpdates.length,
+      latestInquiry,
+      paymentSummary,
+      requirementsChecklist,
+      renewalSummary,
+    ],
   );
   const getSettledRememberedInquiryIdForSelectedVehicle = () => {
     if (!selectedVehicleId) {
@@ -938,6 +876,26 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     selectedVehicleId,
   ]);
 
+  useEffect(() => {
+    if (activePanel !== 'documents') {
+      return;
+    }
+
+    if (
+      latestInquiry?.id &&
+      latestInquiryCanAcceptDocuments &&
+      documentUploadState === 'document_idle'
+    ) {
+      setDocumentUploadState('document_ready');
+      setDocumentUploadMessage('');
+    }
+  }, [
+    activePanel,
+    documentUploadState,
+    latestInquiry?.id,
+    latestInquiryCanAcceptDocuments,
+  ]);
+
   const handleDraftChange = (field, value) => {
     setDraft((currentDraft) => ({
       ...currentDraft,
@@ -1035,54 +993,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }));
     setDocumentUploadState('document_ready');
     setDocumentUploadMessage('Selected file cleared. Choose another document when you are ready.');
-  };
-
-  const handleHomeCardPress = async (cardKey) => {
-    if (cardKey === 'start') {
-      setIntakeMessage('Complete the request form below to start a new insurance case.');
-      if (hasSession && ownedVehicles.length) {
-        setIntakeState('draft_ready');
-      }
-      return;
-    }
-
-    if (cardKey === 'active' || cardKey === 'history') {
-      await refreshTracking();
-      return;
-    }
-
-    if (!latestInquiry?.id) {
-      setDocumentUploadState('document_missing_inquiry');
-      setDocumentUploadMessage('Submit a request first, then use the upload steps below for documents, payment proof, and renewals.');
-      return;
-    }
-
-    if (cardKey === 'documents') {
-      const nextDocumentType = missingRequiredDocuments[0]?.type ?? 'photo';
-      setDocumentDraft((currentDraft) => ({
-        ...currentDraft,
-        documentType: nextDocumentType,
-      }));
-      setDocumentUploadState('document_ready');
-      setDocumentUploadMessage('Use the upload entry below for the next required document.');
-      return;
-    }
-
-    if (cardKey === 'payment') {
-      setDocumentDraft((currentDraft) => ({
-        ...currentDraft,
-        documentType: 'proof_of_payment',
-      }));
-      setDocumentUploadState('document_ready');
-      setDocumentUploadMessage('Use the upload entry below to send proof of payment.');
-      return;
-    }
-
-    setTrackingMessage(
-      renewalPromptVisible
-        ? 'Your renewal reminder is visible below together with the current timeline.'
-        : 'Renewal reminders will appear here after staff flag the request for follow-up.',
-    );
   };
 
   const handleSubmitInquiry = async () => {
@@ -1240,6 +1150,47 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
   };
 
+  const openDocumentsPanel = ({ documentType, message = '' } = {}) => {
+    if (documentType) {
+      setDocumentDraft((currentDraft) => ({
+        ...currentDraft,
+        documentType,
+      }));
+    }
+
+    if (latestInquiry?.id && latestInquiryCanAcceptDocuments) {
+      setDocumentUploadState('document_ready');
+      setDocumentUploadMessage(message);
+    }
+
+    setActivePanel('documents');
+  };
+  const handleOpenPanel = (panelKey) => {
+    if (panelKey === 'documents') {
+      if (latestInquiry?.id && !latestInquiryCanAcceptDocuments) {
+        setDocumentUploadState('document_closed');
+        setDocumentUploadMessage(
+          'This inquiry is no longer accepting supporting documents, so uploads are locked for this vehicle.',
+        );
+        setActivePanel('documents');
+        return;
+      }
+
+      openDocumentsPanel({
+        documentType: missingRequiredDocuments[0]?.type,
+      });
+      return;
+    }
+
+    setActivePanel(panelKey);
+  };
+  const paymentStatusLabel = formatWorkflowLabel(latestInquiry?.paymentStatus ?? 'not_required');
+  const renewalStatusLabel = formatWorkflowLabel(latestInquiry?.renewalStatus ?? 'not_applicable');
+  const latestInquiryUpdatedAtLabel = formatTimestampLabel(latestInquiry?.updatedAt);
+  const historySummary = claimStatusUpdates.length
+    ? `${claimStatusUpdates.length} recorded insurance update${claimStatusUpdates.length === 1 ? '' : 's'} ${claimStatusUpdates.length === 1 ? 'is' : 'are'} already available for this vehicle.`
+    : 'Vehicle-level insurance records will appear here after staff close and record a customer-safe case.';
+
   const heroSubtitle = hasSession
     ? 'Start a request quickly, upload the right documents, and follow review, payment, and renewal prompts without exposing staff-only workflow details.'
     : 'Sign in as a customer to start an insurance request and see customer-safe review, payment, and renewal updates.';
@@ -1310,179 +1261,48 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
           ) : null}
 
           {hasSession && ownedVehicles.length ? (
-            <>
-              <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                  <View>
-                    <Text style={styles.sectionTitle}>Select vehicle</Text>
-                    <Text style={styles.sectionSubtitle}>
-                      Vehicle ownership is the backend gate for insurance intake.
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.vehicleList}>
-                  {ownedVehicles.map((vehicle) => {
-                    const isSelected = vehicle.id === selectedVehicleId;
-
-                    return (
-                      <TouchableOpacity
-                        key={vehicle.id}
-                        style={[styles.selectionChip, isSelected && styles.selectionChipSelected]}
-                        onPress={() => handleSelectVehicle(vehicle.id)}
-                        activeOpacity={0.88}
-                      >
-                        <Text
-                          style={[
-                            styles.selectionChipText,
-                            isSelected && styles.selectionChipTextSelected,
-                          ]}
-                        >
-                          {buildOwnedVehicleInsuranceLabel(vehicle)}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <Text style={styles.sectionTitle}>Select vehicle</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    Vehicle ownership is the backend gate for insurance intake.
+                  </Text>
                 </View>
               </View>
 
-              <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                  <View>
-                    <Text style={styles.sectionTitle}>Create insurance inquiry</Text>
-                    <Text style={styles.sectionSubtitle}>
-                      Status values stay staff-owned. This form only collects customer-safe intake details.
-                    </Text>
-                  </View>
-                </View>
+              <View style={styles.vehicleList}>
+                {ownedVehicles.map((vehicle) => {
+                  const isSelected = vehicle.id === selectedVehicleId;
 
-                <View style={styles.typeRow}>
-                  {inquiryTypeOptions.map((option) => {
-                    const isSelected = draft.inquiryType === option.value;
-
-                    return (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[styles.typeChip, isSelected && styles.typeChipSelected]}
-                        onPress={() => handleDraftChange('inquiryType', option.value)}
-                        activeOpacity={0.88}
+                  return (
+                    <TouchableOpacity
+                      key={vehicle.id}
+                      style={[styles.selectionChip, isSelected && styles.selectionChipSelected]}
+                      onPress={() => handleSelectVehicle(vehicle.id)}
+                      activeOpacity={0.88}
+                    >
+                      <Text
+                        style={[
+                          styles.selectionChipText,
+                          isSelected && styles.selectionChipTextSelected,
+                        ]}
                       >
-                        <Text
-                          style={[
-                            styles.typeChipText,
-                            isSelected && styles.typeChipTextSelected,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <Text style={styles.fieldLabel}>Subject</Text>
-                <TextInput
-                  value={draft.subject}
-                  onChangeText={(value) => handleDraftChange('subject', value)}
-                  placeholder="Accident repair inquiry"
-                  placeholderTextColor={colors.mutedText}
-                  style={styles.input}
-                />
-
-                <Text style={styles.fieldLabel}>Description</Text>
-                <TextInput
-                  value={draft.description}
-                  onChangeText={(value) => handleDraftChange('description', value)}
-                  placeholder="Describe the concern, damage, or claim context."
-                  placeholderTextColor={colors.mutedText}
-                  style={[styles.input, styles.multilineInput]}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-
-                <Text style={styles.fieldLabel}>Provider name</Text>
-                <TextInput
-                  value={draft.providerName}
-                  onChangeText={(value) => handleDraftChange('providerName', value)}
-                  placeholder="Optional insurer or broker name"
-                  placeholderTextColor={colors.mutedText}
-                  style={styles.input}
-                />
-
-                <Text style={styles.fieldLabel}>Policy number</Text>
-                <TextInput
-                  value={draft.policyNumber}
-                  onChangeText={(value) => handleDraftChange('policyNumber', value)}
-                  placeholder="Optional policy reference"
-                  placeholderTextColor={colors.mutedText}
-                  style={styles.input}
-                  autoCapitalize="characters"
-                />
-
-                <Text style={styles.fieldLabel}>Notes</Text>
-                <TextInput
-                  value={draft.notes}
-                  onChangeText={(value) => handleDraftChange('notes', value)}
-                  placeholder="Optional customer-side notes"
-                  placeholderTextColor={colors.mutedText}
-                  style={[styles.input, styles.multilineInput]}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
-
-                {intakeMessage ? (
-                  <InsuranceStatePanel
-                    icon={
-                      intakeState === 'submitted_inquiry'
-                        ? 'check-decagram-outline'
-                        : intakeState === 'submitting'
-                          ? 'progress-clock'
-                          : 'alert-circle-outline'
-                    }
-                    title={
-                      intakeState === 'submitted_inquiry'
-                        ? 'Inquiry submitted'
-                        : intakeState === 'submitting'
-                          ? 'Submitting inquiry'
-                          : 'Insurance intake update'
-                    }
-                    message={intakeMessage}
-                    tone={intakeState === 'submitted_inquiry' ? 'success' : 'default'}
-                    loading={intakeState === 'submitting'}
-                  />
-                ) : null}
-
-                <TouchableOpacity
-                  style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
-                  onPress={handleSubmitInquiry}
-                  disabled={isSubmitting}
-                  activeOpacity={0.9}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator color={colors.onPrimary} size="small" />
-                  ) : (
-                    <>
-                      <MaterialCommunityIcons
-                        name="shield-check-outline"
-                        size={18}
-                        color={colors.onPrimary}
-                      />
-                      <Text style={styles.primaryButtonText}>Submit insurance inquiry</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                        {buildOwnedVehicleInsuranceLabel(vehicle)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-            </>
+            </View>
           ) : null}
 
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.sectionTitle}>Insurance home</Text>
+                <Text style={styles.sectionTitle}>Insurance workspace</Text>
                 <Text style={styles.sectionSubtitle}>
-                  Start, upload, review, payment, renewal, and history all stay in one customer-safe flow.
+                  Open one focused destination at a time for request, documents, payment, renewal, or status review.
                 </Text>
               </View>
               <TouchableOpacity
@@ -1507,32 +1327,41 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 loading={trackingState === 'tracking_loading' || isRefreshing}
               />
             ) : null}
-
-            <View style={styles.homeFocusWrap}>
-              <InsuranceStatePanel
-                icon={homeFocus.icon}
-                title={homeFocus.title}
-                message={homeFocus.message}
-                actionLabel={homeFocus.actionLabel}
-                onAction={() => handleHomeCardPress(homeFocus.highlightedCardKey)}
-                tone={homeFocus.tone}
+            {!isInInsuranceMode ? (
+              <InsuranceEntryPanel
+                entryState={entryState}
+                onEnterMode={() => openInsuranceMode('overview')}
               />
-            </View>
-
-            <View style={styles.homeCardGrid}>
-              {homeCards.map((card) => (
-                <InsuranceHomeCard
-                  key={card.key}
-                  icon={homeCardIconByKey[card.key] ?? 'shield-outline'}
-                  label={card.label}
-                  description={card.description}
-                  value={card.value}
-                  actionLabel={card.actionLabel}
-                  emphasized={card.key === homeFocus.highlightedCardKey}
-                  onPress={() => handleHomeCardPress(card.key)}
-                />
-              ))}
-            </View>
+            ) : (
+              <InsuranceModeShell
+                activeSection={activeModeSection}
+                onChangeSection={setActiveModeSection}
+                onExitMode={closeInsuranceMode}
+              >
+                {activeModeSection === 'overview' ? (
+                  <InsuranceHomePanel
+                    overviewState={overviewState}
+                    onOpenSection={setActiveModeSection}
+                    hero={{
+                      eyebrow: 'Insurance mode',
+                      title: overviewState.title,
+                      message: overviewState.message,
+                      ctaLabel: overviewState.ctaLabel,
+                      routeKey: overviewState.routeKey,
+                    }}
+                    actionCards={overviewState.routeRows.map((row) => ({
+                      key: row.key,
+                      title: row.label,
+                      value: '',
+                      description: row.helper,
+                      routeKey: row.key,
+                    }))}
+                    selectedVehicleLabel={selectedVehicleLabel}
+                    onOpenPanel={setActiveModeSection}
+                  />
+                ) : null}
+              </InsuranceModeShell>
+            )}
 
             {trackingState === 'tracking_loading' && !trackingMessage ? (
               <InsuranceStatePanel
@@ -1543,367 +1372,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               />
             ) : null}
 
-            <View style={styles.documentSection}>
-              <View style={styles.documentSectionHeader}>
-                <View style={styles.documentSectionCopy}>
-                  <Text style={styles.documentSectionTitle}>Requirements checklist</Text>
-                  <Text style={styles.documentSectionText}>
-                    Keep the required files ready early, then upload now or later after you submit the request.
-                  </Text>
-                </View>
-                <View style={styles.documentCountBadge}>
-                  <Text style={styles.documentCountText}>
-                    {requirementsChecklist.required.filter((item) => item.complete).length}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.checklistHeading}>Required</Text>
-              <View style={styles.checklistGroup}>
-                {requirementsChecklist.required.map((item) => (
-                  <ChecklistRow key={item.type} label={item.label} complete={item.complete} />
-                ))}
-              </View>
-
-              <Text style={styles.checklistHeading}>Optional but helpful</Text>
-              <View style={styles.checklistGroup}>
-                {requirementsChecklist.optional.map((item) => (
-                  <ChecklistRow key={item.type} label={item.label} complete={item.complete} />
-                ))}
-              </View>
-
-              <Text style={styles.checklistHelperText}>
-                {latestInquiry
-                  ? missingRequiredDocuments.length
-                    ? `Missing required documents: ${missingRequiredDocuments.map((item) => item.label).join(', ')}.`
-                    : 'All required documents currently show as uploaded for this request.'
-                  : 'Submit the request first, then use the upload entry below whenever you are ready.'}
-              </Text>
-            </View>
-
-            {latestInquiry ? (
-              <>
-                <InsuranceRecordCard
-                  title={latestInquiry.subject}
-                  subtitle={latestInquiry.statusHint}
-                  status={formatWorkflowLabel(latestInquiry.status)}
-                  metadata={[
-                    { label: 'Inquiry type', value: latestInquiry.inquiryTypeLabel },
-                    { label: 'Document status', value: formatWorkflowLabel(latestInquiry.documentStatus) },
-                    { label: 'Payment status', value: formatWorkflowLabel(latestInquiry.paymentStatus) },
-                    { label: 'Renewal status', value: formatWorkflowLabel(latestInquiry.renewalStatus) },
-                    { label: 'Updated', value: formatTimestampLabel(latestInquiry.updatedAt) },
-                  ]}
-                />
-
-                <View style={styles.documentSection}>
-                  <View style={styles.documentSectionHeader}>
-                    <View style={styles.documentSectionCopy}>
-                      <Text style={styles.documentSectionTitle}>Customer timeline</Text>
-                      <Text style={styles.documentSectionText}>
-                        A plain-language view of where the current request stands and what to do next.
-                      </Text>
-                    </View>
-                    <View style={styles.documentCountBadge}>
-                      <Text style={styles.documentCountText}>{customerTimeline.length}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.timelineStepList}>
-                    {customerTimeline.map((step, index) => (
-                      <TimelineStepRow
-                        key={step.key}
-                        step={step}
-                        stepIndex={index}
-                        stepCount={customerTimeline.length}
-                        updatedAtLabel={formatTimestampLabel(latestInquiry.updatedAt)}
-                      />
-                    ))}
-                  </View>
-                </View>
-
-                {paymentPromptVisible ? (
-                  <View style={styles.documentSection}>
-                    <View style={styles.documentSectionHeader}>
-                      <View style={styles.documentSectionCopy}>
-                        <Text style={styles.documentSectionTitle}>Payment</Text>
-                        <Text style={styles.documentSectionText}>
-                          Payment visibility stays customer-safe here while staff keep the internal verification workflow.
-                        </Text>
-                      </View>
-                    </View>
-                    <InsuranceStatePanel
-                      icon="cash-check"
-                      title={paymentSummary.title}
-                      message={paymentSummary.message}
-                      tone={paymentSummary.tone}
-                    />
-                  </View>
-                ) : null}
-
-                {renewalPromptVisible ? (
-                  <View style={styles.documentSection}>
-                    <View style={styles.documentSectionHeader}>
-                      <View style={styles.documentSectionCopy}>
-                        <Text style={styles.documentSectionTitle}>Renewal</Text>
-                        <Text style={styles.documentSectionText}>
-                          Renewal reminders appear here once the current request or vehicle record is tagged for follow-up.
-                        </Text>
-                      </View>
-                    </View>
-                    <InsuranceStatePanel
-                      icon="calendar-refresh"
-                      title={buildRenewalPrompt(latestInquiry).title}
-                      message={buildRenewalPrompt(latestInquiry).message}
-                      tone={buildRenewalPrompt(latestInquiry).tone}
-                    />
-                  </View>
-                ) : null}
-
-                <View style={styles.documentSection}>
-                  <View style={styles.documentSectionHeader}>
-                    <View style={styles.documentSectionCopy}>
-                      <Text style={styles.documentSectionTitle}>Upload documents</Text>
-                      <Text style={styles.documentSectionText}>
-                        Upload PDFs or image files for requirements, proof of payment, and follow-up documents through the live binary upload route.
-                      </Text>
-                    </View>
-                    <View style={styles.documentCountBadge}>
-                      <Text style={styles.documentCountText}>{latestInquiry.documentCount}</Text>
-                    </View>
-                  </View>
-
-                  {latestInquiry.status === 'needs_documents' ? (
-                    <InsuranceStatePanel
-                      icon="file-alert-outline"
-                      title="Staff requested more documents"
-                      message="This request is waiting on missing requirements. Upload the next required file, then refresh the timeline."
-                    />
-                  ) : null}
-
-                  {!latestInquiryCanAcceptDocuments ? (
-                    <InsuranceStatePanel
-                      icon="lock-alert-outline"
-                      title="Document upload is locked"
-                      message="Closed or rejected inquiries cannot accept more supporting documents."
-                      tone="danger"
-                    />
-                  ) : null}
-
-                  {latestInquiry.documents?.length ? (
-                    <View style={styles.documentList}>
-                      {latestInquiry.documents.map((document) => (
-                        <View key={document.id ?? `${document.fileName}-${document.fileUrl}`} style={styles.documentCard}>
-                          <View style={styles.documentCardHeader}>
-                            <View style={styles.documentCardCopy}>
-                              <Text style={styles.documentCardTitle}>{document.fileName}</Text>
-                              <Text style={styles.documentCardText}>{document.fileUrl}</Text>
-                            </View>
-                            <InquiryStatusBadge value={document.documentTypeLabel} />
-                          </View>
-                          <DetailRow label="Notes" value={document.notes} />
-                          <DetailRow label="Uploaded" value={formatTimestampLabel(document.createdAt)} />
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <View style={styles.emptyDocumentCard}>
-                      <Text style={styles.emptyDocumentTitle}>No supporting documents yet</Text>
-                      <Text style={styles.emptyDocumentText}>
-                        Add the required files first, then include proof of payment or other follow-up documents when needed.
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={styles.documentUploadForm}>
-                    <Text style={styles.fieldLabel}>Document type</Text>
-                    <View style={styles.documentTypeRow}>
-                      {customerInsuranceDocumentTypeOptions.map((option) => {
-                        const isSelected = documentDraft.documentType === option.value;
-
-                        return (
-                          <TouchableOpacity
-                            key={option.value}
-                            style={[styles.documentTypeChip, isSelected && styles.documentTypeChipSelected]}
-                            onPress={() => handleDocumentDraftChange('documentType', option.value)}
-                            activeOpacity={0.88}
-                            disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
-                          >
-                            <Text
-                              style={[
-                                styles.documentTypeChipText,
-                                isSelected && styles.documentTypeChipTextSelected,
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    <Text style={styles.fieldLabel}>Selected document</Text>
-                    {documentDraft.fileName ? (
-                      <View style={styles.selectedDocumentCard}>
-                        <View style={styles.selectedDocumentHeader}>
-                          <View style={styles.selectedDocumentIconWrap}>
-                            <MaterialCommunityIcons
-                              name={
-                                documentDraft.mimeType.startsWith('image/')
-                                  ? 'file-image-outline'
-                                  : 'file-pdf-box'
-                              }
-                              size={18}
-                              color={colors.primary}
-                            />
-                          </View>
-                          <View style={styles.selectedDocumentCopy}>
-                            <Text style={styles.selectedDocumentTitle}>{documentDraft.fileName}</Text>
-                            <Text style={styles.selectedDocumentMeta}>
-                              {[documentDraft.mimeType, documentDraft.fileSizeLabel].filter(Boolean).join(' • ')}
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={styles.selectedDocumentActions}>
-                          <TouchableOpacity
-                            style={styles.secondaryButton}
-                            onPress={handlePickDocument}
-                            activeOpacity={0.88}
-                            disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
-                          >
-                            <MaterialCommunityIcons name="file-replace-outline" size={18} color={colors.text} />
-                            <Text style={styles.secondaryButtonText}>Replace</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.secondaryButton}
-                            onPress={handleClearPickedDocument}
-                            activeOpacity={0.88}
-                            disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
-                          >
-                            <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.text} />
-                            <Text style={styles.secondaryButtonText}>Clear</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    ) : (
-                      <View style={styles.emptyDocumentCard}>
-                        <Text style={styles.emptyDocumentTitle}>No file selected yet</Text>
-                        <Text style={styles.emptyDocumentText}>
-                          Choose a PDF or image file from your device, then upload it to the current insurance request.
-                        </Text>
-                      </View>
-                    )}
-
-                    <TouchableOpacity
-                      style={[
-                        styles.secondaryActionButton,
-                        (!latestInquiryCanAcceptDocuments || isUploadingDocument) && styles.primaryButtonDisabled,
-                      ]}
-                      onPress={handlePickDocument}
-                      disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
-                      activeOpacity={0.88}
-                    >
-                      <MaterialCommunityIcons name="file-search-outline" size={18} color={colors.primary} />
-                      <Text style={styles.secondaryActionButtonText}>
-                        {documentDraft.fileName ? 'Select another document' : 'Select document'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <Text style={styles.fieldLabel}>Document notes</Text>
-                    <TextInput
-                      value={documentDraft.notes}
-                      onChangeText={(value) => handleDocumentDraftChange('notes', value)}
-                      placeholder="Optional note for staff review"
-                      placeholderTextColor={colors.mutedText}
-                      style={[styles.input, styles.multilineInput]}
-                      multiline
-                      numberOfLines={3}
-                      textAlignVertical="top"
-                      editable={latestInquiryCanAcceptDocuments && !isUploadingDocument}
-                    />
-
-                    {documentUploadMessage ? (
-                      <InsuranceStatePanel
-                        icon={documentUploadState === 'document_uploaded' ? 'file-check-outline' : 'alert-circle-outline'}
-                        title={documentUploadState === 'document_uploaded' ? 'Document uploaded' : 'Document upload update'}
-                        message={documentUploadMessage}
-                        tone={documentUploadState === 'document_uploaded' ? 'success' : 'default'}
-                        loading={documentUploadState === 'document_uploading' || isUploadingDocument}
-                      />
-                    ) : null}
-
-                    <TouchableOpacity
-                      style={[
-                        styles.primaryButton,
-                        (!latestInquiryCanAcceptDocuments || isUploadingDocument) && styles.primaryButtonDisabled,
-                      ]}
-                      onPress={handleUploadDocument}
-                      disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
-                      activeOpacity={0.9}
-                    >
-                      {isUploadingDocument ? (
-                        <ActivityIndicator color={colors.onPrimary} size="small" />
-                      ) : (
-                        <>
-                          <MaterialCommunityIcons
-                            name="file-upload-outline"
-                            size={18}
-                            color={colors.onPrimary}
-                          />
-                          <Text style={styles.primaryButtonText}>
-                            {documentDraft.documentType === 'proof_of_payment'
-                              ? 'Upload proof of payment'
-                              : 'Upload document'}
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </>
-            ) : (
-              <InsuranceStatePanel
-                icon="clipboard-text-search-outline"
-                title="No active request yet"
-                message="Submit your first insurance request above, then this home screen will show the timeline, upload entry, payment, renewal, and vehicle history updates."
-              />
-            )}
-
-            <View style={styles.documentSection}>
-              <View style={styles.documentSectionHeader}>
-                <View style={styles.documentSectionCopy}>
-                  <Text style={styles.documentSectionTitle}>Insurance history</Text>
-                  <Text style={styles.documentSectionText}>
-                    Vehicle-level insurance records appear here after staff close a request and record it for customer tracking.
-                  </Text>
-                </View>
-              </View>
-
-              {claimStatusUpdates.length ? (
-                claimStatusUpdates.map((record) => (
-                  <InsuranceRecordCard
-                    key={record.id}
-                    title={`${record.inquiryTypeLabel} vehicle record`}
-                    subtitle={record.statusHint}
-                    status={formatWorkflowLabel(record.status)}
-                    metadata={[
-                      { label: 'Recorded', value: formatTimestampLabel(record.createdAt) },
-                      { label: 'Latest update', value: formatTimestampLabel(record.updatedAt) },
-                      { label: 'Provider', value: record.providerName },
-                      { label: 'Policy no.', value: record.policyNumber },
-                    ]}
-                  />
-                ))
-              ) : (
-                <View style={styles.emptyDocumentCard}>
-                  <Text style={styles.emptyDocumentTitle}>No insurance history yet</Text>
-                  <Text style={styles.emptyDocumentText}>
-                    Once staff close and record a customer-safe insurance case for this vehicle, it will show up here.
-                  </Text>
-                </View>
-              )}
-            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
