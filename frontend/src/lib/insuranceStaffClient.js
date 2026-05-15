@@ -1,7 +1,8 @@
 import { ApiError } from './authClient.js';
-import { buildInsuranceBroadcastRequest } from '../app/insurance/insuranceView.mjs';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
+const INSURANCE_BROADCAST_FILTER_FIELDS = ['purpose', 'status', 'paymentStatus', 'renewalStatus'];
+const INSURANCE_BROADCAST_TARGET_MODES = ['selected_cases', 'filtered_results'];
 
 const insuranceStatusHints = {
   submitted: 'New customer intake waiting for staff review.',
@@ -36,6 +37,77 @@ const trimOrNull = (value) => {
 const trimRequiredRequestValue = (value) => String(value ?? '').trim();
 
 const normalizeOptionalWorkflowValue = (value) => trimOrNull(value) ?? undefined;
+const normalizeMeaningfulBroadcastFilters = (filters = {}) =>
+  INSURANCE_BROADCAST_FILTER_FIELDS.reduce((result, field) => {
+    const rawValue = String(filters?.[field] ?? '').trim();
+
+    if (rawValue && rawValue !== 'all') {
+      result[field] = rawValue;
+    }
+
+    return result;
+  }, {});
+const normalizeBroadcastSelectedIds = (selectedIds = []) =>
+  [...new Set(selectedIds.map((value) => String(value ?? '').trim()).filter(Boolean))];
+const buildBroadcastRequestBody = ({
+  targetMode,
+  selectedIds = [],
+  filters = {},
+  title,
+  message,
+} = {}) => {
+  const normalizedTargetMode = String(targetMode ?? '').trim();
+  const normalizedTitle = String(title ?? '').trim();
+  const normalizedMessage = String(message ?? '').trim();
+
+  if (!normalizedTitle || !normalizedMessage || !normalizedTargetMode) {
+    throw new ApiError('Title, message, and target mode are required before sending broadcasts.', 400, {
+      path: '/api/insurance/broadcasts/send',
+    });
+  }
+
+  if (!INSURANCE_BROADCAST_TARGET_MODES.includes(normalizedTargetMode)) {
+    throw new ApiError('Broadcast target mode must be selected_cases or filtered_results.', 400, {
+      path: '/api/insurance/broadcasts/send',
+    });
+  }
+
+  if (normalizedTargetMode === 'filtered_results') {
+    const normalizedFilters = normalizeMeaningfulBroadcastFilters(filters);
+
+    if (!Object.keys(normalizedFilters).length) {
+      throw new ApiError(
+        'Choose at least one server-side insurance filter before sending filtered broadcasts.',
+        400,
+        {
+          path: '/api/insurance/broadcasts/send',
+        },
+      );
+    }
+
+    return {
+      targetMode: normalizedTargetMode,
+      filters: normalizedFilters,
+      title: normalizedTitle,
+      message: normalizedMessage,
+    };
+  }
+
+  const normalizedSelectedIds = normalizeBroadcastSelectedIds(selectedIds);
+
+  if (!normalizedSelectedIds.length) {
+    throw new ApiError('Select at least one insurance case before sending broadcasts.', 400, {
+      path: '/api/insurance/broadcasts/send',
+    });
+  }
+
+  return {
+    targetMode: normalizedTargetMode,
+    selectedIds: normalizedSelectedIds,
+    title: normalizedTitle,
+    message: normalizedMessage,
+  };
+};
 
 const formatDocumentTypeLabel = (value) =>
   insuranceDocumentTypeLabels[value] ??
@@ -357,7 +429,7 @@ export const sendInsuranceBroadcasts = async ({
   request('/api/insurance/broadcasts/send', {
     method: 'POST',
     headers: buildAuthorizedHeaders(accessToken),
-    body: buildInsuranceBroadcastRequest({
+    body: buildBroadcastRequestBody({
       targetMode,
       selectedIds,
       filters,

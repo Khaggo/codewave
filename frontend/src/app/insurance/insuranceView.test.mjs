@@ -582,6 +582,17 @@ test('buildInsuranceBroadcastRequest rejects empty broadcast content or missing 
       }),
     /choose at least one server-side insurance filter/i,
   )
+
+  assert.throws(
+    () =>
+      buildInsuranceBroadcastRequest({
+        targetMode: 'single_case',
+        selectedIds: ['inq-1'],
+        title: 'Insurance processing update',
+        message: 'Valid message',
+      }),
+    /selected_cases or filtered_results/i,
+  )
 })
 
 test('summarizeInsuranceReminderResult reports sent, skipped, and failed reminder counts', () => {
@@ -603,7 +614,7 @@ test('summarizeInsuranceBroadcastResult reports customer-level sends and inquiry
       failedCount: 1,
       deduplicatedCustomerCount: 3,
     }),
-    'Sent 1 broadcast(s) to 3 customer(s). 2 inquiry result(s) skipped. 1 failed.',
+    'Sent 1 of 3 customer broadcast(s). 2 inquiry result(s) skipped. 1 failed.',
   )
 })
 

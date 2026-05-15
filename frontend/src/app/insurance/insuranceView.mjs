@@ -9,6 +9,7 @@ export function formatStatusLabel(value) {
 const TERMINAL_INQUIRY_STATUSES = ['closed', 'cancelled', 'rejected']
 const EDITABLE_WORKFLOW_FIELDS = ['status', 'reviewNotes']
 const REMINDER_FILTER_FIELDS = ['purpose', 'status', 'paymentStatus', 'renewalStatus']
+const BROADCAST_TARGET_MODES = ['selected_cases', 'filtered_results']
 
 const normalizeMeaningfulInsuranceFilters = (filters = {}, allowedFields = REMINDER_FILTER_FIELDS) =>
   allowedFields.reduce((result, field) => {
@@ -249,6 +250,10 @@ export function buildInsuranceBroadcastRequest({
     throw new Error('Title, message, and target mode are required before sending broadcasts.')
   }
 
+  if (!BROADCAST_TARGET_MODES.includes(normalizedTargetMode)) {
+    throw new Error('Broadcast target mode must be selected_cases or filtered_results.')
+  }
+
   if (normalizedTargetMode === 'filtered_results') {
     const normalizedFilters = normalizeMeaningfulInsuranceFilters(filters)
 
@@ -302,7 +307,11 @@ export function summarizeInsuranceBroadcastResult({
   failedCount = 0,
   deduplicatedCustomerCount = 0,
 } = {}) {
-  const parts = [`Sent ${sentCount} broadcast(s) to ${deduplicatedCustomerCount} customer(s).`]
+  const parts = [
+    sentCount === deduplicatedCustomerCount
+      ? `Sent ${sentCount} broadcast(s) to ${deduplicatedCustomerCount} customer(s).`
+      : `Sent ${sentCount} of ${deduplicatedCustomerCount} customer broadcast(s).`,
+  ]
 
   if (skippedCount) {
     parts.push(`${skippedCount} inquiry result(s) skipped.`)
