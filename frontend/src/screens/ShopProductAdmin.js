@@ -40,23 +40,6 @@ function formatCurrency(value) {
   return `PHP ${Number(value ?? 0).toLocaleString()}`
 }
 
-function SummaryTile({ label, value, sub, icon: Icon }) {
-  return (
-    <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
-          <p className="mt-3 text-3xl font-black tracking-tight tabular-nums text-ink-primary">{value}</p>
-          {sub ? <p className="mt-1.5 text-[11px] text-ink-muted">{sub}</p> : null}
-        </div>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
-          <Icon size={14} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function SectionShell({ title, description, children, action }) {
   return (
     <section className="card overflow-hidden">
@@ -273,6 +256,7 @@ export default function ShopProductAdmin() {
   const { toast } = useToast()
   const categories = useCatalogCategories()
   const publishedProducts = usePublishedCatalogProducts()
+  const [catalogQuery, setCatalogQuery] = useState('')
   const [categoryName, setCategoryName] = useState('')
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM)
   const [editForm, setEditForm] = useState(EMPTY_MODAL_FORM)
@@ -286,6 +270,28 @@ export default function ShopProductAdmin() {
     () => publishedProducts.find((product) => product.id === selectedProductId) ?? null,
     [publishedProducts, selectedProductId],
   )
+  const visibleProducts = useMemo(() => {
+    const normalizedQuery = catalogQuery.trim().toLowerCase()
+    if (!normalizedQuery) {
+      return publishedProducts
+    }
+
+    return publishedProducts.filter((product) => {
+      const searchFields = [product.name, product.category, product.sku, product.description]
+      return searchFields.some((field) => field?.toLowerCase().includes(normalizedQuery))
+    })
+  }, [catalogQuery, publishedProducts])
+
+  useEffect(() => {
+    if (!publishedProducts.length) {
+      setSelectedProductId(null)
+      return
+    }
+
+    if (!selectedProductId || !publishedProducts.some((product) => product.id === selectedProductId)) {
+      setSelectedProductId(publishedProducts[0].id)
+    }
+  }, [publishedProducts, selectedProductId])
 
   function updateProductForm(field, value) {
     setProductForm((current) => ({
@@ -453,9 +459,9 @@ export default function ShopProductAdmin() {
   return (
     <div className="ops-page-shell">
       <PageHeader
-        eyebrow="Catalog Administration"
-        title="Publish Storefront-Ready Shop Products"
-        description="Create categories and publish storefront-ready catalog products."
+        eyebrow="Marketplace publishing"
+        title="Catalog Admin"
+        description="Publish and manage customer-visible marketplace products."
         meta={
           <>
             <span className="badge badge-gray">{categories.length} categories</span>
@@ -464,177 +470,32 @@ export default function ShopProductAdmin() {
         }
       />
 
-      <section className="ops-summary-grid">
-        <SummaryTile label="Categories" value={categories.length} sub="Ready for product publishing" icon={FolderPlus} />
-        <SummaryTile label="Published Products" value={publishedProducts.length} sub="Live in the storefront catalog" icon={PackagePlus} />
-        <SummaryTile
-          label="Product Images"
-          value={getCatalogImageCount(publishedProducts)}
-          sub="Image URLs attached to live products"
-          icon={ImagePlus}
-        />
-        <SummaryTile label="Edit Flow" value="Modal" sub="Open a product row to edit details" icon={PencilLine} />
-      </section>
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.38fr)]">
-        <SectionShell
-          title="Add Category"
-          description="Create a category for product publishing."
-        >
-          <form className="space-y-4" onSubmit={handleAddCategory}>
-            <div>
-              <label className="label" htmlFor="catalog-category-name">New Category Name</label>
-              <input
-                id="catalog-category-name"
-                className="input"
-                value={categoryName}
-                onChange={(event) => setCategoryName(event.target.value)}
-                placeholder="e.g. Accessories"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="ops-action-primary w-full"
-              disabled={submittingCategory}
-            >
-              <FolderPlus size={15} />
-              {submittingCategory ? 'Adding Category...' : 'Add Category'}
-            </button>
-          </form>
-
-          <div className="mt-5 flex flex-wrap gap-2">
-            {categories.length ? (
-              categories.map((category) => (
-                <span key={category.id} className="badge badge-gray">
-                  {category.name}
-                </span>
-              ))
-            ) : (
-              <div className="empty-panel w-full px-4 py-6 text-sm text-ink-muted">
-                No catalog categories yet.
-              </div>
-            )}
-          </div>
-        </SectionShell>
-
-        <SectionShell
-          title="Create And Publish Product"
-          description="Publish products with fields that match the shared catalog store."
-        >
-          <form className="space-y-4" onSubmit={handlePublishProduct}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="label" htmlFor="catalog-product-name">Product Name</label>
-                <input
-                  id="catalog-product-name"
-                  className="input"
-                  value={productForm.name}
-                  onChange={(event) => updateProductForm('name', event.target.value)}
-                  placeholder="e.g. Seat Cover Deluxe"
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="catalog-product-category">Category</label>
-                <select
-                  id="catalog-product-category"
-                  className="select"
-                  value={productForm.category}
-                  onChange={(event) => updateProductForm('category', event.target.value)}
-                >
-                  <option value="">Select a category</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="catalog-product-price">Price</label>
-                <input
-                  id="catalog-product-price"
-                  type="number"
-                  min="0"
-                  className="input"
-                  value={productForm.price}
-                  onChange={(event) => updateProductForm('price', event.target.value)}
-                  placeholder="0"
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="catalog-product-stock">Stock</label>
-                <input
-                  id="catalog-product-stock"
-                  type="number"
-                  min="0"
-                  className="input"
-                  value={productForm.stock}
-                  onChange={(event) => updateProductForm('stock', event.target.value)}
-                  placeholder="0"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="label" htmlFor="catalog-product-sku">SKU</label>
-                <div className="relative">
-                  <Tag size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim" />
-                  <input
-                    id="catalog-product-sku"
-                    className="input pl-10"
-                    value={productForm.sku}
-                    onChange={(event) => updateProductForm('sku', event.target.value)}
-                    placeholder="Optional internal SKU"
-                  />
-                </div>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="label" htmlFor="catalog-product-description">Description</label>
-                <textarea
-                  id="catalog-product-description"
-                  className="input min-h-28 resize-y"
-                  value={productForm.description}
-                  onChange={(event) => updateProductForm('description', event.target.value)}
-                  placeholder="Explain fitment, material, or usage details."
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="label" htmlFor="catalog-product-images">Image URLs</label>
-                <div className="relative">
-                  <ImagePlus size={15} className="pointer-events-none absolute left-3 top-4 text-ink-dim" />
-                  <textarea
-                    id="catalog-product-images"
-                    className="input min-h-28 resize-y pl-10"
-                    value={productForm.images}
-                    onChange={(event) => updateProductForm('images', event.target.value)}
-                    placeholder={'One image URL per line\nhttps://example.test/product-front.jpg'}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="ops-action-primary w-full"
-              disabled={submittingProduct}
-            >
-              <PackagePlus size={15} />
-              {submittingProduct ? 'Publishing Product...' : 'Publish Product'}
-            </button>
-          </form>
-        </SectionShell>
-      </div>
-
       <SectionShell
         title="Published Products"
-        description="Open any product row to manage details or images."
-        action={<span className="badge badge-orange">{publishedProducts.length} live</span>}
+        description="Search published products, review status, and choose the next listing to manage."
+        action={<span className="badge badge-orange">{visibleProducts.length} shown</span>}
       >
+        <div className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+          <div>
+            <label className="label" htmlFor="catalog-product-search">Search published products</label>
+            <input
+              id="catalog-product-search"
+              className="input"
+              value={catalogQuery}
+              onChange={(event) => setCatalogQuery(event.target.value)}
+              placeholder="Search by name, category, SKU, or description"
+            />
+          </div>
+          <div className="rounded-2xl border border-surface-border bg-surface-raised/70 px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Categories</p>
+            <p className="mt-2 text-xl font-black tracking-tight text-ink-primary">{categories.length}</p>
+          </div>
+          <div className="rounded-2xl border border-surface-border bg-surface-raised/70 px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Images</p>
+            <p className="mt-2 text-xl font-black tracking-tight text-ink-primary">{getCatalogImageCount(publishedProducts)}</p>
+          </div>
+        </div>
+
         <div className="table-surface">
           <div className="table-scroll">
             <table className="data-table min-w-[860px]" aria-label="Published products">
@@ -656,14 +517,20 @@ export default function ShopProductAdmin() {
                       No published products yet.
                     </td>
                   </tr>
+                ) : visibleProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center text-sm text-ink-muted">
+                      No published products match the current search.
+                    </td>
+                  </tr>
                 ) : (
-                  publishedProducts.map((product) => (
+                  visibleProducts.map((product) => (
                     <tr key={product.id}>
                       <td>
                         <button
                           type="button"
                           className="text-left"
-                          onClick={() => openProductEditor(product)}
+                          onClick={() => setSelectedProductId(product.id)}
                         >
                           <p className="font-semibold text-ink-primary">{product.name}</p>
                           <p className="mt-1 text-xs text-ink-muted">{product.sku || 'No SKU assigned'}</p>
@@ -703,6 +570,264 @@ export default function ShopProductAdmin() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      </SectionShell>
+
+      <SectionShell
+        title="Selected Product"
+        description="Choose a product from the list to review publishing details."
+        action={selectedProduct ? <span className="badge badge-gray">{selectedProduct.status}</span> : null}
+      >
+        {selectedProduct ? (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-lg font-bold text-ink-primary">{selectedProduct.name}</p>
+                    <p className="mt-1 text-sm text-ink-muted">{selectedProduct.description || 'No product description yet.'}</p>
+                  </div>
+                  <span className="badge badge-green">{selectedProduct.status}</span>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Category</p>
+                    <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedProduct.category}</p>
+                  </div>
+                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Price</p>
+                    <p className="mt-2 text-sm font-semibold text-ink-primary">{formatCurrency(selectedProduct.price)}</p>
+                  </div>
+                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Stock</p>
+                    <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedProduct.stock}</p>
+                  </div>
+                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">SKU</p>
+                    <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedProduct.sku || 'Not assigned'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Publishing Notes</p>
+                <p className="mt-2 text-sm text-ink-muted">
+                  Keep customer-facing copy, price, stock, and image coverage aligned before opening the editor.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Images</p>
+                <div className="mt-3 space-y-3">
+                  {selectedProduct.images.length ? (
+                    selectedProduct.images.map((image, index) => (
+                      <div key={`${image}-${index}`} className="rounded-xl border border-surface-border bg-surface-card p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                          Image {index + 1}
+                        </p>
+                        <p className="mt-2 break-all text-sm text-ink-primary">{image}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-panel px-4 py-6 text-sm text-ink-muted">
+                      No product images added yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Actions</p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button type="button" className="ops-action-primary min-w-[144px]" onClick={() => openProductEditor(selectedProduct)}>
+                    <PencilLine size={14} />
+                    Edit Product
+                  </button>
+                  <button
+                    type="button"
+                    className="ops-action-danger min-w-[144px]"
+                    onClick={() => handleArchiveProduct(selectedProduct.id, selectedProduct.name)}
+                    disabled={archivingProductId === selectedProduct.id}
+                  >
+                    <Archive size={14} />
+                    {archivingProductId === selectedProduct.id ? 'Archiving...' : 'Archive Product'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="empty-panel px-4 py-6 text-sm text-ink-muted">
+            Select a published product to review category, pricing, stock, and image details.
+          </div>
+        )}
+      </SectionShell>
+
+      <SectionShell
+        title="Publishing Controls"
+        description="Create categories and publish new marketplace listings after reviewing the current catalog."
+      >
+        <div className="grid gap-5 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.38fr)]">
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Add Category</p>
+              <p className="mt-2 text-sm text-ink-muted">Create a category for product publishing.</p>
+
+              <form className="mt-4 space-y-4" onSubmit={handleAddCategory}>
+                <div>
+                  <label className="label" htmlFor="catalog-category-name">New Category Name</label>
+                  <input
+                    id="catalog-category-name"
+                    className="input"
+                    value={categoryName}
+                    onChange={(event) => setCategoryName(event.target.value)}
+                    placeholder="e.g. Accessories"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="ops-action-primary w-full"
+                  disabled={submittingCategory}
+                >
+                  <FolderPlus size={15} />
+                  {submittingCategory ? 'Adding Category...' : 'Add Category'}
+                </button>
+              </form>
+            </div>
+
+            <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Active Categories</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {categories.length ? (
+                  categories.map((category) => (
+                    <span key={category.id} className="badge badge-gray">
+                      {category.name}
+                    </span>
+                  ))
+                ) : (
+                  <div className="empty-panel w-full px-4 py-6 text-sm text-ink-muted">
+                    No catalog categories yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Create And Publish Product</p>
+            <p className="mt-2 text-sm text-ink-muted">
+              Publish products with fields that match the shared catalog store.
+            </p>
+
+            <form className="mt-4 space-y-4" onSubmit={handlePublishProduct}>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="label" htmlFor="catalog-product-name">Product Name</label>
+                  <input
+                    id="catalog-product-name"
+                    className="input"
+                    value={productForm.name}
+                    onChange={(event) => updateProductForm('name', event.target.value)}
+                    placeholder="e.g. Seat Cover Deluxe"
+                  />
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="catalog-product-category">Category</label>
+                  <select
+                    id="catalog-product-category"
+                    className="select"
+                    value={productForm.category}
+                    onChange={(event) => updateProductForm('category', event.target.value)}
+                  >
+                    <option value="">Select a category</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.name}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="catalog-product-price">Price</label>
+                  <input
+                    id="catalog-product-price"
+                    type="number"
+                    min="0"
+                    className="input"
+                    value={productForm.price}
+                    onChange={(event) => updateProductForm('price', event.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="catalog-product-stock">Stock</label>
+                  <input
+                    id="catalog-product-stock"
+                    type="number"
+                    min="0"
+                    className="input"
+                    value={productForm.stock}
+                    onChange={(event) => updateProductForm('stock', event.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="label" htmlFor="catalog-product-sku">SKU</label>
+                  <div className="relative">
+                    <Tag size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim" />
+                    <input
+                      id="catalog-product-sku"
+                      className="input pl-10"
+                      value={productForm.sku}
+                      onChange={(event) => updateProductForm('sku', event.target.value)}
+                      placeholder="Optional internal SKU"
+                    />
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="label" htmlFor="catalog-product-description">Description</label>
+                  <textarea
+                    id="catalog-product-description"
+                    className="input min-h-28 resize-y"
+                    value={productForm.description}
+                    onChange={(event) => updateProductForm('description', event.target.value)}
+                    placeholder="Explain fitment, material, or usage details."
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="label" htmlFor="catalog-product-images">Image URLs</label>
+                  <div className="relative">
+                    <ImagePlus size={15} className="pointer-events-none absolute left-3 top-4 text-ink-dim" />
+                    <textarea
+                      id="catalog-product-images"
+                      className="input min-h-28 resize-y pl-10"
+                      value={productForm.images}
+                      onChange={(event) => updateProductForm('images', event.target.value)}
+                      placeholder={'One image URL per line\nhttps://example.test/product-front.jpg'}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="ops-action-primary w-full"
+                disabled={submittingProduct}
+              >
+                <PackagePlus size={15} />
+                {submittingProduct ? 'Publishing Product...' : 'Publish Product'}
+              </button>
+            </form>
           </div>
         </div>
       </SectionShell>
