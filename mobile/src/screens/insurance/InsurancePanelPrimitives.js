@@ -38,6 +38,28 @@ export function InsuranceSectionCard({ title, helper, children }) {
   )
 }
 
+export function InsuranceSummaryStrip({ label, value, helper }) {
+  return (
+    <View style={styles.summaryStrip}>
+      <Text style={styles.summaryStripLabel}>{label}</Text>
+      <Text style={styles.summaryStripValue}>{value}</Text>
+      {helper ? <Text style={styles.summaryStripHelper}>{helper}</Text> : null}
+    </View>
+  )
+}
+
+export function InsuranceSectionDivider({ title, helper, children }) {
+  return (
+    <View style={styles.sectionDivider}>
+      <View style={styles.sectionDividerHeader}>
+        <Text style={styles.sectionDividerTitle}>{title}</Text>
+        {helper ? <Text style={styles.sectionDividerHelper}>{helper}</Text> : null}
+      </View>
+      {children}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   shell: { gap: 12 },
   eyebrow: {
@@ -86,5 +108,50 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 14,
     lineHeight: 22,
+  },
+  summaryStrip: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceStrong,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    gap: 4,
+  },
+  summaryStripLabel: {
+    color: colors.labelText,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  summaryStripValue: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  summaryStripHelper: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  sectionDivider: {
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    gap: 12,
+  },
+  sectionDividerHeader: {
+    gap: 4,
+  },
+  sectionDividerTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  sectionDividerHelper: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
   },
 })

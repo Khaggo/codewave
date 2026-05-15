@@ -1,60 +1,95 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { InsuranceActionRow, InsurancePanelShell } from './InsurancePanelPrimitives'
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import {
+  InsurancePanelShell,
+  InsuranceSectionCard,
+} from './InsurancePanelPrimitives'
 import { colors, radius } from '../../theme'
 
-const iconByKey = {
-  documents: 'file-document-outline',
-  payment: 'cash-check',
-  renewal: 'calendar-clock-outline',
-  history: 'history',
-}
-
-export default function InsuranceHomePanel({
-  hero,
-  actionCards,
-  selectedVehicleLabel,
-  onOpenPanel,
-}) {
+export default function InsuranceHomePanel({ overviewState, onOpenSection }) {
   return (
-    <View style={styles.content}>
+    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <InsurancePanelShell
-        eyebrow={hero.eyebrow}
-        title="Insurance home"
-        subtitle="Review the current request, then open the exact task you need."
+        eyebrow="Overview"
+        title="Insurance overview"
+        subtitle="Use one section at a time so the current request stays easy to follow."
       >
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>{hero.title}</Text>
-          <Text style={styles.heroMessage}>{hero.message}</Text>
-          {selectedVehicleLabel ? <Text style={styles.vehicleLabel}>{selectedVehicleLabel}</Text> : null}
-          <TouchableOpacity style={styles.heroButton} onPress={() => onOpenPanel(hero.routeKey)} activeOpacity={0.9}>
-            <Text style={styles.heroButtonText}>{hero.ctaLabel}</Text>
+        <InsuranceSectionCard title={overviewState.title} helper={overviewState.message}>
+          <TouchableOpacity
+            style={styles.primaryAction}
+            onPress={() => onOpenSection(overviewState.routeKey)}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.primaryActionText}>{overviewState.ctaLabel}</Text>
           </TouchableOpacity>
-        </View>
+        </InsuranceSectionCard>
       </InsurancePanelShell>
 
-      <View style={styles.actionsGrid}>
-        {actionCards.map((card) => (
-          <InsuranceActionRow
-            key={card.key}
-            icon={iconByKey[card.key]}
-            label={card.title}
-            value={card.value}
-            description={card.description}
-            onPress={() => onOpenPanel(card.routeKey)}
-          />
-        ))}
-      </View>
-    </View>
+      {overviewState.routeRows.map((row) => (
+        <TouchableOpacity
+          key={row.key}
+          style={styles.routeRow}
+          onPress={() => onOpenSection(row.key)}
+          activeOpacity={0.88}
+        >
+          <View style={styles.routeCopy}>
+            <Text style={styles.routeLabel}>{row.label}</Text>
+            <Text style={styles.routeHelper}>{row.helper}</Text>
+          </View>
+          <Text style={styles.routeArrow}>→</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
-  content: { gap: 18, paddingBottom: 32 },
-  heroCard: { borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 20, gap: 12 },
-  heroTitle: { color: colors.text, fontSize: 24, fontWeight: '900' },
-  heroMessage: { color: colors.mutedText, fontSize: 15, lineHeight: 23 },
-  vehicleLabel: { color: colors.labelText, fontSize: 13, fontWeight: '700' },
-  heroButton: { marginTop: 4, borderRadius: radius.lg, backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 14, alignItems: 'center' },
-  heroButtonText: { color: colors.onPrimary, fontSize: 15, fontWeight: '800' },
-  actionsGrid: { gap: 14 },
+  content: {
+    gap: 14,
+    paddingBottom: 28,
+  },
+  primaryAction: {
+    minHeight: 52,
+    marginTop: 8,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  primaryActionText: {
+    color: colors.onPrimary,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  routeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  routeCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  routeLabel: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  routeHelper: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  routeArrow: {
+    color: colors.primary,
+    fontSize: 20,
+    fontWeight: '800',
+  },
 })

@@ -937,23 +937,14 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     latestInquiryCanAcceptDocuments,
   ]);
 
-  const handleDraftChange = (field, value) => {
-    setDraft((currentDraft) => ({
-      ...currentDraft,
-      [field]: value,
-    }));
-
+  const handleDraftPatch = () => {
     if (hasSession && ownedVehicles.length && selectedVehicle) {
       setIntakeState('draft_ready');
       setIntakeMessage('');
     }
   };
 
-  const handleDocumentDraftChange = (field, value) => {
-    setDocumentDraft((currentDraft) => ({
-      ...currentDraft,
-      [field]: value,
-    }));
+  const handleDocumentDraftPatch = () => {
     setDocumentUploadState('document_ready');
     setDocumentUploadMessage('');
   };
@@ -974,7 +965,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
   };
 
-  const handlePickDocument = async () => {
+  const pickCustomerInsuranceDocument = async () => {
     if (!latestInquiry?.id) {
       setDocumentUploadState('document_missing_inquiry');
       setDocumentUploadMessage('Submit a request first, then select a document for upload.');
@@ -1109,7 +1100,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
   };
 
-  const handleUploadDocument = async () => {
+  const handleUploadPickedDocument = async () => {
     if (!hasSession) {
       setDocumentUploadState('document_unauthorized');
       setDocumentUploadMessage('Sign in first so the app can attach insurance documents.');
@@ -1406,22 +1397,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   <InsuranceHomePanel
                     overviewState={overviewState}
                     onOpenSection={handleChangeModeSection}
-                    hero={{
-                      eyebrow: 'Insurance mode',
-                      title: overviewState.title,
-                      message: overviewState.message,
-                      ctaLabel: overviewState.ctaLabel,
-                      routeKey: overviewState.routeKey,
-                    }}
-                    actionCards={overviewState.routeRows.map((row) => ({
-                      key: row.key,
-                      title: row.label,
-                      value: '',
-                      description: row.helper,
-                      routeKey: row.key,
-                    }))}
-                    selectedVehicleLabel={selectedVehicleLabel}
-                    onOpenPanel={handleChangeModeSection}
                   />
                 ) : null}
 
@@ -1430,10 +1405,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                     selectedVehicleLabel={selectedVehicleLabel}
                     draft={draft}
                     inquiryTypeOptions={inquiryTypeOptions}
-                    onChangeDraft={handleDraftChange}
+                    onChangeDraft={(patch) => {
+                      setDraft((current) => ({ ...current, ...patch }))
+                      handleDraftPatch()
+                    }}
                     onSubmit={handleSubmitInquiry}
                     isSubmitting={isSubmitting}
-                    onBack={() => handleChangeModeSection('overview')}
                     intakeState={intakeState}
                     intakeMessage={intakeMessage}
                   />
@@ -1443,14 +1420,16 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   <InsuranceDocumentsPanel
                     checklist={requirementsChecklist}
                     latestInquiry={latestInquiry}
-                    onPickDocument={handlePickDocument}
+                    onChangeDocumentDraft={(patch) => {
+                      setDocumentDraft((current) => ({ ...current, ...patch }))
+                      handleDocumentDraftPatch()
+                    }}
+                    onPickDocument={pickCustomerInsuranceDocument}
+                    onUploadDocument={handleUploadPickedDocument}
                     isUploadingDocument={isUploadingDocument}
-                    onBack={() => handleChangeModeSection('overview')}
                     documentDraft={documentDraft}
                     documentTypeOptions={customerInsuranceDocumentTypeOptions}
-                    onChangeDocumentDraft={handleDocumentDraftChange}
                     onClearPickedDocument={handleClearPickedDocument}
-                    onUploadDocument={handleUploadDocument}
                     uploadMessage={documentUploadMessage}
                     uploadState={documentUploadState}
                     canAcceptDocuments={Boolean(latestInquiry?.id && latestInquiryCanAcceptDocuments)}

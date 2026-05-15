@@ -1,6 +1,10 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import { InsurancePanelShell } from './InsurancePanelPrimitives'
+import {
+  InsurancePanelShell,
+  InsuranceSectionDivider,
+  InsuranceSummaryStrip,
+} from './InsurancePanelPrimitives'
 import { colors, radius } from '../../theme'
 
 function InlineNotice({ state, message }) {
@@ -46,175 +50,154 @@ export default function InsuranceRequestPanel({
   onChangeDraft,
   onSubmit,
   isSubmitting,
-  onBack,
   intakeState,
   intakeMessage,
 }) {
   return (
     <View style={styles.root}>
-      <TouchableOpacity style={styles.backLink} onPress={onBack} activeOpacity={0.88}>
-        <MaterialCommunityIcons name="arrow-left" size={18} color={colors.primary} />
-        <Text style={styles.backLinkText}>Back to home</Text>
-      </TouchableOpacity>
-
       <InsurancePanelShell
         eyebrow="Request"
         title="Start a customer-safe insurance request"
-        subtitle="Use the selected vehicle, choose the inquiry type, and describe what support you need."
+        subtitle="Capture the essential details first, then submit one guided request for the selected vehicle."
       >
-        <View style={styles.vehicleCard}>
-          <Text style={styles.vehicleLabel}>Selected vehicle</Text>
-          <Text style={styles.vehicleValue}>{selectedVehicleLabel || 'Choose a vehicle first'}</Text>
-        </View>
-
-        <View style={styles.fieldBlock}>
-          <Text style={styles.fieldLabel}>Inquiry type</Text>
-          <View style={styles.segmentRow}>
-            {inquiryTypeOptions.map((option) => {
-              const isSelected = draft.inquiryType === option.value
-
-              return (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[styles.segmentButton, isSelected && styles.segmentButtonSelected]}
-                  onPress={() => onChangeDraft('inquiryType', option.value)}
-                  activeOpacity={0.88}
-                >
-                  <Text style={[styles.segmentButtonText, isSelected && styles.segmentButtonTextSelected]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              )
-            })}
-          </View>
-        </View>
-
-        <View style={styles.fieldBlock}>
-          <Text style={styles.fieldLabel}>Subject</Text>
-          <TextInput
-            value={draft.subject}
-            onChangeText={(value) => onChangeDraft('subject', value)}
-            placeholder="Accident repair inquiry"
-            placeholderTextColor={colors.mutedText}
-            style={styles.input}
+        <View style={styles.summaryStrip}>
+          <InsuranceSummaryStrip
+            label="Selected vehicle"
+            value={selectedVehicleLabel || 'Choose a vehicle first'}
+            helper="This request stays tied to the active vehicle in insurance mode."
           />
         </View>
 
-        <View style={styles.fieldBlock}>
-          <Text style={styles.fieldLabel}>Description</Text>
-          <TextInput
-            value={draft.description}
-            onChangeText={(value) => onChangeDraft('description', value)}
-            placeholder="Describe the concern, damage, or claim context."
-            placeholderTextColor={colors.mutedText}
-            style={[styles.input, styles.multilineInput]}
-            multiline
-            numberOfLines={5}
-            textAlignVertical="top"
-          />
+        <View style={styles.sectionDivider}>
+          <InsuranceSectionDivider
+            title="Inquiry type"
+            helper="Choose the policy lane before you fill in the request details."
+          >
+            <View style={styles.segmentRow}>
+              {inquiryTypeOptions.map((option) => {
+                const isSelected = draft.inquiryType === option.value
+
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[styles.segmentButton, isSelected && styles.segmentButtonSelected]}
+                    onPress={() => onChangeDraft({ inquiryType: option.value })}
+                    activeOpacity={0.88}
+                  >
+                    <Text style={[styles.segmentButtonText, isSelected && styles.segmentButtonTextSelected]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          </InsuranceSectionDivider>
         </View>
 
-        <View style={styles.fieldBlock}>
-          <Text style={styles.fieldLabel}>Provider name</Text>
-          <TextInput
-            value={draft.providerName}
-            onChangeText={(value) => onChangeDraft('providerName', value)}
-            placeholder="Optional insurer or broker name"
-            placeholderTextColor={colors.mutedText}
-            style={styles.input}
-          />
+        <View style={styles.sectionDivider}>
+          <InsuranceSectionDivider
+            title="Claim details"
+            helper="Describe the issue clearly so staff can triage the request without follow-up guesswork."
+          >
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>Subject</Text>
+              <TextInput
+                value={draft.subject}
+                onChangeText={(value) => onChangeDraft({ subject: value })}
+                placeholder="Accident repair inquiry"
+                placeholderTextColor={colors.mutedText}
+                style={styles.input}
+              />
+            </View>
+
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>Description</Text>
+              <TextInput
+                value={draft.description}
+                onChangeText={(value) => onChangeDraft({ description: value })}
+                placeholder="Describe the concern, damage, or claim context."
+                placeholderTextColor={colors.mutedText}
+                style={[styles.input, styles.multilineInput]}
+                multiline
+                numberOfLines={5}
+                textAlignVertical="top"
+              />
+            </View>
+
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>Notes</Text>
+              <TextInput
+                value={draft.notes}
+                onChangeText={(value) => onChangeDraft({ notes: value })}
+                placeholder="Optional customer-side notes"
+                placeholderTextColor={colors.mutedText}
+                style={[styles.input, styles.notesInput]}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+          </InsuranceSectionDivider>
         </View>
 
-        <View style={styles.fieldBlock}>
-          <Text style={styles.fieldLabel}>Policy number</Text>
-          <TextInput
-            value={draft.policyNumber}
-            onChangeText={(value) => onChangeDraft('policyNumber', value)}
-            placeholder="Optional policy reference"
-            placeholderTextColor={colors.mutedText}
-            style={styles.input}
-            autoCapitalize="characters"
-          />
-        </View>
+        <View style={styles.sectionDivider}>
+          <InsuranceSectionDivider
+            title="Insurance details"
+            helper="These fields are optional, but they help connect the request to an existing provider or policy."
+          >
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>Provider name</Text>
+              <TextInput
+                value={draft.providerName}
+                onChangeText={(value) => onChangeDraft({ providerName: value })}
+                placeholder="Optional insurer or broker name"
+                placeholderTextColor={colors.mutedText}
+                style={styles.input}
+              />
+            </View>
 
-        <View style={styles.fieldBlock}>
-          <Text style={styles.fieldLabel}>Notes</Text>
-          <TextInput
-            value={draft.notes}
-            onChangeText={(value) => onChangeDraft('notes', value)}
-            placeholder="Optional customer-side notes"
-            placeholderTextColor={colors.mutedText}
-            style={[styles.input, styles.multilineInput]}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>Policy number</Text>
+              <TextInput
+                value={draft.policyNumber}
+                onChangeText={(value) => onChangeDraft({ policyNumber: value })}
+                placeholder="Optional policy reference"
+                placeholderTextColor={colors.mutedText}
+                style={styles.input}
+                autoCapitalize="characters"
+              />
+            </View>
+          </InsuranceSectionDivider>
         </View>
 
         <InlineNotice state={intakeState} message={intakeMessage} />
+      </InsurancePanelShell>
 
+      <View style={styles.footer}>
+        <Text style={styles.footerMeta}>Step 1 of 5</Text>
         <TouchableOpacity
-          style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
+          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
           onPress={onSubmit}
           disabled={isSubmitting}
-          activeOpacity={0.9}
+          activeOpacity={0.88}
         >
           {isSubmitting ? (
             <ActivityIndicator color={colors.onPrimary} size="small" />
-          ) : (
-            <>
-              <MaterialCommunityIcons
-                name="shield-check-outline"
-                size={18}
-                color={colors.onPrimary}
-              />
-              <Text style={styles.primaryButtonText}>Submit request</Text>
-            </>
-          )}
+          ) : null}
+          <Text style={styles.submitButtonText}>{isSubmitting ? 'Submitting...' : 'Submit request'}</Text>
         </TouchableOpacity>
-      </InsurancePanelShell>
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { gap: 18 },
-  backLink: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  root: {
+    gap: 18,
+    paddingBottom: 8,
   },
-  backLinkText: {
-    color: colors.primary,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  vehicleCard: {
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: 18,
-    gap: 6,
-  },
-  vehicleLabel: {
-    color: colors.labelText,
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  vehicleValue: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  fieldBlock: { gap: 8 },
-  fieldLabel: {
-    color: colors.labelText,
-    fontSize: 13,
-    fontWeight: '700',
+  summaryStrip: {
+    marginTop: 4,
   },
   segmentRow: {
     flexDirection: 'row',
@@ -243,6 +226,17 @@ const styles = StyleSheet.create({
   segmentButtonTextSelected: {
     color: colors.primary,
   },
+  sectionDivider: {
+    gap: 12,
+  },
+  fieldBlock: {
+    gap: 8,
+  },
+  fieldLabel: {
+    color: colors.labelText,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   input: {
     minHeight: 52,
     borderRadius: radius.lg,
@@ -255,7 +249,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   multilineInput: {
-    minHeight: 110,
+    minHeight: 112,
+  },
+  notesInput: {
+    minHeight: 88,
   },
   noticeCard: {
     borderRadius: radius.xl,
@@ -277,7 +274,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  noticeCopy: { flex: 1, gap: 4 },
+  noticeCopy: {
+    flex: 1,
+    gap: 4,
+  },
   noticeTitle: {
     color: colors.text,
     fontSize: 14,
@@ -288,7 +288,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
-  primaryButton: {
+  footer: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 16,
+    gap: 10,
+  },
+  footerMeta: {
+    color: colors.labelText,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  submitButton: {
     minHeight: 54,
     borderRadius: radius.lg,
     backgroundColor: colors.primary,
@@ -297,10 +312,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  primaryButtonDisabled: {
+  submitButtonDisabled: {
     opacity: 0.78,
   },
-  primaryButtonText: {
+  submitButtonText: {
     color: colors.onPrimary,
     fontSize: 15,
     fontWeight: '800',

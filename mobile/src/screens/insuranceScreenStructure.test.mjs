@@ -67,3 +67,73 @@ test('task 3 panel dependencies are tracked for clean checkouts', () => {
   assert.match(trackedFiles, /InsuranceDocumentsPanel\.js/)
   assert.match(trackedFiles, /InsuranceStatusDetailPanel\.js/)
 })
+
+test('insurance mode renders overview, request, docs, status, and history destinations', () => {
+  const source = read('./InsuranceInquiryScreen.js')
+
+  const requiredFragments = [
+    "activeModeSection === 'overview'",
+    "activeModeSection === 'request'",
+    "activeModeSection === 'documents'",
+    "activeModeSection === 'status'",
+    "activeModeSection === 'history'",
+    '<InsuranceHomePanel',
+    '<InsuranceRequestPanel',
+    '<InsuranceDocumentsPanel',
+    '<InsuranceStatusDetailPanel',
+  ]
+
+  for (const fragment of requiredFragments) {
+    assert.ok(source.includes(fragment), `Expected insurance mode fragment: ${fragment}`)
+  }
+})
+
+test('task 4 uses the redesigned overview, request, and document workspace structure', () => {
+  const screenSource = read('./InsuranceInquiryScreen.js')
+  const homeSource = read('./insurance/InsuranceHomePanel.js')
+  const requestSource = read('./insurance/InsuranceRequestPanel.js')
+  const documentsSource = read('./insurance/InsuranceDocumentsPanel.js')
+
+  const homeFragments = [
+    'title="Insurance overview"',
+    'overviewState.routeRows.map((row) => (',
+    'styles.routeRow',
+  ]
+
+  const requestFragments = [
+    'Step 1 of 5',
+    'styles.footer',
+    'styles.summaryStrip',
+    'styles.sectionDivider',
+  ]
+
+  const documentFragments = [
+    'styles.sectionDivider',
+    'styles.uploadTargetRow',
+    'styles.footer',
+    'Upload file',
+  ]
+
+  assert.match(
+    screenSource,
+    /onChangeDraft=\{\(patch\) => \{[\s\S]*?setDraft\(\(current\) => \(\{ \.\.\.current, \.\.\.patch \}\)\)[\s\S]*?\}\}/,
+  )
+  assert.match(screenSource, /onPickDocument=\{pickCustomerInsuranceDocument\}/)
+  assert.match(screenSource, /onUploadDocument=\{handleUploadPickedDocument\}/)
+  assert.match(
+    screenSource,
+    /onChangeDocumentDraft=\{\(patch\) => \{[\s\S]*?setDocumentDraft\(\(current\) => \(\{ \.\.\.current, \.\.\.patch \}\)\)[\s\S]*?\}\}/,
+  )
+
+  for (const fragment of homeFragments) {
+    assert.ok(homeSource.includes(fragment), `Expected home redesign fragment: ${fragment}`)
+  }
+
+  for (const fragment of requestFragments) {
+    assert.ok(requestSource.includes(fragment), `Expected request redesign fragment: ${fragment}`)
+  }
+
+  for (const fragment of documentFragments) {
+    assert.ok(documentsSource.includes(fragment), `Expected documents redesign fragment: ${fragment}`)
+  }
+})
