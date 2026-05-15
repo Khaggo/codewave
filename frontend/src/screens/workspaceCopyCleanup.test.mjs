@@ -216,6 +216,33 @@ test('catalog admin uses marketplace publishing header copy', () => {
   assert.ok(catalog.includes('Choose a product from the list to review publishing details.'))
 })
 
+test('catalog admin keeps modal editor state separate from selected detail state', () => {
+  const catalog = read('frontend/src/screens/ShopProductAdmin.js')
+
+  assert.ok(catalog.includes('const [editorProductId, setEditorProductId] = useState(null)'))
+  assert.ok(catalog.includes('const editorProduct = useMemo('))
+  assert.ok(catalog.includes('if (!editorProduct) return'))
+  assert.ok(catalog.includes('{editorProduct ? ('))
+})
+
+test('inventory uses concise operational copy', () => {
+  const inventory = read('frontend/src/screens/InventoryWorkspace.js')
+
+  assert.ok(inventory.includes('Track stock levels, restock needs, and item availability.'))
+})
+
+test('staff accounts uses concise operational copy', () => {
+  const staff = read('frontend/src/components/StaffProvisioningPanel.js')
+
+  assert.ok(staff.includes('Create accounts, manage access, and keep operations staffing usable.'))
+})
+
+test('analytics uses concise operational copy', () => {
+  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
+
+  assert.ok(analytics.includes("Review today's workload, bottlenecks, and live operational signals."))
+})
+
 test('inventory keeps product list before detail and coverage sections', () => {
   const inventory = read('frontend/src/screens/InventoryWorkspace.js')
 
@@ -228,6 +255,28 @@ test('inventory keeps product list before detail and coverage sections', () => {
   assert.notEqual(inventoryCoverageIndex, -1)
   assert.ok(inventoryListIndex < inventoryDetailIndex)
   assert.ok(inventoryDetailIndex < inventoryCoverageIndex)
+})
+
+test('staff accounts keeps the managed directory ahead of provisioning controls', () => {
+  const staff = read('frontend/src/components/StaffProvisioningPanel.js')
+
+  const staffDirectoryIndex = staff.indexOf('Managed Account Directory')
+  const staffProvisioningIndex = staff.indexOf('Provision Operations Accounts')
+
+  assert.notEqual(staffDirectoryIndex, -1)
+  assert.notEqual(staffProvisioningIndex, -1)
+  assert.ok(staffDirectoryIndex < staffProvisioningIndex)
+})
+
+test('analytics keeps current operations sections ahead of dashboard summaries', () => {
+  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
+
+  const analyticsOperationsIndex = analytics.indexOf('title="Booking Status Mix"')
+  const analyticsDashboardIndex = analytics.indexOf('title="Sales Signals"')
+
+  assert.notEqual(analyticsOperationsIndex, -1)
+  assert.notEqual(analyticsDashboardIndex, -1)
+  assert.ok(analyticsOperationsIndex < analyticsDashboardIndex)
 })
 
 test('analytics and loyalty workspaces stay concise', () => {

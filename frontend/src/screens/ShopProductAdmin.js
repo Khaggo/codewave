@@ -261,6 +261,7 @@ export default function ShopProductAdmin() {
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM)
   const [editForm, setEditForm] = useState(EMPTY_MODAL_FORM)
   const [selectedProductId, setSelectedProductId] = useState(null)
+  const [editorProductId, setEditorProductId] = useState(null)
   const [submittingCategory, setSubmittingCategory] = useState(false)
   const [submittingProduct, setSubmittingProduct] = useState(false)
   const [savingProduct, setSavingProduct] = useState(false)
@@ -269,6 +270,10 @@ export default function ShopProductAdmin() {
   const selectedProduct = useMemo(
     () => publishedProducts.find((product) => product.id === selectedProductId) ?? null,
     [publishedProducts, selectedProductId],
+  )
+  const editorProduct = useMemo(
+    () => publishedProducts.find((product) => product.id === editorProductId) ?? null,
+    [editorProductId, publishedProducts],
   )
   const visibleProducts = useMemo(() => {
     const normalizedQuery = catalogQuery.trim().toLowerCase()
@@ -309,11 +314,12 @@ export default function ShopProductAdmin() {
 
   function openProductEditor(product) {
     setSelectedProductId(product.id)
+    setEditorProductId(product.id)
     setEditForm(buildModalForm(product))
   }
 
   function closeProductEditor() {
-    setSelectedProductId(null)
+    setEditorProductId(null)
     setEditForm(EMPTY_MODAL_FORM)
   }
 
@@ -400,12 +406,12 @@ export default function ShopProductAdmin() {
   }
 
   function handleSaveProductEdits() {
-    if (!selectedProduct) return
+    if (!editorProduct) return
 
     setSavingProduct(true)
 
     try {
-      const updatedProduct = updateInventoryProduct(selectedProduct.id, {
+      const updatedProduct = updateInventoryProduct(editorProduct.id, {
         name: editForm.name,
         category: editForm.category,
         price: editForm.price,
@@ -442,7 +448,7 @@ export default function ShopProductAdmin() {
         title: 'Product archived',
         message: `${productName} has been removed from the published catalog.`,
       })
-      if (selectedProductId === productId) {
+      if (editorProductId === productId) {
         closeProductEditor()
       }
     } catch (error) {
@@ -832,18 +838,18 @@ export default function ShopProductAdmin() {
         </div>
       </SectionShell>
 
-      {selectedProduct ? (
+      {editorProduct ? (
         <ProductEditModal
           categories={categories}
           form={editForm}
           saving={savingProduct}
-          archiving={archivingProductId === selectedProduct.id}
+          archiving={archivingProductId === editorProduct.id}
           onChange={updateEditForm}
           onAddImage={handleAddImageToEditForm}
           onRemoveImage={handleRemoveImageFromEditForm}
           onClose={closeProductEditor}
           onSave={handleSaveProductEdits}
-          onArchive={() => handleArchiveProduct(selectedProduct.id, selectedProduct.name)}
+          onArchive={() => handleArchiveProduct(editorProduct.id, editorProduct.name)}
         />
       ) : null}
     </div>
