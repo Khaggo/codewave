@@ -130,3 +130,21 @@ test('insurance shell uses pull-to-refresh and removes the floating reload affor
     /<TouchableOpacity[\s\S]*?style=\{styles\.secondaryButton\}[\s\S]*?onPress=\{\(\) => refreshTracking\(\)\}[\s\S]*?<Text[\s\S]*?>Refresh<\/Text>[\s\S]*?<\/TouchableOpacity>/,
   )
 })
+
+test('home and status tabs use section-first layout with short copy and no extra top-level cards', () => {
+  const homeSource = read('./insurance/InsuranceHomePanel.js')
+  const statusSource = read('./insurance/InsuranceStatusDetailPanel.js')
+
+  assert.match(homeSource, /title="Overview"/)
+  assert.match(homeSource, /current vehicle/i)
+  assert.match(homeSource, /next step/i)
+  assert.match(homeSource, /Request/)
+  assert.match(homeSource, /Documents/)
+  assert.match(homeSource, /Status/)
+  assert.doesNotMatch(homeSource, /Protection center/)
+  assert.doesNotMatch(homeSource, /Open the dedicated insurance workspace/)
+
+  assert.match(statusSource, /title="Latest update"/)
+  assert.match(statusSource, /timeline/i)
+  assert.match(statusSource, /history/i)
+})

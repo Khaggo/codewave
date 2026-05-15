@@ -431,6 +431,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       renewalSummary,
     ],
   );
+  const homeTitle = 'Overview';
+  const statusTitle = 'Status';
+  const statusSubtitle = 'Current status and next step';
   const getSettledRememberedInquiryIdForSelectedVehicle = () => {
     if (!selectedVehicleId) {
       return undefined;
@@ -1343,7 +1346,10 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             >
               {activeInsuranceTab === 'home' ? (
                 <InsuranceHomePanel
+                  title={homeTitle}
+                  selectedVehicleLabel={selectedVehicleLabel}
                   overviewState={overviewState}
+                  statusState={statusState}
                   onOpenSection={handleOpenInsuranceHomeSection}
                 />
               ) : null}
@@ -1391,8 +1397,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               {activeInsuranceTab === 'status' ? (
                 <InsuranceStatusDetailPanel
                   eyebrow="Status"
-                  title="Current request status"
-                  subtitle="Review the current blocker, latest update, and next action in one place."
+                  title={statusTitle}
+                  subtitle={statusSubtitle}
                   statusState={statusState}
                   isRefreshing={isRefreshing}
                   onRefresh={refreshTracking}

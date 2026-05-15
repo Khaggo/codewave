@@ -1,95 +1,104 @@
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import {
   InsurancePanelShell,
-  InsuranceSectionCard,
+  InsuranceSectionDivider,
 } from './InsurancePanelPrimitives'
 import { colors, radius } from '../../theme'
 
-export default function InsuranceHomePanel({ overviewState, onOpenSection }) {
+const LINK_ITEMS = [
+  { key: 'request', label: 'Request' },
+  { key: 'documents', label: 'Documents' },
+  { key: 'status', label: 'Status' },
+]
+
+export default function InsuranceHomePanel({
+  title = 'Overview',
+  selectedVehicleLabel,
+  overviewState,
+  statusState,
+  onOpenSection,
+}) {
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <InsurancePanelShell
-        eyebrow="Overview"
-        title="Insurance overview"
-        subtitle="Use one section at a time so the current request stays easy to follow."
-      >
-        <InsuranceSectionCard title={overviewState.title} helper={overviewState.message}>
+    <View style={styles.root} accessibilityLabel={title}>
+      <InsurancePanelShell title="Overview">
+        <InsuranceSectionDivider title="Current vehicle" leading>
+          <Text style={styles.primaryValue}>{selectedVehicleLabel || 'No vehicle selected'}</Text>
+        </InsuranceSectionDivider>
+
+        <InsuranceSectionDivider title="Next step">
+          <Text style={styles.summaryText}>{overviewState.title}</Text>
           <TouchableOpacity
-            style={styles.primaryAction}
+            style={styles.primaryButton}
             onPress={() => onOpenSection(overviewState.routeKey)}
             activeOpacity={0.88}
           >
-            <Text style={styles.primaryActionText}>{overviewState.ctaLabel}</Text>
+            <Text style={styles.primaryButtonText}>{overviewState.ctaLabel}</Text>
           </TouchableOpacity>
-        </InsuranceSectionCard>
+        </InsuranceSectionDivider>
+
+        <InsuranceSectionDivider title="Current status">
+          <Text style={styles.summaryText}>{statusState.summary}</Text>
+        </InsuranceSectionDivider>
       </InsurancePanelShell>
 
-      {overviewState.routeRows.map((row) => (
-        <TouchableOpacity
-          key={row.key}
-          style={styles.routeRow}
-          onPress={() => onOpenSection(row.key)}
-          activeOpacity={0.88}
-        >
-          <View style={styles.routeCopy}>
-            <Text style={styles.routeLabel}>{row.label}</Text>
-            <Text style={styles.routeHelper}>{row.helper}</Text>
-          </View>
-          <Text style={styles.routeArrow}>→</Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+      <View style={styles.linkList}>
+        {LINK_ITEMS.map((item) => (
+          <TouchableOpacity
+            key={item.key}
+            style={styles.linkRow}
+            onPress={() => onOpenSection(item.key)}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.linkLabel}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  content: {
-    gap: 14,
-    paddingBottom: 28,
+  root: {
+    gap: 18,
   },
-  primaryAction: {
-    minHeight: 52,
-    marginTop: 8,
+  primaryValue: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  summaryText: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  primaryButton: {
+    minHeight: 50,
+    marginTop: 4,
     borderRadius: radius.lg,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
-  primaryActionText: {
+  primaryButtonText: {
     color: colors.onPrimary,
     fontSize: 15,
     fontWeight: '800',
   },
-  routeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+  linkList: {
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
   },
-  routeCopy: {
-    flex: 1,
-    gap: 4,
+  linkRow: {
+    minHeight: 48,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+    justifyContent: 'center',
+    paddingVertical: 10,
   },
-  routeLabel: {
+  linkLabel: {
     color: colors.text,
     fontSize: 15,
-    fontWeight: '800',
-  },
-  routeHelper: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  routeArrow: {
-    color: colors.primary,
-    fontSize: 20,
     fontWeight: '800',
   },
 })

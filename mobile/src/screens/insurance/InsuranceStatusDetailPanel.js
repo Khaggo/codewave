@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { InsurancePanelShell, InsuranceSectionCard } from './InsurancePanelPrimitives'
+import { InsurancePanelShell, InsuranceSectionDivider } from './InsurancePanelPrimitives'
 import { colors, radius } from '../../theme'
 
 export default function InsuranceStatusDetailPanel({
@@ -17,6 +17,7 @@ export default function InsuranceStatusDetailPanel({
 }) {
   const scrollViewRef = useRef(null)
   const showsFooter = Boolean(footerLabel && (onFooterPress || footerScrollTarget))
+  const hasHistoryContent = Boolean(children)
 
   const handleFooterPress = () => {
     if (footerScrollTarget === 'end') {
@@ -32,7 +33,11 @@ export default function InsuranceStatusDetailPanel({
       <ScrollView
         ref={scrollViewRef}
         style={styles.scroll}
-        contentContainerStyle={[styles.content, showsFooter && styles.contentWithFooter]}
+        contentContainerStyle={[
+          styles.content,
+          showsFooter && styles.contentWithFooter,
+          hasHistoryContent && styles.contentWithHistory,
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -43,33 +48,27 @@ export default function InsuranceStatusDetailPanel({
         }
       >
         <InsurancePanelShell eyebrow={eyebrow} title={title} subtitle={subtitle}>
-          <InsuranceSectionCard
-            title={statusState.title}
-            helper={statusState.summary}
-          />
+          <InsuranceSectionDivider title="Current status" leading>
+            <Text style={styles.statusTitle}>{statusState.title}</Text>
+            <Text style={styles.statusSummary}>{statusState.summary}</Text>
+          </InsuranceSectionDivider>
+
+          {statusState.timeline.length ? (
+            <InsuranceSectionDivider title="Timeline">
+              {statusState.timeline.map((item) => (
+                <View key={item.key} style={styles.timelineRow}>
+                  <View style={[styles.timelineDot, item.active && styles.timelineDotActive]} />
+                  <Text style={styles.timelineLabel}>{item.label}</Text>
+                </View>
+              ))}
+            </InsuranceSectionDivider>
+          ) : null}
+
+          <InsuranceSectionDivider title="Latest update">
+            <Text style={styles.statusSummary}>{statusState.latestUpdateLabel}</Text>
+          </InsuranceSectionDivider>
         </InsurancePanelShell>
 
-        {statusState.timeline.length ? (
-          <View style={styles.timelineSection}>
-            <Text style={styles.timelineTitle}>Timeline</Text>
-            {statusState.timeline.map((item) => (
-              <View key={item.key} style={styles.timelineRow}>
-                <View
-                  style={[
-                    styles.timelineDot,
-                    item.active && styles.timelineDotActive,
-                  ]}
-                />
-                <Text style={styles.timelineLabel}>{item.label}</Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-
-        <InsuranceSectionCard
-          title="Latest update"
-          helper={statusState.latestUpdateLabel}
-        />
         {children}
       </ScrollView>
 
@@ -98,26 +97,24 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
   content: {
-    gap: 14,
+    gap: 18,
     paddingBottom: 28,
   },
   contentWithFooter: {
     paddingBottom: 140,
   },
-  timelineSection: {
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: 18,
-    gap: 12,
+  contentWithHistory: {
+    paddingBottom: 156,
   },
-  timelineTitle: {
-    color: colors.labelText,
-    fontSize: 12,
+  statusTitle: {
+    color: colors.text,
+    fontSize: 18,
     fontWeight: '800',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+  },
+  statusSummary: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 22,
   },
   timelineRow: {
     flexDirection: 'row',

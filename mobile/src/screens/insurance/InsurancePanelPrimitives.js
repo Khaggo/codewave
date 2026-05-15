@@ -48,9 +48,9 @@ export function InsuranceSummaryStrip({ label, value, helper }) {
   )
 }
 
-export function InsuranceSectionDivider({ title, helper, children }) {
+export function InsuranceSectionDivider({ title, helper, leading = false, children }) {
   return (
-    <View style={styles.sectionDivider}>
+    <View style={[styles.sectionDivider, leading && styles.sectionDividerLeading]}>
       <View style={styles.sectionDividerHeader}>
         <Text style={styles.sectionDividerTitle}>{title}</Text>
         {helper ? <Text style={styles.sectionDividerHelper}>{helper}</Text> : null}
@@ -140,6 +140,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderSoft,
     gap: 12,
+  },
+  sectionDividerLeading: {
+    paddingTop: 0,
+    borderTopWidth: 0,
   },
   sectionDividerHeader: {
     gap: 4,
