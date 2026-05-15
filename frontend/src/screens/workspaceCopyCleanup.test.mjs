@@ -46,7 +46,7 @@ test('intake, qa, and finance workspaces use short section descriptions', () => 
 
   assert.ok(finance.includes('Review invoice-ready work, payment entries, and completion records.'))
   assert.ok(finance.includes('Focus on records that are ready for payment or invoice follow-through.'))
-  assert.ok(finance.includes('Inspect loaded job orders for invoice and payment status.'))
+  assert.ok(finance.includes('Keep the active billing record in view before updating payment or completion follow-through.'))
 })
 
 test('service flow workspaces use queue-first copy and remove bulky dashboard wording', () => {
@@ -60,8 +60,8 @@ test('service flow workspaces use queue-first copy and remove bulky dashboard wo
   assert.ok(qa.includes('Review release checks, record verdicts, and keep overrides auditable.'))
   assert.ok(qa.includes('Focus on the jobs waiting for release review.'))
 
-  assert.ok(finance.includes('Review service invoices, ecommerce orders, and aging analytics from one workspace.'))
-  assert.ok(finance.includes('Review aging, payment guidance, and live billing lookups before detail review.'))
+  assert.ok(finance.includes('Review invoice-ready work, payment entries, and completion records.'))
+  assert.ok(finance.includes('Focus on records that are ready for payment or invoice follow-through.'))
 
   assert.ok(!jobOrders.includes('Choose a schedule date and refresh to load confirmed bookings.'))
   assert.ok(
@@ -109,6 +109,20 @@ test('job orders workspace keeps queue before detail actions', () => {
   assert.ok(assignmentsIndex < progressIndex)
   assert.ok(progressIndex < evidenceIndex)
   assert.ok(evidenceIndex < finalizeIndex)
+})
+
+test('invoice workspace keeps record queue before payment details', () => {
+  const source = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
+
+  const queueIndex = source.indexOf('Invoice & Order Queue')
+  const detailIndex = source.indexOf('Selected Record')
+  const paymentIndex = source.indexOf('Payment Entries')
+
+  assert.notEqual(queueIndex, -1)
+  assert.notEqual(detailIndex, -1)
+  assert.notEqual(paymentIndex, -1)
+  assert.ok(queueIndex < detailIndex)
+  assert.ok(detailIndex < paymentIndex)
 })
 
 test('intake workspace source keeps the guided front-desk section order', () => {
