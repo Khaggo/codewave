@@ -26,6 +26,7 @@
 | `GET /api/users/:id/insurance-inquiries` | `live` | controller + staff client | load staff-side customer insurance history when needed |
 | `PATCH /api/insurance/inquiries/:id/status` | `live` | controller + shipped web client | narrow phase-1 review save route for `status` and optional `reviewNotes` |
 | `PATCH /api/insurance/inquiries/:id/workflow` | `live` | controller + collections web client | broader adviser/admin workflow route for collections metadata and later staff follow-up fields |
+| `POST /api/insurance/broadcasts/send` | `live` | controller + shipped web client | send custom in-app insurance broadcasts to selected or server-filtered case audiences |
 | `POST /api/insurance/inquiries/:id/documents/upload` | `live` | Swagger/controller | accept PDF/image uploads for inquiry evidence |
 | `POST /api/insurance/inquiries/:id/documents` | `live` | Swagger/controller | keep legacy reference-document attachment available |
 
@@ -90,6 +91,17 @@
 - this slice does not add insurer payout, settlement, or third-party integration behavior
 - live phase-1 statuses are `submitted`, `needs_documents`, `under_review`, `for_approval`, `approved`, `payment_pending`, `active`, `for_renewal`, `closed`, `rejected`, and `cancelled`
 - live workflow tags are `documentStatus`, `paymentStatus`, and `renewalStatus`; they complement the main inquiry status instead of replacing it
+
+## Phase 4C Custom Broadcasts
+
+- the insurance review workspace now supports insurance-only custom in-app broadcasts through `POST /api/insurance/broadcasts/send`
+- custom broadcasts support only these target modes: `selected_cases` and `filtered_results`
+- `selected_cases` sends resolve from the explicitly checked insurance inquiries in the staff workspace
+- `filtered_results` sends resolve from the current server-side insurance queue filters, not from the client-only search narrowing used in the visible table
+- broadcasts target only active, non-terminal insurance inquiries; cases that are closed, cancelled, rejected, or otherwise ineligible must be skipped rather than silently treated as sent
+- each broadcast action deduplicates by customer so one customer receives at most one in-app broadcast notification per send action even if multiple eligible inquiries match
+- the staff-side audit trail for each eligible participating inquiry is `manual_broadcast_sent`
+- the returned summary must distinguish targeted cases, eligible cases, deduplicated customers, sent notifications, skipped results, failed results, and per-inquiry result rows
 
 ## Acceptance States
 
