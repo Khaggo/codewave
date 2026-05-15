@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  NotImplementedException,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
@@ -17,6 +18,7 @@ import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
 import { CreateRenewalFollowUpDto } from '../dto/create-renewal-follow-up.dto';
 import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
+import { SendInsuranceBroadcastsDto } from '../dto/send-insurance-broadcasts.dto';
 import { UploadInsuranceDocumentDto } from '../dto/upload-insurance-document.dto';
 import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inquiry-workflow.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
@@ -339,6 +341,11 @@ export class InsuranceService {
     const vehicle = await this.vehiclesService.findById(vehicleId);
     await this.assertCanAccessVehicleRecords(vehicle.userId, actor);
     return this.insuranceRepository.findRecordsByVehicleId(vehicleId);
+  }
+
+  async sendManualBroadcasts(_payload: SendInsuranceBroadcastsDto, actor: InsuranceActor) {
+    await this.assertStaffReviewer(actor.userId);
+    throw new NotImplementedException('Insurance broadcasts are not implemented yet');
   }
 
   private async assertActorCanCreate(customerUserId: string, actor: InsuranceActor) {

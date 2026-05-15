@@ -1061,7 +1061,7 @@ describe('InsuranceController integration', () => {
     }
   });
 
-  it('accepts a staff insurance broadcast send request and returns the route contract summary', async () => {
+  it('returns a typed not-implemented response for a valid staff insurance broadcast send request', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
@@ -1089,18 +1089,98 @@ describe('InsuranceController integration', () => {
           message: 'Please review your insurance request in the app for the latest update.',
         });
 
-      expect(sendResponse.status).toBe(200);
-      expect(sendResponse.body).toEqual(
-        expect.objectContaining({
-          targetedCaseCount: expect.any(Number),
-          eligibleCaseCount: expect.any(Number),
-          deduplicatedCustomerCount: expect.any(Number),
-          sentCount: expect.any(Number),
-          skippedCount: expect.any(Number),
-          failedCount: expect.any(Number),
-          results: expect.any(Array),
-        }),
-      );
+      expect(sendResponse.status).toBe(501);
+      expect(sendResponse.body.message).toBe('Insurance broadcasts are not implemented yet');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects insurance broadcast sends with blank title or message content', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.broadcasts.validation.content@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5405',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+
+      const blankTitleResponse = await request(app.getHttpServer())
+        .post('/api/insurance/broadcasts/send')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          targetMode: 'selected_cases',
+          selectedIds: ['4c559c0b-4d1b-492f-a11f-e61271f4a32d'],
+          title: '   ',
+          message: 'Please review your insurance request in the app for the latest update.',
+        });
+
+      expect(blankTitleResponse.status).toBe(400);
+
+      const blankMessageResponse = await request(app.getHttpServer())
+        .post('/api/insurance/broadcasts/send')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          targetMode: 'selected_cases',
+          selectedIds: ['4c559c0b-4d1b-492f-a11f-e61271f4a32d'],
+          title: 'Insurance processing update',
+          message: '   ',
+        });
+
+      expect(blankMessageResponse.status).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects insurance broadcast sends without the mode-specific target payload', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.broadcasts.validation.targets@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5406',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+
+      const selectedCasesResponse = await request(app.getHttpServer())
+        .post('/api/insurance/broadcasts/send')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          targetMode: 'selected_cases',
+          title: 'Insurance processing update',
+          message: 'Please review your insurance request in the app for the latest update.',
+        });
+
+      expect(selectedCasesResponse.status).toBe(400);
+
+      const filteredResultsResponse = await request(app.getHttpServer())
+        .post('/api/insurance/broadcasts/send')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          targetMode: 'filtered_results',
+          title: 'Insurance processing update',
+          message: 'Please review your insurance request in the app for the latest update.',
+        });
+
+      expect(filteredResultsResponse.status).toBe(400);
     } finally {
       await app.close();
     }

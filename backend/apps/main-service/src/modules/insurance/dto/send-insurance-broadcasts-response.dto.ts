@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 
 export const insuranceBroadcastResultStatusValues = ['sent', 'skipped', 'failed'] as const;
 
@@ -8,7 +8,7 @@ export class SendInsuranceBroadcastResultDto {
   })
   inquiryId!: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: '55555555-5555-4555-8555-555555555555',
     nullable: true,
   })
@@ -20,7 +20,7 @@ export class SendInsuranceBroadcastResultDto {
   })
   status!: (typeof insuranceBroadcastResultStatusValues)[number];
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: 'Customer already received an equivalent broadcast in this send.',
     nullable: true,
   })

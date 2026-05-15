@@ -62,13 +62,6 @@ type InsuranceReminderRouteService = {
   ) => unknown;
 };
 
-type InsuranceBroadcastRouteService = {
-  sendManualBroadcasts: (
-    payload: SendInsuranceBroadcastsDto,
-    actor: { userId: string; role: string },
-  ) => unknown;
-};
-
 @ApiTags('insurance')
 @Controller()
 export class InsuranceController {
@@ -147,7 +140,7 @@ export class InsuranceController {
   @ApiForbiddenResponse({ description: 'Only service advisers or super admins can send insurance broadcasts.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   sendBroadcasts(@Body() payload: SendInsuranceBroadcastsDto, @Req() request: Request) {
-    return (this.insuranceService as unknown as InsuranceBroadcastRouteService).sendManualBroadcasts(
+    return this.insuranceService.sendManualBroadcasts(
       payload,
       request.user as { userId: string; role: string },
     );
