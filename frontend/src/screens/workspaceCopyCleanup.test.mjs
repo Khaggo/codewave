@@ -39,7 +39,7 @@ test('intake, qa, and finance workspaces use short section descriptions', () => 
   const finance = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
 
   assert.ok(intakeView.includes('Check in arrivals and capture vehicle condition before handoff.'))
-  assert.ok(intakeScreen.includes('Check in the arrival, confirm the visit, and record the handoff condition.'))
+  assert.ok(intakeScreen.includes('Capture the visit, then record the vehicle condition.'))
   assert.ok(intakeScreen.includes('Review past records for the active vehicle.'))
 
   assert.ok(qa.includes('Review QA checks, record verdicts, and keep overrides auditable.'))
@@ -47,6 +47,33 @@ test('intake, qa, and finance workspaces use short section descriptions', () => 
   assert.ok(finance.includes('Review service invoices, ecommerce orders, and aging analytics from one workspace.'))
   assert.ok(finance.includes('Review aging, payment guidance, and live billing lookups before detail review.'))
   assert.ok(finance.includes('Inspect loaded job orders for invoice and payment status.'))
+})
+
+test('service flow workspaces use queue-first copy and remove bulky dashboard wording', () => {
+  const jobOrders = read('frontend/src/screens/JobOrderWorkbench.js')
+  const qa = read('frontend/src/screens/QAAuditWorkspace.js')
+  const finance = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
+
+  assert.ok(jobOrders.includes('Review active work, update progress, and prepare jobs for QA.'))
+  assert.ok(jobOrders.includes('Focus on the live execution queue first.'))
+
+  assert.ok(qa.includes('Review release checks, record verdicts, and keep overrides auditable.'))
+  assert.ok(qa.includes('Focus on the jobs waiting for release review.'))
+
+  assert.ok(finance.includes('Review invoice-ready work, payment entries, and completion records.'))
+  assert.ok(finance.includes('Focus on records that are ready for payment or invoice follow-through.'))
+
+  assert.ok(!jobOrders.includes('Choose a schedule date and refresh to load confirmed bookings.'))
+  assert.ok(
+    !qa.includes(
+      'Review the validator summary before the head technician decides.',
+    ),
+  )
+  assert.ok(
+    !finance.includes(
+      'Review aging, payment guidance, and live billing lookups before detail review.',
+    ),
+  )
 })
 
 test('intake workspace source keeps the guided front-desk section order', () => {
@@ -72,6 +99,12 @@ test('intake workspace source keeps the guided front-desk section order', () => 
       `Expected "${sectionMarkers[index - 1]}" to appear before "${sectionMarkers[index]}"`,
     )
   }
+})
+
+test('intake workspace guidance stays concise after front-desk redesign', () => {
+  const intakeScreen = read('frontend/src/screens/DigitalIntakeInspectionWorkspace.js')
+
+  assert.ok(intakeScreen.includes('Capture the visit, then record the vehicle condition.'))
 })
 
 test('catalog, booking-service, and inventory workspaces use one-sentence descriptions', () => {
