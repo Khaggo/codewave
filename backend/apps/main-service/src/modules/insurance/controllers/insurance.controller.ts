@@ -42,6 +42,8 @@ import { CreateRenewalFollowUpDto } from '../dto/create-renewal-follow-up.dto';
 import { InsuranceInquiryResponseDto } from '../dto/insurance-inquiry-response.dto';
 import { InsuranceRecordResponseDto } from '../dto/insurance-record-response.dto';
 import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
+import { SendInsuranceRemindersDto } from '../dto/send-insurance-reminders.dto';
+import { SendInsuranceRemindersResponseDto } from '../dto/send-insurance-reminders-response.dto';
 import { UploadInsuranceDocumentDto } from '../dto/upload-insurance-document.dto';
 import { UploadInsuranceDocumentResponseDto } from '../dto/upload-insurance-document-response.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
@@ -50,6 +52,13 @@ import { InsuranceUploadFile, InsuranceService } from '../services/insurance.ser
 import { insuranceDocumentTypeEnum } from '../schemas/insurance.schema';
 
 const INSURANCE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+
+type InsuranceReminderRouteService = {
+  sendManualReminders: (
+    payload: SendInsuranceRemindersDto,
+    actor: { userId: string; role: string },
+  ) => unknown;
+};
 
 @ApiTags('insurance')
 @Controller()
@@ -90,6 +99,26 @@ export class InsuranceController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   createRenewalFollowUp(@Body() payload: CreateRenewalFollowUpDto, @Req() request: Request) {
     return this.insuranceService.createRenewalFollowUp(
+      payload,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post('insurance/reminders/send')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Send manual insurance reminders for one or more staff-selected cases.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'The reminder send request was accepted and summarized.',
+    type: SendInsuranceRemindersResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The insurance reminder payload is invalid.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can send insurance reminders.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  sendReminders(@Body() payload: SendInsuranceRemindersDto, @Req() request: Request) {
+    return (this.insuranceService as unknown as InsuranceReminderRouteService).sendManualReminders(
       payload,
       request.user as { userId: string; role: string },
     );

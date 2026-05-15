@@ -878,6 +878,99 @@ describe('InsuranceController integration', () => {
     }
   });
 
+  it('allows a service adviser to send a manual single-case missing-documents reminder', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      installInsuranceWorkflowRepositoryContract(app);
+
+      const adviser = await seedAuthUser({
+        email: 'adviser.insurance.manual@example.com',
+        password: 'password123',
+        firstName: 'Ivy',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-5401',
+      });
+
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.manual@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: adviser.email,
+        password: 'password123',
+      });
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS4B01',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const inquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Manual reminder contract',
+          description: 'Needs missing document reminder.',
+        });
+      expect(inquiryResponse.status).toBe(201);
+
+      const workflowResponse = await request(app.getHttpServer())
+        .patch(`/api/insurance/inquiries/${inquiryResponse.body.id}/workflow`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          status: 'needs_documents',
+          documentStatus: 'incomplete',
+          reviewNotes: 'Waiting for OR/CR upload.',
+        });
+      expect(workflowResponse.status).toBe(200);
+
+      const sendResponse = await request(app.getHttpServer())
+        .post('/api/insurance/reminders/send')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          reminderType: 'missing_documents',
+          targetMode: 'single_case',
+          selectedIds: [inquiryResponse.body.id],
+        });
+
+      expect(sendResponse.status).toBe(200);
+      expect(sendResponse.body).toEqual(
+        expect.objectContaining({
+          targetedCount: 1,
+          eligibleCount: 1,
+          sentCount: 1,
+          skippedCount: 0,
+          failedCount: 0,
+          results: [
+            expect.objectContaining({
+              inquiryId: inquiryResponse.body.id,
+              reminderType: 'missing_documents',
+              result: 'sent',
+            }),
+          ],
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
   it('creates the insurance record when the workflow route closes an inquiry', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 
