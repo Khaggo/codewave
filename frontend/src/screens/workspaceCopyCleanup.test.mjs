@@ -44,8 +44,8 @@ test('intake, qa, and finance workspaces use short section descriptions', () => 
 
   assert.ok(qa.includes('Review release checks, record verdicts, and keep overrides auditable.'))
 
-  assert.ok(finance.includes('Review service invoices, ecommerce orders, and aging analytics from one workspace.'))
-  assert.ok(finance.includes('Review aging, payment guidance, and live billing lookups before detail review.'))
+  assert.ok(finance.includes('Review invoice-ready work, payment entries, and completion records.'))
+  assert.ok(finance.includes('Focus on records that are ready for payment or invoice follow-through.'))
   assert.ok(finance.includes('Inspect loaded job orders for invoice and payment status.'))
 })
 
