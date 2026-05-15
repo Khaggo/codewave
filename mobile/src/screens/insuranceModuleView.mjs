@@ -15,6 +15,29 @@ const OPTIONAL_DOCUMENT_TYPES = [
 export const REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY =
   'codewave:insurance:remembered-inquiries'
 
+const CUSTOMER_INSURANCE_RENEWAL_FOLLOW_UP_MODELS = Object.freeze({
+  upcoming: Object.freeze({
+    title: 'Renewal reminder',
+    summary: 'Renewal follow-up is scheduled for this request.',
+    blocker: false,
+  }),
+  quoted: Object.freeze({
+    title: 'Renewal quote ready',
+    summary: 'A renewal quote is available for this request.',
+    blocker: false,
+  }),
+  awaiting_customer: Object.freeze({
+    title: 'Renewal follow-up',
+    summary: 'Renewal is waiting on the customer for this request.',
+    blocker: true,
+  }),
+  expired: Object.freeze({
+    title: 'Renewal overdue',
+    summary: 'Renewal is overdue for this request.',
+    blocker: true,
+  }),
+})
+
 const hasUploadedType = (uploadedTypes, type) => uploadedTypes.includes(type)
 const rememberedInquiryIdsByVehicle = new Map()
 const CUSTOMER_PAYMENT_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
@@ -57,6 +80,35 @@ export const createPickedInsuranceDocumentDraft = ({
 export const isTerminalCustomerInquiryStatus = (status) =>
   ['closed', 'rejected', 'cancelled'].includes(status)
 
+const hasCustomerInsuranceRenewalFollowUpModel = (renewalStatus) =>
+  Object.prototype.hasOwnProperty.call(
+    CUSTOMER_INSURANCE_RENEWAL_FOLLOW_UP_MODELS,
+    renewalStatus,
+  )
+
+const getCustomerInsuranceRenewalFollowUpState = ({
+  status = 'submitted',
+  renewalStatus = 'not_applicable',
+} = {}) => {
+  if (isTerminalCustomerInquiryStatus(status)) {
+    return null
+  }
+
+  if (hasCustomerInsuranceRenewalFollowUpModel(renewalStatus)) {
+    return CUSTOMER_INSURANCE_RENEWAL_FOLLOW_UP_MODELS[renewalStatus]
+  }
+
+  if (status === 'for_renewal') {
+    return {
+      title: 'Renewal follow-up',
+      summary: 'Renewal is the current blocker for this request.',
+      blocker: true,
+    }
+  }
+
+  return null
+}
+
 export const shouldShowCustomerInsuranceFollowUp = ({
   status = 'submitted',
   paymentStatus = 'not_required',
@@ -72,7 +124,12 @@ export const shouldShowCustomerInsuranceFollowUp = ({
   }
 
   if (followUpType === 'renewal') {
-    return status === 'for_renewal' || renewalStatus !== 'not_applicable'
+    return Boolean(
+      getCustomerInsuranceRenewalFollowUpState({
+        status,
+        renewalStatus,
+      }),
+    )
   }
 
   return false
@@ -392,6 +449,10 @@ export const buildCustomerInsuranceStatusState = ({
     paymentStatus,
     renewalStatus,
   })
+  const renewalFollowUpState = getCustomerInsuranceRenewalFollowUpState({
+    status,
+    renewalStatus,
+  })
   const hasPaymentTimelineStep = workflowTimeline.some((step) => step.key === 'payment')
   const hasRenewalTimelineStep = workflowTimeline.some((step) => step.key === 'renewal')
   const hasPaymentFollowUp =
@@ -403,19 +464,11 @@ export const buildCustomerInsuranceStatusState = ({
     }) &&
     (status === 'payment_pending' ||
       ['awaiting_payment', 'proof_submitted', 'verifying', 'overdue'].includes(paymentStatus))
-  const hasRenewalFollowUp =
-    shouldShowCustomerInsuranceFollowUp({
-      status,
-      paymentStatus,
-      renewalStatus,
-      followUpType: 'renewal',
-    }) &&
-    (status === 'for_renewal' || ['upcoming', 'quoted', 'awaiting_customer'].includes(renewalStatus))
   const buildTimeline = () => [
     { key: 'request', label: 'Request submitted', active: true },
     { key: 'documents', label: 'Documents complete', active: true },
     { key: 'payment', label: 'Payment follow-up', active: hasPaymentTimelineStep || hasPaymentFollowUp },
-    { key: 'renewal', label: 'Renewal', active: hasRenewalTimelineStep || hasRenewalFollowUp },
+    { key: 'renewal', label: 'Renewal', active: hasRenewalTimelineStep || Boolean(renewalFollowUpState) },
   ]
 
   if (missingCount > 0) {
@@ -434,10 +487,10 @@ export const buildCustomerInsuranceStatusState = ({
     }
   }
 
-  if (hasRenewalFollowUp) {
+  if (renewalFollowUpState?.blocker) {
     return {
-      title: 'Renewal follow-up',
-      summary: 'Renewal is the current blocker for this request.',
+      title: renewalFollowUpState.title,
+      summary: renewalFollowUpState.summary,
       ctaLabel: 'Review renewal',
       ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
       latestUpdateLabel,
@@ -450,6 +503,17 @@ export const buildCustomerInsuranceStatusState = ({
       title: 'Payment follow-up',
       summary: 'Payment is the current blocker for this request.',
       ctaLabel: 'Review payment',
+      ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
+      latestUpdateLabel,
+      timeline: buildTimeline(),
+    }
+  }
+
+  if (renewalFollowUpState) {
+    return {
+      title: renewalFollowUpState.title,
+      summary: renewalFollowUpState.summary,
+      ctaLabel: 'Review renewal',
       ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
       latestUpdateLabel,
       timeline: buildTimeline(),

@@ -264,7 +264,7 @@ test('status state prioritizes renewal follow-up before payment follow-up', () =
     }),
     {
       title: 'Renewal follow-up',
-      summary: 'Renewal is the current blocker for this request.',
+      summary: 'Renewal is waiting on the customer for this request.',
       ctaLabel: 'Review renewal',
       ctaRouteKey: 'status',
       latestUpdateLabel: 'Renewal follow-up is waiting on the customer.',
@@ -318,10 +318,64 @@ test('status state surfaces renewal follow-up even when the shared timeline curr
     }),
     {
       title: 'Renewal follow-up',
-      summary: 'Renewal is the current blocker for this request.',
+      summary: 'Renewal is waiting on the customer for this request.',
       ctaLabel: 'Review renewal',
       ctaRouteKey: 'status',
       latestUpdateLabel: 'Renewal follow-up is waiting on the customer.',
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: true },
+        { key: 'renewal', label: 'Renewal', active: true },
+      ],
+    },
+  )
+})
+
+test('status state treats expired renewal as an active renewal blocker', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        status: 'active',
+        paymentStatus: 'paid',
+        renewalStatus: 'expired',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Renewal is overdue.',
+    }),
+    {
+      title: 'Renewal overdue',
+      summary: 'Renewal is overdue for this request.',
+      ctaLabel: 'Review renewal',
+      ctaRouteKey: 'status',
+      latestUpdateLabel: 'Renewal is overdue.',
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: true },
+        { key: 'renewal', label: 'Renewal', active: true },
+      ],
+    },
+  )
+})
+
+test('status state uses reminder copy for upcoming renewal follow-up', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        status: 'active',
+        paymentStatus: 'paid',
+        renewalStatus: 'upcoming',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Renewal reminder is scheduled.',
+    }),
+    {
+      title: 'Renewal reminder',
+      summary: 'Renewal follow-up is scheduled for this request.',
+      ctaLabel: 'Review renewal',
+      ctaRouteKey: 'status',
+      latestUpdateLabel: 'Renewal reminder is scheduled.',
       timeline: [
         { key: 'request', label: 'Request submitted', active: true },
         { key: 'documents', label: 'Documents complete', active: true },
