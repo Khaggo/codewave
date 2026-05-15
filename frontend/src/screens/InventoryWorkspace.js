@@ -1,91 +1,65 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Boxes,
-  Database,
   Eye,
-  LoaderCircle,
   Package,
+  PencilLine,
   RefreshCcw,
   ShieldAlert,
-  Tag,
   Warehouse,
 } from 'lucide-react'
 
+import {
+  ACTION,
+  addInventoryAdjustment,
+  hasPermission,
+  updateInventoryProductThreshold,
+} from '@autocare/shared'
+
 import { useToast } from '@/components/Toast.jsx'
 import PageHeader from '@/components/ui/PageHeader'
-import { ApiError } from '@/lib/authClient'
+import {
+  useInventoryAdjustmentHistory,
+  useInventoryProducts,
+} from '@/hooks/useOperationsStore'
+import { resolveSharedRole } from '@/lib/roleAccess'
 import { useUser } from '@/lib/userContext'
+
 import {
-  getEcommerceInventoryApiBaseUrl,
-  getStaffInventoryProductDetail,
-  loadStaffInventorySnapshot,
-} from '@/lib/inventoryAdminClient'
-import {
-  canStaffReadInventory,
-  createEmptyStaffInventorySnapshot,
-  getStaffInventoryDetailState,
-  getStaffInventoryLoadState,
-  staffInventoryKnownApiGaps,
-  staffInventoryRouteRules,
-  staffInventoryStateScenarios,
-} from '@/lib/api/generated/inventory/staff-web-inventory'
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05,
-      delayChildren: 0.04,
-    },
-  },
-}
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.24, ease: 'easeOut' } },
-}
-
-const LOAD_STATE_LABELS = {
-  inventory_loading: 'Loading Inventory Visibility',
-  inventory_loaded: 'Live Catalog Visibility Ready',
-  inventory_partial: 'Partially Loaded',
-  inventory_empty: 'Catalog Visibility Empty',
-  inventory_service_unavailable: 'Ecommerce Runtime Unavailable',
-  inventory_forbidden_role: 'Role Blocked',
-  inventory_unauthorized: 'Sign-In Required',
-  inventory_failed: 'Inventory Visibility Failed',
-}
+  buildInventorySummary,
+  filterInventoryProducts,
+  formatInventoryDelta,
+  formatInventoryTimestamp,
+  formatInventoryVisibility,
+  getInventoryActorLabel,
+  getInventoryStockStateMeta,
+} from './inventoryWorkspaceView.mjs'
 
 function StatCard({ icon: Icon, label, value, sub, toneClass }) {
   return (
-    <div className="card p-5">
-      <div className="flex items-start justify-between gap-4">
+    <div className="card p-4">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight tabular-nums text-ink-primary">{value}</p>
-          {sub ? <p className="mt-1.5 text-[11px] text-ink-secondary">{sub}</p> : null}
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+            {label}
+          </p>
+          <p className="mt-2 text-2xl font-semibold tracking-tight text-ink-primary">{value}</p>
+          {sub ? <p className="mt-1 text-xs text-ink-secondary">{sub}</p> : null}
         </div>
         <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${toneClass}`}>
-          <Icon size={14} />
+          <Icon size={15} />
         </div>
       </div>
     </div>
   )
 }
 
-function InfoPanel({ icon: Icon = Database, title, body, tone = 'info' }) {
-  const className =
-    tone === 'warning'
-      ? 'status-message status-message-warning'
-      : 'status-message status-message-warning'
-
+function InfoPanel({ icon: Icon = AlertTriangle, title, body }) {
   return (
-    <div className={`flex gap-3 ${className}`}>
+    <div className="status-message status-message-warning flex gap-3">
       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-orange/10 text-brand-orange">
         <Icon size={16} />
       </div>
@@ -97,7 +71,7 @@ function InfoPanel({ icon: Icon = Database, title, body, tone = 'info' }) {
   )
 }
 
-function SectionShell({ title, description, children, action }) {
+function SectionShell({ title, description, action, children }) {
   return (
     <section className="card overflow-hidden">
       <div className="flex items-start justify-between gap-4 border-b border-surface-border bg-surface-raised/70 px-5 py-4">
@@ -112,278 +86,149 @@ function SectionShell({ title, description, children, action }) {
   )
 }
 
-function RouteBadge({ status }) {
-  const badgeClass = status === 'live' ? 'badge-green' : 'badge-orange'
+const createAdjustmentDraft = () => ({
+  actionType: 'add',
+  quantity: '1',
+  reason: '',
+  note: '',
+})
 
-  return <span className={`badge ${badgeClass}`}>{status === 'live' ? 'Live' : 'Planned'}</span>
-}
+const createThresholdDraft = (product) => String(product?.lowStockThreshold ?? 0)
 
-function StockScenarioCard({ item }) {
-  const badgeClass =
-    item.key === 'out_of_stock'
-      ? 'badge-red'
-      : item.key === 'low_stock'
-        ? 'badge-orange'
-        : item.key === 'reserved'
-          ? 'badge-blue'
-          : 'badge-green'
-
-  return (
-    <motion.article variants={itemVariants} className="card p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-lg font-bold text-ink-primary">{item.label}</p>
-          <p className="mt-1 text-sm text-ink-muted">{item.notes}</p>
-        </div>
-        <span className={`badge ${badgeClass}`}>{item.routeStatus === 'planned' ? 'Planned State' : 'Live State'}</span>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Availability Example</p>
-          <p className="mt-2 text-base font-bold text-ink-primary">{item.quantityLabel}</p>
-        </div>
-        <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Reservation Example</p>
-          <p className="mt-2 text-base font-bold text-ink-primary">{item.reservationLabel}</p>
-        </div>
-      </div>
-
-      <p className="mt-4 text-sm leading-6 text-ink-secondary">{item.customerImpact}</p>
-    </motion.article>
-  )
-}
+const formatLabel = (value) =>
+  String(value ?? '')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 
 export default function InventoryWorkspace() {
   const user = useUser()
   const { toast } = useToast()
-  const [snapshot, setSnapshot] = useState(createEmptyStaffInventorySnapshot)
-  const [requestState, setRequestState] = useState('inventory_loading')
-  const [selectedProductId, setSelectedProductId] = useState(null)
-  const [detailState, setDetailState] = useState({
-    status: 'detail_idle',
-    product: null,
-    errorMessage: '',
-  })
+  const products = useInventoryProducts()
+  const [catalogQuery, setCatalogQuery] = useState('')
+  const [selectedProductId, setSelectedProductId] = useState(products[0]?.id ?? null)
+  const [adjustmentDraft, setAdjustmentDraft] = useState(createAdjustmentDraft)
+  const [thresholdDraft, setThresholdDraft] = useState(createThresholdDraft(products[0]))
 
-  const canRead = canStaffReadInventory(user)
-
-  const loadInventory = useCallback(
-    async ({ notifyFailure = false } = {}) => {
-      if (!user?.accessToken) {
-        setSnapshot(createEmptyStaffInventorySnapshot())
-        setSelectedProductId(null)
-        setDetailState({
-          status: 'detail_idle',
-          product: null,
-          errorMessage: '',
-        })
-        setRequestState('inventory_unauthorized')
-        return
-      }
-
-      if (!canRead) {
-        setSnapshot(createEmptyStaffInventorySnapshot())
-        setSelectedProductId(null)
-        setDetailState({
-          status: 'detail_idle',
-          product: null,
-          errorMessage: '',
-        })
-        setRequestState('inventory_forbidden_role')
-        return
-      }
-
-      setRequestState('inventory_loading')
-
-      try {
-        const nextSnapshot = await loadStaffInventorySnapshot({
-          accessToken: user.accessToken,
-        })
-
-        const partialFailure = Boolean(
-          nextSnapshot.errors.products || nextSnapshot.errors.categories,
-        )
-        const runtimeUnavailable =
-          nextSnapshot.productsRuntimeUnavailable &&
-          nextSnapshot.categoriesRuntimeUnavailable
-        const authRejected =
-          [401, 403].includes(nextSnapshot.errorStatuses.products ?? -1) &&
-          [401, 403].includes(nextSnapshot.errorStatuses.categories ?? -1)
-
-        setSnapshot(nextSnapshot)
-        setRequestState(
-          authRejected
-            ? 'inventory_unauthorized'
-            : getStaffInventoryLoadState({
-                hasSession: true,
-                canRead,
-                products: nextSnapshot.products,
-                runtimeUnavailable,
-                partialFailure,
-              }),
-        )
-        setSelectedProductId((currentProductId) =>
-          nextSnapshot.products.some((product) => product.id === currentProductId)
-            ? currentProductId
-            : nextSnapshot.products[0]?.id ?? null,
-        )
-
-        if (notifyFailure && partialFailure) {
-          toast({
-            type: 'info',
-            title: 'Inventory partially loaded',
-            message:
-              nextSnapshot.errors.products ||
-              nextSnapshot.errors.categories ||
-              'Some inventory visibility sections are still unavailable.',
-          })
-        }
-      } catch (error) {
-        const nextState =
-          error instanceof ApiError && (error.status === 401 || error.status === 403)
-            ? 'inventory_unauthorized'
-            : error instanceof ApiError && error.status === 0
-              ? 'inventory_service_unavailable'
-              : 'inventory_failed'
-        const nextMessage =
-          error instanceof ApiError && error.message
-            ? error.message
-            : 'We could not load the staff inventory visibility workspace right now.'
-
-        setSnapshot(createEmptyStaffInventorySnapshot())
-        setSelectedProductId(null)
-        setDetailState({
-          status: 'detail_idle',
-          product: null,
-          errorMessage: '',
-        })
-        setRequestState(nextState)
-
-        if (notifyFailure) {
-          toast({
-            type: 'error',
-            title: 'Inventory refresh failed',
-            message: nextMessage,
-          })
-        }
-      }
-    },
-    [canRead, toast, user?.accessToken],
+  const canManageInventory = hasPermission(
+    resolveSharedRole(user?.roleLabel ?? user?.role),
+    ACTION.INVENTORY_MANAGE,
   )
 
   useEffect(() => {
-    void loadInventory()
-  }, [loadInventory])
+    setSelectedProductId((currentProductId) =>
+      products.some((product) => product.id === currentProductId)
+        ? currentProductId
+        : products[0]?.id ?? null,
+    )
+  }, [products])
+
+  const selectedProduct = useMemo(
+    () => products.find((product) => product.id === selectedProductId) ?? null,
+    [products, selectedProductId],
+  )
+
+  const adjustmentHistory = useInventoryAdjustmentHistory(selectedProductId)
 
   useEffect(() => {
-    if (!selectedProductId || !user?.accessToken || !canRead) {
-      setDetailState({
-        status: 'detail_idle',
-        product: null,
-        errorMessage: '',
-      })
+    setAdjustmentDraft(createAdjustmentDraft())
+    setThresholdDraft(createThresholdDraft(selectedProduct))
+  }, [selectedProductId, selectedProduct])
+
+  const filteredProducts = useMemo(
+    () => filterInventoryProducts(products, catalogQuery),
+    [catalogQuery, products],
+  )
+
+  const summary = useMemo(() => buildInventorySummary(products), [products])
+
+  const handleRefresh = () => {
+    toast({
+      type: 'info',
+      title: 'Inventory queue refreshed',
+      message: 'The page is already reading the live local stock workspace.',
+    })
+  }
+
+  const handleThresholdSubmit = (event) => {
+    event.preventDefault()
+
+    if (!selectedProduct) {
       return
     }
 
-    let isCancelled = false
+    try {
+      const nextProduct = updateInventoryProductThreshold(
+        selectedProduct.id,
+        Number(thresholdDraft),
+      )
 
-    const loadDetail = async () => {
-      setDetailState((currentState) => ({
-        ...currentState,
-        status: 'detail_loading',
-        errorMessage: '',
-      }))
+      setThresholdDraft(String(nextProduct.lowStockThreshold))
+      toast({
+        type: 'success',
+        title: 'Threshold updated',
+        message: `${nextProduct.name} now flags low stock at ${nextProduct.lowStockThreshold}.`,
+      })
+    } catch (error) {
+      toast({
+        type: 'error',
+        title: 'Threshold update failed',
+        message: error instanceof Error ? error.message : 'Unable to update the low-stock threshold.',
+      })
+    }
+  }
 
-      try {
-        const product = await getStaffInventoryProductDetail({
-          productId: selectedProductId,
-          accessToken: user.accessToken,
-        })
+  const handleAdjustmentSubmit = (event) => {
+    event.preventDefault()
 
-        if (isCancelled) {
-          return
-        }
-
-        setDetailState({
-          status: getStaffInventoryDetailState({ product }),
-          product,
-          errorMessage: '',
-        })
-      } catch (error) {
-        if (isCancelled) {
-          return
-        }
-
-        setDetailState({
-          status: getStaffInventoryDetailState({
-            errorStatus: error instanceof ApiError ? error.status : 500,
-          }),
-          product: null,
-          errorMessage:
-            error instanceof ApiError && error.message
-              ? error.message
-              : 'We could not refresh the selected product detail right now.',
-        })
-      }
+    if (!selectedProduct) {
+      return
     }
 
-    void loadDetail()
+    try {
+      const updatedProduct = addInventoryAdjustment(selectedProduct.id, {
+        actor: getInventoryActorLabel(user),
+        actionType: adjustmentDraft.actionType,
+        quantity: Number(adjustmentDraft.quantity),
+        reason: adjustmentDraft.reason,
+        note: adjustmentDraft.note,
+      })
 
-    return () => {
-      isCancelled = true
+      setAdjustmentDraft(createAdjustmentDraft())
+      toast({
+        type: 'success',
+        title: 'Stock updated',
+        message: `${updatedProduct.name} is now at ${updatedProduct.stock} on hand.`,
+      })
+    } catch (error) {
+      toast({
+        type: 'error',
+        title: 'Stock adjustment failed',
+        message: error instanceof Error ? error.message : 'Unable to record the stock adjustment.',
+      })
     }
-  }, [canRead, selectedProductId, user?.accessToken])
+  }
 
-  const selectedProductSummary = useMemo(
-    () =>
-      snapshot.products.find((product) => product.id === selectedProductId) ?? null,
-    [selectedProductId, snapshot.products],
-  )
-
-  const selectedProduct = detailState.product ?? selectedProductSummary
-
-  const stats = useMemo(() => {
-    const liveProducts = snapshot.products.length
-    const publishedProducts = snapshot.products.filter(
-      (product) => product.visibilityLabel === 'Published',
-    ).length
-    const hiddenProducts = snapshot.products.filter(
-      (product) => product.visibilityLabel === 'Hidden',
-    ).length
-
-    return {
-      liveProducts,
-      publishedProducts,
-      hiddenProducts,
-      categories: snapshot.categories.length,
-    }
-  }, [snapshot.categories.length, snapshot.products])
-
-  const hasPartialFailure = Boolean(
-    snapshot.errors.products || snapshot.errors.categories,
-  )
-  if (!user?.accessToken) {
+  if (!user) {
     return (
       <div className="space-y-6">
         <InfoPanel
           icon={ShieldAlert}
           title="Staff sign-in required"
-          body="Sign in as a staff user before loading the inventory visibility workspace."
-          tone="warning"
+          body="Sign in as staff before managing stock from the inventory workspace."
         />
       </div>
     )
   }
 
-  if (!canRead) {
+  if (!canManageInventory) {
     return (
       <div className="space-y-6">
         <InfoPanel
           icon={ShieldAlert}
-          title="Inventory visibility is adviser/admin only"
-          body="Technician sessions should not see inventory and stock administration pages in this phase."
-          tone="warning"
+          title="Inventory access is limited"
+          body="Only admin inventory roles can adjust stock or edit stock thresholds in this workspace."
         />
       </div>
     )
@@ -391,308 +236,454 @@ export default function InventoryWorkspace() {
 
   return (
     <div className="ops-page-shell">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.28, ease: 'easeOut' }}
-      >
-        <PageHeader
-          eyebrow="Inventory Operations"
-          title="Product Visibility And Inventory Readiness"
-          description="Review live product visibility and planned inventory readiness."
-        />
-      </motion.div>
-
-      {requestState === 'inventory_loading' && snapshot.products.length === 0 ? (
-        <InfoPanel
-          icon={LoaderCircle}
-          title="Loading inventory visibility"
-          body="Reading the current ecommerce product and category directories before rendering the admin inventory workspace."
-        />
-      ) : null}
-
-      {requestState === 'inventory_service_unavailable' ? (
-        <InfoPanel
-          icon={AlertTriangle}
-          title="Ecommerce inventory runtime unavailable"
-          body={`The web client could not reach ${getEcommerceInventoryApiBaseUrl()}. Start ecommerce-service on port 3001 or set NEXT_PUBLIC_ECOMMERCE_API_BASE_URL.`}
-          tone="warning"
-        />
-      ) : null}
-
-      {requestState === 'inventory_unauthorized' ? (
-        <InfoPanel
-          icon={ShieldAlert}
-          title="Inventory session needs attention"
-          body="The staff session could not read inventory visibility data. Sign in again, then retry this page."
-          tone="warning"
-        />
-      ) : null}
-
-      {requestState === 'inventory_failed' ? (
-        <InfoPanel
-          icon={AlertTriangle}
-          title="Inventory visibility failed"
-          body="The live inventory visibility read failed before the page could render any product directory data."
-          tone="warning"
-        />
-      ) : null}
-
-      {hasPartialFailure ? (
-        <InfoPanel
-          icon={AlertTriangle}
-          title="Partial live coverage"
-          body={
-            snapshot.errors.products ||
-            snapshot.errors.categories ||
-            'One live inventory visibility section is still unavailable.'
-          }
-          tone="warning"
-        />
-      ) : null}
+      <PageHeader
+        eyebrow="Stock operations"
+        title="Inventory"
+        description="Manage stock levels, thresholds, and item availability for catalog products."
+      />
 
       <section className="ops-summary-grid">
         <StatCard
           icon={Boxes}
-          label="Live Product Records"
-          value={stats.liveProducts}
-          sub="Current product records from the catalog."
-          toneClass="border-brand-orange/15 bg-brand-orange/10 text-brand-orange"
-        />
-        <StatCard
-          icon={Eye}
-          label="Published Products"
-          value={stats.publishedProducts}
-          sub="Visible product records from the catalog."
-          toneClass="border-emerald-500/15 bg-emerald-500/10 text-emerald-400"
-        />
-        <StatCard
-          icon={Tag}
-          label="Hidden Products"
-          value={stats.hiddenProducts}
-          sub="Live records that stay unpublished."
-          toneClass="border-sky-500/15 bg-sky-500/10 text-sky-400"
+          label="Catalog Products"
+          value={summary.totalProducts}
+          sub="Existing product records in stock control."
+          toneClass="border-surface-border bg-surface-raised text-ink-secondary"
         />
         <StatCard
           icon={Warehouse}
-          label="Planned Stock States"
-          value={staffInventoryStateScenarios.length}
-          sub="Future readiness states for stock behavior."
-          toneClass="border-amber-500/15 bg-amber-500/10 text-amber-400"
+          label="Low Stock"
+          value={summary.lowStockProducts}
+          sub="Needs supply attention."
+          toneClass="border-brand-orange/15 bg-brand-orange/10 text-brand-orange"
+        />
+        <StatCard
+          icon={AlertTriangle}
+          label="Out of Stock"
+          value={summary.outOfStockProducts}
+          sub="Unavailable until adjusted."
+          toneClass="surface-tone-danger"
+        />
+        <StatCard
+          icon={Eye}
+          label="Published"
+          value={summary.publishedProducts}
+          sub="Marketplace visibility stays separate."
+          toneClass="surface-tone-success"
         />
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
-        <SectionShell
-          title="Live Product Visibility"
-          description="Review current product visibility without stock counts."
-          action={
-            <button
-              type="button"
-              className="ops-action-secondary min-w-[132px] self-start xl:self-auto"
-              onClick={() => {
-                void loadInventory({ notifyFailure: true })
-              }}
-            >
-              <RefreshCcw size={15} />
-              Refresh
-            </button>
-          }
-        >
-          {snapshot.products.length === 0 ? (
-            <div className="empty-panel min-h-[180px]">
-              <Package size={22} className="mx-auto text-ink-muted" />
-              <p className="mt-3 text-sm font-semibold text-ink-primary">No live product records yet</p>
-              <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
-                The catalog returned zero products, so stock states remain documented in the planned glossary below.
-              </p>
-            </div>
-          ) : (
-            <div className="table-scroll">
-              <table className="data-table min-w-[920px]" aria-label="Inventory visibility table">
-                <thead>
-                  <tr>
-                    <th>Product</th>
-                    <th>SKU</th>
-                    <th>Category</th>
-                    <th>Price</th>
-                    <th>Visibility</th>
-                    <th>Stock Readiness</th>
-                    <th>Updated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.products.map((product) => {
-                    const isSelected = product.id === selectedProductId
-
-                    return (
-                      <tr
-                        key={product.id}
-                        className={isSelected ? 'bg-brand-orange/8' : undefined}
-                      >
-                        <td>
-                          <button
-                            type="button"
-                            className="flex items-center gap-3 text-left"
-                            onClick={() => setSelectedProductId(product.id)}
-                          >
-                            <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${isSelected ? 'border-brand-orange/30 bg-brand-orange/10 text-brand-orange' : 'border-surface-border bg-surface-raised text-ink-muted'}`}>
-                              <Package size={16} />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-ink-primary">{product.name}</p>
-                              <p className="mt-1 text-xs text-ink-muted">{product.description || 'No product description published yet.'}</p>
-                            </div>
-                          </button>
-                        </td>
-                        <td>
-                          <span className="rounded-lg bg-brand-orange/10 px-2 py-1 font-mono text-xs font-bold text-brand-orange">
-                            {product.sku}
-                          </span>
-                        </td>
-                        <td className="text-ink-secondary">{product.categoryLabel}</td>
-                        <td className="font-semibold text-ink-primary">{product.priceLabel}</td>
-                        <td>
-                          <span className={`badge ${product.visibilityLabel === 'Published' ? 'badge-green' : 'badge-gray'}`}>
-                            {product.visibilityLabel}
-                          </span>
-                        </td>
-                        <td>
-                          <RouteBadge status={product.stockRouteStatus} />
-                        </td>
-                        <td className="text-ink-secondary">{new Date(product.updatedAt).toLocaleDateString('en-PH', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </SectionShell>
-
-        <div className="space-y-4">
-          <SectionShell
-            title="Selected Product Detail"
-            description="Inspect current catalog metadata for the selected product."
+      <SectionShell
+        title="Inventory Queue"
+        description="Search existing catalog products and act on the live stock queue."
+        action={
+          <button
+            type="button"
+            className="ops-action-secondary min-w-[132px] self-start xl:self-auto"
+            onClick={handleRefresh}
           >
-            {!selectedProduct ? (
-              <div className="empty-panel min-h-[180px]">
-                <Eye size={22} className="mx-auto text-ink-muted" />
-                <p className="mt-3 text-sm font-semibold text-ink-primary">Select a product</p>
-                <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
-                  Choose any live product row to inspect its current catalog metadata.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {detailState.status === 'detail_loading' ? (
-                  <div className="status-message status-message-warning">
-                    Refreshing live product detail...
-                  </div>
-                ) : null}
-
-                {detailState.status === 'detail_failed' ? (
-                  <InfoPanel
-                    icon={AlertTriangle}
-                    title="Detail refresh failed"
-                    body={detailState.errorMessage || 'We could not refresh the selected product detail right now.'}
-                    tone="warning"
-                  />
-                ) : null}
-
-                <div className="rounded-3xl border border-surface-border bg-surface-raised p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-orange">Live Product Metadata</p>
-                  <p className="mt-2 text-xl font-bold tracking-tight text-ink-primary">{selectedProduct.name}</p>
-                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                    {selectedProduct.description || 'No product description published yet.'}
-                  </p>
-
-                  <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">SKU</dt>
-                      <dd className="mt-1 text-sm font-semibold text-ink-primary">{selectedProduct.sku}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Category</dt>
-                      <dd className="mt-1 text-sm font-semibold text-ink-primary">{selectedProduct.categoryLabel}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Price</dt>
-                      <dd className="mt-1 text-sm font-semibold text-ink-primary">{selectedProduct.priceLabel}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Visibility</dt>
-                      <dd className="mt-1 text-sm font-semibold text-ink-primary">{selectedProduct.visibilityLabel}</dd>
-                    </div>
-                  </dl>
-
-                  <div className="mt-4 rounded-2xl border border-surface-border bg-surface p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Stock Readiness</p>
-                    <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedProduct.stockRouteLabel}</p>
-                    <p className="mt-2 text-xs leading-6 text-ink-muted">
-                      Current product records do not expose quantity on hand, reserved units, or movement history.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </SectionShell>
-
-          <SectionShell
-            title="Inventory Coverage"
-            description="Review which inventory capabilities are live or planned."
-          >
-            <div className="space-y-3">
-              {staffInventoryRouteRules.map((routeRule) => (
-                <div
-                  key={`${routeRule.method}-${routeRule.path}`}
-                  className="rounded-3xl border border-surface-border bg-surface-raised p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-ink-primary">{routeRule.label}</p>
-                    </div>
-                    <RouteBadge status={routeRule.status} />
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-ink-secondary">{routeRule.notes}</p>
-                </div>
-              ))}
-            </div>
-          </SectionShell>
-        </div>
-      </div>
-
-      {staffInventoryKnownApiGaps.length ? (
-        <SectionShell
-          title="Planned Stock Controls"
-          description="Review planned stock controls that are not live yet."
-        >
-          <div className="grid gap-3 lg:grid-cols-3">
-            {staffInventoryKnownApiGaps.map((gap) => (
-              <InfoPanel key={gap} title="Planned Capability" body={gap} />
-            ))}
+            <RefreshCcw size={15} />
+            Refresh
+          </button>
+        }
+      >
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <label className="min-w-[260px] flex-1">
+            <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+              Search products
+            </span>
+            <input
+              className="input"
+              value={catalogQuery}
+              onChange={(event) => setCatalogQuery(event.target.value)}
+              placeholder="Search by name, SKU, category, or description"
+            />
+          </label>
+          <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+              In view
+            </p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-ink-primary">
+              {filteredProducts.length}
+            </p>
           </div>
-        </SectionShell>
-      ) : null}
+        </div>
+
+        {products.length === 0 ? (
+          <div className="empty-panel min-h-[180px]">
+            <Package size={22} className="mx-auto text-ink-muted" />
+            <p className="mt-3 text-sm font-semibold text-ink-primary">
+              No catalog products are available
+            </p>
+            <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
+              Publish or create a catalog product first, then return here to manage its stock.
+            </p>
+          </div>
+        ) : (
+          <div className="table-scroll">
+            <table className="data-table w-full min-w-[1040px]" aria-label="Inventory stock table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>SKU</th>
+                  <th>Category</th>
+                  <th>Visibility</th>
+                  <th>On Hand</th>
+                  <th>Low-Stock Threshold</th>
+                  <th>Stock State</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((product) => {
+                  const stockMeta = getInventoryStockStateMeta(product.stockState)
+                  const isSelected = product.id === selectedProductId
+
+                  return (
+                    <tr key={product.id} className={isSelected ? 'bg-brand-orange/8' : undefined}>
+                      <td>
+                        <button
+                          type="button"
+                          className="flex items-center gap-3 text-left"
+                          onClick={() => setSelectedProductId(product.id)}
+                        >
+                          <div
+                            className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${
+                              isSelected
+                                ? 'border-brand-orange/30 bg-brand-orange/10 text-brand-orange'
+                                : 'border-surface-border bg-surface-raised text-ink-muted'
+                            }`}
+                          >
+                            <Package size={16} />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-ink-primary">{product.name}</p>
+                            <p className="mt-1 text-xs text-ink-muted">
+                              {product.description || 'No product description recorded.'}
+                            </p>
+                          </div>
+                        </button>
+                      </td>
+                      <td>
+                        <span className="rounded-lg bg-surface-raised px-2 py-1 font-mono text-xs font-semibold text-ink-primary">
+                          {product.sku || 'No SKU'}
+                        </span>
+                      </td>
+                      <td className="text-ink-secondary">{product.category}</td>
+                      <td>
+                        <span className={`badge ${product.status === 'published' ? 'badge-green' : 'badge-gray'}`}>
+                          {formatInventoryVisibility(product.status)}
+                        </span>
+                      </td>
+                      <td className="font-semibold text-ink-primary">{product.stock}</td>
+                      <td className="text-ink-secondary">{product.lowStockThreshold}</td>
+                      <td>
+                        <span className={stockMeta.badgeClassName}>{stockMeta.label}</span>
+                      </td>
+                      <td className="text-ink-secondary">
+                        {formatInventoryTimestamp(product.updatedAt ?? product.createdAt)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {products.length > 0 && filteredProducts.length === 0 ? (
+          <div className="empty-panel mt-4 min-h-[140px]">
+            <Package size={20} className="mx-auto text-ink-muted" />
+            <p className="mt-3 text-sm font-semibold text-ink-primary">
+              No products match this search
+            </p>
+            <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
+              Try another product name, SKU, category, or description keyword.
+            </p>
+          </div>
+        ) : null}
+      </SectionShell>
 
       <SectionShell
-        title="Planned Stock State Glossary"
-        description="Review the planned stock-state glossary."
+        title="Selected Product"
+        description="Review the selected product before updating stock or threshold settings."
+        action={
+          selectedProduct ? (
+            <a href="/admin/catalog" className="ops-action-secondary min-w-[168px] justify-center">
+              Manage in Catalog
+            </a>
+          ) : null
+        }
       >
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid gap-4 lg:grid-cols-2"
-        >
-          {staffInventoryStateScenarios.map((scenario) => (
-            <StockScenarioCard key={scenario.key} item={scenario} />
-          ))}
-        </motion.div>
+        {!selectedProduct ? (
+          <div className="empty-panel min-h-[180px]">
+            <Eye size={22} className="mx-auto text-ink-muted" />
+            <p className="mt-3 text-sm font-semibold text-ink-primary">Select a product</p>
+            <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
+              Choose a queue row to review its stock and update controls.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <div className="rounded-3xl border border-surface-border bg-surface-raised p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={getInventoryStockStateMeta(selectedProduct.stockState).badgeClassName}>
+                      {getInventoryStockStateMeta(selectedProduct.stockState).label}
+                    </span>
+                    <span className={`badge ${selectedProduct.status === 'published' ? 'badge-green' : 'badge-gray'}`}>
+                      {formatInventoryVisibility(selectedProduct.status)}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-2xl font-bold tracking-tight text-ink-primary">
+                    {selectedProduct.name}
+                  </p>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
+                    {selectedProduct.description || 'No product description recorded.'}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3 text-right">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                    Last updated
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-ink-primary">
+                    {formatInventoryTimestamp(selectedProduct.updatedAt ?? selectedProduct.createdAt)}
+                  </p>
+                </div>
+              </div>
+
+              <dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
+                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">SKU</dt>
+                  <dd className="mt-2 text-base font-semibold text-ink-primary">
+                    {selectedProduct.sku || 'No SKU'}
+                  </dd>
+                </div>
+                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
+                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Category</dt>
+                  <dd className="mt-2 text-base font-semibold text-ink-primary">
+                    {selectedProduct.category}
+                  </dd>
+                </div>
+                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
+                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">On Hand</dt>
+                  <dd className="mt-2 text-base font-semibold text-ink-primary">
+                    {selectedProduct.stock}
+                  </dd>
+                </div>
+                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
+                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                    Low-Stock Threshold
+                  </dt>
+                  <dd className="mt-2 text-base font-semibold text-ink-primary">
+                    {selectedProduct.lowStockThreshold}
+                  </dd>
+                </div>
+                <div
+                  className={`rounded-2xl border px-4 py-3 ${getInventoryStockStateMeta(selectedProduct.stockState).fieldClassName}`}
+                >
+                  <dt className="text-xs font-semibold uppercase tracking-[0.16em]">Stock State</dt>
+                  <dd className="mt-2 text-base font-semibold">
+                    {getInventoryStockStateMeta(selectedProduct.stockState).label}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <form
+              className="rounded-3xl border border-surface-border bg-surface-card p-5"
+              onSubmit={handleThresholdSubmit}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-ink-primary">Low-stock threshold</p>
+                  <p className="mt-1 text-sm text-ink-secondary">
+                    Set the quantity where this product moves into low-stock status.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="min-w-[180px]">
+                    <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                      Threshold
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      inputMode="numeric"
+                      className="input"
+                      value={thresholdDraft}
+                      onChange={(event) => setThresholdDraft(event.target.value)}
+                    />
+                  </label>
+                  <button type="submit" className="ops-action-primary min-w-[156px]">
+                    <PencilLine size={15} />
+                    Update threshold
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        )}
+      </SectionShell>
+
+      <SectionShell
+        title="Stock Adjustment"
+        description="Record a live stock change for the selected product."
+      >
+        {!selectedProduct ? (
+          <div className="empty-panel min-h-[160px]">
+            <Package size={20} className="mx-auto text-ink-muted" />
+            <p className="mt-3 text-sm font-semibold text-ink-primary">No product selected</p>
+            <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
+              Select a product from the queue before recording a stock movement.
+            </p>
+          </div>
+        ) : (
+          <form className="grid gap-4 xl:grid-cols-[1fr_1fr]" onSubmit={handleAdjustmentSubmit}>
+            <label>
+              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                Adjustment type
+              </span>
+              <select
+                className="input"
+                value={adjustmentDraft.actionType}
+                onChange={(event) =>
+                  setAdjustmentDraft((currentDraft) => ({
+                    ...currentDraft,
+                    actionType: event.target.value,
+                  }))
+                }
+              >
+                <option value="add">Add</option>
+                <option value="subtract">Subtract</option>
+              </select>
+            </label>
+
+            <label>
+              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                Quantity
+              </span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                className="input"
+                value={adjustmentDraft.quantity}
+                onChange={(event) =>
+                  setAdjustmentDraft((currentDraft) => ({
+                    ...currentDraft,
+                    quantity: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label className="xl:col-span-2">
+              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                Reason
+              </span>
+              <input
+                className="input"
+                value={adjustmentDraft.reason}
+                onChange={(event) =>
+                  setAdjustmentDraft((currentDraft) => ({
+                    ...currentDraft,
+                    reason: event.target.value,
+                  }))
+                }
+                placeholder="Required reason for the stock change"
+              />
+            </label>
+
+            <label className="xl:col-span-2">
+              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                Note
+              </span>
+              <textarea
+                className="input min-h-[112px] resize-y py-3"
+                value={adjustmentDraft.note}
+                onChange={(event) =>
+                  setAdjustmentDraft((currentDraft) => ({
+                    ...currentDraft,
+                    note: event.target.value,
+                  }))
+                }
+                placeholder="Optional context for the stock change"
+              />
+            </label>
+
+            <div className="xl:col-span-2 flex justify-end">
+              <button type="submit" className="ops-action-primary min-w-[156px]">
+                Submit adjustment
+              </button>
+            </div>
+          </form>
+        )}
+      </SectionShell>
+
+      <SectionShell
+        title="Adjustment History"
+        description="Review the latest stock changes for this product."
+      >
+        {!selectedProduct ? (
+          <div className="empty-panel min-h-[160px]">
+            <Package size={20} className="mx-auto text-ink-muted" />
+            <p className="mt-3 text-sm font-semibold text-ink-primary">No history to show</p>
+            <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
+              Select a product first to review its stock movement history.
+            </p>
+          </div>
+        ) : adjustmentHistory.length === 0 ? (
+          <div className="empty-panel min-h-[160px]">
+            <Package size={20} className="mx-auto text-ink-muted" />
+            <p className="mt-3 text-sm font-semibold text-ink-primary">
+              No stock adjustments recorded yet
+            </p>
+            <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
+              The first live stock adjustment for this product will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {adjustmentHistory.map((record) => (
+              <div
+                key={record.id}
+                className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`badge ${
+                          record.actionType === 'add' ? 'badge-green' : 'badge-orange'
+                        }`}
+                      >
+                        {formatLabel(record.actionType)}
+                      </span>
+                      <span className="rounded-lg bg-surface-card px-2 py-1 font-mono text-xs font-semibold text-ink-primary">
+                        {formatInventoryDelta(record.delta)}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-ink-primary">{record.reason}</p>
+                    <p className="mt-1 text-sm text-ink-secondary">
+                      {record.previousQuantity} to {record.newQuantity} on hand
+                    </p>
+                    {record.note ? (
+                      <p className="mt-2 text-sm leading-6 text-ink-secondary">{record.note}</p>
+                    ) : null}
+                  </div>
+                  <div className="text-right text-sm text-ink-secondary">
+                    <p>{record.actor}</p>
+                    <p className="mt-1">{formatInventoryTimestamp(record.timestamp)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </SectionShell>
     </div>
   )

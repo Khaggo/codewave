@@ -179,10 +179,11 @@ test('booking-service and inventory workspaces use one-sentence descriptions', (
   assert.ok(booking.includes('Create a category before publishing services.'))
   assert.ok(booking.includes('Publish services with valid category records only.'))
 
-  assert.ok(inventory.includes('Review live product visibility and planned inventory readiness.'))
-  assert.ok(inventory.includes('Review current product visibility without stock counts.'))
-  assert.ok(inventory.includes('Inspect current catalog metadata for the selected product.'))
-  assert.ok(inventory.includes('Review which inventory capabilities are live or planned.'))
+  assert.ok(inventory.includes('Manage stock levels, thresholds, and item availability for catalog products.'))
+  assert.ok(inventory.includes('Search existing catalog products and act on the live stock queue.'))
+  assert.ok(inventory.includes('Review the selected product before updating stock or threshold settings.'))
+  assert.ok(inventory.includes('Record a live stock change for the selected product.'))
+  assert.ok(inventory.includes('Review the latest stock changes for this product.'))
 })
 
 test('catalog admin uses concise operational copy', () => {
@@ -228,7 +229,7 @@ test('catalog admin keeps modal editor state separate from selected detail state
 test('inventory uses concise operational copy', () => {
   const inventory = read('frontend/src/screens/InventoryWorkspace.js')
 
-  assert.ok(inventory.includes('Track stock levels, restock needs, and item availability.'))
+  assert.ok(inventory.includes('Manage stock levels, thresholds, and item availability for catalog products.'))
 })
 
 test('staff accounts uses concise operational copy', () => {
@@ -243,18 +244,34 @@ test('analytics uses concise operational copy', () => {
   assert.ok(analytics.includes("Review today's workload, bottlenecks, and live operational signals."))
 })
 
-test('inventory keeps product list before detail and coverage sections', () => {
+test('inventory keeps product list before selected detail', () => {
   const inventory = read('frontend/src/screens/InventoryWorkspace.js')
 
-  const inventoryListIndex = inventory.indexOf('aria-label="Inventory visibility table"')
-  const inventoryDetailIndex = inventory.indexOf('title="Selected Product Detail"')
-  const inventoryCoverageIndex = inventory.indexOf('title="Inventory Coverage"')
+  const inventoryListIndex = inventory.indexOf('aria-label="Inventory stock table"')
+  const inventoryDetailIndex = inventory.indexOf('title="Selected Product"')
+  const adjustmentIndex = inventory.indexOf('title="Stock Adjustment"')
+  const historyIndex = inventory.indexOf('title="Adjustment History"')
 
   assert.notEqual(inventoryListIndex, -1)
   assert.notEqual(inventoryDetailIndex, -1)
-  assert.notEqual(inventoryCoverageIndex, -1)
+  assert.notEqual(adjustmentIndex, -1)
+  assert.notEqual(historyIndex, -1)
   assert.ok(inventoryListIndex < inventoryDetailIndex)
-  assert.ok(inventoryDetailIndex < inventoryCoverageIndex)
+  assert.ok(inventoryDetailIndex < adjustmentIndex)
+  assert.ok(adjustmentIndex < historyIndex)
+})
+
+test('inventory workspace removes planned glossary language from the main surface', () => {
+  const inventory = read('frontend/src/screens/InventoryWorkspace.js')
+
+  assert.ok(!inventory.includes('Planned Stock Controls'))
+  assert.ok(!inventory.includes('Stock State Glossary'))
+  assert.ok(!inventory.includes('Planned Capability'))
+  assert.ok(!inventory.includes('Planned State'))
+  assert.ok(!inventory.includes('Inventory Coverage'))
+  assert.ok(!inventory.includes('coverage'))
+  assert.ok(!inventory.includes('planned'))
+  assert.ok(!inventory.includes('backlog'))
 })
 
 test('staff accounts keeps the managed directory ahead of provisioning controls', () => {
