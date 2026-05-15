@@ -55,7 +55,11 @@ export default function InsuranceRequestPanel({
 }) {
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <InsurancePanelShell
           eyebrow="Request"
           title="Start a customer-safe insurance request"
@@ -198,9 +202,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  scroll: {
+    flex: 1,
+    minHeight: 0,
+  },
   content: {
     gap: 18,
-    paddingBottom: 20,
+    paddingBottom: 140,
   },
   summaryStrip: {
     marginTop: 4,

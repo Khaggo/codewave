@@ -82,7 +82,11 @@ export default function InsuranceDocumentsPanel({
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <InsurancePanelShell
           eyebrow="Documents"
           title="Manage supporting files"
@@ -101,6 +105,34 @@ export default function InsuranceDocumentsPanel({
             >
               <ChecklistGroup title="Required" items={checklist.required} />
               <ChecklistGroup title="Optional" items={checklist.optional} />
+            </InsuranceSectionDivider>
+          </View>
+
+          <View style={styles.sectionDivider}>
+            <InsuranceSectionDivider
+              title="Already on file"
+              helper="Review the files already attached to this request before adding another upload."
+            >
+              {latestInquiry?.documents?.length ? (
+                <View style={styles.attachedFileList}>
+                  {latestInquiry.documents.map((document) => (
+                    <View key={document.id ?? `${document.fileName}-${document.fileUrl}`} style={styles.attachedFileRow}>
+                      <View style={styles.attachedFileCopy}>
+                        <Text style={styles.attachedFileTitle}>{document.fileName}</Text>
+                        <Text style={styles.attachedFileMeta}>
+                          {[document.documentTypeLabel, document.createdAt].filter(Boolean).join(' • ')}
+                        </Text>
+                      </View>
+                      <MaterialCommunityIcons name="file-document-outline" size={18} color={colors.primary} />
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyTitle}>Nothing attached yet</Text>
+                  <Text style={styles.emptyText}>Uploaded request files will appear here once they are on file.</Text>
+                </View>
+              )}
             </InsuranceSectionDivider>
           </View>
 
@@ -241,9 +273,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  scroll: {
+    flex: 1,
+    minHeight: 0,
+  },
   content: {
     gap: 18,
-    paddingBottom: 20,
+    paddingBottom: 140,
   },
   sectionDivider: {
     gap: 12,
@@ -289,6 +325,34 @@ const styles = StyleSheet.create({
   checklistLabelComplete: {
     color: colors.primary,
     fontWeight: '700',
+  },
+  attachedFileList: {
+    gap: 10,
+  },
+  attachedFileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceStrong,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  attachedFileCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  attachedFileTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  attachedFileMeta: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
   },
   uploadTargetRow: {
     flexDirection: 'row',

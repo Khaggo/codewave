@@ -40,9 +40,9 @@ test('insurance screen uses the hybrid panel architecture', () => {
   )
   assert.match(
     source,
-    /activePanel === 'renewal'[\s\S]*?activePanel === 'payment'[\s\S]*?: 'Current request status'/s,
+    /const currentStatusDestinationKey = activeModeSection === 'status' \? statusPanelKey : activePanel;/,
   )
-  assert.match(source, /activePanel === 'payment' \? \(/)
+  assert.match(source, /currentStatusDestinationKey === 'payment' \? \(/)
   assert.match(source, /: statusState\.summary/)
 })
 
@@ -154,7 +154,42 @@ test('request and documents sections own scrolling when sticky footers are enabl
   )
   assert.match(modeShellSource, /style=\{\[styles\.container, style\]\}/)
   assert.match(requestSource, /import \{ ActivityIndicator, ScrollView, StyleSheet/)
-  assert.match(requestSource, /<ScrollView contentContainerStyle=\{styles\.content\} showsVerticalScrollIndicator=\{false\}>/)
+  assert.match(
+    requestSource,
+    /<ScrollView[\s\S]*?contentContainerStyle=\{styles\.content\}[\s\S]*?showsVerticalScrollIndicator=\{false\}[\s\S]*?>/,
+  )
   assert.match(documentsSource, /import \{ ActivityIndicator, ScrollView, StyleSheet/)
-  assert.match(documentsSource, /<ScrollView contentContainerStyle=\{styles\.content\} showsVerticalScrollIndicator=\{false\}>/)
+  assert.match(
+    documentsSource,
+    /<ScrollView[\s\S]*?contentContainerStyle=\{styles\.content\}[\s\S]*?showsVerticalScrollIndicator=\{false\}[\s\S]*?>/,
+  )
+})
+
+test('task 4 follow-up keeps footer space constrained, restores attached files, and uses stable status data', () => {
+  const screenSource = read('./InsuranceInquiryScreen.js')
+  const requestSource = read('./insurance/InsuranceRequestPanel.js')
+  const documentsSource = read('./insurance/InsuranceDocumentsPanel.js')
+
+  assert.match(
+    requestSource,
+    /<ScrollView[\s\S]*?style=\{styles\.scroll\}[\s\S]*?contentContainerStyle=\{styles\.content\}[\s\S]*?showsVerticalScrollIndicator=\{false\}[\s\S]*?>/,
+  )
+  assert.match(requestSource, /scroll:\s*\{\s*flex:\s*1,\s*minHeight:\s*0,/s)
+  assert.match(requestSource, /paddingBottom:\s*140,/)
+
+  assert.match(
+    documentsSource,
+    /<ScrollView[\s\S]*?style=\{styles\.scroll\}[\s\S]*?contentContainerStyle=\{styles\.content\}[\s\S]*?showsVerticalScrollIndicator=\{false\}[\s\S]*?>/,
+  )
+  assert.match(documentsSource, /latestInquiry\?\.documents\?\.length/)
+  assert.match(documentsSource, /title="Already on file"/)
+  assert.match(documentsSource, /latestInquiry\.documents\.map\(\(document\) => \(/)
+  assert.match(documentsSource, /paddingBottom:\s*140,/)
+
+  assert.match(screenSource, /const latestStatusUpdateLabel = useMemo\(/)
+  assert.doesNotMatch(screenSource, /latestUpdateLabel: timeline\[0\]\?\.message \?\? '--'/)
+  assert.match(screenSource, /latestUpdateLabel: latestStatusUpdateLabel,/)
+  assert.match(screenSource, /const currentStatusDestinationKey = activeModeSection === 'status' \? statusPanelKey : activePanel;/)
+  assert.match(screenSource, /currentStatusDestinationKey === 'renewal'/)
+  assert.match(screenSource, /currentStatusDestinationKey === 'payment'/)
 })

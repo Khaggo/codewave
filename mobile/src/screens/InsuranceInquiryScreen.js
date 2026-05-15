@@ -426,15 +426,30 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }),
     [claimStatusUpdates.length, latestInquiry, missingRequiredDocuments, selectedVehicleLabel],
   );
-  const timeline = claimStatusUpdates;
+  const latestStatusUpdateLabel = useMemo(() => {
+    if (latestInquiry?.updatedAt) {
+      return formatTimestampLabel(latestInquiry.updatedAt);
+    }
+
+    const latestRecord = claimStatusUpdates.reduce((currentLatest, record) => {
+      const currentValue = new Date(record?.updatedAt ?? record?.createdAt ?? 0).getTime();
+      const latestValue = new Date(
+        currentLatest?.updatedAt ?? currentLatest?.createdAt ?? 0,
+      ).getTime();
+
+      return currentValue > latestValue ? record : currentLatest;
+    }, null);
+
+    return formatTimestampLabel(latestRecord?.updatedAt ?? latestRecord?.createdAt);
+  }, [claimStatusUpdates, latestInquiry?.updatedAt]);
   const statusState = useMemo(
     () =>
       buildCustomerInsuranceStatusState({
         latestInquiry,
         missingRequiredDocuments,
-        latestUpdateLabel: timeline[0]?.message ?? '--',
+        latestUpdateLabel: latestStatusUpdateLabel,
       }),
-    [latestInquiry, missingRequiredDocuments, timeline],
+    [latestInquiry, latestStatusUpdateLabel, missingRequiredDocuments],
   );
   const statusPanelKey = useMemo(() => {
     if (missingRequiredDocuments.length) {
@@ -1233,7 +1248,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   };
   const paymentStatusLabel = formatWorkflowLabel(latestInquiry?.paymentStatus ?? 'not_required');
   const renewalStatusLabel = formatWorkflowLabel(latestInquiry?.renewalStatus ?? 'not_applicable');
-  const latestInquiryUpdatedAtLabel = formatTimestampLabel(latestInquiry?.updatedAt);
+  const currentStatusDestinationKey = activeModeSection === 'status' ? statusPanelKey : activePanel;
   const historySummary = claimStatusUpdates.length
     ? `${claimStatusUpdates.length} recorded insurance update${claimStatusUpdates.length === 1 ? '' : 's'} ${claimStatusUpdates.length === 1 ? 'is' : 'are'} already available for this vehicle.`
     : 'Vehicle-level insurance records will appear here after staff close and record a customer-safe case.';
@@ -1438,37 +1453,37 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 {activeModeSection === 'status' ? (
                   <InsuranceStatusDetailPanel
                     eyebrow={
-                      activePanel === 'renewal'
+                      currentStatusDestinationKey === 'renewal'
                         ? 'Renewal'
-                        : activePanel === 'payment'
+                        : currentStatusDestinationKey === 'payment'
                         ? 'Payment'
                         : 'Status'
                     }
                     title={
-                      activePanel === 'renewal'
+                      currentStatusDestinationKey === 'renewal'
                         ? 'Renewal follow-up'
-                        : activePanel === 'payment'
+                        : currentStatusDestinationKey === 'payment'
                         ? 'Payment follow-up'
                         : 'Current request status'
                     }
                     subtitle={
-                      activePanel === 'renewal'
+                      currentStatusDestinationKey === 'renewal'
                         ? 'Watch renewal prompts here so you can respond quickly when a quote, reminder, or next step is ready.'
-                        : activePanel === 'payment'
+                        : currentStatusDestinationKey === 'payment'
                         ? 'Review the latest customer-safe payment instruction here, then head to documents if you need to send proof of payment.'
                         : 'Review the latest customer-safe status update, visible timeline, and next step for this request.'
                     }
                     statusLabel={
-                      activePanel === 'renewal'
+                      currentStatusDestinationKey === 'renewal'
                         ? renewalStatusLabel
-                        : activePanel === 'payment'
+                        : currentStatusDestinationKey === 'payment'
                         ? paymentStatusLabel
                         : formatWorkflowLabel(latestInquiry?.status ?? 'submitted')
                     }
                     summary={
-                      activePanel === 'renewal'
+                      currentStatusDestinationKey === 'renewal'
                         ? renewalSummary.message
-                        : activePanel === 'payment'
+                        : currentStatusDestinationKey === 'payment'
                         ? paymentSummary.message
                         : statusState.summary
                     }
@@ -1476,30 +1491,30 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   >
                     <InsuranceStatePanel
                       icon={
-                        activePanel === 'renewal'
+                        currentStatusDestinationKey === 'renewal'
                           ? 'calendar-refresh'
-                          : activePanel === 'payment'
+                          : currentStatusDestinationKey === 'payment'
                           ? 'credit-card-check-outline'
                           : 'clipboard-text-clock-outline'
                       }
                       title={
-                        activePanel === 'renewal'
+                        currentStatusDestinationKey === 'renewal'
                           ? renewalSummary.title
-                          : activePanel === 'payment'
+                          : currentStatusDestinationKey === 'payment'
                           ? paymentSummary.title
                           : statusState.title
                       }
                       message={
-                        activePanel === 'renewal'
+                        currentStatusDestinationKey === 'renewal'
                           ? renewalSummary.message
-                          : activePanel === 'payment'
+                          : currentStatusDestinationKey === 'payment'
                           ? paymentSummary.message
                           : statusState.latestUpdateLabel
                       }
                       tone={
-                        activePanel === 'renewal'
+                        currentStatusDestinationKey === 'renewal'
                           ? renewalSummary.tone
-                          : activePanel === 'payment'
+                          : currentStatusDestinationKey === 'payment'
                           ? paymentSummary.tone
                           : 'default'
                       }
@@ -1508,34 +1523,34 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                       <View style={styles.timelineCardHeader}>
                         <View style={styles.timelineCardCopy}>
                           <Text style={styles.timelineCardTitle}>
-                            {activePanel === 'renewal'
+                            {currentStatusDestinationKey === 'renewal'
                               ? 'Renewal tracking'
-                              : activePanel === 'payment'
+                              : currentStatusDestinationKey === 'payment'
                               ? 'Current request snapshot'
                               : 'Status timeline'}
                           </Text>
                           <Text style={styles.timelineCardSubtitle}>
-                            {activePanel === 'renewal'
+                            {currentStatusDestinationKey === 'renewal'
                               ? 'Renewal follow-up stays customer-safe here while staff continue the internal workflow.'
-                              : activePanel === 'payment'
+                              : currentStatusDestinationKey === 'payment'
                               ? 'Keep the latest request state handy before you upload a receipt or ask for help.'
                               : 'Review the latest customer-safe request update and next visible step.'}
                           </Text>
                         </View>
                         <InquiryStatusBadge
                           value={
-                            activePanel === 'renewal'
+                            currentStatusDestinationKey === 'renewal'
                               ? renewalStatusLabel
-                              : activePanel === 'payment'
+                              : currentStatusDestinationKey === 'payment'
                               ? paymentStatusLabel
                               : formatWorkflowLabel(latestInquiry?.status ?? 'submitted')
                           }
                         />
                       </View>
-                      <DetailRow label="Latest update" value={latestInquiryUpdatedAtLabel} />
+                      <DetailRow label="Latest update" value={statusState.latestUpdateLabel} />
                       <DetailRow label="Current step" value={currentTimelineStepLabel} />
                     </View>
-                    {activePanel === 'payment' ? (
+                    {currentStatusDestinationKey === 'payment' ? (
                       latestInquiry?.id && latestInquiryCanAcceptDocuments ? (
                         <TouchableOpacity
                           style={styles.secondaryActionButton}
