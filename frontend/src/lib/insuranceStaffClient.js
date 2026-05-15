@@ -59,6 +59,12 @@ const buildReminderRequestBody = ({
   const normalizedReminderType = String(reminderType ?? '').trim();
   const normalizedTargetMode = String(targetMode ?? '').trim();
 
+  if (!normalizedReminderType || !normalizedTargetMode) {
+    throw new ApiError('Reminder type and target mode are required before sending reminders.', 400, {
+      path: '/api/insurance/reminders/send',
+    });
+  }
+
   if (normalizedTargetMode === 'filtered_results') {
     const normalizedFilters = normalizeMeaningfulReminderFilters(filters);
 
@@ -81,10 +87,22 @@ const buildReminderRequestBody = ({
 
   const normalizedSelectedIds = normalizeReminderSelectedIds(selectedIds);
 
+  if (!normalizedSelectedIds.length) {
+    throw new ApiError('Select at least one insurance case before sending reminders.', 400, {
+      path: '/api/insurance/reminders/send',
+    });
+  }
+
+  if (normalizedTargetMode === 'single_case' && normalizedSelectedIds.length !== 1) {
+    throw new ApiError('Single-case reminders require exactly one selected insurance case.', 400, {
+      path: '/api/insurance/reminders/send',
+    });
+  }
+
   return {
     reminderType: normalizedReminderType,
     targetMode: normalizedTargetMode,
-    ...(normalizedSelectedIds.length ? { selectedIds: normalizedSelectedIds } : {}),
+    selectedIds: normalizedSelectedIds,
   };
 };
 const normalizeMeaningfulBroadcastFilters = (filters = {}) =>

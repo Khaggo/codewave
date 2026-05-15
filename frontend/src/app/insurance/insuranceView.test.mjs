@@ -808,6 +808,67 @@ test('sendInsuranceReminders rejects filtered-results sends with no meaningful s
   )
 })
 
+test('sendInsuranceReminders rejects missing reminder type or target mode at the client boundary', async () => {
+  await assert.rejects(
+    () =>
+      sendInsuranceReminders({
+        reminderType: '   ',
+        targetMode: 'selected_cases',
+        selectedIds: ['inq-1'],
+        accessToken: 'token-1',
+      }),
+    /reminder type and target mode are required/i,
+  )
+
+  await assert.rejects(
+    () =>
+      sendInsuranceReminders({
+        reminderType: 'missing_documents',
+        targetMode: '   ',
+        selectedIds: ['inq-1'],
+        accessToken: 'token-1',
+      }),
+    /reminder type and target mode are required/i,
+  )
+})
+
+test('sendInsuranceReminders rejects selected reminder modes without selected ids', async () => {
+  await assert.rejects(
+    () =>
+      sendInsuranceReminders({
+        reminderType: 'missing_documents',
+        targetMode: 'selected_cases',
+        selectedIds: [' ', ''],
+        accessToken: 'token-1',
+      }),
+    /select at least one insurance case/i,
+  )
+
+  await assert.rejects(
+    () =>
+      sendInsuranceReminders({
+        reminderType: 'missing_documents',
+        targetMode: 'single_case',
+        selectedIds: [],
+        accessToken: 'token-1',
+      }),
+    /select at least one insurance case/i,
+  )
+})
+
+test('sendInsuranceReminders rejects single-case reminder sends with more than one selected id after dedupe', async () => {
+  await assert.rejects(
+    () =>
+      sendInsuranceReminders({
+        reminderType: 'missing_documents',
+        targetMode: 'single_case',
+        selectedIds: ['inq-1', 'inq-2'],
+        accessToken: 'token-1',
+      }),
+    /single-case reminders require exactly one selected insurance case/i,
+  )
+})
+
 test('sendInsuranceBroadcasts posts the built broadcast payload to the broadcast route', async () => {
   const originalFetch = globalThis.fetch
   const calls = []
