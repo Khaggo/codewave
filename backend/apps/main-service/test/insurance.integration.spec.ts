@@ -1137,7 +1137,7 @@ describe('InsuranceController integration', () => {
         targetedCaseCount: 2,
         eligibleCaseCount: 2,
         deduplicatedCustomerCount: 1,
-        sentCount: 2,
+        sentCount: 1,
         skippedCount: 0,
         failedCount: 0,
         results: [

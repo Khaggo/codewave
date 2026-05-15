@@ -1796,7 +1796,7 @@ describe('InsuranceService', () => {
       targetedCaseCount: 4,
       eligibleCaseCount: 3,
       deduplicatedCustomerCount: 2,
-      sentCount: 2,
+      sentCount: 1,
       skippedCount: 1,
       failedCount: 1,
       results: [
@@ -1823,6 +1823,97 @@ describe('InsuranceService', () => {
           customerId: 'customer-3',
           status: 'failed',
           reason: 'notification_send_failed',
+        },
+      ],
+    });
+  });
+
+  it('treats appendActivity failures separately after a successful customer broadcast notification', async () => {
+    const insuranceRepository = {
+      findById: jest
+        .fn()
+        .mockResolvedValueOnce({
+          id: 'case-activity-sent',
+          userId: 'customer-1',
+          status: 'submitted',
+          documentStatus: 'incomplete',
+          paymentStatus: 'not_required',
+          renewalStatus: 'not_applicable',
+          subject: 'First activity case',
+        })
+        .mockResolvedValueOnce({
+          id: 'case-activity-failed',
+          userId: 'customer-1',
+          status: 'active',
+          documentStatus: 'complete',
+          paymentStatus: 'paid',
+          renewalStatus: 'not_applicable',
+          subject: 'Second activity case',
+        }),
+      appendActivity: jest
+        .fn()
+        .mockResolvedValueOnce({ id: 'activity-1' })
+        .mockRejectedValueOnce(new Error('Simulated activity persistence failure')),
+    };
+
+    const notificationsService = {
+      enqueueNotification: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'sent' }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsuranceService,
+        { provide: InsuranceRepository, useValue: insuranceRepository },
+        { provide: NotificationsService, useValue: notificationsService },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: { findById: jest.fn() },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(InsuranceService);
+
+    const result = await service.sendManualBroadcasts(
+      {
+        targetMode: 'selected_cases',
+        selectedIds: ['case-activity-sent', 'case-activity-failed'],
+        title: 'Insurance processing update',
+        message: 'Please review your insurance request in the app for the latest update.',
+      },
+      { userId: 'adviser-1', role: 'service_adviser' },
+    );
+
+    expect(notificationsService.enqueueNotification).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      targetedCaseCount: 2,
+      eligibleCaseCount: 2,
+      deduplicatedCustomerCount: 1,
+      sentCount: 1,
+      skippedCount: 0,
+      failedCount: 1,
+      results: [
+        {
+          inquiryId: 'case-activity-sent',
+          customerId: 'customer-1',
+          status: 'sent',
+          reason: null,
+        },
+        {
+          inquiryId: 'case-activity-failed',
+          customerId: 'customer-1',
+          status: 'failed',
+          reason: 'activity_log_failed',
         },
       ],
     });

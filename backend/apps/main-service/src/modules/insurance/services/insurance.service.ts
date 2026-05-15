@@ -114,7 +114,7 @@ type ManualBroadcastResult = {
   inquiryId: string;
   customerId: string | null;
   status: 'sent' | 'skipped' | 'failed';
-  reason: 'case_not_broadcast_eligible' | 'notification_send_failed' | null;
+  reason: 'case_not_broadcast_eligible' | 'notification_send_failed' | 'activity_log_failed' | null;
 };
 
 const reminderFilterKeys = ['purpose', 'status', 'paymentStatus', 'renewalStatus'] as const;
@@ -416,6 +416,7 @@ export class InsuranceService {
     const resultsByInquiryId = new Map<string, ManualBroadcastResult>();
     const eligibleInquiries: ReminderTargetInquiry[] = [];
     const inquiriesByCustomerId = new Map<string, ReminderTargetInquiry[]>();
+    let successfulCustomerSends = 0;
 
     for (const inquiry of inquiries) {
       if (!this.isManualBroadcastEligible(inquiry)) {
@@ -439,8 +440,22 @@ export class InsuranceService {
 
       try {
         await this.sendManualBroadcastNotification(representativeInquiry, payload.title, payload.message);
-
+        successfulCustomerSends += 1;
+      } catch (error) {
         for (const inquiry of customerInquiries) {
+          resultsByInquiryId.set(inquiry.id, {
+            inquiryId: inquiry.id,
+            customerId: inquiry.userId ?? null,
+            status: 'failed',
+            reason: 'notification_send_failed',
+          });
+        }
+
+        continue;
+      }
+
+      for (const inquiry of customerInquiries) {
+        try {
           if (typeof this.insuranceRepository.appendActivity === 'function') {
             await this.insuranceRepository.appendActivity(inquiry.id, {
               action: 'manual_broadcast_sent',
@@ -455,14 +470,12 @@ export class InsuranceService {
             status: 'sent',
             reason: null,
           });
-        }
-      } catch (error) {
-        for (const inquiry of customerInquiries) {
+        } catch (error) {
           resultsByInquiryId.set(inquiry.id, {
             inquiryId: inquiry.id,
             customerId: inquiry.userId ?? null,
             status: 'failed',
-            reason: 'notification_send_failed',
+            reason: 'activity_log_failed',
           });
         }
       }
@@ -481,6 +494,7 @@ export class InsuranceService {
       inquiries.length,
       eligibleInquiries.length,
       inquiriesByCustomerId.size,
+      successfulCustomerSends,
       results,
     );
   }
@@ -827,9 +841,9 @@ export class InsuranceService {
     targetedCaseCount: number,
     eligibleCaseCount: number,
     deduplicatedCustomerCount: number,
+    sentCount: number,
     results: ManualBroadcastResult[],
   ) {
-    const sentCount = results.filter((result) => result.status === 'sent').length;
     const skippedCount = results.filter((result) => result.status === 'skipped').length;
     const failedCount = results.filter((result) => result.status === 'failed').length;
 
