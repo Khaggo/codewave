@@ -187,7 +187,16 @@ test('task 4 follow-up keeps footer space constrained, restores attached files, 
   assert.match(documentsSource, /paddingBottom:\s*140,/)
 
   assert.match(screenSource, /const latestStatusUpdateLabel = useMemo\(/)
+  assert.match(
+    screenSource,
+    /const latestStatusUpdateLabel = useMemo\(\(\) => \{\s*if \(latestInquiry\?\.statusHint\) \{\s*return latestInquiry\.statusHint;/s,
+  )
+  assert.match(screenSource, /if \(latestRecord\?\.statusHint\) \{\s*return latestRecord\.statusHint;/s)
   assert.doesNotMatch(screenSource, /latestUpdateLabel: timeline\[0\]\?\.message \?\? '--'/)
+  assert.doesNotMatch(
+    screenSource,
+    /const latestStatusUpdateLabel = useMemo\(\(\) => \{\s*if \(latestInquiry\?\.updatedAt\) \{\s*return formatTimestampLabel\(latestInquiry\.updatedAt\);/s,
+  )
   assert.match(screenSource, /latestUpdateLabel: latestStatusUpdateLabel,/)
   assert.match(screenSource, /const currentStatusDestinationKey = activeModeSection === 'status' \? statusPanelKey : activePanel;/)
   assert.match(screenSource, /currentStatusDestinationKey === 'renewal'/)

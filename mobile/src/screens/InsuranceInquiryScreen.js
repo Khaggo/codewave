@@ -423,12 +423,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         latestInquiry,
         missingRequiredDocuments,
         historyCount: claimStatusUpdates.length,
-      }),
+    }),
     [claimStatusUpdates.length, latestInquiry, missingRequiredDocuments, selectedVehicleLabel],
   );
   const latestStatusUpdateLabel = useMemo(() => {
-    if (latestInquiry?.updatedAt) {
-      return formatTimestampLabel(latestInquiry.updatedAt);
+    if (latestInquiry?.statusHint) {
+      return latestInquiry.statusHint;
     }
 
     const latestRecord = claimStatusUpdates.reduce((currentLatest, record) => {
@@ -440,8 +440,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return currentValue > latestValue ? record : currentLatest;
     }, null);
 
+    if (latestRecord?.statusHint) {
+      return latestRecord.statusHint;
+    }
+
     return formatTimestampLabel(latestRecord?.updatedAt ?? latestRecord?.createdAt);
-  }, [claimStatusUpdates, latestInquiry?.updatedAt]);
+  }, [claimStatusUpdates, latestInquiry?.statusHint]);
   const statusState = useMemo(
     () =>
       buildCustomerInsuranceStatusState({
