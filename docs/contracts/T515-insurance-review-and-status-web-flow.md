@@ -98,7 +98,7 @@
 - custom broadcasts support only these target modes: `selected_cases` and `filtered_results`
 - `selected_cases` sends resolve from the explicitly checked insurance inquiries in the staff workspace
 - `filtered_results` sends resolve from the current server-side insurance queue filters, not from the client-only search narrowing used in the visible table
-- broadcasts target only active, non-terminal insurance inquiries; cases that are closed, cancelled, rejected, or otherwise ineligible must be skipped rather than silently treated as sent
+- broadcasts target only customer-linked, non-terminal insurance inquiries; cases that are `closed`, `cancelled`, `rejected`, or otherwise ineligible must be skipped rather than silently treated as sent
 - each broadcast action deduplicates by customer so one customer receives at most one in-app broadcast notification per send action even if multiple eligible inquiries match
 - the staff-side audit trail for each eligible participating inquiry is `manual_broadcast_sent`
 - the returned summary must distinguish targeted cases, eligible cases, deduplicated customers, sent notifications, skipped results, failed results, and per-inquiry result rows

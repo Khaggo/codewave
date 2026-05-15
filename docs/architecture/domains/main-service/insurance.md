@@ -63,7 +63,7 @@ Key relations:
 2. Required metadata is recorded and supporting documents can be attached while the inquiry remains open through either the reference-document route or the binary upload route.
 3. Staff lists inquiries, filters by workflow tags, reviews one inquiry in detail, and uses `PATCH /insurance/inquiries/:id/status` for narrow status changes plus optional review notes on the general phase-1 review page.
 4. Staff collections work happens in the dedicated `/insurance/collections` workspace, which uses `PATCH /insurance/inquiries/:id/workflow` for payment metadata, due-date handling, overdue tagging, and later follow-up fields. Same-status workflow updates are allowed there so metadata-only edits can persist without forcing a status transition.
-5. Staff can send manual insurance-only custom broadcasts through `POST /insurance/broadcasts/send`, targeting either explicit case selections or the current server-side filtered queue while deduplicating to one in-app notification per customer per send action.
+5. Staff can send manual insurance-only custom broadcasts through `POST /api/insurance/broadcasts/send`, targeting either explicit case selections or the current server-side filtered queue while deduplicating to one in-app notification per customer per send action.
 6. Follow-on `insurance_records` support vehicle-level tracking records; the current service implementation upserts that record layer when an inquiry is moved to `closed`.
 7. Notifications and lifecycle updates are generated later as dependent integrations.
 
@@ -85,16 +85,16 @@ Key relations:
 - `GET /users/:id/insurance-inquiries`
 - `PATCH /insurance/inquiries/:id/status`
 - `PATCH /insurance/inquiries/:id/workflow`
-- `POST /insurance/broadcasts/send`
+- `POST /api/insurance/broadcasts/send`
 - `POST /insurance/inquiries/:id/documents/upload`
 - `POST /insurance/inquiries/:id/documents`
 - `GET /vehicles/:id/insurance-records`
 
 ## Manual Broadcasts
 
-- route: `POST /insurance/broadcasts/send`
+- route: `POST /api/insurance/broadcasts/send`
 - channel: `in_app`
-- scope is insurance-only and limited to active, non-terminal inquiries; terminal or otherwise ineligible inquiries must be skipped
+- scope is insurance-only and limited to customer-linked, non-terminal inquiries; `closed`, `cancelled`, and `rejected` cases must be skipped
 - target modes are `selected_cases` and `filtered_results`
 - `selected_cases` resolves from explicit staff-selected insurance inquiries
 - `filtered_results` resolves from the current server-side insurance queue filters
