@@ -171,23 +171,49 @@ test('intake workspace guidance stays concise after front-desk redesign', () => 
   assert.ok(intakeScreen.includes('Capture the visit, then record the vehicle condition.'))
 })
 
-test('catalog, booking-service, and inventory workspaces use one-sentence descriptions', () => {
-  const shop = read('frontend/src/screens/ShopProductAdmin.js')
-  const booking = read('frontend/src/components/BookingServiceAdmin.js')
+test('catalog, inventory, staff, and analytics workspaces use concise operational copy', () => {
+  const catalog = read('frontend/src/screens/ShopProductAdmin.js')
   const inventory = read('frontend/src/screens/InventoryWorkspace.js')
+  const staff = read('frontend/src/components/StaffProvisioningPanel.js')
+  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
 
-  assert.ok(shop.includes('Create categories and publish storefront-ready catalog products.'))
-  assert.ok(shop.includes('Create a category for product publishing.'))
-  assert.ok(shop.includes('Publish products with fields that match the shared catalog store.'))
+  assert.ok(catalog.includes('Publish and manage customer-visible marketplace products.'))
+  assert.ok(inventory.includes('Track stock levels, restock needs, and item availability.'))
+  assert.ok(staff.includes('Create accounts, manage access, and keep operations staffing usable.'))
+  assert.ok(analytics.includes("Review today's workload, bottlenecks, and live operational signals."))
+})
+
+test('booking-service workspace keeps concise publishing copy', () => {
+  const booking = read('frontend/src/components/BookingServiceAdmin.js')
 
   assert.ok(booking.includes('Create booking categories and publish live booking services.'))
   assert.ok(booking.includes('Create a category before publishing services.'))
   assert.ok(booking.includes('Publish services with valid category records only.'))
+})
 
-  assert.ok(inventory.includes('Review live product visibility and planned inventory readiness.'))
-  assert.ok(inventory.includes('Review current product visibility without stock counts.'))
-  assert.ok(inventory.includes('Inspect current catalog metadata for the selected product.'))
-  assert.ok(inventory.includes('Review which inventory capabilities are live or planned.'))
+test('admin operations workspaces move live queues ahead of secondary editors and summaries', () => {
+  const catalog = read('frontend/src/screens/ShopProductAdmin.js')
+  const staff = read('frontend/src/components/StaffProvisioningPanel.js')
+  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
+
+  const catalogListIndex = catalog.indexOf('title="Published Products"')
+  const catalogEditorIndex = catalog.indexOf('title="Create And Publish Product"')
+  const staffDirectoryIndex = staff.indexOf('Managed Account Directory')
+  const staffProvisioningIndex = staff.indexOf('Provision Operations Accounts')
+  const analyticsOperationsIndex = analytics.indexOf('Review booking-state counts from the operations snapshot.')
+  const analyticsDashboardIndex = analytics.indexOf('Review derived sales signals from the latest snapshot.')
+
+  assert.notEqual(catalogListIndex, -1)
+  assert.notEqual(catalogEditorIndex, -1)
+  assert.ok(catalogListIndex < catalogEditorIndex)
+
+  assert.notEqual(staffDirectoryIndex, -1)
+  assert.notEqual(staffProvisioningIndex, -1)
+  assert.ok(staffDirectoryIndex < staffProvisioningIndex)
+
+  assert.notEqual(analyticsOperationsIndex, -1)
+  assert.notEqual(analyticsDashboardIndex, -1)
+  assert.ok(analyticsOperationsIndex < analyticsDashboardIndex)
 })
 
 test('analytics and loyalty workspaces stay concise', () => {
