@@ -430,6 +430,7 @@ export default function InsuranceContent() {
   const [broadcastTargetMode, setBroadcastTargetMode] = useState(DEFAULT_BROADCAST_TARGET_MODE)
   const [broadcastState, setBroadcastState] = useState('idle')
   const [broadcastStatusMessage, setBroadcastStatusMessage] = useState('')
+  const [broadcastSummary, setBroadcastSummary] = useState(null)
   const [broadcastResults, setBroadcastResults] = useState([])
   const previousSelectedInquiryIdRef = useRef('')
   const selectedInquiryIdRef = useRef('')
@@ -602,10 +603,10 @@ export default function InsuranceContent() {
     [broadcastResults],
   )
   const broadcastAudiencePreviewCount =
-    broadcastTargetMode === 'filtered_results' ? filteredInquiries.length : selectedInquiryIds.length
+    broadcastTargetMode === 'filtered_results' ? inquiries.length : selectedInquiryIds.length
   const broadcastAudiencePreviewLabel =
     broadcastTargetMode === 'filtered_results'
-      ? `${filteredInquiries.length} visible case${filteredInquiries.length === 1 ? '' : 's'}`
+      ? `${inquiries.length} server-filtered case${inquiries.length === 1 ? '' : 's'}`
       : `${selectedInquiryIds.length} selected case${selectedInquiryIds.length === 1 ? '' : 's'}`
 
   const handleFilterChange = (field) => (event) => {
@@ -801,6 +802,7 @@ export default function InsuranceContent() {
 
     setBroadcastState('submitting')
     setBroadcastStatusMessage('')
+    setBroadcastSummary(null)
     setBroadcastResults([])
 
     try {
@@ -818,6 +820,7 @@ export default function InsuranceContent() {
       })
 
       setBroadcastState('sent')
+      setBroadcastSummary(broadcastSummary)
       setBroadcastResults(Array.isArray(broadcastSummary?.results) ? broadcastSummary.results : [])
       setBroadcastStatusMessage(summarizeInsuranceBroadcastResult(broadcastSummary))
     } catch (error) {
@@ -1039,7 +1042,7 @@ export default function InsuranceContent() {
             <div>
               <p className="text-sm font-semibold text-ink-primary">Custom Broadcast Send</p>
               <p className="mt-1 text-xs text-ink-muted">
-                Send a custom in-app broadcast to checked cases or the currently visible insurance queue audience.
+                Send a custom in-app broadcast to checked cases or the current server-filtered insurance queue audience.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1049,8 +1052,8 @@ export default function InsuranceContent() {
               <span className={`badge ${filteredInquiries.length ? 'badge-blue' : 'badge-gray'}`}>
                 {filteredInquiries.length} visible
               </span>
-              <span className={`badge ${broadcastResults.length ? 'badge-green' : 'badge-gray'}`}>
-                {broadcastResults.length} last result{broadcastResults.length === 1 ? '' : 's'}
+              <span className={`badge ${broadcastSummary ? 'badge-green' : 'badge-gray'}`}>
+                {broadcastSummary ? 'Last send recorded' : 'No send yet'}
               </span>
             </div>
           </div>
@@ -1147,7 +1150,7 @@ export default function InsuranceContent() {
             </div>
           ) : null}
 
-          {broadcastResults.length ? (
+          {broadcastSummary ? (
             <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
               <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
                 <p className="text-sm font-semibold text-ink-primary">Broadcast Results</p>
@@ -1162,10 +1165,20 @@ export default function InsuranceContent() {
                     {broadcastResultBreakdown.failed.length} failed
                   </span>
                 </div>
-                <p className="mt-3 text-xs text-ink-muted">
-                  Audience preview at send time: {broadcastAudiencePreviewCount} case
-                  {broadcastAudiencePreviewCount === 1 ? '' : 's'}.
-                </p>
+                <div className="mt-3 space-y-1 text-xs text-ink-muted">
+                  <p>
+                    Targeted at send time: {broadcastSummary.targetedCaseCount ?? 0} case
+                    {(broadcastSummary.targetedCaseCount ?? 0) === 1 ? '' : 's'}.
+                  </p>
+                  <p>
+                    Eligible: {broadcastSummary.eligibleCaseCount ?? 0} case
+                    {(broadcastSummary.eligibleCaseCount ?? 0) === 1 ? '' : 's'}.
+                  </p>
+                  <p>
+                    Deduplicated audience: {broadcastSummary.deduplicatedCustomerCount ?? 0} customer
+                    {(broadcastSummary.deduplicatedCustomerCount ?? 0) === 1 ? '' : 's'}.
+                  </p>
+                </div>
               </div>
               <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
                 <p className="text-sm font-semibold text-ink-primary">Last Broadcast Results</p>
