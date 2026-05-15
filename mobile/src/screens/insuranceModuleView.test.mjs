@@ -197,11 +197,39 @@ test('status state folds payment and renewal into one tracking model', () => {
       summary: 'Payment is the current blocker for this request.',
       ctaLabel: 'Review payment',
       ctaRouteKey: 'status',
+      latestUpdateLabel: 'Payment instructions are ready.',
       timeline: [
         { key: 'request', label: 'Request submitted', active: true },
         { key: 'documents', label: 'Documents complete', active: true },
         { key: 'payment', label: 'Payment follow-up', active: true },
         { key: 'renewal', label: 'Renewal', active: false },
+      ],
+    },
+  )
+})
+
+test('status state prioritizes renewal follow-up before payment follow-up', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        status: 'for_renewal',
+        paymentStatus: 'paid',
+        renewalStatus: 'awaiting_customer',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Renewal follow-up is waiting on the customer.',
+    }),
+    {
+      title: 'Renewal follow-up',
+      summary: 'Renewal is the current blocker for this request.',
+      ctaLabel: 'Review renewal',
+      ctaRouteKey: 'status',
+      latestUpdateLabel: 'Renewal follow-up is waiting on the customer.',
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: true },
+        { key: 'renewal', label: 'Renewal', active: true },
       ],
     },
   )

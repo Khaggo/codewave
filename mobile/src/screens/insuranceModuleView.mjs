@@ -381,56 +381,68 @@ export const buildCustomerInsuranceStatusState = ({
   latestUpdateLabel = '--',
 } = {}) => {
   const missingCount = Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments.length : 0
-  const withLatestUpdateLabel = (state) =>
-    Object.defineProperty(state, 'latestUpdateLabel', {
-      value: latestUpdateLabel,
-      enumerable: false,
-      configurable: true,
-      writable: true,
-    })
 
   if (missingCount > 0) {
-    return withLatestUpdateLabel({
+    return {
       title: 'Documents needed',
       summary: 'Documents are the current blocker for this request.',
       ctaLabel: 'Open docs',
       ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.documents,
+      latestUpdateLabel,
       timeline: [
         { key: 'request', label: 'Request submitted', active: true },
         { key: 'documents', label: 'Documents needed', active: true },
         { key: 'payment', label: 'Payment follow-up', active: false },
         { key: 'renewal', label: 'Renewal', active: false },
       ],
-    })
+    }
+  }
+
+  if (latestInquiry?.status === 'for_renewal' || latestInquiry?.renewalStatus !== 'not_applicable') {
+    return {
+      title: 'Renewal follow-up',
+      summary: 'Renewal is the current blocker for this request.',
+      ctaLabel: 'Review renewal',
+      ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
+      latestUpdateLabel,
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: true },
+        { key: 'renewal', label: 'Renewal', active: true },
+      ],
+    }
   }
 
   if (latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required') {
-    return withLatestUpdateLabel({
+    return {
       title: 'Payment follow-up',
       summary: 'Payment is the current blocker for this request.',
       ctaLabel: 'Review payment',
       ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
+      latestUpdateLabel,
       timeline: [
         { key: 'request', label: 'Request submitted', active: true },
         { key: 'documents', label: 'Documents complete', active: true },
         { key: 'payment', label: 'Payment follow-up', active: true },
         { key: 'renewal', label: 'Renewal', active: false },
       ],
-    })
+    }
   }
 
-  return withLatestUpdateLabel({
+  return {
     title: 'Current request status',
     summary: 'Review the latest customer-safe update and next step.',
     ctaLabel: 'Review status',
     ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
+    latestUpdateLabel,
     timeline: [
       { key: 'request', label: 'Request submitted', active: true },
       { key: 'documents', label: 'Documents complete', active: true },
       { key: 'payment', label: 'Payment follow-up', active: false },
       { key: 'renewal', label: 'Renewal', active: false },
     ],
-  })
+  }
 }
 
 export const buildCustomerInsuranceActionCards = ({
