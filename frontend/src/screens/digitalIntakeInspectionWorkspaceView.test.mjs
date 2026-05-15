@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   getIntakeWorkspaceHeroCopy,
+  getIntakeRequirementsBadge,
   getIntakeWorkspacePrimaryActionLabel,
 } from './digitalIntakeInspectionWorkspaceView.mjs'
 
@@ -21,22 +22,67 @@ test('technician hero copy stays intake-first and concise', () => {
 })
 
 test('primary action labels stay concise across supported visit types', () => {
-  assert.equal(getIntakeWorkspacePrimaryActionLabel('regular_service'), 'Start service check-in')
+  assert.equal(getIntakeWorkspacePrimaryActionLabel('regular_service'), 'Save Service Intake')
   assert.equal(
     getIntakeWorkspacePrimaryActionLabel('insurance_related'),
-    'Start insurance check-in',
+    'Save Insurance Intake',
   )
-  assert.equal(
-    getIntakeWorkspacePrimaryActionLabel('back_job_complaint'),
-    'Start return visit check-in',
-  )
-  assert.equal(
-    getIntakeWorkspacePrimaryActionLabel('inspection_only'),
-    'Start inspection check-in',
-  )
+  assert.equal(getIntakeWorkspacePrimaryActionLabel('back_job_complaint'), 'Save Complaint Intake')
+  assert.equal(getIntakeWorkspacePrimaryActionLabel('inspection_only'), 'Save Inspection')
 })
 
 test('primary action labels fall back safely for missing visit types', () => {
-  assert.equal(getIntakeWorkspacePrimaryActionLabel(undefined), 'Start intake check-in')
-  assert.equal(getIntakeWorkspacePrimaryActionLabel('unknown_visit_type'), 'Start intake check-in')
+  assert.equal(getIntakeWorkspacePrimaryActionLabel(undefined), 'Save Intake')
+  assert.equal(getIntakeWorkspacePrimaryActionLabel('unknown_visit_type'), 'Save Intake')
+})
+
+test('requirements badge reflects checklist progress and missing notes', () => {
+  assert.equal(getIntakeRequirementsBadge({}, ''), 'Pending check')
+  assert.equal(
+    getIntakeRequirementsBadge(
+      {
+        bookingFound: true,
+        orCrPresent: false,
+        validIdPresent: false,
+      },
+      '',
+    ),
+    'Partially checked',
+  )
+  assert.equal(
+    getIntakeRequirementsBadge(
+      {
+        bookingFound: true,
+        orCrPresent: true,
+        validIdPresent: true,
+        oldPolicyPresent: true,
+        supportingDocsPresent: true,
+      },
+      '',
+    ),
+    'Ready to hand off',
+  )
+  assert.equal(
+    getIntakeRequirementsBadge(
+      {
+        bookingFound: true,
+        orCrPresent: true,
+      },
+      '',
+    ),
+    'Partially checked',
+  )
+  assert.equal(
+    getIntakeRequirementsBadge(
+      {
+        bookingFound: true,
+        orCrPresent: true,
+        validIdPresent: true,
+        oldPolicyPresent: true,
+        supportingDocsPresent: true,
+      },
+      'Customer still needs to return with documents.',
+    ),
+    'Needs follow-up',
+  )
 })

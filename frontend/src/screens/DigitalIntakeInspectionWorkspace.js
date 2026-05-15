@@ -30,7 +30,11 @@ import {
   fuelLevelOptions,
   intakeFieldMaxLengths,
 } from './digitalIntakeInspectionWorkspaceForm.mjs'
-import { getIntakeWorkspaceHeroCopy } from './digitalIntakeInspectionWorkspaceView.mjs'
+import {
+  getIntakeRequirementsBadge,
+  getIntakeWorkspaceHeroCopy,
+  getIntakeWorkspacePrimaryActionLabel,
+} from './digitalIntakeInspectionWorkspaceView.mjs'
 
 const intakeStatusMeta = {
   pending: {
@@ -41,6 +45,33 @@ const intakeStatusMeta = {
     badgeClassName: 'badge badge-green',
     label: 'Completed intake',
   },
+}
+
+const arrivalTypeOptions = [
+  { value: 'walk_in', label: 'Walk-in', helper: 'No advance booking' },
+  { value: 'with_booking', label: 'Booking', helper: 'Scheduled arrival' },
+]
+
+const visitTypeOptions = [
+  { value: 'regular_service', label: 'Regular Service', nextRoute: 'service' },
+  { value: 'insurance_related', label: 'Insurance', nextRoute: 'insurance' },
+  { value: 'back_job_complaint', label: 'Back Job', nextRoute: 'complaint' },
+  { value: 'inspection_only', label: 'Inspection Only', nextRoute: 'inspection' },
+]
+
+const requirementsChecklistOptions = [
+  { value: 'bookingFound', label: 'Booking confirmed' },
+  { value: 'orCrPresent', label: 'OR/CR present' },
+  { value: 'validIdPresent', label: 'Valid ID present' },
+  { value: 'oldPolicyPresent', label: 'Old policy present' },
+  { value: 'supportingDocsPresent', label: 'Supporting docs present' },
+]
+
+const nextRouteLabels = {
+  service: 'Service bay handoff',
+  insurance: 'Insurance intake handoff',
+  complaint: 'Return visit review',
+  inspection: 'Inspection-only handoff',
 }
 
 const formatLabel = (value) =>
@@ -257,6 +288,14 @@ export default function DigitalIntakeInspectionWorkspace() {
   const defaultReceivedByStaff = getUserDisplayLabel(user)
   const isSubmittingPending = captureState.status === 'capture_submitting' && submitIntent === 'pending'
   const isSubmittingCompleted = captureState.status === 'capture_submitting' && submitIntent === 'completed'
+  const selectedVisitTypeMeta =
+    visitTypeOptions.find((option) => option.value === draft.visitType) ?? visitTypeOptions[0]
+  const nextRouteLabel = nextRouteLabels[draft.nextRoute] ?? formatLabel(draft.nextRoute) || 'Next handoff'
+  const primaryActionLabel = getIntakeWorkspacePrimaryActionLabel(draft.visitType)
+  const requirementsBadge = getIntakeRequirementsBadge(
+    draft.requirementsChecklist,
+    draft.missingRequirementsNote,
+  )
 
   const intakeContext = useMemo(() => {
     const items = []
@@ -304,6 +343,26 @@ export default function DigitalIntakeInspectionWorkspace() {
     setDraft((current) => ({
       ...current,
       ...patch,
+    }))
+  }
+
+  const updateVisitType = (visitType) => {
+    const selectedOption = visitTypeOptions.find((option) => option.value === visitType)
+
+    setDraft((current) => ({
+      ...current,
+      visitType,
+      nextRoute: selectedOption?.nextRoute ?? current.nextRoute,
+    }))
+  }
+
+  const updateRequirement = (field, checked) => {
+    setDraft((current) => ({
+      ...current,
+      requirementsChecklist: {
+        ...current.requirementsChecklist,
+        [field]: checked,
+      },
     }))
   }
 
@@ -508,106 +567,121 @@ export default function DigitalIntakeInspectionWorkspace() {
         <div className="card p-5 md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="card-title">Booking Reference</p>
+              <p className="card-title">Reception Intake Flow</p>
               <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                Start from the customer, vehicle, and booking, then capture the vehicle&apos;s arrival condition before
-                service begins.
+                Check in the arrival, confirm the visit, and record the handoff condition.
               </p>
             </div>
             <span className={draftStatus.badgeClassName}>{draftStatus.label}</span>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {!isTechnician ? (
-              <label className="label">
-                Customer
-                <select
-                  value={draft.customerUserId}
-                  onChange={(event) =>
-                    updateDraft({
-                      customerUserId: event.target.value,
-                      vehicleId: '',
-                      bookingId: '',
-                    })
-                  }
-                  className="select"
-                >
-                  <option value="">Choose a customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.displayName} / {customer.email}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <label className="label">
-              Vehicle
-              {isTechnician ? (
-                <input
-                  value={draft.vehicleId}
-                  onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
-                  className="input"
-                  placeholder="Paste vehicle UUID"
-                />
-              ) : (
-                <select
-                  value={draft.vehicleId}
-                  onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
-                  className="select"
-                >
-                  <option value="">Choose a customer vehicle</option>
-                  {customerVehicleOptions.map((vehicle) => (
-                    <option key={vehicle.id} value={vehicle.id}>
-                      {formatVehicleOptionLabel(vehicle)}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </label>
-            <label className="label md:col-span-2">
-              Optional booking
-              {isTechnician ? (
-                <input
-                  value={draft.bookingId}
-                  onChange={(event) => updateDraft({ bookingId: event.target.value })}
-                  className="input"
-                  placeholder="Booking UUID if this intake came from a scheduled visit"
-                />
-              ) : (
-                <select
-                  value={draft.bookingId}
-                  onChange={(event) => updateDraft({ bookingId: event.target.value })}
-                  className="select"
-                >
-                  <option value="">No booking link</option>
-                  {vehicleBookings.map((booking) => (
-                    <option key={booking.id} value={booking.id}>
-                      {formatBookingOptionLabel(booking)}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </label>
-          </div>
-
           <div className="mt-5 space-y-4">
             <IntakeSection
-              title="Vehicle Details"
-              description="Record the odometer and a concise arrival summary for the selected intake context."
-              badge={draft.vehicleId ? 'Vehicle selected' : 'Vehicle required'}
+              title="Arrival"
+              description="Choose how the vehicle arrived."
+              badge={draft.arrivalType === 'with_booking' ? 'Booking arrival' : 'Walk-in arrival'}
             >
               <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-surface-border bg-surface-raised p-4 md:col-span-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Arrival mode</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {arrivalTypeOptions.map((option) => {
+                      const isSelected = draft.arrivalType === option.value
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => updateDraft({ arrivalType: option.value })}
+                          className={`rounded-2xl border p-4 text-left transition-colors ${
+                            isSelected
+                              ? 'border-brand-orange bg-brand-orange/10'
+                              : 'border-surface-border bg-surface-card hover:border-brand-orange/40'
+                          }`}
+                        >
+                          <p className="text-sm font-semibold text-ink-primary">{option.label}</p>
+                          <p className="mt-1 text-xs text-ink-muted">{option.helper}</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                {!isTechnician ? (
+                  <label className="label">
+                    Customer
+                    <select
+                      value={draft.customerUserId}
+                      onChange={(event) =>
+                        updateDraft({
+                          customerUserId: event.target.value,
+                          vehicleId: '',
+                          bookingId: '',
+                        })
+                      }
+                      className="select"
+                    >
+                      <option value="">Choose a customer</option>
+                      {customers.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.displayName} / {customer.email}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <label className="label">
-                  Current odometer (km)
-                  <input
-                    value={draft.currentOdometerKm}
-                    onChange={(event) => updateDraft({ currentOdometerKm: event.target.value })}
-                    className="input"
-                    inputMode="numeric"
-                    maxLength={intakeFieldMaxLengths.currentOdometerKm}
-                    placeholder="45230"
-                  />
+                  Vehicle
+                  {isTechnician ? (
+                    <input
+                      value={draft.vehicleId}
+                      onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
+                      className="input"
+                      placeholder="Paste vehicle UUID"
+                    />
+                  ) : (
+                    <select
+                      value={draft.vehicleId}
+                      onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
+                      className="select"
+                    >
+                      <option value="">Choose a customer vehicle</option>
+                      {customerVehicleOptions.map((vehicle) => (
+                        <option key={vehicle.id} value={vehicle.id}>
+                          {formatVehicleOptionLabel(vehicle)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </label>
+                <label className="label md:col-span-2">
+                  {draft.arrivalType === 'with_booking' ? 'Booking' : 'Booking reference'}
+                  {isTechnician ? (
+                    <input
+                      value={draft.bookingId}
+                      onChange={(event) => updateDraft({ bookingId: event.target.value })}
+                      className="input"
+                      placeholder={
+                        draft.arrivalType === 'with_booking'
+                          ? 'Paste the booking UUID for this arrival'
+                          : 'Optional booking UUID for linked arrivals'
+                      }
+                    />
+                  ) : (
+                    <select
+                      value={draft.bookingId}
+                      onChange={(event) => updateDraft({ bookingId: event.target.value })}
+                      className="select"
+                    >
+                      <option value="">
+                        {draft.arrivalType === 'with_booking' ? 'Choose a booking' : 'No booking link'}
+                      </option>
+                      {vehicleBookings.map((booking) => (
+                        <option key={booking.id} value={booking.id}>
+                          {formatBookingOptionLabel(booking)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </label>
                 <div className="rounded-xl border border-surface-border bg-surface-raised p-4 md:col-span-2">
                   <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Selected context</p>
@@ -627,184 +701,301 @@ export default function DigitalIntakeInspectionWorkspace() {
                     </p>
                   )}
                 </div>
-                <label className="label md:col-span-2">
-                  Service concern on arrival
+              </div>
+            </IntakeSection>
+
+            <IntakeSection
+              title="Visit Type"
+              description="Set the handoff lane."
+              badge={selectedVisitTypeMeta.label}
+            >
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {visitTypeOptions.map((option) => {
+                    const isSelected = draft.visitType === option.value
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => updateVisitType(option.value)}
+                        className={`rounded-2xl border p-4 text-left transition-colors ${
+                          isSelected
+                            ? 'border-brand-orange bg-brand-orange/10'
+                            : 'border-surface-border bg-surface-raised hover:border-brand-orange/40'
+                        }`}
+                      >
+                        <p className="text-sm font-semibold text-ink-primary">{option.label}</p>
+                        <p className="mt-1 text-xs text-ink-muted">{nextRouteLabels[option.nextRoute]}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary">
+                    <input
+                      type="checkbox"
+                      checked={draft.isRepeatVisit}
+                      onChange={(event) => updateDraft({ isRepeatVisit: event.target.checked })}
+                      className="h-4 w-4 accent-[#f07c00]"
+                    />
+                    Repeat visit
+                  </label>
+                  <label className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary">
+                    <input
+                      type="checkbox"
+                      checked={draft.urgencyFlag}
+                      onChange={(event) => updateDraft({ urgencyFlag: event.target.checked })}
+                      className="h-4 w-4 accent-[#f07c00]"
+                    />
+                    Mark as urgent
+                  </label>
+                </div>
+              </div>
+            </IntakeSection>
+
+            <IntakeSection
+              title="Customer Concern"
+              description="Capture the front-desk summary."
+              badge={draft.serviceConcern.trim() ? 'Concern captured' : 'Waiting for concern'}
+            >
+              <div className="grid gap-3">
+                <label className="label">
+                  Reason for visit
+                  <input
+                    value={draft.reasonForVisit}
+                    onChange={(event) => updateDraft({ reasonForVisit: event.target.value })}
+                    className="input"
+                    maxLength={intakeFieldMaxLengths.reasonForVisit}
+                    placeholder="Reason for today&apos;s visit"
+                  />
+                </label>
+                <label className="label">
+                  Customer concern
                   <textarea
                     value={draft.serviceConcern}
                     onChange={(event) => updateDraft({ serviceConcern: event.target.value })}
                     rows={3}
                     className="input min-h-[96px] resize-y"
                     maxLength={intakeFieldMaxLengths.serviceConcern}
-                    placeholder="Summarize the customer-reported concern or requested check."
+                    placeholder="Summarize the reported issue."
+                  />
+                </label>
+                <label className="label">
+                  Requested service summary
+                  <textarea
+                    value={draft.requestedServiceSummary}
+                    onChange={(event) => updateDraft({ requestedServiceSummary: event.target.value })}
+                    rows={3}
+                    className="input min-h-[96px] resize-y"
+                    maxLength={intakeFieldMaxLengths.requestedServiceSummary}
+                    placeholder="What should happen next?"
                   />
                 </label>
               </div>
             </IntakeSection>
 
             <IntakeSection
-              title="Fuel Level On Arrival"
-              description="Use the intake-first fuel snapshot instead of a free-form note."
-              badge={draft.fuelLevel || 'Not set'}
+              title="Requirements"
+              description="Confirm intake requirements."
+              badge={requirementsBadge}
             >
-              <div className="booking-segmented-control w-full flex-wrap">
-                {fuelLevelOptions.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => updateDraft({ fuelLevel: option })}
-                    className={`booking-tab-button ${draft.fuelLevel === option ? 'booking-tab-button-active' : ''}`}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {requirementsChecklistOptions.map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary"
                   >
-                    {option}
-                  </button>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft.requirementsChecklist[option.value])}
+                      onChange={(event) => updateRequirement(option.value, event.target.checked)}
+                      className="h-4 w-4 accent-[#f07c00]"
+                    />
+                    {option.label}
+                  </label>
                 ))}
               </div>
-            </IntakeSection>
-
-            <IntakeSection
-              title="Existing Damage / Marks"
-              description="Mark visible areas with existing damage or special attention points before the vehicle enters service."
-              badge={draft.damageAreas.length ? `${draft.damageAreas.length} area(s)` : 'None marked'}
-            >
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {damageAreaOptions.map((area) => {
-                  const isSelected = draft.damageAreas.includes(area.value)
-
-                  return (
-                    <button
-                      key={area.value}
-                      type="button"
-                      onClick={() => toggleDamageArea(area.value)}
-                      className={`rounded-xl border px-4 py-3 text-left text-sm font-medium transition-colors ${
-                        isSelected
-                          ? 'border-brand-orange bg-brand-orange/10 text-ink-primary'
-                          : 'border-surface-border bg-surface-raised text-ink-secondary hover:border-brand-orange/40'
-                      }`}
-                    >
-                      {area.label}
-                    </button>
-                  )
-                })}
-              </div>
               <label className="label mt-4">
-                Additional damage notes
+                Missing requirements note
                 <textarea
-                  value={draft.damageNotes}
-                  onChange={(event) => updateDraft({ damageNotes: event.target.value })}
+                  value={draft.missingRequirementsNote}
+                  onChange={(event) => updateDraft({ missingRequirementsNote: event.target.value })}
                   rows={3}
                   className="input min-h-[96px] resize-y"
-                  maxLength={intakeFieldMaxLengths.damageNotes}
-                  placeholder="Describe scratches, dents, chips, or anything the next handoff should know."
+                  maxLength={intakeFieldMaxLengths.missingRequirementsNote}
+                  placeholder="List anything still needed."
                 />
               </label>
             </IntakeSection>
 
             <IntakeSection
-              title="Arrival Photos"
-              description="Use named slots for the existing upload-ref workflow. This screen records refs only."
-              badge="Ref-based save"
+              title="Arrival Inspection"
+              description="Keep the arrival condition visible."
+              badge={draft.damageAreas.length ? `${draft.damageAreas.length} marked area(s)` : 'No damage marked'}
             >
-              <div className="grid gap-3 md:grid-cols-2">
-                {arrivalPhotoSlots.map((slot) => (
-                  <label key={slot.value} className="label">
-                    {slot.label}
+              <div className="grid gap-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="label">
+                    Current odometer (km)
                     <input
-                      value={draft.arrivalPhotos[slot.value]}
-                      onChange={(event) => updateArrivalPhoto(slot.value, event.target.value)}
+                      value={draft.currentOdometerKm}
+                      onChange={(event) => updateDraft({ currentOdometerKm: event.target.value })}
                       className="input"
-                      placeholder={`upload://vehicle/${slot.value}`}
+                      inputMode="numeric"
+                      maxLength={intakeFieldMaxLengths.currentOdometerKm}
+                      placeholder="45230"
                     />
                   </label>
-                ))}
-              </div>
-            </IntakeSection>
-
-            <IntakeSection
-              title="Pre-Service Checklist"
-              description="Capture a quick OK or Issue result for the standard arrival checks."
-              badge="OK / Issue"
-            >
-              <div className="space-y-3">
-                {checklistItemOptions.map((item) => (
-                  <div
-                    key={item.value}
-                    className="rounded-xl border border-surface-border bg-surface-raised p-3 md:flex md:items-center md:justify-between"
-                  >
-                    <p className="text-sm font-medium text-ink-primary">{item.label}</p>
-                    <div className="booking-segmented-control mt-3 w-full flex-wrap md:mt-0 md:w-auto">
-                      {[
-                        { value: 'ok', label: 'OK' },
-                        { value: 'issue', label: 'Issue' },
-                      ].map((option) => (
+                  <div>
+                    <p className="label">Fuel level on arrival</p>
+                    <div className="booking-segmented-control w-full flex-wrap">
+                      {fuelLevelOptions.map((option) => (
                         <button
-                          key={option.value}
+                          key={option}
                           type="button"
-                          onClick={() => updateChecklistItem(item.value, option.value)}
+                          onClick={() => updateDraft({ fuelLevel: option })}
                           className={`booking-tab-button ${
-                            draft.checklist[item.value] === option.value ? 'booking-tab-button-active' : ''
+                            draft.fuelLevel === option ? 'booking-tab-button-active' : ''
                           }`}
                         >
-                          {option.label}
+                          {option}
                         </button>
                       ))}
                     </div>
                   </div>
-                ))}
-              </div>
-            </IntakeSection>
+                </div>
 
-            <IntakeSection
-              title="Customer Items In Vehicle"
-              description="Note any personal items or accessories that should be acknowledged at handoff."
-            >
-              <label className="label">
-                Items left in vehicle
-                <textarea
-                  value={draft.customerItems}
-                  onChange={(event) => updateDraft({ customerItems: event.target.value })}
-                  rows={3}
-                  className="input min-h-[96px] resize-y"
-                  maxLength={intakeFieldMaxLengths.customerItems}
-                  placeholder="Dashcam, child seat, parking card, tools, loose valuables, and similar items."
-                />
-              </label>
-            </IntakeSection>
+                <div>
+                  <p className="label">Existing damage or marks</p>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {damageAreaOptions.map((area) => {
+                      const isSelected = draft.damageAreas.includes(area.value)
 
-            <IntakeSection
-              title="Customer Acknowledgment"
-              description="Capture the sign-off details that confirm the arrival condition was reviewed with the customer."
-              badge={draft.customerAcknowledged ? 'Acknowledged' : 'Awaiting acknowledgment'}
-            >
-              <label className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary">
-                <input
-                  type="checkbox"
-                  checked={draft.customerAcknowledged}
-                  onChange={(event) => updateDraft({ customerAcknowledged: event.target.checked })}
-                  className="h-4 w-4 accent-[#f07c00]"
-                />
-                Customer acknowledged the intake condition summary.
-              </label>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      return (
+                        <button
+                          key={area.value}
+                          type="button"
+                          onClick={() => toggleDamageArea(area.value)}
+                          className={`rounded-xl border px-4 py-3 text-left text-sm font-medium transition-colors ${
+                            isSelected
+                              ? 'border-brand-orange bg-brand-orange/10 text-ink-primary'
+                              : 'border-surface-border bg-surface-raised text-ink-secondary hover:border-brand-orange/40'
+                          }`}
+                        >
+                          {area.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 <label className="label">
-                  Customer signature name
-                  <input
-                    value={draft.customerSignatureName}
-                    onChange={(event) => updateDraft({ customerSignatureName: event.target.value })}
-                    className="input"
-                    maxLength={intakeFieldMaxLengths.customerSignatureName}
-                    placeholder="Customer full name"
+                  Additional damage notes
+                  <textarea
+                    value={draft.damageNotes}
+                    onChange={(event) => updateDraft({ damageNotes: event.target.value })}
+                    rows={3}
+                    className="input min-h-[96px] resize-y"
+                    maxLength={intakeFieldMaxLengths.damageNotes}
+                    placeholder="Add quick condition notes."
                   />
                 </label>
+
+                <div>
+                  <p className="label">Arrival photos</p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {arrivalPhotoSlots.map((slot) => (
+                      <label key={slot.value} className="label">
+                        {slot.label}
+                        <input
+                          value={draft.arrivalPhotos[slot.value]}
+                          onChange={(event) => updateArrivalPhoto(slot.value, event.target.value)}
+                          className="input"
+                          placeholder={`upload://vehicle/${slot.value}`}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="label">Inspection checklist</p>
+                  <div className="space-y-3">
+                    {checklistItemOptions.map((item) => (
+                      <div
+                        key={item.value}
+                        className="rounded-xl border border-surface-border bg-surface-raised p-3 md:flex md:items-center md:justify-between"
+                      >
+                        <p className="text-sm font-medium text-ink-primary">{item.label}</p>
+                        <div className="booking-segmented-control mt-3 w-full flex-wrap md:mt-0 md:w-auto">
+                          {[
+                            { value: 'ok', label: 'OK' },
+                            { value: 'issue', label: 'Issue' },
+                          ].map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => updateChecklistItem(item.value, option.value)}
+                              className={`booking-tab-button ${
+                                draft.checklist[item.value] === option.value ? 'booking-tab-button-active' : ''
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <label className="label">
-                  Received by staff
-                  <input
-                    value={draft.receivedByStaff}
-                    onChange={(event) => updateDraft({ receivedByStaff: event.target.value })}
-                    className="input"
-                    maxLength={intakeFieldMaxLengths.receivedByStaff}
-                    placeholder={defaultReceivedByStaff || 'Staff member name'}
+                  Items left in vehicle
+                  <textarea
+                    value={draft.customerItems}
+                    onChange={(event) => updateDraft({ customerItems: event.target.value })}
+                    rows={3}
+                    className="input min-h-[96px] resize-y"
+                    maxLength={intakeFieldMaxLengths.customerItems}
+                    placeholder="List customer items left inside."
                   />
                 </label>
-                <label className="label md:col-span-2">
+
+                <label className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary">
+                  <input
+                    type="checkbox"
+                    checked={draft.customerAcknowledged}
+                    onChange={(event) => updateDraft({ customerAcknowledged: event.target.checked })}
+                    className="h-4 w-4 accent-[#f07c00]"
+                  />
+                  Customer acknowledged the arrival summary.
+                </label>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="label">
+                    Customer signature name
+                    <input
+                      value={draft.customerSignatureName}
+                      onChange={(event) => updateDraft({ customerSignatureName: event.target.value })}
+                      className="input"
+                      maxLength={intakeFieldMaxLengths.customerSignatureName}
+                      placeholder="Customer full name"
+                    />
+                  </label>
+                  <label className="label">
+                    Received by staff
+                    <input
+                      value={draft.receivedByStaff}
+                      onChange={(event) => updateDraft({ receivedByStaff: event.target.value })}
+                      className="input"
+                      maxLength={intakeFieldMaxLengths.receivedByStaff}
+                      placeholder={defaultReceivedByStaff || 'Staff member name'}
+                    />
+                  </label>
+                </div>
+
+                <label className="label">
                   Additional staff notes
                   <textarea
                     value={draft.notes}
@@ -812,62 +1003,11 @@ export default function DigitalIntakeInspectionWorkspace() {
                     rows={3}
                     className="input min-h-[96px] resize-y"
                     maxLength={intakeFieldMaxLengths.notes}
-                    placeholder="Optional extra intake notes that should travel with the inspection record."
+                    placeholder="Optional extra handoff notes."
                   />
                 </label>
               </div>
             </IntakeSection>
-          </div>
-
-          {captureState.message ? (
-            <div className={`mt-4 ${getMessageTone(captureState.status)}`}>
-              {captureState.message}
-            </div>
-          ) : null}
-
-          <div className="mt-5 rounded-2xl border border-surface-border bg-surface-card p-4 md:p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-bold text-ink-primary">Actions</p>
-                <p className="mt-1 text-sm text-ink-muted">
-                  Save a pending draft while the intake is still in progress, or submit the completed intake once the
-                  arrival check is captured.
-                </p>
-              </div>
-              <span className="badge badge-gray">History stays on the right</span>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => void saveInspection('pending')}
-                disabled={captureState.status === 'capture_submitting'}
-                className="btn-ghost"
-              >
-                {isSubmittingPending ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <FileSearch size={15} />
-                )}
-                Save Pending Draft
-              </button>
-              <button
-                type="button"
-                onClick={() => void saveInspection('completed')}
-                disabled={captureState.status === 'capture_submitting'}
-                className="btn-primary"
-              >
-                {isSubmittingCompleted ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <BadgeCheck size={15} />
-                )}
-                Submit Completed Intake
-              </button>
-              <button type="button" onClick={loadHistory} className="btn-ghost">
-                <FileSearch size={15} />
-                Load Vehicle History
-              </button>
-            </div>
           </div>
         </div>
 
@@ -875,9 +1015,9 @@ export default function DigitalIntakeInspectionWorkspace() {
           <section className="card p-5 md:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="card-title">Vehicle Inspection History</p>
+                <p className="card-title">Inspection History</p>
                 <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                  Load prior inspection records for the active vehicle.
+                  Review past records for the active vehicle.
                 </p>
               </div>
               <span className="badge badge-gray">Read state: {formatLabel(historyState.status)}</span>
@@ -924,8 +1064,8 @@ export default function DigitalIntakeInspectionWorkspace() {
                 <p className="card-title">Selected Inspection Detail</p>
                 <p className="mt-2 text-sm leading-6 text-ink-secondary">
                   {isTechnician
-                    ? 'Review findings and verification before continuing work.'
-                    : 'Review findings and verification for the selected inspection.'}
+                    ? 'Review evidence before continuing work.'
+                    : 'Review evidence for the selected inspection.'}
                 </p>
               </div>
               {selectedInspection ? (
@@ -984,6 +1124,69 @@ export default function DigitalIntakeInspectionWorkspace() {
               </div>
             )}
           </section>
+        </div>
+      </section>
+
+      {captureState.message ? (
+        <div className={`mt-4 ${getMessageTone(captureState.status)}`}>
+          {captureState.message}
+        </div>
+      ) : null}
+
+      <section className="card mt-5 p-5 md:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="card-title">Next Step Actions</p>
+            <p className="mt-2 text-sm leading-6 text-ink-secondary">
+              Save progress or hand off the arrival.
+            </p>
+          </div>
+          <span className="badge badge-gray">{nextRouteLabel}</span>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,0.9fr)_auto] md:items-start">
+          <div className="rounded-2xl border border-surface-border bg-surface-raised p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Handoff plan</p>
+            <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedVisitTypeMeta.label}</p>
+            <p className="mt-1 text-sm text-ink-muted">{nextRouteLabel}</p>
+            <p className="mt-3 text-sm text-ink-muted">
+              {draft.arrivalType === 'with_booking'
+                ? 'Booking arrivals keep the scheduled visit attached when you save.'
+                : 'Walk-ins can stay unbooked or be linked later.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void saveInspection('pending')}
+              disabled={captureState.status === 'capture_submitting'}
+              className="btn-ghost"
+            >
+              {isSubmittingPending ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <FileSearch size={15} />
+              )}
+              Save Pending Draft
+            </button>
+              <button
+                type="button"
+                onClick={() => void saveInspection('completed')}
+              disabled={captureState.status === 'capture_submitting'}
+              className="btn-primary"
+              >
+                {isSubmittingCompleted ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <BadgeCheck size={15} />
+                )}
+                {primaryActionLabel}
+              </button>
+            <button type="button" onClick={loadHistory} className="btn-ghost">
+              <FileSearch size={15} />
+              Load Vehicle History
+            </button>
+          </div>
         </div>
       </section>
     </div>

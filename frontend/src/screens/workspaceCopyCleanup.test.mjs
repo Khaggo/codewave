@@ -18,6 +18,12 @@ test('dashboard workspace copy is concise', () => {
       'Use this workspace as the staff command center for booking review, intake coordination, job-order handoff, QA checks, and finance follow-through.',
     ),
   )
+
+  assert.ok(!source.includes('Open the daily schedule and booking queue.'))
+  assert.ok(!source.includes('Open pending bookings'))
+  assert.ok(!source.includes('Continue intake inspection'))
+  assert.ok(!source.includes('View invoices'))
+  assert.ok(!source.includes('QA review'))
 })
 
 test('settings workspace copy stays one sentence', () => {
@@ -32,19 +38,40 @@ test('intake, qa, and finance workspaces use short section descriptions', () => 
   const qa = read('frontend/src/screens/QAAuditWorkspace.js')
   const finance = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
 
-  assert.ok(intakeView.includes('Record vehicle condition before service begins.'))
-  assert.ok(
-    intakeScreen.includes(
-      'Start from the customer, vehicle, and booking, then capture the vehicle&apos;s arrival condition before',
-    ),
-  )
-  assert.ok(intakeScreen.includes('Load prior inspection records for the active vehicle.'))
+  assert.ok(intakeView.includes('Check in arrivals and capture vehicle condition before handoff.'))
+  assert.ok(intakeScreen.includes('Check in the arrival, confirm the visit, and record the handoff condition.'))
+  assert.ok(intakeScreen.includes('Review past records for the active vehicle.'))
 
   assert.ok(qa.includes('Review QA checks, record verdicts, and keep overrides auditable.'))
 
   assert.ok(finance.includes('Review service invoices, ecommerce orders, and aging analytics from one workspace.'))
   assert.ok(finance.includes('Review aging, payment guidance, and live billing lookups before detail review.'))
   assert.ok(finance.includes('Inspect loaded job orders for invoice and payment status.'))
+})
+
+test('intake workspace source keeps the guided front-desk section order', () => {
+  const intakeScreen = read('frontend/src/screens/DigitalIntakeInspectionWorkspace.js')
+  const sectionMarkers = [
+    'title="Arrival"',
+    'title="Visit Type"',
+    'title="Customer Concern"',
+    'title="Requirements"',
+    'title="Arrival Inspection"',
+    '<p className="card-title">Inspection History</p>',
+    '<p className="card-title">Next Step Actions</p>',
+  ]
+  const indices = sectionMarkers.map((marker) => intakeScreen.indexOf(marker))
+
+  for (const [index, marker] of sectionMarkers.entries()) {
+    assert.notEqual(indices[index], -1, `Expected intake screen source to include "${marker}"`)
+  }
+
+  for (let index = 1; index < indices.length; index += 1) {
+    assert.ok(
+      indices[index - 1] < indices[index],
+      `Expected "${sectionMarkers[index - 1]}" to appear before "${sectionMarkers[index]}"`,
+    )
+  }
 })
 
 test('catalog, booking-service, and inventory workspaces use one-sentence descriptions', () => {

@@ -4,11 +4,39 @@ export const getIntakeWorkspaceHeroCopy = () => ({
 })
 
 const PRIMARY_ACTION_LABELS = {
-  regular_service: 'Start service check-in',
-  insurance_related: 'Start insurance check-in',
-  back_job_complaint: 'Start return visit check-in',
-  inspection_only: 'Start inspection check-in',
+  regular_service: 'Save Service Intake',
+  insurance_related: 'Save Insurance Intake',
+  back_job_complaint: 'Save Complaint Intake',
+  inspection_only: 'Save Inspection',
 }
 
 export const getIntakeWorkspacePrimaryActionLabel = (visitType) =>
-  PRIMARY_ACTION_LABELS[visitType] ?? 'Start intake check-in'
+  PRIMARY_ACTION_LABELS[visitType] ?? 'Save Intake'
+
+const REQUIREMENTS_CHECKLIST_FIELDS = [
+  'bookingFound',
+  'orCrPresent',
+  'validIdPresent',
+  'oldPolicyPresent',
+  'supportingDocsPresent',
+]
+
+export const getIntakeRequirementsBadge = (requirementsChecklist, missingRequirementsNote) => {
+  const checkedCount = REQUIREMENTS_CHECKLIST_FIELDS.filter((field) =>
+    Boolean(requirementsChecklist?.[field]),
+  ).length
+
+  if (String(missingRequirementsNote ?? '').trim()) {
+    return 'Needs follow-up'
+  }
+
+  if (!checkedCount) {
+    return 'Pending check'
+  }
+
+  if (checkedCount === REQUIREMENTS_CHECKLIST_FIELDS.length) {
+    return 'Ready to hand off'
+  }
+
+  return 'Partially checked'
+}
