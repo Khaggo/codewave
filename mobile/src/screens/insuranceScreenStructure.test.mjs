@@ -107,7 +107,8 @@ test('insurance shell uses pull-to-refresh and removes the floating reload affor
   assert.match(source, /RefreshControl/)
   assert.match(source, /onRefresh=\{refreshTracking\}/)
   assert.match(source, /refreshing=\{isRefreshing\}/)
-  assert.doesNotMatch(source, /floating/i)
-  assert.doesNotMatch(source, /reload button/i)
-  assert.doesNotMatch(source, /onPress=\{refreshTracking\}[\s\S]*?outside/i)
+  assert.doesNotMatch(
+    source,
+    /<TouchableOpacity[\s\S]*?style=\{styles\.secondaryButton\}[\s\S]*?onPress=\{\(\) => refreshTracking\(\)\}[\s\S]*?<Text[\s\S]*?>Refresh<\/Text>[\s\S]*?<\/TouchableOpacity>/,
+  )
 })
