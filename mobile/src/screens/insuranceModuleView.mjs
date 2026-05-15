@@ -195,6 +195,83 @@ export const getInsuranceHomeCards = ({ hasActiveRequest } = {}) => [
   { key: 'history', label: 'History' },
 ]
 
+export const buildCustomerInsuranceHomeFocus = ({
+  latestInquiry = null,
+  missingRequiredDocuments = [],
+  claimStatusUpdateCount = 0,
+} = {}) => {
+  const requiredCount = Array.isArray(missingRequiredDocuments)
+    ? missingRequiredDocuments.length
+    : 0
+
+  if (requiredCount > 0) {
+    return {
+      icon: 'file-document-alert-outline',
+      title: 'Upload required documents',
+      message: `${requiredCount} required document${requiredCount === 1 ? '' : 's'} still need attention before the review can continue.`,
+      actionLabel: 'Upload now',
+      tone: 'warning',
+      highlightedCardKey: 'documents',
+    }
+  }
+
+  if (latestInquiry?.status === 'payment_pending' || latestInquiry?.paymentStatus === 'overdue') {
+    return {
+      icon: 'cash-clock',
+      title: latestInquiry?.paymentStatus === 'overdue' ? 'Payment is overdue' : 'Payment follow-up is active',
+      message:
+        latestInquiry?.paymentStatus === 'overdue'
+          ? 'Upload your proof of payment as soon as possible so staff can continue the request.'
+          : 'Proof of payment or verification is still part of the current request.',
+      actionLabel: 'Review payment',
+      tone: latestInquiry?.paymentStatus === 'overdue' ? 'danger' : 'default',
+      highlightedCardKey: 'payment',
+    }
+  }
+
+  if (latestInquiry?.status === 'for_renewal' || latestInquiry?.renewalStatus === 'awaiting_customer') {
+    return {
+      icon: 'calendar-clock-outline',
+      title: 'Renewal follow-up is active',
+      message: 'A renewal prompt is already in progress for this vehicle, so watch the latest timeline update closely.',
+      actionLabel: 'Review renewal',
+      tone: 'default',
+      highlightedCardKey: 'renewal',
+    }
+  }
+
+  if (latestInquiry?.id) {
+    return {
+      icon: 'clipboard-check-outline',
+      title: 'Current request in view',
+      message: 'This home screen is already synced to your latest inquiry, timeline, and upload steps.',
+      actionLabel: 'Refresh status',
+      tone: 'success',
+      highlightedCardKey: 'active',
+    }
+  }
+
+  if (claimStatusUpdateCount > 0) {
+    return {
+      icon: 'history',
+      title: 'Insurance history available',
+      message: `${claimStatusUpdateCount} recorded insurance update${claimStatusUpdateCount === 1 ? '' : 's'} ${claimStatusUpdateCount === 1 ? 'is' : 'are'} already available for this vehicle.`,
+      actionLabel: 'Review history',
+      tone: 'default',
+      highlightedCardKey: 'history',
+    }
+  }
+
+  return {
+    icon: 'shield-plus-outline',
+    title: 'Start a fresh request',
+    message: 'Begin with a short concern summary, then use this same screen to upload documents and track the workflow.',
+    actionLabel: 'Start now',
+    tone: 'default',
+    highlightedCardKey: 'start',
+  }
+}
+
 export const buildRequirementsChecklist = ({ status = 'submitted', uploadedTypes = [] } = {}) => {
   const normalizedUploadedTypes = Array.isArray(uploadedTypes) ? uploadedTypes : []
 

@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  buildCustomerInsuranceHomeFocus,
   buildRequirementsChecklist,
   clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
@@ -27,6 +28,51 @@ test('home cards prioritize start, upload, payment, and renewal actions', () => 
   assert.deepEqual(
     getInsuranceHomeCards({ hasActiveRequest: true }).map((card) => card.key),
     ['start', 'active', 'documents', 'payment', 'renewal', 'history'],
+  )
+})
+
+test('insurance home focus prioritizes missing-document follow-up when requirements are still incomplete', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceHomeFocus({
+      latestInquiry: {
+        id: 'inq-1',
+        status: 'needs_documents',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [
+        { type: 'policy', label: 'Policy copy' },
+        { type: 'valid_id', label: 'Valid ID' },
+      ],
+      claimStatusUpdateCount: 0,
+    }),
+    {
+      icon: 'file-document-alert-outline',
+      title: 'Upload required documents',
+      message:
+        '2 required documents still need attention before the review can continue.',
+      actionLabel: 'Upload now',
+      tone: 'warning',
+      highlightedCardKey: 'documents',
+    },
+  )
+})
+
+test('insurance home focus falls back to vehicle history once there is no active request', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceHomeFocus({
+      latestInquiry: null,
+      missingRequiredDocuments: [],
+      claimStatusUpdateCount: 3,
+    }),
+    {
+      icon: 'history',
+      title: 'Insurance history available',
+      message: '3 recorded insurance updates are already available for this vehicle.',
+      actionLabel: 'Review history',
+      tone: 'default',
+      highlightedCardKey: 'history',
+    },
   )
 })
 

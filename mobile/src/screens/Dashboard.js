@@ -70,8 +70,11 @@ import {
   updateCustomerCartItem,
 } from '../lib/ecommerceCheckoutClient';
 import {
+  buildCustomerNotificationPanelSummary,
   createEmptyCustomerNotificationSnapshot,
   loadCustomerNotificationSnapshot,
+  markAllCustomerNotificationsReadLocally,
+  markCustomerNotificationReadLocally,
   updateCustomerNotificationPreferences,
 } from '../lib/notificationClient';
 import ShopCatalogSection from '../components/shop/ShopCatalogSection';
@@ -116,7 +119,7 @@ const notificationPreferenceOptions = [
   {
     key: 'emailEnabled',
     label: 'Email Delivery',
-    description: 'Turn customer email notifications on or off for all operational updates.',
+    description: 'Turn customer email notifications on or off for booking, invoice, back-job, and follow-up updates.',
   },
   {
     key: 'bookingRemindersEnabled',
@@ -126,7 +129,7 @@ const notificationPreferenceOptions = [
   {
     key: 'insuranceUpdatesEnabled',
     label: 'Insurance Updates',
-    description: 'Get notified when insurance inquiries move through review or need more documents.',
+    description: 'Get in-app insurance reminders when documents, payment, or renewal follow-up need your action.',
   },
   {
     key: 'invoiceRemindersEnabled',
@@ -1154,6 +1157,8 @@ function ProfileAvatarButton({
 }
 
 function NotificationRow({ item, onDismiss, onOpen }) {
+  const requiresAction = item.unread;
+
   return (
     <View style={styles.notificationRow}>
       <View style={[styles.notificationIconWrap, { backgroundColor: item.bgColor }]}>
@@ -1164,6 +1169,25 @@ function NotificationRow({ item, onDismiss, onOpen }) {
         <View style={styles.notificationTitleRow}>
           {item.unread ? <View style={styles.notificationUnreadDot} /> : null}
           <Text style={styles.notificationRowTitle}>{item.title}</Text>
+          <View
+            style={[
+              styles.notificationStatusPill,
+              requiresAction
+                ? styles.notificationStatusPillAction
+                : styles.notificationStatusPillInformational,
+            ]}
+          >
+            <Text
+              style={[
+                styles.notificationStatusPillText,
+                requiresAction
+                  ? styles.notificationStatusPillTextAction
+                  : styles.notificationStatusPillTextInformational,
+              ]}
+            >
+              {requiresAction ? 'Action needed' : 'Reviewed'}
+            </Text>
+          </View>
         </View>
         <Text style={styles.notificationRowMessage}>{item.message}</Text>
         <Text style={styles.notificationRowTime}>{item.timeLabel}</Text>
@@ -4039,12 +4063,11 @@ export default function Dashboard({
   };
 
   const handleMarkAllNotificationsRead = () => {
-    setNotificationsFeed((current) =>
-      current.map((item) => ({
-        ...item,
-        unread: false,
-      }))
-    );
+    setNotificationsFeed((current) => markAllCustomerNotificationsReadLocally(current));
+    setNotificationModuleState((currentState) => ({
+      ...currentState,
+      notifications: markAllCustomerNotificationsReadLocally(currentState.notifications),
+    }));
   };
 
   const handleDismissNotification = (notificationKey) => {
@@ -4054,14 +4077,15 @@ export default function Dashboard({
   const handleOpenNotification = (item) => {
     setNotificationsFeed((current) =>
       current.map((notification) =>
-        notification.key === item.key
-          ? {
-              ...notification,
-              unread: false,
-            }
-          : notification
+        notification.key === item.key ? markCustomerNotificationReadLocally(notification) : notification
       )
     );
+    setNotificationModuleState((currentState) => ({
+      ...currentState,
+      notifications: currentState.notifications.map((notification) =>
+        notification.key === item.key ? markCustomerNotificationReadLocally(notification) : notification
+      ),
+    }));
 
     if (item.action === 'booking' || item.category === 'booking_reminder') {
       navigateToBooking('track');
@@ -5895,6 +5919,12 @@ export default function Dashboard({
     ));
 
   const renderInsuranceContent = () => {
+    const insuranceNotifications = notificationsFeed.filter(
+      (item) => item.action === 'insurance' || item.category === 'insurance_update',
+    );
+    const insuranceNotificationSummary = buildCustomerNotificationPanelSummary(
+      insuranceNotifications,
+    );
     const vehicles = digitalGarageState.vehicleSummaries?.length
       ? digitalGarageState.vehicleSummaries
       : (digitalGarageState.vehicles ?? account?.ownedVehicles ?? []).map((vehicle, index) => ({
@@ -5918,17 +5948,58 @@ export default function Dashboard({
       </View>
 
       <View style={styles.infoPanel}>
-        <Text style={styles.infoPanelTitle}>Insurance inquiry center</Text>
-        <Text style={styles.infoPanelText}>
-          Open your customer insurance home to start a request, upload documents, and follow payment or renewal prompts for a saved vehicle.
-        </Text>
-        <TouchableOpacity
-          style={[styles.primaryButton, styles.editProfileButton]}
-          onPress={() => navigateToInsuranceInquiry(selectedGarageVehicleId)}
-          activeOpacity={0.86}
-        >
-          <Text style={styles.primaryButtonText}>Open Insurance Home</Text>
-        </TouchableOpacity>
+        <View style={styles.infoPanelHeader}>
+          <View style={styles.infoPanelHeaderCopy}>
+            <Text style={styles.infoPanelTitle}>Insurance inquiry center</Text>
+            <Text style={styles.infoPanelText}>
+              Open your customer insurance home to start a request, upload documents, and follow payment or renewal prompts for a saved vehicle.
+            </Text>
+          </View>
+          <View style={styles.infoPanelPill}>
+            <Text style={styles.infoPanelPillText}>
+              {selectedGarageVehicleId ? 'Vehicle ready' : 'Choose vehicle'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.infoPanelSummaryRow}>
+          <View style={styles.infoPanelSummaryCard}>
+            <Text style={styles.infoPanelSummaryLabel}>Insurance reminders</Text>
+            <Text style={styles.infoPanelSummaryValue}>
+              {insuranceNotificationSummary.actionNeededCount}
+            </Text>
+            <Text style={styles.infoPanelSummaryText}>
+              {insuranceNotificationSummary.primaryTitle}
+            </Text>
+          </View>
+          <View style={styles.infoPanelSummaryCard}>
+            <Text style={styles.infoPanelSummaryLabel}>Visibility updates</Text>
+            <Text style={styles.infoPanelSummaryValueMuted}>
+              {insuranceNotificationSummary.informationalCount}
+            </Text>
+            <Text style={styles.infoPanelSummaryText}>
+              {insuranceNotificationSummary.secondaryTitle}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.infoPanelActionRow}>
+          <TouchableOpacity
+            style={[styles.primaryButton, styles.editProfileButton, styles.infoPanelPrimaryAction]}
+            onPress={() => navigateToInsuranceInquiry(selectedGarageVehicleId)}
+            activeOpacity={0.86}
+          >
+            <Text style={styles.primaryButtonText}>Open Insurance Home</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.infoPanelSecondaryAction}
+            onPress={handleToggleNotifications}
+            activeOpacity={0.86}
+          >
+            <MaterialCommunityIcons name="bell-outline" size={18} color={colors.text} />
+            <Text style={styles.infoPanelSecondaryActionText}>Review reminders</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Text style={styles.sectionHeading}>Choose Vehicle Context</Text>
@@ -6639,6 +6710,7 @@ export default function Dashboard({
   const isCatalogDetailVisible = catalogDetailState.status !== 'idle';
   const selectedCatalogProduct = catalogDetailState.product ?? catalogDetailState.previewProduct;
   const unreadNotificationCount = notificationsFeed.filter((item) => item.unread).length;
+  const notificationPanelSummary = buildCustomerNotificationPanelSummary(notificationsFeed);
   const bottomNavItemInset = isTinyPhone ? 0 : isVeryCompactPhone ? 1 : isCompactPhone ? 3 : 6;
 
   return (
@@ -6682,7 +6754,10 @@ export default function Dashboard({
                 <View>
                   <Text style={styles.notificationsPanelTitle}>Notifications</Text>
                   <Text style={styles.notificationsPanelSubtitle}>
-                    {unreadNotificationCount} unread
+                    {notificationPanelSummary.primaryTitle}
+                  </Text>
+                  <Text style={styles.notificationsPanelHelperText}>
+                    {notificationPanelSummary.secondaryTitle}
                   </Text>
                 </View>
 
@@ -6702,6 +6777,25 @@ export default function Dashboard({
                   >
                     <MaterialCommunityIcons name="close" size={18} color={colors.mutedText} />
                   </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.notificationsSummaryRow}>
+                <View style={styles.notificationsSummaryCard}>
+                  <Text style={styles.notificationsSummaryLabel}>Unread</Text>
+                  <Text style={styles.notificationsSummaryValue}>{unreadNotificationCount}</Text>
+                </View>
+                <View style={styles.notificationsSummaryCard}>
+                  <Text style={styles.notificationsSummaryLabel}>Action needed</Text>
+                  <Text style={styles.notificationsSummaryValue}>
+                    {notificationPanelSummary.actionNeededCount}
+                  </Text>
+                </View>
+                <View style={styles.notificationsSummaryCard}>
+                  <Text style={styles.notificationsSummaryLabel}>Visibility only</Text>
+                  <Text style={styles.notificationsSummaryValueMuted}>
+                    {notificationPanelSummary.informationalCount}
+                  </Text>
                 </View>
               </View>
 
@@ -11290,6 +11384,16 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 14,
   },
+  infoPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 14,
+  },
+  infoPanelHeaderCopy: {
+    flex: 1,
+  },
   infoPanelTitle: {
     color: colors.text,
     fontSize: 16,
@@ -11300,6 +11404,86 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 14,
     lineHeight: 22,
+  },
+  infoPanelPill: {
+    minHeight: 30,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primaryGlow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoPanelPillText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  infoPanelSummaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  infoPanelSummaryCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.medium,
+    padding: 14,
+  },
+  infoPanelSummaryLabel: {
+    color: colors.labelText,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  infoPanelSummaryValue: {
+    color: colors.primary,
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  infoPanelSummaryValueMuted: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  infoPanelSummaryText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  infoPanelActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  infoPanelPrimaryAction: {
+    flexGrow: 1,
+    minWidth: 170,
+    marginTop: 0,
+  },
+  infoPanelSecondaryAction: {
+    minHeight: 54,
+    paddingHorizontal: 16,
+    borderRadius: radius.medium,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  infoPanelSecondaryActionText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
   },
   profileSettingsList: {
     marginTop: 6,
@@ -11659,6 +11843,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 4,
   },
+  notificationsPanelHelperText: {
+    color: colors.labelText,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+    maxWidth: 220,
+  },
   notificationsPanelActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -11688,6 +11879,42 @@ const styles = StyleSheet.create({
   notificationsListContent: {
     paddingBottom: 12,
   },
+  notificationsSummaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+  },
+  notificationsSummaryCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.medium,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  notificationsSummaryLabel: {
+    color: colors.labelText,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  notificationsSummaryValue: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  notificationsSummaryValueMuted: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
   notificationRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -11711,6 +11938,8 @@ const styles = StyleSheet.create({
   notificationTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 4,
   },
   notificationUnreadDot: {
@@ -11724,6 +11953,33 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '800',
+  },
+  notificationStatusPill: {
+    minHeight: 24,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationStatusPillAction: {
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primaryGlow,
+  },
+  notificationStatusPillInformational: {
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  notificationStatusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  notificationStatusPillTextAction: {
+    color: colors.primary,
+  },
+  notificationStatusPillTextInformational: {
+    color: colors.labelText,
   },
   notificationRowMessage: {
     color: colors.mutedText,

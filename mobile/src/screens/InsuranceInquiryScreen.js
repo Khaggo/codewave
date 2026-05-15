@@ -31,6 +31,7 @@ import {
 import {
   REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
   buildRequirementsChecklist,
+  buildCustomerInsuranceHomeFocus,
   clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
   doesCustomerInsuranceInquiryMatchVehicle,
@@ -201,6 +202,7 @@ function InsuranceStatePanel({
       style={[
         styles.statePanel,
         tone === 'danger' && styles.statePanelDanger,
+        tone === 'warning' && styles.statePanelWarning,
         tone === 'success' && styles.statePanelSuccess,
       ]}
     >
@@ -266,9 +268,13 @@ function InsuranceRecordCard({ title, subtitle, status, metadata = [] }) {
   );
 }
 
-function InsuranceHomeCard({ icon, label, description, value, onPress }) {
+function InsuranceHomeCard({ icon, label, description, value, actionLabel, emphasized = false, onPress }) {
   return (
-    <TouchableOpacity style={styles.homeCard} onPress={onPress} activeOpacity={0.9}>
+    <TouchableOpacity
+      style={[styles.homeCard, emphasized && styles.homeCardEmphasized]}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
       <View style={styles.homeCardHeader}>
         <View style={styles.homeCardIconWrap}>
           <MaterialCommunityIcons name={icon} size={18} color={colors.primary} />
@@ -277,6 +283,10 @@ function InsuranceHomeCard({ icon, label, description, value, onPress }) {
       </View>
       <Text style={styles.homeCardTitle}>{label}</Text>
       <Text style={styles.homeCardText}>{description}</Text>
+      <View style={styles.homeCardActionRow}>
+        <Text style={styles.homeCardActionText}>{actionLabel}</Text>
+        <MaterialCommunityIcons name="arrow-right" size={16} color={colors.primary} />
+      </View>
     </TouchableOpacity>
   );
 }
@@ -303,7 +313,7 @@ function ChecklistRow({ label, complete }) {
   );
 }
 
-function TimelineStepRow({ step, updatedAtLabel }) {
+function TimelineStepRow({ step, updatedAtLabel, stepIndex, stepCount }) {
   const isCurrent = step.state === 'current';
   const isDone = step.state === 'done';
 
@@ -326,7 +336,9 @@ function TimelineStepRow({ step, updatedAtLabel }) {
         <Text style={styles.timelineStepText}>
           {timelineStepCopy[step.key] ?? 'We will keep this request updated as it moves forward.'}
         </Text>
-        <Text style={styles.timelineStepMeta}>Latest update: {updatedAtLabel}</Text>
+        <Text style={styles.timelineStepMeta}>
+          Step {stepIndex + 1} of {stepCount} • Latest update: {updatedAtLabel}
+        </Text>
       </View>
     </View>
   );
@@ -448,6 +460,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 ? `Start a request for ${buildOwnedVehicleInsuranceLabel(selectedVehicle)} with just the key concern first.`
                 : 'Choose a vehicle first, then begin a request with a short concern summary.',
               value: draft.inquiryType === 'ctpl' ? 'CTPL' : 'Comprehensive',
+              actionLabel: 'Begin intake',
             };
           case 'active':
             return {
@@ -456,6 +469,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 ? latestInquiry.statusHint
                 : 'Your current request will appear here once you submit one.',
               value: latestInquiry ? formatWorkflowLabel(latestInquiry.status) : 'No request',
+              actionLabel: latestInquiry ? 'Review timeline' : 'Check status',
             };
           case 'documents':
             return {
@@ -464,6 +478,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 ? `${missingRequiredDocuments.length} required item${missingRequiredDocuments.length === 1 ? '' : 's'} still need attention.`
                 : 'See the checklist now so you know what files to prepare after submission.',
               value: `${requirementsChecklist.required.filter((item) => item.complete).length}/${requirementsChecklist.required.length}`,
+              actionLabel: latestInquiry ? 'Prepare upload' : 'View checklist',
             };
           case 'payment':
             return {
@@ -472,6 +487,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 ? paymentSummary.message
                 : 'Payment instructions and proof-of-payment follow-up will surface here when needed.',
               value: latestInquiry ? formatWorkflowLabel(latestInquiry.paymentStatus) : 'Not required',
+              actionLabel: paymentPromptVisible ? 'Review payment' : 'Wait for update',
             };
           case 'renewal':
             return {
@@ -480,6 +496,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 ? buildRenewalPrompt(latestInquiry).message
                 : 'Renewal reminders will appear here when staff flag an upcoming follow-up.',
               value: latestInquiry ? formatWorkflowLabel(latestInquiry.renewalStatus) : 'Not applicable',
+              actionLabel: renewalPromptVisible ? 'Review renewal' : 'Stay ready',
             };
           default:
             return {
@@ -488,6 +505,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 ? `${claimStatusUpdates.length} vehicle insurance record${claimStatusUpdates.length === 1 ? '' : 's'} are available to review.`
                 : 'Vehicle insurance history will appear here once staff close the request and record it for tracking.',
               value: String(claimStatusUpdates.length),
+              actionLabel: claimStatusUpdates.length ? 'Review history' : 'Watch for history',
             };
         }
       }),
@@ -502,6 +520,15 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       requirementsChecklist,
       selectedVehicle,
     ],
+  );
+  const homeFocus = useMemo(
+    () =>
+      buildCustomerInsuranceHomeFocus({
+        latestInquiry,
+        missingRequiredDocuments,
+        claimStatusUpdateCount: claimStatusUpdates.length,
+      }),
+    [claimStatusUpdates.length, latestInquiry, missingRequiredDocuments],
   );
   const getSettledRememberedInquiryIdForSelectedVehicle = () => {
     if (!selectedVehicleId) {
@@ -1481,6 +1508,17 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               />
             ) : null}
 
+            <View style={styles.homeFocusWrap}>
+              <InsuranceStatePanel
+                icon={homeFocus.icon}
+                title={homeFocus.title}
+                message={homeFocus.message}
+                actionLabel={homeFocus.actionLabel}
+                onAction={() => handleHomeCardPress(homeFocus.highlightedCardKey)}
+                tone={homeFocus.tone}
+              />
+            </View>
+
             <View style={styles.homeCardGrid}>
               {homeCards.map((card) => (
                 <InsuranceHomeCard
@@ -1489,6 +1527,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   label={card.label}
                   description={card.description}
                   value={card.value}
+                  actionLabel={card.actionLabel}
+                  emphasized={card.key === homeFocus.highlightedCardKey}
                   onPress={() => handleHomeCardPress(card.key)}
                 />
               ))}
@@ -1570,10 +1610,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   </View>
 
                   <View style={styles.timelineStepList}>
-                    {customerTimeline.map((step) => (
+                    {customerTimeline.map((step, index) => (
                       <TimelineStepRow
                         key={step.key}
                         step={step}
+                        stepIndex={index}
+                        stepCount={customerTimeline.length}
                         updatedAtLabel={formatTimestampLabel(latestInquiry.updatedAt)}
                       />
                     ))}
@@ -1941,6 +1983,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  homeFocusWrap: {
+    marginBottom: 2,
+  },
   sectionCard: {
     borderWidth: 1,
     borderColor: colors.borderSoft,
@@ -2110,6 +2155,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceStrong,
     borderRadius: radius.large,
     padding: 14,
+    minHeight: 148,
+  },
+  homeCardEmphasized: {
+    borderColor: colors.primaryGlow,
+    backgroundColor: '#1C1A20',
   },
   homeCardHeader: {
     flexDirection: 'row',
@@ -2136,6 +2186,23 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 12,
     lineHeight: 18,
+    flex: 1,
+  },
+  homeCardActionRow: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  homeCardActionText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   documentSection: {
     borderWidth: 1,
@@ -2360,6 +2427,9 @@ const styles = StyleSheet.create({
   },
   statePanelDanger: {
     borderColor: 'rgba(255, 107, 107, 0.4)',
+  },
+  statePanelWarning: {
+    borderColor: 'rgba(234, 179, 8, 0.35)',
   },
   statePanelSuccess: {
     borderColor: 'rgba(63, 215, 143, 0.35)',
