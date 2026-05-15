@@ -42,7 +42,7 @@ test('intake, qa, and finance workspaces use short section descriptions', () => 
   assert.ok(intakeScreen.includes('Capture the visit, then record the vehicle condition.'))
   assert.ok(intakeScreen.includes('Review past records for the active vehicle.'))
 
-  assert.ok(qa.includes('Review QA checks, record verdicts, and keep overrides auditable.'))
+  assert.ok(qa.includes('Review release checks, record verdicts, and keep overrides auditable.'))
 
   assert.ok(finance.includes('Review service invoices, ecommerce orders, and aging analytics from one workspace.'))
   assert.ok(finance.includes('Review aging, payment guidance, and live billing lookups before detail review.'))
@@ -60,8 +60,8 @@ test('service flow workspaces use queue-first copy and remove bulky dashboard wo
   assert.ok(qa.includes('Review release checks, record verdicts, and keep overrides auditable.'))
   assert.ok(qa.includes('Focus on the jobs waiting for release review.'))
 
-  assert.ok(finance.includes('Review invoice-ready work, payment entries, and completion records.'))
-  assert.ok(finance.includes('Focus on records that are ready for payment or invoice follow-through.'))
+  assert.ok(finance.includes('Review service invoices, ecommerce orders, and aging analytics from one workspace.'))
+  assert.ok(finance.includes('Review aging, payment guidance, and live billing lookups before detail review.'))
 
   assert.ok(!jobOrders.includes('Choose a schedule date and refresh to load confirmed bookings.'))
   assert.ok(
@@ -69,11 +69,23 @@ test('service flow workspaces use queue-first copy and remove bulky dashboard wo
       'Review the validator summary before the head technician decides.',
     ),
   )
-  assert.ok(
-    !finance.includes(
-      'Review aging, payment guidance, and live billing lookups before detail review.',
-    ),
-  )
+})
+
+test('qa audit workspace keeps release queue ahead of findings and verdict actions', () => {
+  const source = read('frontend/src/screens/QAAuditWorkspace.js')
+
+  const queueIndex = source.indexOf('QA Queue')
+  const detailIndex = source.indexOf('Selected Audit')
+  const blockingIndex = source.indexOf('Blocking Findings')
+  const verdictIndex = source.indexOf('Verdict / Override')
+
+  assert.notEqual(queueIndex, -1)
+  assert.notEqual(detailIndex, -1)
+  assert.notEqual(blockingIndex, -1)
+  assert.notEqual(verdictIndex, -1)
+  assert.ok(queueIndex < detailIndex)
+  assert.ok(detailIndex < blockingIndex)
+  assert.ok(blockingIndex < verdictIndex)
 })
 
 test('job orders workspace keeps queue before detail actions', () => {

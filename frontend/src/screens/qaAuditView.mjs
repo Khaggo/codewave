@@ -4,7 +4,7 @@ const findingSeverityPriority = {
   info: 2,
 }
 
-const findingGroupDefinitions = [
+const findingGroupDefinitions = Object.freeze([
   {
     key: 'critical',
     title: 'Blocking Findings',
@@ -29,7 +29,7 @@ const findingGroupDefinitions = [
     badgeClass: 'badge-gray',
     matches: (finding) => !Object.hasOwn(findingSeverityPriority, finding.severity ?? ''),
   },
-]
+])
 
 export function getFindingSortPriority(finding) {
   const severity = finding?.severity ?? ''

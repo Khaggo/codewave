@@ -46,3 +46,13 @@ test('getGroupedQualityFindings groups findings by severity buckets', () => {
     ],
   )
 })
+
+test('getGroupedQualityFindings keeps blocking findings ahead of review-needed findings', () => {
+  const grouped = getGroupedQualityFindings([
+    { id: 'w1', severity: 'warning', gate: 'notes', code: 'warn' },
+    { id: 'c1', severity: 'critical', gate: 'photos', code: 'crit' },
+  ])
+
+  assert.equal(grouped[0].key, 'critical')
+  assert.equal(grouped[1].key, 'warning')
+})
