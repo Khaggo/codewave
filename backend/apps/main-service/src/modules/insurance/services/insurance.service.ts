@@ -1,10 +1,10 @@
+import { randomUUID } from 'crypto';
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
-  NotImplementedException,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
@@ -12,18 +12,30 @@ import {
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
-import { createNotificationTrigger } from '@shared/events/contracts/notification-triggers';
+import {
+  createNotificationTrigger,
+  type InsuranceCustomerReminderState,
+} from '@shared/events/contracts/notification-triggers';
 
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
 import { CreateRenewalFollowUpDto } from '../dto/create-renewal-follow-up.dto';
 import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
 import { SendInsuranceBroadcastsDto } from '../dto/send-insurance-broadcasts.dto';
+import {
+  type InsuranceManualReminderType,
+  type InsuranceReminderTargetMode,
+  type SendInsuranceRemindersDto,
+} from '../dto/send-insurance-reminders.dto';
 import { UploadInsuranceDocumentDto } from '../dto/upload-insurance-document.dto';
 import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inquiry-workflow.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
 import { InsuranceRepository } from '../repositories/insurance.repository';
-import { insuranceInquiryStatusEnum } from '../schemas/insurance.schema';
+import {
+  insuranceInquiryStatusEnum,
+  insurancePaymentStatusEnum,
+  insuranceRenewalStatusEnum,
+} from '../schemas/insurance.schema';
 import { InsuranceDocumentStorageService } from './insurance-document-storage.service';
 
 type InsuranceActor = {
@@ -38,13 +50,9 @@ export type InsuranceUploadFile = {
 };
 
 type InsuranceInquiryStatus = (typeof insuranceInquiryStatusEnum.enumValues)[number];
+type InsurancePaymentStatus = (typeof insurancePaymentStatusEnum.enumValues)[number];
+type InsuranceRenewalStatus = (typeof insuranceRenewalStatusEnum.enumValues)[number];
 type InsuranceWorkflowUpdatePayload = Parameters<InsuranceRepository['updateWorkflow']>[1];
-type InsuranceNotificationStatus =
-  | 'submitted'
-  | 'needs_documents'
-  | 'under_review'
-  | 'rejected'
-  | 'closed';
 type PaymentActivityAction =
   | 'payment_marked_paid'
   | 'payment_marked_overdue'
@@ -73,13 +81,43 @@ const allowedStatusTransitions: Record<InsuranceInquiryStatus, InsuranceInquiryS
   closed: [],
 };
 
-const notificationEligibleStatuses: InsuranceNotificationStatus[] = [
-  'submitted',
-  'needs_documents',
-  'under_review',
-  'rejected',
-  'closed',
-];
+type InsuranceReminderSourceState = {
+  id: string;
+  userId: string;
+  status: InsuranceInquiryStatus;
+  paymentStatus: InsurancePaymentStatus;
+  renewalStatus: InsuranceRenewalStatus;
+  subject: string;
+  updatedAt?: Date | string | null;
+  reviewedAt?: Date | string | null;
+};
+
+type ReminderTargetInquiry = {
+  id: string;
+  userId: string;
+  status: InsuranceInquiryStatus;
+  documentStatus?: string | null;
+  paymentStatus: InsurancePaymentStatus;
+  renewalStatus: InsuranceRenewalStatus;
+  paymentDueAt?: Date | string | null;
+  subject: string;
+};
+
+type ManualReminderResult = {
+  inquiryId: string;
+  reminderType: InsuranceManualReminderType;
+  result: 'sent' | 'skipped' | 'failed';
+  reason?: 'case_not_reminder_eligible' | 'notification_send_failed';
+};
+
+type ManualBroadcastResult = {
+  inquiryId: string;
+  customerId: string | null;
+  status: 'sent' | 'skipped' | 'failed';
+  reason: 'case_not_broadcast_eligible' | 'notification_send_failed' | null;
+};
+
+const reminderFilterKeys = ['purpose', 'status', 'paymentStatus', 'renewalStatus'] as const;
 
 @Injectable()
 export class InsuranceService {
@@ -126,13 +164,25 @@ export class InsuranceService {
     };
 
     if (typeof this.insuranceRepository.createRenewalFollowUp === 'function') {
-      return this.insuranceRepository.createRenewalFollowUp(
+      const createdInquiry = await this.insuranceRepository.createRenewalFollowUp(
         {
           ...payload,
           createdByUserId: actor.userId,
         },
         activity,
       );
+
+      const createdReminderState = this.asReminderSourceState(createdInquiry);
+
+      await this.emitCustomerReminderTrigger(
+        {
+          ...createdReminderState,
+          status: 'approved',
+        },
+        createdReminderState,
+      );
+
+      return createdInquiry;
     }
 
     const createdInquiry = await this.insuranceRepository.create({
@@ -158,13 +208,23 @@ export class InsuranceService {
       undefined,
     );
 
-    return {
+    const normalizedInquiry = {
       ...updatedInquiry,
       purpose: updatedInquiry.purpose ?? 'renewal',
       paymentStatus: updatedInquiry.paymentStatus ?? 'not_required',
       renewalStatus: updatedInquiry.renewalStatus ?? 'upcoming',
       renewalDueAt: updatedInquiry.renewalDueAt ?? new Date(payload.renewalDueAt),
     };
+
+    await this.emitCustomerReminderTrigger(
+      {
+        ...this.asReminderSourceState(normalizedInquiry),
+        status: 'approved',
+      },
+      this.asReminderSourceState(normalizedInquiry),
+    );
+
+    return normalizedInquiry;
   }
 
   async findById(id: string, actor: InsuranceActor) {
@@ -235,7 +295,10 @@ export class InsuranceService {
       reviewedAt: new Date(),
     }, this.buildCloseRecordUpsert(inquiry, payload.status));
 
-    await this.emitWorkflowStatusNotification(updatedInquiry);
+    await this.emitCustomerReminderTrigger(
+      this.asReminderSourceState(inquiry),
+      this.asReminderSourceState(updatedInquiry),
+    );
 
     return updatedInquiry;
   }
@@ -270,7 +333,10 @@ export class InsuranceService {
       workflowActivities,
       this.buildCloseRecordUpsert(inquiry, payload.status),
     );
-    await this.emitWorkflowStatusNotification(updatedInquiry);
+    await this.emitCustomerReminderTrigger(
+      this.asReminderSourceState(inquiry),
+      this.asReminderSourceState(updatedInquiry),
+    );
     return updatedInquiry;
   }
 
@@ -343,9 +409,126 @@ export class InsuranceService {
     return this.insuranceRepository.findRecordsByVehicleId(vehicleId);
   }
 
-  async sendManualBroadcasts(_payload: SendInsuranceBroadcastsDto, actor: InsuranceActor) {
+  async sendManualBroadcasts(payload: SendInsuranceBroadcastsDto, actor: InsuranceActor) {
     await this.assertStaffReviewer(actor.userId);
-    throw new NotImplementedException('Insurance broadcasts are not implemented yet');
+
+    const inquiries = await this.resolveBroadcastTargets(payload);
+    const resultsByInquiryId = new Map<string, ManualBroadcastResult>();
+    const eligibleInquiries: ReminderTargetInquiry[] = [];
+    const inquiriesByCustomerId = new Map<string, ReminderTargetInquiry[]>();
+
+    for (const inquiry of inquiries) {
+      if (!this.isManualBroadcastEligible(inquiry)) {
+        resultsByInquiryId.set(inquiry.id, {
+          inquiryId: inquiry.id,
+          customerId: inquiry.userId ?? null,
+          status: 'skipped',
+          reason: 'case_not_broadcast_eligible',
+        });
+        continue;
+      }
+
+      eligibleInquiries.push(inquiry);
+      const customerInquiries = inquiriesByCustomerId.get(inquiry.userId) ?? [];
+      customerInquiries.push(inquiry);
+      inquiriesByCustomerId.set(inquiry.userId, customerInquiries);
+    }
+
+    for (const customerInquiries of inquiriesByCustomerId.values()) {
+      const representativeInquiry = customerInquiries[0];
+
+      try {
+        await this.sendManualBroadcastNotification(representativeInquiry, payload.title, payload.message);
+
+        for (const inquiry of customerInquiries) {
+          if (typeof this.insuranceRepository.appendActivity === 'function') {
+            await this.insuranceRepository.appendActivity(inquiry.id, {
+              action: 'manual_broadcast_sent',
+              actorUserId: actor.userId,
+              notes: payload.title,
+            });
+          }
+
+          resultsByInquiryId.set(inquiry.id, {
+            inquiryId: inquiry.id,
+            customerId: inquiry.userId ?? null,
+            status: 'sent',
+            reason: null,
+          });
+        }
+      } catch (error) {
+        for (const inquiry of customerInquiries) {
+          resultsByInquiryId.set(inquiry.id, {
+            inquiryId: inquiry.id,
+            customerId: inquiry.userId ?? null,
+            status: 'failed',
+            reason: 'notification_send_failed',
+          });
+        }
+      }
+    }
+
+    const results: ManualBroadcastResult[] = inquiries.map((inquiry) => (
+      resultsByInquiryId.get(inquiry.id) ?? {
+        inquiryId: inquiry.id,
+        customerId: inquiry.userId ?? null,
+        status: 'skipped' as const,
+        reason: 'case_not_broadcast_eligible' as const,
+      }
+    ));
+
+    return this.buildManualBroadcastSummary(
+      inquiries.length,
+      eligibleInquiries.length,
+      inquiriesByCustomerId.size,
+      results,
+    );
+  }
+
+  async sendManualReminders(payload: SendInsuranceRemindersDto, actor: InsuranceActor) {
+    await this.assertStaffReviewer(actor.userId);
+
+    const inquiries = await this.resolveReminderTargets(payload);
+    const results: ManualReminderResult[] = [];
+
+    for (const inquiry of inquiries) {
+      const eligibility = this.evaluateManualReminderEligibility(inquiry, payload.reminderType);
+
+      if (!eligibility.eligible) {
+        results.push({
+          inquiryId: inquiry.id,
+          reminderType: payload.reminderType,
+          result: 'skipped',
+          reason: eligibility.reason,
+        });
+        continue;
+      }
+
+      try {
+        await this.sendManualReminderNotification(inquiry, payload.reminderType);
+        if (typeof this.insuranceRepository.appendActivity === 'function') {
+          await this.insuranceRepository.appendActivity(inquiry.id, {
+            action: 'manual_reminder_sent',
+            actorUserId: actor.userId,
+            notes: payload.reminderType,
+          });
+        }
+        results.push({
+          inquiryId: inquiry.id,
+          reminderType: payload.reminderType,
+          result: 'sent',
+        });
+      } catch (error) {
+        results.push({
+          inquiryId: inquiry.id,
+          reminderType: payload.reminderType,
+          result: 'failed',
+          reason: 'notification_send_failed',
+        });
+      }
+    }
+
+    return this.buildManualReminderSummary(inquiries.length, results);
   }
 
   private async assertActorCanCreate(customerUserId: string, actor: InsuranceActor) {
@@ -435,6 +618,292 @@ export class InsuranceService {
 
   private getInsuranceDocumentStorage() {
     return this.insuranceDocumentStorage ?? new InsuranceDocumentStorageService();
+  }
+
+  private async resolveBroadcastTargets(payload: SendInsuranceBroadcastsDto): Promise<ReminderTargetInquiry[]> {
+    if (payload.targetMode === 'filtered_results') {
+      if (!this.hasMeaningfulReminderFilters(payload.filters)) {
+        throw new BadRequestException('Broadcast filters are required for filtered-results sends');
+      }
+
+      const filters = payload.filters as ListInsuranceInquiriesQueryDto;
+
+      if (typeof this.insuranceRepository.listForStaff === 'function') {
+        return this.normalizeReminderTargets(await this.insuranceRepository.listForStaff(filters));
+      }
+
+      const inquiries = await this.insuranceRepository.listForAnalytics();
+      const filteredInquiries = inquiries.filter((inquiry) => {
+        if (filters.purpose && inquiry.purpose !== filters.purpose) {
+          return false;
+        }
+
+        if (filters.status && inquiry.status !== filters.status) {
+          return false;
+        }
+
+        if (filters.paymentStatus && inquiry.paymentStatus !== filters.paymentStatus) {
+          return false;
+        }
+
+        if (filters.renewalStatus && inquiry.renewalStatus !== filters.renewalStatus) {
+          return false;
+        }
+
+        return true;
+      });
+
+      return this.normalizeReminderTargets(filteredInquiries);
+    }
+
+    if (!payload.selectedIds?.length) {
+      throw new BadRequestException('Selected insurance inquiry ids are required for this broadcast send');
+    }
+
+    const uniqueSelectedIds = [...new Set(payload.selectedIds)];
+    const inquiries = await Promise.all(
+      uniqueSelectedIds.map((selectedId) => this.insuranceRepository.findById(selectedId)),
+    );
+
+    return this.normalizeReminderTargets(inquiries);
+  }
+
+  private isManualBroadcastEligible(inquiry: ReminderTargetInquiry) {
+    if (!inquiry.userId) {
+      return false;
+    }
+
+    return !['closed', 'cancelled', 'rejected'].includes(inquiry.status);
+  }
+
+  private async resolveReminderTargets(payload: SendInsuranceRemindersDto): Promise<ReminderTargetInquiry[]> {
+    if (payload.targetMode === 'filtered_results') {
+      if (!this.hasMeaningfulReminderFilters(payload.filters)) {
+        throw new BadRequestException('Reminder filters are required for filtered-results sends');
+      }
+
+      const filters = payload.filters as ListInsuranceInquiriesQueryDto;
+
+      if (typeof this.insuranceRepository.listForStaff === 'function') {
+        return this.normalizeReminderTargets(await this.insuranceRepository.listForStaff(filters));
+      }
+
+      const inquiries = await this.insuranceRepository.listForAnalytics();
+      const filteredInquiries = inquiries.filter((inquiry) => {
+        if (filters.purpose && inquiry.purpose !== filters.purpose) {
+          return false;
+        }
+
+        if (filters.status && inquiry.status !== filters.status) {
+          return false;
+        }
+
+        if (filters.paymentStatus && inquiry.paymentStatus !== filters.paymentStatus) {
+          return false;
+        }
+
+        if (filters.renewalStatus && inquiry.renewalStatus !== filters.renewalStatus) {
+          return false;
+        }
+
+        return true;
+      });
+
+      return this.normalizeReminderTargets(filteredInquiries);
+    }
+
+    if (!payload.selectedIds?.length) {
+      throw new BadRequestException('Selected insurance inquiry ids are required for this reminder send');
+    }
+
+    if (payload.targetMode === 'single_case' && payload.selectedIds.length !== 1) {
+      throw new BadRequestException('Single-case reminders require exactly one selected insurance inquiry id');
+    }
+
+    const uniqueSelectedIds = [...new Set(payload.selectedIds)];
+    const inquiries = await Promise.all(
+      uniqueSelectedIds.map((selectedId) => this.insuranceRepository.findById(selectedId)),
+    );
+
+    return this.normalizeReminderTargets(inquiries);
+  }
+
+  private hasMeaningfulReminderFilters(filters: ListInsuranceInquiriesQueryDto | undefined) {
+    if (!filters) {
+      return false;
+    }
+
+    return reminderFilterKeys.some((key) => {
+      const value = filters[key];
+      return value !== undefined && value !== null;
+    });
+  }
+
+  private normalizeReminderTargets(
+    inquiries: Array<{
+      id: string;
+      userId: string;
+      status: string;
+      documentStatus?: string | null;
+      paymentStatus?: string | null;
+      renewalStatus?: string | null;
+      paymentDueAt?: Date | string | null;
+      subject: string;
+    }>,
+  ): ReminderTargetInquiry[] {
+    return inquiries.map((inquiry) => ({
+      id: inquiry.id,
+      userId: inquiry.userId,
+      status: inquiry.status as InsuranceInquiryStatus,
+      documentStatus: inquiry.documentStatus ?? null,
+      paymentStatus: (inquiry.paymentStatus ?? 'not_required') as InsurancePaymentStatus,
+      renewalStatus: (inquiry.renewalStatus ?? 'not_applicable') as InsuranceRenewalStatus,
+      paymentDueAt: inquiry.paymentDueAt ?? null,
+      subject: inquiry.subject,
+    }));
+  }
+
+  private evaluateManualReminderEligibility(
+    inquiry: ReminderTargetInquiry,
+    reminderType: InsuranceManualReminderType,
+  ) {
+    if (['closed', 'cancelled', 'rejected'].includes(inquiry.status)) {
+      return { eligible: false, reason: 'case_not_reminder_eligible' as const };
+    }
+
+    switch (reminderType) {
+      case 'missing_documents':
+        return {
+          eligible: inquiry.status === 'needs_documents' || inquiry.documentStatus === 'incomplete',
+          reason: 'case_not_reminder_eligible' as const,
+        };
+      case 'payment_pending':
+        return {
+          eligible:
+            inquiry.status === 'payment_pending' ||
+            ['unpaid', 'proof_submitted', 'verifying'].includes(inquiry.paymentStatus),
+          reason: 'case_not_reminder_eligible' as const,
+        };
+      case 'overdue_payment': {
+        const paymentDueAt = inquiry.paymentDueAt;
+
+        return {
+          eligible:
+            inquiry.paymentStatus === 'overdue' ||
+            (paymentDueAt !== null &&
+              paymentDueAt !== undefined &&
+              new Date(paymentDueAt).getTime() < Date.now() &&
+              inquiry.paymentStatus !== 'paid'),
+          reason: 'case_not_reminder_eligible' as const,
+        };
+      }
+      case 'renewal_follow_up':
+        return {
+          eligible:
+            inquiry.status === 'for_renewal' ||
+            ['upcoming', 'quote_preparing', 'quoted', 'awaiting_customer'].includes(inquiry.renewalStatus),
+          reason: 'case_not_reminder_eligible' as const,
+        };
+    }
+  }
+
+  private buildManualReminderSummary(targetedCount: number, results: ManualReminderResult[]) {
+    const eligibleCount = results.filter((result) => result.result === 'sent' || result.result === 'failed').length;
+    const sentCount = results.filter((result) => result.result === 'sent').length;
+    const skippedCount = results.filter((result) => result.result === 'skipped').length;
+    const failedCount = results.filter((result) => result.result === 'failed').length;
+
+    return {
+      targetedCount,
+      eligibleCount,
+      sentCount,
+      skippedCount,
+      failedCount,
+      results,
+    };
+  }
+
+  private buildManualBroadcastSummary(
+    targetedCaseCount: number,
+    eligibleCaseCount: number,
+    deduplicatedCustomerCount: number,
+    results: ManualBroadcastResult[],
+  ) {
+    const sentCount = results.filter((result) => result.status === 'sent').length;
+    const skippedCount = results.filter((result) => result.status === 'skipped').length;
+    const failedCount = results.filter((result) => result.status === 'failed').length;
+
+    return {
+      targetedCaseCount,
+      eligibleCaseCount,
+      deduplicatedCustomerCount,
+      sentCount,
+      skippedCount,
+      failedCount,
+      results,
+    };
+  }
+
+  private async sendManualBroadcastNotification(
+    inquiry: Pick<ReminderTargetInquiry, 'id' | 'userId'>,
+    title: string,
+    message: string,
+  ) {
+    if (!this.notificationsService) {
+      throw new Error('Notifications service is not configured');
+    }
+
+    return this.notificationsService.enqueueNotification({
+      userId: inquiry.userId,
+      category: 'insurance_update',
+      channel: 'in_app',
+      sourceType: 'insurance_inquiry',
+      sourceId: inquiry.id,
+      title,
+      message,
+      dedupeKey: `notification:insurance.broadcast:${inquiry.id}:${randomUUID()}`,
+    });
+  }
+
+  private async sendManualReminderNotification(
+    inquiry: ReminderTargetInquiry,
+    reminderType: InsuranceManualReminderType,
+  ) {
+    if (!this.notificationsService) {
+      throw new Error('Notifications service is not configured');
+    }
+
+    const reminderCopyByType: Record<InsuranceManualReminderType, { title: string; message: string }> = {
+      missing_documents: {
+        title: 'Missing documents',
+        message: 'Please upload the required insurance documents so we can continue your request.',
+      },
+      payment_pending: {
+        title: 'Payment pending',
+        message: 'Your insurance request now needs payment action.',
+      },
+      overdue_payment: {
+        title: 'Payment overdue',
+        message: 'Your insurance request is overdue for payment. Upload proof after payment or contact staff for help.',
+      },
+      renewal_follow_up: {
+        title: 'Renewal follow-up',
+        message: 'Your insurance renewal is coming up. Open your insurance request for the next step.',
+      },
+    };
+
+    const reminderCopy = reminderCopyByType[reminderType];
+
+    return this.notificationsService.enqueueNotification({
+      userId: inquiry.userId,
+      category: 'insurance_update',
+      channel: 'in_app',
+      sourceType: 'insurance_inquiry',
+      sourceId: inquiry.id,
+      title: reminderCopy.title,
+      message: reminderCopy.message,
+      dedupeKey: `notification:insurance.manual:${inquiry.id}:${reminderType}:${randomUUID()}`,
+    });
   }
 
   private presentInquiryForActor<
@@ -590,28 +1059,101 @@ export class InsuranceService {
     };
   }
 
-  private async emitWorkflowStatusNotification(
-    updatedInquiry: {
+  private asReminderSourceState(
+    inquiry: {
       id: string;
       userId: string;
-      vehicleId: string;
-      inquiryType: Parameters<InsuranceRepository['upsertRecordFromInquiry']>[0]['inquiryType'];
-      providerName?: string | null;
-      policyNumber?: string | null;
       status: string;
+      paymentStatus?: string | null;
+      renewalStatus?: string | null;
       subject: string;
+      updatedAt?: Date | string | null;
+      reviewedAt?: Date | string | null;
     },
+  ): InsuranceReminderSourceState {
+    return {
+      id: inquiry.id,
+      userId: inquiry.userId,
+      status: inquiry.status as InsuranceInquiryStatus,
+      paymentStatus: (inquiry.paymentStatus ?? 'not_required') as InsurancePaymentStatus,
+      renewalStatus: (inquiry.renewalStatus ?? 'not_applicable') as InsuranceRenewalStatus,
+      subject: inquiry.subject,
+      updatedAt: inquiry.updatedAt,
+      reviewedAt: inquiry.reviewedAt,
+    };
+  }
+
+  private buildCustomerReminderState(
+    previousInquiry: InsuranceReminderSourceState,
+    updatedInquiry: InsuranceReminderSourceState,
+  ): InsuranceCustomerReminderState | null {
+    if (previousInquiry.status !== 'needs_documents' && updatedInquiry.status === 'needs_documents') {
+      return 'needs_documents';
+    }
+
+    if (
+      updatedInquiry.status === 'payment_pending' &&
+      previousInquiry.paymentStatus !== 'overdue' &&
+      updatedInquiry.paymentStatus === 'overdue'
+    ) {
+      return 'payment_overdue';
+    }
+
+    if (previousInquiry.status !== 'payment_pending' && updatedInquiry.status === 'payment_pending') {
+      return 'payment_pending';
+    }
+
+    if (
+      updatedInquiry.status === 'for_renewal' &&
+      previousInquiry.renewalStatus !== 'awaiting_customer' &&
+      updatedInquiry.renewalStatus === 'awaiting_customer'
+    ) {
+      return 'renewal_awaiting_customer';
+    }
+
+    if (previousInquiry.status !== 'for_renewal' && updatedInquiry.status === 'for_renewal') {
+      return 'for_renewal';
+    }
+
+    return null;
+  }
+
+  private buildTransitionedAt(
+    inquiry: Pick<InsuranceReminderSourceState, 'updatedAt' | 'reviewedAt'>,
   ) {
-    if (!notificationEligibleStatuses.includes(updatedInquiry.status as InsuranceNotificationStatus)) {
+    const transitionDate = inquiry.updatedAt ?? inquiry.reviewedAt;
+
+    if (!transitionDate) {
+      return null;
+    }
+
+    return new Date(transitionDate).toISOString();
+  }
+
+  private async emitCustomerReminderTrigger(
+    previousInquiry: InsuranceReminderSourceState,
+    updatedInquiry: InsuranceReminderSourceState,
+  ) {
+    const reminderState = this.buildCustomerReminderState(previousInquiry, updatedInquiry);
+    if (!reminderState || !this.notificationsService) {
+      return;
+    }
+
+    const transitionedAt = this.buildTransitionedAt(updatedInquiry);
+    if (!transitionedAt) {
       return;
     }
 
     try {
-      await this.notificationsService?.applyTrigger(
+      await this.notificationsService.applyTrigger(
         createNotificationTrigger('insurance.inquiry_status_changed', 'main-service.insurance', {
           inquiryId: updatedInquiry.id,
           userId: updatedInquiry.userId,
-          status: updatedInquiry.status as InsuranceNotificationStatus,
+          status: updatedInquiry.status,
+          paymentStatus: updatedInquiry.paymentStatus,
+          renewalStatus: updatedInquiry.renewalStatus,
+          customerReminderState: reminderState,
+          transitionedAt,
           subject: updatedInquiry.subject,
         }),
       );

@@ -1061,7 +1061,7 @@ describe('InsuranceController integration', () => {
     }
   });
 
-  it('returns a typed not-implemented response for a valid staff insurance broadcast send request', async () => {
+  it('sends a staff insurance broadcast and returns the real backend summary contract', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
@@ -1073,24 +1073,101 @@ describe('InsuranceController integration', () => {
         role: 'service_adviser',
         staffCode: 'SA-5404',
       });
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.broadcasts@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
 
       const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
         email: adviser.email,
         password: 'password123',
       });
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS4B02',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const firstInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          subject: 'Broadcast case one',
+          description: 'First insurance case for the customer broadcast flow.',
+        });
+      expect(firstInquiryResponse.status).toBe(201);
+
+      const secondInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'ctpl',
+          subject: 'Broadcast case two',
+          description: 'Second insurance case for the customer broadcast flow.',
+        });
+      expect(secondInquiryResponse.status).toBe(201);
 
       const sendResponse = await request(app.getHttpServer())
         .post('/api/insurance/broadcasts/send')
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           targetMode: 'selected_cases',
-          selectedIds: ['4c559c0b-4d1b-492f-a11f-e61271f4a32d'],
+          selectedIds: [firstInquiryResponse.body.id, secondInquiryResponse.body.id],
           title: 'Insurance processing update',
           message: 'Please review your insurance request in the app for the latest update.',
         });
 
-      expect(sendResponse.status).toBe(501);
-      expect(sendResponse.body.message).toBe('Insurance broadcasts are not implemented yet');
+      expect(sendResponse.status).toBe(200);
+      expect(sendResponse.body).toEqual({
+        targetedCaseCount: 2,
+        eligibleCaseCount: 2,
+        deduplicatedCustomerCount: 1,
+        sentCount: 2,
+        skippedCount: 0,
+        failedCount: 0,
+        results: [
+          {
+            inquiryId: firstInquiryResponse.body.id,
+            customerId: customer.id,
+            status: 'sent',
+            reason: null,
+          },
+          {
+            inquiryId: secondInquiryResponse.body.id,
+            customerId: customer.id,
+            status: 'sent',
+            reason: null,
+          },
+        ],
+      });
+
+      const firstReadBackResponse = await request(app.getHttpServer())
+        .get(`/api/insurance/inquiries/${firstInquiryResponse.body.id}`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+      expect(firstReadBackResponse.status).toBe(200);
+      expect(firstReadBackResponse.body.activities).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'manual_broadcast_sent',
+            notes: 'Insurance processing update',
+          }),
+        ]),
+      );
     } finally {
       await app.close();
     }
@@ -1181,6 +1258,18 @@ describe('InsuranceController integration', () => {
         });
 
       expect(filteredResultsResponse.status).toBe(400);
+
+      const emptyFiltersResponse = await request(app.getHttpServer())
+        .post('/api/insurance/broadcasts/send')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          targetMode: 'filtered_results',
+          filters: {},
+          title: 'Insurance processing update',
+          message: 'Please review your insurance request in the app for the latest update.',
+        });
+
+      expect(emptyFiltersResponse.status).toBe(400);
     } finally {
       await app.close();
     }
