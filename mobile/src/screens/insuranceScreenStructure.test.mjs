@@ -23,10 +23,15 @@ test('insurance tab opens directly into the insurance shell without an extra ent
     "const handleChangeInsuranceTab = (section) => {",
     "if (section === 'documents') {",
     'handleOpenPanel(section)',
+    "const [statusTabFocus, setStatusTabFocus] = useState('summary')",
     "if (section === 'history') {",
     "setActiveInsuranceTab('status')",
-    'title="Recorded vehicle updates"',
-    'statusState={historyStatusState}',
+    "setStatusTabFocus('history')",
+    "setStatusTabFocus('summary')",
+    "statusTabFocus === 'history'",
+    '<Text style={styles.statusSectionEyebrow}>History</Text>',
+    '<Text style={styles.statusSectionTitle}>Recorded vehicle updates</Text>',
+    '{historyStatusState.summary}',
     'sortedHistoryRecords.map((record) => (',
   ]
 
@@ -38,6 +43,7 @@ test('insurance tab opens directly into the insurance shell without an extra ent
   assert.doesNotMatch(source, /Enter insurance mode/)
   assert.doesNotMatch(source, /Protection center/)
   assert.doesNotMatch(source, /onChangeSection=\{setActiveInsuranceTab\}/)
+  assert.equal((source.match(/<InsuranceStatusDetailPanel/g) ?? []).length, 1)
 })
 
 test('insurance shell exposes direct-entry tabs and vehicle picker trigger', () => {

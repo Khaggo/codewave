@@ -273,6 +273,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const [selectedVehicleId, setSelectedVehicleId] = useState(initialVehicleId);
   const [activePanel, setActivePanel] = useState('home');
   const [activeInsuranceTab, setActiveInsuranceTab] = useState('home');
+  const [statusTabFocus, setStatusTabFocus] = useState('summary');
   const [, setIsVehiclePickerOpen] = useState(false);
   const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
   const [documentDraft, setDocumentDraft] = useState(buildInitialDocumentUploadDraft());
@@ -301,6 +302,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   useEffect(() => {
     setActivePanel('home');
     setActiveInsuranceTab('home');
+    setStatusTabFocus('summary');
   }, [selectedVehicleId]);
 
   const selectedVehicle =
@@ -1128,11 +1130,13 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   };
   const handleChangeInsuranceTab = (section) => {
     if (section === 'documents') {
+      setStatusTabFocus('summary');
       handleOpenPanel(section);
       setActiveInsuranceTab(section);
       return;
     }
 
+    setStatusTabFocus('summary');
     setActiveInsuranceTab(section);
     setActivePanel(section === 'home' ? 'home' : section);
   };
@@ -1141,11 +1145,45 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     if (section === 'history') {
       setActiveInsuranceTab('status');
       setActivePanel('status');
+      setStatusTabFocus('history');
       return;
     }
 
     handleChangeInsuranceTab(section);
   };
+
+  const historyStatusSection = (
+    <View
+      style={[
+        styles.statusInlineSection,
+        statusTabFocus === 'history' && styles.statusInlineSectionFocused,
+      ]}
+    >
+      <Text style={styles.statusSectionEyebrow}>History</Text>
+      <Text style={styles.statusSectionTitle}>Recorded vehicle updates</Text>
+      <Text style={styles.statusSectionSubtitle}>{historyStatusState.summary}</Text>
+      {historyStatusState.latestUpdateLabel && historyStatusState.latestUpdateLabel !== '--' ? (
+        <Text style={styles.statusSectionMeta}>
+          Latest update: {historyStatusState.latestUpdateLabel}
+        </Text>
+      ) : null}
+
+      {sortedHistoryRecords.length ? (
+        sortedHistoryRecords.map((record) => (
+          <InsuranceSectionCard
+            key={`${record.status}-${record.updatedAt ?? record.createdAt ?? record.id ?? record.policyNumber ?? record.inquiryTypeLabel ?? 'history'}`}
+            title={buildHistoryRecordTitle(record)}
+            helper={buildHistoryRecordSummary(record)}
+          />
+        ))
+      ) : (
+        <InsuranceSectionCard
+          title="No completed records yet"
+          helper="Completed insurance records will appear here after staff close and record them."
+        />
+      )}
+    </View>
+  );
 
   const heroSubtitle = hasSession
     ? 'Start a request quickly, upload the right documents, and follow review, payment, and renewal prompts without exposing staff-only workflow details.'
@@ -1342,6 +1380,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   footerScrollTarget={statusState.ctaRouteKey === 'status' ? 'end' : null}
                   onFooterPress={statusState.ctaRouteKey === 'documents' ? () => handleChangeInsuranceTab('documents') : null}
                 >
+                  {statusTabFocus === 'history' ? historyStatusSection : null}
+
                   {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
                     <InsuranceSectionCard
                       title="Payment"
@@ -1356,27 +1396,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                     />
                   ) : null}
 
-                  <InsuranceStatusDetailPanel
-                    eyebrow="History"
-                    title="Recorded vehicle updates"
-                    subtitle="Completed customer-safe insurance records for this vehicle."
-                    statusState={historyStatusState}
-                  >
-                    {sortedHistoryRecords.length ? (
-                      sortedHistoryRecords.map((record) => (
-                        <InsuranceSectionCard
-                          key={`${record.status}-${record.updatedAt ?? record.createdAt ?? record.id ?? record.policyNumber ?? record.inquiryTypeLabel ?? 'history'}`}
-                          title={buildHistoryRecordTitle(record)}
-                          helper={buildHistoryRecordSummary(record)}
-                        />
-                      ))
-                    ) : (
-                      <InsuranceSectionCard
-                        title="No completed records yet"
-                        helper="Completed insurance records will appear here after staff close and record them."
-                      />
-                    )}
-                  </InsuranceStatusDetailPanel>
+                  {statusTabFocus === 'history' ? null : historyStatusSection}
                 </InsuranceStatusDetailPanel>
               ) : null}
             </InsuranceModeShell>
@@ -2109,5 +2129,39 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     lineHeight: 20,
+  },
+  statusInlineSection: {
+    gap: 10,
+  },
+  statusInlineSectionFocused: {
+    padding: 16,
+    borderRadius: radius.large,
+    borderWidth: 1,
+    borderColor: colors.primaryGlow,
+    backgroundColor: colors.primarySoft,
+  },
+  statusSectionEyebrow: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  statusSectionTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  statusSectionSubtitle: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  statusSectionMeta: {
+    color: colors.labelText,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
 });
