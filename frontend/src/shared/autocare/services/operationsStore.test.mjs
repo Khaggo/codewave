@@ -141,6 +141,24 @@ test('updating inventory products rejects invalid low-stock thresholds', () => {
   )
 })
 
+test('updating inventory product thresholds rejects invalid low-stock thresholds', () => {
+  const originalProduct = getInventoryProductsSnapshot().find((product) => product.id === 'p2')
+
+  assert.throws(
+    () => updateInventoryProductThreshold('p2', -1),
+    /low-stock threshold must be zero or greater/i,
+  )
+
+  assert.throws(
+    () => updateInventoryProductThreshold('p2', Number.NaN),
+    /low-stock threshold must be zero or greater/i,
+  )
+
+  const unchangedProduct = getInventoryProductsSnapshot().find((product) => product.id === 'p2')
+
+  assert.equal(unchangedProduct.lowStockThreshold, originalProduct.lowStockThreshold)
+})
+
 test('stock adjustments stay separate from catalog publish visibility', () => {
   archiveInventoryProduct('p2')
 
