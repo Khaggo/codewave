@@ -2,9 +2,13 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  buildInsuranceBroadcastRequest,
   buildInsuranceTableRow,
+  buildInsuranceReminderRequest,
   getNextInsuranceWorkspaceViewState,
   shouldApplyInsuranceAsyncResult,
+  summarizeInsuranceBroadcastResult,
+  summarizeInsuranceReminderResult,
   formatStatusLabel,
   getInsuranceDetailTabs,
   getInsuranceSummaryCards,
@@ -13,6 +17,8 @@ import * as insuranceStaffClient from '../../lib/insuranceStaffClient.js'
 
 const {
   createInsuranceRenewalFollowUp,
+  sendInsuranceBroadcasts,
+  sendInsuranceReminders,
   updateInsuranceInquiryStatus,
   updateInsuranceInquiryWorkflow,
 } = insuranceStaffClient
@@ -447,4 +453,283 @@ test('createInsuranceRenewalFollowUp posts a live renewal follow-up payload and 
   assert.equal(result?.purpose, 'renewal')
   assert.equal(result?.renewalStatus, 'upcoming')
   assert.equal(result?.subject, 'Renewal due next month')
+})
+
+test('buildInsuranceReminderRequest deduplicates selected ids for selected-cases sends', () => {
+  assert.deepEqual(
+    buildInsuranceReminderRequest({
+      reminderType: 'missing_documents',
+      targetMode: 'selected_cases',
+      selectedIds: ['inq-1', 'inq-1', 'inq-2'],
+      filters: {
+        status: 'all',
+        paymentStatus: 'all',
+        renewalStatus: 'all',
+        search: '',
+      },
+    }),
+    {
+      reminderType: 'missing_documents',
+      targetMode: 'selected_cases',
+      selectedIds: ['inq-1', 'inq-2'],
+    },
+  )
+})
+
+test('buildInsuranceReminderRequest keeps only meaningful server filters for filtered-results sends', () => {
+  assert.deepEqual(
+    buildInsuranceReminderRequest({
+      reminderType: 'renewal_follow_up',
+      targetMode: 'filtered_results',
+      selectedIds: [],
+      filters: {
+        status: 'for_renewal',
+        paymentStatus: 'all',
+        renewalStatus: 'upcoming',
+        search: 'customer side search is local only',
+      },
+    }),
+    {
+      reminderType: 'renewal_follow_up',
+      targetMode: 'filtered_results',
+      filters: {
+        status: 'for_renewal',
+        renewalStatus: 'upcoming',
+      },
+    },
+  )
+})
+
+test('buildInsuranceBroadcastRequest trims content and deduplicates selected ids for selected-cases sends', () => {
+  assert.deepEqual(
+    buildInsuranceBroadcastRequest({
+      targetMode: ' selected_cases ',
+      selectedIds: ['inq-1', 'inq-1', ' inq-2 '],
+      filters: {
+        status: 'all',
+      },
+      title: ' Insurance processing update ',
+      message: ' Please review your insurance request in the app for the latest update. ',
+    }),
+    {
+      targetMode: 'selected_cases',
+      selectedIds: ['inq-1', 'inq-2'],
+      title: 'Insurance processing update',
+      message: 'Please review your insurance request in the app for the latest update.',
+    },
+  )
+})
+
+test('buildInsuranceBroadcastRequest keeps only meaningful server filters for filtered-results sends', () => {
+  assert.deepEqual(
+    buildInsuranceBroadcastRequest({
+      targetMode: 'filtered_results',
+      selectedIds: ['inq-1'],
+      filters: {
+        status: 'payment_pending',
+        paymentStatus: 'proof_submitted',
+        renewalStatus: 'all',
+        search: 'local only',
+      },
+      title: 'Payment follow-up',
+      message: 'Please upload any remaining payment support if requested.',
+    }),
+    {
+      targetMode: 'filtered_results',
+      filters: {
+        status: 'payment_pending',
+        paymentStatus: 'proof_submitted',
+      },
+      title: 'Payment follow-up',
+      message: 'Please upload any remaining payment support if requested.',
+    },
+  )
+})
+
+test('buildInsuranceBroadcastRequest rejects empty broadcast content or missing targets', () => {
+  assert.throws(
+    () =>
+      buildInsuranceBroadcastRequest({
+        targetMode: 'selected_cases',
+        selectedIds: ['inq-1'],
+        title: '   ',
+        message: 'Valid message',
+      }),
+    /title, message, and target mode are required/i,
+  )
+
+  assert.throws(
+    () =>
+      buildInsuranceBroadcastRequest({
+        targetMode: 'selected_cases',
+        selectedIds: [],
+        title: 'Insurance processing update',
+        message: 'Valid message',
+      }),
+    /select at least one insurance case/i,
+  )
+
+  assert.throws(
+    () =>
+      buildInsuranceBroadcastRequest({
+        targetMode: 'filtered_results',
+        filters: {
+          status: 'all',
+          search: 'local only',
+        },
+        title: 'Insurance processing update',
+        message: 'Valid message',
+      }),
+    /choose at least one server-side insurance filter/i,
+  )
+})
+
+test('summarizeInsuranceReminderResult reports sent, skipped, and failed reminder counts', () => {
+  assert.equal(
+    summarizeInsuranceReminderResult({
+      sentCount: 3,
+      skippedCount: 1,
+      failedCount: 2,
+    }),
+    'Sent 3 reminder(s). 1 skipped. 2 failed.',
+  )
+})
+
+test('summarizeInsuranceBroadcastResult reports customer-level sends and inquiry-level follow-up counts', () => {
+  assert.equal(
+    summarizeInsuranceBroadcastResult({
+      sentCount: 1,
+      skippedCount: 2,
+      failedCount: 1,
+      deduplicatedCustomerCount: 3,
+    }),
+    'Sent 1 broadcast(s) to 3 customer(s). 2 inquiry result(s) skipped. 1 failed.',
+  )
+})
+
+test('sendInsuranceReminders posts the built manual reminder payload to the reminder route', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({
+      url,
+      options: {
+        ...options,
+        body: options.body,
+      },
+    })
+
+    return new Response(
+      JSON.stringify({
+        targetedCount: 2,
+        eligibleCount: 2,
+        sentCount: 2,
+        skippedCount: 0,
+        failedCount: 0,
+        results: [
+          { inquiryId: 'inq-1', reminderType: 'payment_pending', result: 'sent' },
+          { inquiryId: 'inq-2', reminderType: 'payment_pending', result: 'sent' },
+        ],
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }
+
+  let result
+
+  try {
+    result = await sendInsuranceReminders({
+      reminderType: 'payment_pending',
+      targetMode: 'selected_cases',
+      selectedIds: ['inq-1', 'inq-2'],
+      accessToken: 'token-1',
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'http://127.0.0.1:3000/api/insurance/reminders/send')
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    reminderType: 'payment_pending',
+    targetMode: 'selected_cases',
+    selectedIds: ['inq-1', 'inq-2'],
+  })
+  assert.equal(result?.sentCount, 2)
+  assert.equal(result?.results?.length, 2)
+})
+
+test('sendInsuranceBroadcasts posts the built broadcast payload to the broadcast route', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({
+      url,
+      options: {
+        ...options,
+        body: options.body,
+      },
+    })
+
+    return new Response(
+      JSON.stringify({
+        targetedCaseCount: 2,
+        eligibleCaseCount: 2,
+        deduplicatedCustomerCount: 1,
+        sentCount: 1,
+        skippedCount: 0,
+        failedCount: 0,
+        results: [
+          { inquiryId: 'inq-1', customerId: 'customer-1', status: 'sent', reason: null },
+          { inquiryId: 'inq-2', customerId: 'customer-1', status: 'sent', reason: null },
+        ],
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }
+
+  let result
+
+  try {
+    result = await sendInsuranceBroadcasts({
+      targetMode: 'filtered_results',
+      selectedIds: ['inq-ignored'],
+      filters: {
+        status: 'payment_pending',
+        paymentStatus: 'proof_submitted',
+        search: 'local only',
+      },
+      title: ' Payment follow-up ',
+      message: ' Please upload any remaining payment support if requested. ',
+      accessToken: 'token-1',
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'http://127.0.0.1:3000/api/insurance/broadcasts/send')
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    targetMode: 'filtered_results',
+    filters: {
+      status: 'payment_pending',
+      paymentStatus: 'proof_submitted',
+    },
+    title: 'Payment follow-up',
+    message: 'Please upload any remaining payment support if requested.',
+  })
+  assert.equal(result?.sentCount, 1)
+  assert.equal(result?.deduplicatedCustomerCount, 1)
 })

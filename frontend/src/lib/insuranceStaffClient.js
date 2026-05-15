@@ -1,4 +1,5 @@
 import { ApiError } from './authClient.js';
+import { buildInsuranceBroadcastRequest } from '../app/insurance/insuranceView.mjs';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 
@@ -326,3 +327,41 @@ export const updateInsuranceInquiryWorkflow = async ({
     }),
   );
 };
+
+export const sendInsuranceReminders = async ({
+  reminderType,
+  targetMode,
+  selectedIds,
+  filters,
+  accessToken,
+}) =>
+  request('/api/insurance/reminders/send', {
+    method: 'POST',
+    headers: buildAuthorizedHeaders(accessToken),
+    body: {
+      reminderType,
+      targetMode,
+      ...(Array.isArray(selectedIds) ? { selectedIds } : {}),
+      ...(filters && typeof filters === 'object' ? { filters } : {}),
+    },
+  });
+
+export const sendInsuranceBroadcasts = async ({
+  targetMode,
+  selectedIds,
+  filters,
+  title,
+  message,
+  accessToken,
+}) =>
+  request('/api/insurance/broadcasts/send', {
+    method: 'POST',
+    headers: buildAuthorizedHeaders(accessToken),
+    body: buildInsuranceBroadcastRequest({
+      targetMode,
+      selectedIds,
+      filters,
+      title,
+      message,
+    }),
+  });

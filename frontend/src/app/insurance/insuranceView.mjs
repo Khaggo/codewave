@@ -7,43 +7,30 @@ export function formatStatusLabel(value) {
 }
 
 const TERMINAL_INQUIRY_STATUSES = ['closed', 'cancelled', 'rejected']
-const EDITABLE_WORKFLOW_FIELDS = [
-  'status',
-  'documentStatus',
-  'paymentStatus',
-  'renewalStatus',
-  'paymentDueAt',
-  'policyExpiryAt',
-  'renewalDueAt',
-  'assignedStaffId',
-  'reviewNotes',
-]
+const EDITABLE_WORKFLOW_FIELDS = ['status', 'reviewNotes']
+const REMINDER_FILTER_FIELDS = ['purpose', 'status', 'paymentStatus', 'renewalStatus']
+
+const normalizeMeaningfulInsuranceFilters = (filters = {}, allowedFields = REMINDER_FILTER_FIELDS) =>
+  allowedFields.reduce((result, field) => {
+    const rawValue = String(filters?.[field] ?? '').trim()
+
+    if (rawValue && rawValue !== 'all') {
+      result[field] = rawValue
+    }
+
+    return result
+  }, {})
+
+const normalizeSelectedInsuranceIds = (selectedIds = []) =>
+  [...new Set(selectedIds.map((value) => String(value ?? '').trim()).filter(Boolean))]
 
 const isTerminalInquiry = (inquiry) => TERMINAL_INQUIRY_STATUSES.includes(inquiry?.status)
 
 const countMatchingInquiries = (inquiries, predicate) =>
   inquiries.reduce((total, inquiry) => (predicate(inquiry) ? total + 1 : total), 0)
 
-const toInputDateValue = (value) => {
-  if (!value) return ''
-
-  const parsedDate = new Date(value)
-  if (Number.isNaN(parsedDate.getTime())) {
-    return ''
-  }
-
-  return parsedDate.toISOString().slice(0, 10)
-}
-
 const buildInsuranceUpdateDraft = (inquiry, nextStatuses = []) => ({
   status: nextStatuses[0] ?? inquiry?.status ?? 'submitted',
-  documentStatus: inquiry?.documentStatus ?? 'incomplete',
-  paymentStatus: inquiry?.paymentStatus ?? 'not_required',
-  renewalStatus: inquiry?.renewalStatus ?? 'not_applicable',
-  paymentDueAt: toInputDateValue(inquiry?.paymentDueAt),
-  policyExpiryAt: toInputDateValue(inquiry?.policyExpiryAt),
-  renewalDueAt: toInputDateValue(inquiry?.renewalDueAt),
-  assignedStaffId: inquiry?.assignedStaffId ?? '',
   reviewNotes: inquiry?.reviewNotes ?? '',
 })
 
@@ -127,7 +114,7 @@ export function getInsuranceSummaryCards(input = {}) {
     {
       label: 'Editable Fields',
       value: String(EDITABLE_WORKFLOW_FIELDS.length),
-      sub: 'status, workflow tags, assignee, due dates, and review notes',
+      sub: 'status and review notes only',
     },
   ]
 }
@@ -201,4 +188,129 @@ export function getNextInsuranceWorkspaceViewState({
 
 export function shouldApplyInsuranceAsyncResult({ requestInquiryId, selectedInquiryId } = {}) {
   return Boolean(requestInquiryId) && requestInquiryId === selectedInquiryId
+}
+
+export function buildInsuranceReminderRequest({
+  reminderType,
+  targetMode,
+  selectedIds = [],
+  filters = {},
+} = {}) {
+  const normalizedReminderType = String(reminderType ?? '').trim()
+  const normalizedTargetMode = String(targetMode ?? '').trim()
+
+  if (!normalizedReminderType || !normalizedTargetMode) {
+    throw new Error('Reminder type and target mode are required before sending reminders.')
+  }
+
+  if (normalizedTargetMode === 'filtered_results') {
+    const normalizedFilters = normalizeMeaningfulInsuranceFilters(filters)
+
+    if (!Object.keys(normalizedFilters).length) {
+      throw new Error('Choose at least one server-side insurance filter before sending filtered reminders.')
+    }
+
+    return {
+      reminderType: normalizedReminderType,
+      targetMode: normalizedTargetMode,
+      filters: normalizedFilters,
+    }
+  }
+
+  const normalizedSelectedIds = normalizeSelectedInsuranceIds(selectedIds)
+
+  if (!normalizedSelectedIds.length) {
+    throw new Error('Select at least one insurance case before sending reminders.')
+  }
+
+  if (normalizedTargetMode === 'single_case' && normalizedSelectedIds.length !== 1) {
+    throw new Error('Single-case reminders require exactly one selected insurance case.')
+  }
+
+  return {
+    reminderType: normalizedReminderType,
+    targetMode: normalizedTargetMode,
+    selectedIds: normalizedSelectedIds,
+  }
+}
+
+export function buildInsuranceBroadcastRequest({
+  targetMode,
+  selectedIds = [],
+  filters = {},
+  title,
+  message,
+} = {}) {
+  const normalizedTargetMode = String(targetMode ?? '').trim()
+  const normalizedTitle = String(title ?? '').trim()
+  const normalizedMessage = String(message ?? '').trim()
+
+  if (!normalizedTitle || !normalizedMessage || !normalizedTargetMode) {
+    throw new Error('Title, message, and target mode are required before sending broadcasts.')
+  }
+
+  if (normalizedTargetMode === 'filtered_results') {
+    const normalizedFilters = normalizeMeaningfulInsuranceFilters(filters)
+
+    if (!Object.keys(normalizedFilters).length) {
+      throw new Error('Choose at least one server-side insurance filter before sending filtered broadcasts.')
+    }
+
+    return {
+      targetMode: normalizedTargetMode,
+      filters: normalizedFilters,
+      title: normalizedTitle,
+      message: normalizedMessage,
+    }
+  }
+
+  const normalizedSelectedIds = normalizeSelectedInsuranceIds(selectedIds)
+
+  if (!normalizedSelectedIds.length) {
+    throw new Error('Select at least one insurance case before sending broadcasts.')
+  }
+
+  return {
+    targetMode: normalizedTargetMode,
+    selectedIds: normalizedSelectedIds,
+    title: normalizedTitle,
+    message: normalizedMessage,
+  }
+}
+
+export function summarizeInsuranceReminderResult({
+  sentCount = 0,
+  skippedCount = 0,
+  failedCount = 0,
+} = {}) {
+  const parts = [`Sent ${sentCount} reminder(s).`]
+
+  if (skippedCount) {
+    parts.push(`${skippedCount} skipped.`)
+  }
+
+  if (failedCount) {
+    parts.push(`${failedCount} failed.`)
+  }
+
+  return parts.join(' ')
+}
+
+export function summarizeInsuranceBroadcastResult({
+  sentCount = 0,
+  skippedCount = 0,
+  failedCount = 0,
+  deduplicatedCustomerCount = 0,
+} = {}) {
+  const parts = [`Sent ${sentCount} broadcast(s) to ${deduplicatedCustomerCount} customer(s).`]
+
+  if (skippedCount) {
+    parts.push(`${skippedCount} inquiry result(s) skipped.`)
+  }
+
+  if (failedCount) {
+    parts.push(`${failedCount} failed.`)
+  }
+
+  return parts.join(' ')
 }
