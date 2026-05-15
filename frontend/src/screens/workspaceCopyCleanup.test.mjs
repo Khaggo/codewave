@@ -171,6 +171,25 @@ test('intake workspace guidance stays concise after front-desk redesign', () => 
   assert.ok(intakeScreen.includes('Capture the visit, then record the vehicle condition.'))
 })
 
+test('catalog, booking-service, and inventory workspaces use one-sentence descriptions', () => {
+  const shop = read('frontend/src/screens/ShopProductAdmin.js')
+  const booking = read('frontend/src/components/BookingServiceAdmin.js')
+  const inventory = read('frontend/src/screens/InventoryWorkspace.js')
+
+  assert.ok(shop.includes('Create categories and publish storefront-ready catalog products.'))
+  assert.ok(shop.includes('Create a category for product publishing.'))
+  assert.ok(shop.includes('Publish products with fields that match the shared catalog store.'))
+
+  assert.ok(booking.includes('Create booking categories and publish live booking services.'))
+  assert.ok(booking.includes('Create a category before publishing services.'))
+  assert.ok(booking.includes('Publish services with valid category records only.'))
+
+  assert.ok(inventory.includes('Review live product visibility and planned inventory readiness.'))
+  assert.ok(inventory.includes('Review current product visibility without stock counts.'))
+  assert.ok(inventory.includes('Inspect current catalog metadata for the selected product.'))
+  assert.ok(inventory.includes('Review which inventory capabilities are live or planned.'))
+})
+
 test('catalog, inventory, staff, and analytics workspaces use concise operational copy', () => {
   const catalog = read('frontend/src/screens/ShopProductAdmin.js')
   const inventory = read('frontend/src/screens/InventoryWorkspace.js')
@@ -218,8 +237,14 @@ test('admin operations workspaces move live queues ahead of secondary editors an
   assert.ok(analyticsOperationsIndex < analyticsDashboardIndex)
 })
 
-test('loyalty workspace stays concise', () => {
+test('analytics and loyalty workspaces stay concise', () => {
+  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
   const loyalty = read('frontend/src/screens/LoyaltyManager.js')
+
+  assert.ok(analytics.includes('Inspect read-only analytics snapshots across operations and support domains.'))
+  assert.ok(analytics.includes('Review derived sales signals from the latest snapshot.'))
+  assert.ok(analytics.includes('Review insurance workload from the latest snapshot.'))
+  assert.ok(analytics.includes('Review service demand from the latest dashboard snapshot.'))
 
   assert.ok(loyalty.includes('Manage rewards, earning rules, and loyalty analytics.'))
 })
