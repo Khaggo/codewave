@@ -100,3 +100,14 @@ test('insurance shell uses a header-triggered vehicle picker instead of a body v
   assert.doesNotMatch(source, /Choose vehicle context/)
   assert.doesNotMatch(source, /Select vehicle/)
 })
+
+test('insurance shell uses pull-to-refresh and removes the floating reload affordance', () => {
+  const source = read('./InsuranceInquiryScreen.js')
+
+  assert.match(source, /RefreshControl/)
+  assert.match(source, /onRefresh=\{refreshTracking\}/)
+  assert.match(source, /refreshing=\{isRefreshing\}/)
+  assert.doesNotMatch(source, /floating/i)
+  assert.doesNotMatch(source, /reload button/i)
+  assert.doesNotMatch(source, /onPress=\{refreshTracking\}[\s\S]*?outside/i)
+})

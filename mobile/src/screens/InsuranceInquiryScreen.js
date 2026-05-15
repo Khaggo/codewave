@@ -8,6 +8,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -1319,14 +1320,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   Open one focused destination at a time for request, documents, payment, renewal, or status review.
                 </Text>
               </View>
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={() => refreshTracking()}
-                activeOpacity={0.88}
-              >
-                <MaterialCommunityIcons name="refresh" size={18} color={colors.text} />
-                <Text style={styles.secondaryButtonText}>Refresh</Text>
-              </TouchableOpacity>
             </View>
 
             {trackingMessage ? (
@@ -1444,6 +1437,13 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         {insuranceModeUsesPanelScroll ? <View style={styles.fixedModeViewport}>{screenContent}</View> : <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={refreshTracking}
+              tintColor={colors.primary}
+            />
+          }
         >
           {screenContent}
         </ScrollView>}
@@ -1678,23 +1678,6 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
     fontSize: 15,
     fontWeight: '800',
-  },
-  secondaryButton: {
-    minHeight: 42,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  secondaryButtonText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
   },
   secondaryActionButton: {
     minHeight: 48,
