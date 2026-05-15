@@ -10,7 +10,7 @@ import {
   getOperationsActivitySnapshot,
   getPublishedCatalogProductsSnapshot,
   subscribeOperations,
-} from '@autocare/shared'
+} from '../shared/autocare/services/operationsStore.js'
 
 function createCachedSnapshot(getSnapshot) {
   let cachedSerialized = null

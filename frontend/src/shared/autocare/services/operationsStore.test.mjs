@@ -4,11 +4,13 @@ import assert from 'node:assert/strict'
 import {
   LOW_STOCK_THRESHOLD,
   addInventoryAdjustment,
+  addInventoryProduct,
   archiveInventoryProduct,
   getInventoryAdjustmentHistorySnapshot,
   getInventoryProductsSnapshot,
   getLowStockProducts,
   resetOperationsState,
+  updateInventoryProduct,
   updateInventoryProductThreshold,
 } from './operationsStore.js'
 
@@ -105,6 +107,38 @@ test('inventory low-stock lookups use per-product thresholds instead of publish 
   const lowStockIds = getLowStockProducts().map((product) => product.id)
 
   assert.deepEqual(lowStockIds.sort(), ['p2', 'p8'].sort())
+})
+
+test('adding inventory products rejects invalid low-stock thresholds', () => {
+  const [existingProduct] = getInventoryProductsSnapshot()
+
+  assert.throws(
+    () =>
+      addInventoryProduct({
+        name: 'Wheel Cleaner',
+        category: existingProduct.category,
+        price: 299,
+        stock: 12,
+        sku: 'WC-001',
+        description: 'Concentrated wheel cleaner.',
+        images: ['https://example.com/wheel-cleaner.jpg'],
+        lowStockThreshold: -1,
+      }),
+    /low-stock threshold must be zero or greater/i,
+  )
+})
+
+test('updating inventory products rejects invalid low-stock thresholds', () => {
+  const existingProduct = getInventoryProductsSnapshot().find((product) => product.id === 'p2')
+
+  assert.throws(
+    () =>
+      updateInventoryProduct('p2', {
+        category: existingProduct.category,
+        lowStockThreshold: Number.NaN,
+      }),
+    /low-stock threshold must be zero or greater/i,
+  )
 })
 
 test('stock adjustments stay separate from catalog publish visibility', () => {

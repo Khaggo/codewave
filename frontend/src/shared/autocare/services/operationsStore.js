@@ -17,6 +17,20 @@ function normalizeStockThreshold(value, fallback = LOW_STOCK_THRESHOLD) {
   return Math.trunc(threshold)
 }
 
+function resolveStockThresholdInput(value, fallback = LOW_STOCK_THRESHOLD) {
+  if (value === undefined) {
+    return fallback
+  }
+
+  const threshold = normalizeStockThreshold(value, Number.NaN)
+
+  if (!Number.isFinite(threshold)) {
+    throw new Error('Low-stock threshold must be zero or greater.')
+  }
+
+  return threshold
+}
+
 export function getInventoryStockState(quantity, threshold = LOW_STOCK_THRESHOLD) {
   const normalizedQuantity = Math.max(0, Math.trunc(Number(quantity) || 0))
   const normalizedThreshold = normalizeStockThreshold(threshold)
@@ -327,7 +341,7 @@ export function addInventoryProduct(input) {
     ...product,
     category: category.name,
     categoryId: category.id,
-    lowStockThreshold: normalizeStockThreshold(input?.lowStockThreshold),
+    lowStockThreshold: resolveStockThresholdInput(input?.lowStockThreshold),
     images: [...product.images],
   }
 
@@ -390,7 +404,7 @@ export function updateInventoryProduct(productId, input) {
         ...updatedFields,
         category: category.name,
         categoryId: category.id,
-        lowStockThreshold: normalizeStockThreshold(input?.lowStockThreshold, product.lowStockThreshold),
+        lowStockThreshold: resolveStockThresholdInput(input?.lowStockThreshold, product.lowStockThreshold),
         images: [...updatedFields.images],
         updatedAt: new Date().toISOString(),
       }
@@ -448,11 +462,7 @@ export function updateInventoryProductThreshold(productId, lowStockThreshold) {
     throw new Error(`Product ${productId} does not exist.`)
   }
 
-  const nextThreshold = normalizeStockThreshold(lowStockThreshold, Number.NaN)
-
-  if (!Number.isFinite(nextThreshold)) {
-    throw new Error('Low-stock threshold must be zero or greater.')
-  }
+  const nextThreshold = resolveStockThresholdInput(lowStockThreshold, Number.NaN)
 
   let updatedProduct = null
 
