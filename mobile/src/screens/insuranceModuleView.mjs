@@ -381,6 +381,12 @@ export const buildCustomerInsuranceStatusState = ({
   latestUpdateLabel = '--',
 } = {}) => {
   const missingCount = Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments.length : 0
+  const hasRenewalFollowUp =
+    Boolean(latestInquiry) &&
+    (latestInquiry.status === 'for_renewal' ||
+      ['upcoming', 'quoted', 'awaiting_customer', 'renewed', 'expired'].includes(
+        latestInquiry.renewalStatus,
+      ))
 
   if (missingCount > 0) {
     return {
@@ -398,7 +404,7 @@ export const buildCustomerInsuranceStatusState = ({
     }
   }
 
-  if (latestInquiry?.status === 'for_renewal' || latestInquiry?.renewalStatus !== 'not_applicable') {
+  if (hasRenewalFollowUp) {
     return {
       title: 'Renewal follow-up',
       summary: 'Renewal is the current blocker for this request.',

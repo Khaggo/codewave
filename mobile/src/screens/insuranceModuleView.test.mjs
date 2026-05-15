@@ -235,6 +235,29 @@ test('status state prioritizes renewal follow-up before payment follow-up', () =
   )
 })
 
+test('status state keeps the empty default case on the current request fallback', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: null,
+      missingRequiredDocuments: [],
+      latestUpdateLabel: '--',
+    }),
+    {
+      title: 'Current request status',
+      summary: 'Review the latest customer-safe update and next step.',
+      ctaLabel: 'Review status',
+      ctaRouteKey: 'status',
+      latestUpdateLabel: '--',
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: false },
+        { key: 'renewal', label: 'Renewal', active: false },
+      ],
+    },
+  )
+})
+
 test('insurance action cards expose focused destinations for the hybrid home', () => {
   assert.deepEqual(
     buildCustomerInsuranceActionCards({
