@@ -32,8 +32,6 @@ import {
 } from '../lib/insuranceClient';
 import {
   REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
-  buildCustomerInsuranceActionCards,
-  buildCustomerInsuranceHeroState,
   buildCustomerInsuranceOverviewState,
   buildCustomerInsuranceStatusState,
   buildRequirementsChecklist,
@@ -340,7 +338,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }),
     [latestInquiry?.paymentDueAt, latestInquiry?.paymentStatus, latestInquiry?.status],
   );
-  const renewalSummary = useMemo(() => buildRenewalPrompt(latestInquiry), [latestInquiry]);
   const overviewState = useMemo(
     () =>
       buildCustomerInsuranceOverviewState({
@@ -396,38 +393,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       timeline: [],
     }),
     [historyLatestUpdateLabel, historySummary, sortedHistoryRecords.length],
-  );
-  const heroState = useMemo(
-    () =>
-      buildCustomerInsuranceHeroState({
-        selectedVehicleLabel,
-        latestInquiry,
-        missingRequiredDocuments,
-        claimStatusUpdateCount: claimStatusUpdates.length,
-      }),
-    [
-      claimStatusUpdates.length,
-      latestInquiry,
-      missingRequiredDocuments,
-      selectedVehicleLabel,
-    ],
-  );
-  const actionCards = useMemo(
-    () =>
-      buildCustomerInsuranceActionCards({
-        latestInquiry,
-        requirementsChecklist,
-        claimStatusUpdateCount: claimStatusUpdates.length,
-        paymentSummary,
-        renewalSummary,
-      }),
-    [
-      claimStatusUpdates.length,
-      latestInquiry,
-      paymentSummary,
-      requirementsChecklist,
-      renewalSummary,
-    ],
   );
   const homeTitle = 'Overview';
   const statusTitle = 'Status';
@@ -1194,232 +1159,197 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     </InsuranceSectionDivider>
   );
 
-  const heroSubtitle = hasSession
-    ? 'Start a request quickly, upload the right documents, and follow review, payment, and renewal prompts without exposing staff-only workflow details.'
-    : 'Sign in as a customer to start an insurance request and see customer-safe review, payment, and renewal updates.';
   const insuranceModeUsesPanelScroll =
     activeInsuranceTab === 'request' ||
     activeInsuranceTab === 'documents' ||
     activeInsuranceTab === 'status';
   const screenContent = (
     <View style={[styles.content, insuranceModeUsesPanelScroll && styles.fixedModeContent]}>
-          <View style={styles.heroCard}>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.88}>
-              <MaterialCommunityIcons name="arrow-left" size={20} color={colors.text} />
-            </TouchableOpacity>
-            <Text style={styles.eyebrow}>CUSTOMER INSURANCE</Text>
-            <Text style={styles.title}>Insurance home</Text>
-            <Text style={styles.subtitle}>{heroSubtitle}</Text>
-            <View style={styles.routePill}>
-              <Text style={styles.routePillText}>Live routes: create inquiry, upload document file, get inquiry by id, vehicle insurance records</Text>
-            </View>
-          </View>
+      {!hasSession ? (
+        <InsuranceStatePanel
+          icon="lock-outline"
+          title="Customer session required"
+          message="Sign in to create and track insurance requests."
+          actionLabel="Sign in"
+          onAction={() => navigation.navigate('Login')}
+          tone="danger"
+        />
+      ) : null}
 
-          {!hasSession ? (
-            <InsuranceStatePanel
-              icon="lock-outline"
-              title="Customer session required"
-              message="This mobile flow only works for a signed-in customer account because insurance creation and tracking are bearer-token protected."
-              actionLabel="Sign in"
-              onAction={() => navigation.navigate('Login')}
-              tone="danger"
-            />
-          ) : null}
+      {hasSession && vehicleLoadState === 'loading' && !ownedVehicles.length ? (
+        <InsuranceStatePanel
+          icon="car-clock"
+          title="Loading owned vehicles"
+          message="Checking your garage."
+          loading
+        />
+      ) : null}
 
-          {hasSession && vehicleLoadState === 'loading' && !ownedVehicles.length ? (
-            <InsuranceStatePanel
-              icon="car-clock"
-              title="Loading owned vehicles"
-              message="Checking your live garage before insurance intake starts."
-              loading
-            />
-          ) : null}
+      {hasSession && vehicleLoadState === 'failed' && !ownedVehicles.length ? (
+        <InsuranceStatePanel
+          icon="alert-circle-outline"
+          title="Vehicle lookup failed"
+          message={vehicleLoadMessage || 'We could not load your owned vehicles right now.'}
+          actionLabel="Retry"
+          onAction={() => setVehicleReloadKey((currentKey) => currentKey + 1)}
+          tone="danger"
+        />
+      ) : null}
 
-          {hasSession && vehicleLoadState === 'failed' && !ownedVehicles.length ? (
-            <InsuranceStatePanel
-              icon="alert-circle-outline"
-              title="Vehicle lookup failed"
-              message={vehicleLoadMessage || 'We could not load your owned vehicles right now.'}
-              actionLabel="Retry"
-              onAction={() => setVehicleReloadKey((currentKey) => currentKey + 1)}
-              tone="danger"
-            />
-          ) : null}
+      {hasSession &&
+      !ownedVehicles.length &&
+      vehicleLoadState !== 'loading' &&
+      vehicleLoadState !== 'failed' ? (
+        <InsuranceStatePanel
+          icon="car-off"
+          title="No owned vehicle on file"
+          message="Insurance intake starts from a customer-owned vehicle."
+          tone="danger"
+        />
+      ) : null}
 
-          {hasSession &&
-          !ownedVehicles.length &&
-          vehicleLoadState !== 'loading' &&
-          vehicleLoadState !== 'failed' ? (
-            <InsuranceStatePanel
-              icon="car-off"
-              title="No owned vehicle on file"
-              message="Insurance intake can only start from a customer-owned vehicle. Complete vehicle onboarding first, then come back here."
-              tone="danger"
-            />
-          ) : null}
-
-          {hasSession && ownedVehicles.length ? (
-            <Modal
-              animationType="slide"
-              transparent
-              visible={isVehiclePickerOpen}
-              onRequestClose={() => setIsVehiclePickerOpen(false)}
-            >
-              <Pressable
-                style={styles.sheetBackdrop}
-                onPress={() => setIsVehiclePickerOpen(false)}
-              >
-                <Pressable style={styles.sheetCard}>
-                  <Text style={styles.sheetTitle}>Choose vehicle</Text>
-                  <ScrollView style={styles.sheetList} contentContainerStyle={styles.sheetListContent}>
-                    {ownedVehicles.map((vehicle) => {
-                      const vehicleLabel = buildOwnedVehicleInsuranceLabel(vehicle);
-                      const selected = vehicle.id === selectedVehicleId;
-
-                      return (
-                        <TouchableOpacity
-                          key={vehicle.id}
-                          style={[styles.sheetRow, selected && styles.sheetRowSelected]}
-                          onPress={() => {
-                            handleSelectVehicle(vehicle.id);
-                            setIsVehiclePickerOpen(false);
-                          }}
-                          activeOpacity={0.88}
-                        >
-                          <Text style={styles.sheetRowLabel}>{vehicleLabel}</Text>
-                          {selected ? <Text style={styles.sheetRowMeta}>Current</Text> : null}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </Pressable>
-              </Pressable>
-            </Modal>
-          ) : null}
-
-          <View
-            style={[
-              styles.sectionCard,
-              insuranceModeUsesPanelScroll && styles.fixedModeWorkspaceCard,
-            ]}
+      {hasSession && ownedVehicles.length ? (
+        <Modal
+          animationType="slide"
+          transparent
+          visible={isVehiclePickerOpen}
+          onRequestClose={() => setIsVehiclePickerOpen(false)}
+        >
+          <Pressable
+            style={styles.sheetBackdrop}
+            onPress={() => setIsVehiclePickerOpen(false)}
           >
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Insurance workspace</Text>
-                <Text style={styles.sectionSubtitle}>
-                  Open one focused destination at a time for request, documents, payment, renewal, or status review.
+            <Pressable style={styles.sheetCard}>
+              <Text style={styles.sheetTitle}>Choose vehicle</Text>
+              <ScrollView style={styles.sheetList} contentContainerStyle={styles.sheetListContent}>
+                {ownedVehicles.map((vehicle) => {
+                  const vehicleLabel = buildOwnedVehicleInsuranceLabel(vehicle);
+                  const selected = vehicle.id === selectedVehicleId;
+
+                  return (
+                    <TouchableOpacity
+                      key={vehicle.id}
+                      style={[styles.sheetRow, selected && styles.sheetRowSelected]}
+                      onPress={() => {
+                        handleSelectVehicle(vehicle.id);
+                        setIsVehiclePickerOpen(false);
+                      }}
+                      activeOpacity={0.88}
+                    >
+                      <Text style={styles.sheetRowLabel}>{vehicleLabel}</Text>
+                      {selected ? <Text style={styles.sheetRowMeta}>Current</Text> : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
+
+      {trackingMessage ? (
+        <InsuranceStatePanel
+          icon={trackingState === 'tracking_not_found' ? 'file-question-outline' : 'information-outline'}
+          title="Tracking update"
+          message={trackingMessage}
+          loading={trackingState === 'tracking_loading' || isRefreshing}
+        />
+      ) : null}
+      <InsuranceModeShell
+        activeSection={activeInsuranceTab}
+        onChangeSection={handleChangeInsuranceTab}
+        selectedVehicleLabel={selectedVehicleLabel}
+        isVehiclePickerAvailable={isVehiclePickerAvailable}
+        onOpenVehiclePicker={handleOpenVehiclePicker}
+      >
+        {activeInsuranceTab === 'home' ? (
+          <InsuranceHomePanel
+            title={homeTitle}
+            selectedVehicleLabel={selectedVehicleLabel}
+            overviewState={overviewState}
+            statusState={statusState}
+            onOpenSection={handleOpenInsuranceHomeSection}
+          />
+        ) : null}
+
+        {activeInsuranceTab === 'request' ? (
+          <InsuranceRequestPanel
+            selectedVehicleLabel={selectedVehicleLabel}
+            draft={draft}
+            inquiryTypeOptions={inquiryTypeOptions}
+            isRefreshing={isRefreshing}
+            onRefresh={refreshTracking}
+            onChangeDraft={(patch) => {
+              setDraft((current) => ({ ...current, ...patch }))
+              handleDraftPatch()
+            }}
+            onSubmit={handleSubmitInquiry}
+            isSubmitting={isSubmitting}
+            intakeState={intakeState}
+            intakeMessage={intakeMessage}
+          />
+        ) : null}
+
+        {activeInsuranceTab === 'documents' ? (
+          <InsuranceDocumentsPanel
+            checklist={requirementsChecklist}
+            latestInquiry={latestInquiry}
+            isRefreshing={isRefreshing}
+            onRefresh={refreshTracking}
+            onChangeDocumentDraft={(patch) => {
+              setDocumentDraft((current) => ({ ...current, ...patch }))
+              handleDocumentDraftPatch()
+            }}
+            onPickDocument={pickCustomerInsuranceDocument}
+            onUploadDocument={handleUploadPickedDocument}
+            isUploadingDocument={isUploadingDocument}
+            documentDraft={documentDraft}
+            documentTypeOptions={customerInsuranceDocumentTypeOptions}
+            onClearPickedDocument={handleClearPickedDocument}
+            uploadMessage={documentUploadMessage}
+            uploadState={documentUploadState}
+            canAcceptDocuments={Boolean(latestInquiry?.id && latestInquiryCanAcceptDocuments)}
+          />
+        ) : null}
+
+        {activeInsuranceTab === 'status' ? (
+          <InsuranceStatusDetailPanel
+            eyebrow="Status"
+            title={statusTitle}
+            subtitle={statusSubtitle}
+            statusState={statusState}
+            isRefreshing={isRefreshing}
+            onRefresh={refreshTracking}
+          >
+            {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
+              <InsuranceSectionDivider title="Payment">
+                <Text style={styles.statusSectionSubtitle}>{paymentSummary.message}</Text>
+              </InsuranceSectionDivider>
+            ) : null}
+
+            {latestInquiry?.renewalStatus && latestInquiry.renewalStatus !== 'not_applicable' ? (
+              <InsuranceSectionDivider title="Renewal">
+                <Text style={styles.statusSectionSubtitle}>
+                  {buildRenewalPrompt(latestInquiry).message}
                 </Text>
-              </View>
-            </View>
-
-            {trackingMessage ? (
-              <InsuranceStatePanel
-                icon={trackingState === 'tracking_not_found' ? 'file-question-outline' : 'information-outline'}
-                title={
-                  trackingState === 'tracking_not_found'
-                    ? 'Known inquiry missing'
-                    : 'Tracking update'
-                }
-                message={trackingMessage}
-                loading={trackingState === 'tracking_loading' || isRefreshing}
-              />
-            ) : null}
-            <InsuranceModeShell
-              activeSection={activeInsuranceTab}
-              onChangeSection={handleChangeInsuranceTab}
-              selectedVehicleLabel={selectedVehicleLabel}
-              isVehiclePickerAvailable={isVehiclePickerAvailable}
-              onOpenVehiclePicker={handleOpenVehiclePicker}
-            >
-              {activeInsuranceTab === 'home' ? (
-                <InsuranceHomePanel
-                  title={homeTitle}
-                  selectedVehicleLabel={selectedVehicleLabel}
-                  overviewState={overviewState}
-                  statusState={statusState}
-                  onOpenSection={handleOpenInsuranceHomeSection}
-                />
-              ) : null}
-
-              {activeInsuranceTab === 'request' ? (
-                <InsuranceRequestPanel
-                  selectedVehicleLabel={selectedVehicleLabel}
-                  draft={draft}
-                  inquiryTypeOptions={inquiryTypeOptions}
-                  isRefreshing={isRefreshing}
-                  onRefresh={refreshTracking}
-                  onChangeDraft={(patch) => {
-                    setDraft((current) => ({ ...current, ...patch }))
-                    handleDraftPatch()
-                  }}
-                  onSubmit={handleSubmitInquiry}
-                  isSubmitting={isSubmitting}
-                  intakeState={intakeState}
-                  intakeMessage={intakeMessage}
-                />
-              ) : null}
-
-              {activeInsuranceTab === 'documents' ? (
-                <InsuranceDocumentsPanel
-                  checklist={requirementsChecklist}
-                  latestInquiry={latestInquiry}
-                  isRefreshing={isRefreshing}
-                  onRefresh={refreshTracking}
-                  onChangeDocumentDraft={(patch) => {
-                    setDocumentDraft((current) => ({ ...current, ...patch }))
-                    handleDocumentDraftPatch()
-                  }}
-                  onPickDocument={pickCustomerInsuranceDocument}
-                  onUploadDocument={handleUploadPickedDocument}
-                  isUploadingDocument={isUploadingDocument}
-                  documentDraft={documentDraft}
-                  documentTypeOptions={customerInsuranceDocumentTypeOptions}
-                  onClearPickedDocument={handleClearPickedDocument}
-                  uploadMessage={documentUploadMessage}
-                  uploadState={documentUploadState}
-                  canAcceptDocuments={Boolean(latestInquiry?.id && latestInquiryCanAcceptDocuments)}
-                />
-              ) : null}
-
-              {activeInsuranceTab === 'status' ? (
-                <InsuranceStatusDetailPanel
-                  eyebrow="Status"
-                  title={statusTitle}
-                  subtitle={statusSubtitle}
-                  statusState={statusState}
-                  isRefreshing={isRefreshing}
-                  onRefresh={refreshTracking}
-                >
-                  {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
-                    <InsuranceSectionDivider title="Payment">
-                      <Text style={styles.statusSectionSubtitle}>{paymentSummary.message}</Text>
-                    </InsuranceSectionDivider>
-                  ) : null}
-
-                  {latestInquiry?.renewalStatus && latestInquiry.renewalStatus !== 'not_applicable' ? (
-                    <InsuranceSectionDivider title="Renewal">
-                      <Text style={styles.statusSectionSubtitle}>
-                        {buildRenewalPrompt(latestInquiry).message}
-                      </Text>
-                    </InsuranceSectionDivider>
-                  ) : null}
-
-                  {historyStatusSection}
-                </InsuranceStatusDetailPanel>
-              ) : null}
-            </InsuranceModeShell>
-
-            {trackingState === 'tracking_loading' && !trackingMessage ? (
-              <InsuranceStatePanel
-                icon="refresh"
-                title="Loading insurance updates"
-                message="We’re checking the latest inquiry state and any vehicle-level insurance history already recorded for tracking."
-                loading
-              />
+              </InsuranceSectionDivider>
             ) : null}
 
-        </View>
-      </View>
+            {historyStatusSection}
+          </InsuranceStatusDetailPanel>
+        ) : null}
+      </InsuranceModeShell>
+
+      {trackingState === 'tracking_loading' && !trackingMessage ? (
+        <InsuranceStatePanel
+          icon="refresh"
+          title="Loading insurance updates"
+          message="Checking the latest request and vehicle history."
+          loading
+        />
+      ) : null}
+
+    </View>
   );
 
   return (
@@ -1476,91 +1406,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
-  heroCard: {
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.large,
-    backgroundColor: colors.surface,
-    padding: 22,
-    marginBottom: 18,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
-    marginBottom: 16,
-  },
-  eyebrow: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.6,
-    marginBottom: 10,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-    marginBottom: 10,
-  },
-  subtitle: {
-    color: colors.mutedText,
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  routePill: {
-    marginTop: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
-  },
-  routePillText: {
-    color: colors.labelText,
-    fontSize: 12,
-    lineHeight: 18,
-  },
   homeFocusWrap: {
     marginBottom: 2,
-  },
-  sectionCard: {
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.large,
-    backgroundColor: colors.surface,
-    padding: 20,
-    marginBottom: 18,
-  },
-  fixedModeWorkspaceCard: {
-    flex: 1,
-    minHeight: 0,
-    marginBottom: 0,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-    gap: 12,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 20,
-    maxWidth: 520,
   },
   sheetBackdrop: {
     flex: 1,
