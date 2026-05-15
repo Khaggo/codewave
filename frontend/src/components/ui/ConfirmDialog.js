@@ -40,10 +40,10 @@ export default function ConfirmDialog({
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm-dialog-title"
-          className="w-full max-w-xl overflow-hidden rounded-t-3xl border border-surface-border bg-surface-card shadow-card-md md:rounded-3xl"
+          className="w-full max-w-xl overflow-hidden rounded-t-[28px] border border-surface-border bg-surface-card/98 shadow-[0_28px_64px_rgba(0,0,0,0.34)] md:rounded-[28px]"
         >
-          <div className="flex items-start gap-4 border-b border-surface-border px-5 py-5 md:px-6">
-            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${meta.iconClassName}`}>
+          <div className="flex items-start gap-4 border-b border-surface-border px-5 py-5 md:px-6 md:py-6">
+            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${meta.iconClassName}`}>
               <Icon size={18} />
             </div>
 
@@ -51,16 +51,16 @@ export default function ConfirmDialog({
               <p id="confirm-dialog-title" className="text-base font-semibold tracking-tight text-ink-primary md:text-lg">
                 {title}
               </p>
-              <p className="mt-1 text-sm leading-6 text-ink-secondary">{message}</p>
+              <p className="mt-1.5 text-sm leading-6 text-ink-secondary">{message}</p>
             </div>
           </div>
 
-          <div className="flex flex-col-reverse gap-3 px-5 py-4 md:flex-row md:justify-end md:px-6">
+          <div className="flex flex-col-reverse gap-2.5 px-5 py-4 md:flex-row md:justify-end md:px-6 md:py-5">
             <button
               type="button"
               onClick={onCancel}
               disabled={submitting}
-              className="btn-ghost justify-center disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-ghost min-w-[132px] justify-center disabled:cursor-not-allowed disabled:opacity-50"
             >
               {cancelLabel}
             </button>
@@ -69,7 +69,7 @@ export default function ConfirmDialog({
               type="button"
               onClick={onConfirm}
               disabled={submitting}
-              className={`${meta.confirmClassName} justify-center disabled:cursor-not-allowed disabled:opacity-50`}
+              className={`${meta.confirmClassName} min-w-[132px] justify-center disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {confirmLabel}
             </button>
