@@ -1,7 +1,13 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { colors, radius } from '../../theme'
 
-const SECTION_LABELS = ['Overview', 'Request', 'Docs', 'Status', 'History']
+const SECTION_ITEMS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'request', label: 'Request' },
+  { key: 'documents', label: 'Docs' },
+  { key: 'status', label: 'Status' },
+  { key: 'history', label: 'History' },
+]
 
 export default function InsuranceModeShell({ activeSection, onChangeSection, onExitMode, children }) {
   return (
@@ -14,8 +20,7 @@ export default function InsuranceModeShell({ activeSection, onChangeSection, onE
       <Text style={styles.title}>Insurance mode</Text>
 
       <View style={styles.navRow}>
-        {SECTION_LABELS.map((label) => {
-          const key = label.toLowerCase() === 'docs' ? 'documents' : label.toLowerCase()
+        {SECTION_ITEMS.map(({ key, label }) => {
           const active = activeSection === key
 
           return (
