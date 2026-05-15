@@ -15,11 +15,19 @@ test('insurance tab opens directly into the insurance shell without an extra ent
   const requiredFragments = [
     '<InsuranceModeShell',
     'activeSection={activeInsuranceTab}',
-    'onChangeSection={setActiveInsuranceTab}',
+    'onChangeSection={handleChangeInsuranceTab}',
     "activeInsuranceTab === 'home'",
     "activeInsuranceTab === 'request'",
     "activeInsuranceTab === 'documents'",
     "activeInsuranceTab === 'status'",
+    "const handleChangeInsuranceTab = (section) => {",
+    "if (section === 'documents') {",
+    'handleOpenPanel(section)',
+    "if (section === 'history') {",
+    "setActiveInsuranceTab('status')",
+    'title="Recorded vehicle updates"',
+    'statusState={historyStatusState}',
+    'sortedHistoryRecords.map((record) => (',
   ]
 
   for (const fragment of requiredFragments) {
@@ -29,6 +37,7 @@ test('insurance tab opens directly into the insurance shell without an extra ent
   assert.doesNotMatch(source, /<InsuranceEntryPanel/)
   assert.doesNotMatch(source, /Enter insurance mode/)
   assert.doesNotMatch(source, /Protection center/)
+  assert.doesNotMatch(source, /onChangeSection=\{setActiveInsuranceTab\}/)
 })
 
 test('insurance shell exposes direct-entry tabs and vehicle picker trigger', () => {

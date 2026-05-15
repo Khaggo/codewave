@@ -180,6 +180,26 @@ const getLatestInsuranceRecord = (records) =>
     return currentValue > latestValue ? record : currentLatest;
   }, null);
 
+const buildHistoryRecordTitle = (record) => {
+  const statusLabel = formatWorkflowLabel(record?.status);
+
+  return record?.inquiryTypeLabel
+    ? `${record.inquiryTypeLabel} - ${statusLabel}`
+    : statusLabel;
+};
+
+const buildHistoryRecordSummary = (record) => {
+  const latestUpdateLabel = formatTimestampLabel(record?.updatedAt ?? record?.createdAt);
+  const summaryParts = [
+    record?.statusHint,
+    latestUpdateLabel !== '--' ? `Latest update: ${latestUpdateLabel}` : null,
+    record?.providerName ? `Provider: ${record.providerName}` : null,
+    record?.policyNumber ? `Policy no.: ${record.policyNumber}` : null,
+  ].filter(Boolean);
+
+  return summaryParts.join(' ') || 'Completed insurance record.';
+};
+
 function InsuranceStatePanel({
   icon,
   title,
@@ -283,25 +303,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setActiveInsuranceTab('home');
   }, [selectedVehicleId]);
 
-  useEffect(() => {
-    if (activeInsuranceTab === 'request') {
-      setActivePanel('request');
-      return;
-    }
-
-    if (activeInsuranceTab === 'documents') {
-      setActivePanel('documents');
-      return;
-    }
-
-    if (activeInsuranceTab === 'status') {
-      setActivePanel('status');
-      return;
-    }
-
-    setActivePanel('home');
-  }, [activeInsuranceTab]);
-
   const selectedVehicle =
     ownedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
   const selectedVehicleLabel = selectedVehicle
@@ -361,6 +362,30 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         latestUpdateLabel: latestStatusUpdateLabel,
       }),
     [latestInquiry, latestStatusUpdateLabel, missingRequiredDocuments],
+  );
+  const sortedHistoryRecords = useMemo(() => {
+    return [...claimStatusUpdates].sort((left, right) => {
+      const leftTimestamp = new Date(left?.updatedAt ?? left?.createdAt ?? 0).getTime();
+      const rightTimestamp = new Date(right?.updatedAt ?? right?.createdAt ?? 0).getTime();
+
+      return rightTimestamp - leftTimestamp;
+    });
+  }, [claimStatusUpdates]);
+  const historySummary = sortedHistoryRecords.length
+    ? `${sortedHistoryRecords.length} recorded insurance update${sortedHistoryRecords.length === 1 ? '' : 's'} ${sortedHistoryRecords.length === 1 ? 'is' : 'are'} already available for this vehicle.`
+    : 'Vehicle-level insurance records will appear here after staff close and record a customer-safe case.';
+  const latestHistoryRecord = sortedHistoryRecords[0] ?? null;
+  const historyLatestUpdateLabel =
+    latestHistoryRecord?.statusHint ??
+    formatTimestampLabel(latestHistoryRecord?.updatedAt ?? latestHistoryRecord?.createdAt);
+  const historyStatusState = useMemo(
+    () => ({
+      title: sortedHistoryRecords.length ? 'Completed records' : 'No history yet',
+      summary: historySummary,
+      latestUpdateLabel: historyLatestUpdateLabel,
+      timeline: [],
+    }),
+    [historyLatestUpdateLabel, historySummary, sortedHistoryRecords.length],
   );
   const heroState = useMemo(
     () =>
@@ -1101,13 +1126,25 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
     setActivePanel(panelKey);
   };
-  const handleOpenInsuranceHomeSection = (section) => {
-    if (section === 'history') {
-      setActiveInsuranceTab('status');
+  const handleChangeInsuranceTab = (section) => {
+    if (section === 'documents') {
+      handleOpenPanel(section);
+      setActiveInsuranceTab(section);
       return;
     }
 
     setActiveInsuranceTab(section);
+    setActivePanel(section === 'home' ? 'home' : section);
+  };
+
+  const handleOpenInsuranceHomeSection = (section) => {
+    if (section === 'history') {
+      setActiveInsuranceTab('status');
+      setActivePanel('status');
+      return;
+    }
+
+    handleChangeInsuranceTab(section);
   };
 
   const heroSubtitle = hasSession
@@ -1248,16 +1285,13 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             ) : null}
             <InsuranceModeShell
               activeSection={activeInsuranceTab}
-              onChangeSection={setActiveInsuranceTab}
+              onChangeSection={handleChangeInsuranceTab}
               selectedVehicleLabel={selectedVehicleLabel}
               onOpenVehiclePicker={() => setIsVehiclePickerOpen(true)}
             >
               {activeInsuranceTab === 'home' ? (
                 <InsuranceHomePanel
-                  overviewState={{
-                    ...overviewState,
-                    routeRows: overviewState.routeRows.filter((row) => row.key !== 'history'),
-                  }}
+                  overviewState={overviewState}
                   onOpenSection={handleOpenInsuranceHomeSection}
                 />
               ) : null}
@@ -1306,7 +1340,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   statusState={statusState}
                   footerLabel={statusState.ctaLabel}
                   footerScrollTarget={statusState.ctaRouteKey === 'status' ? 'end' : null}
-                  onFooterPress={statusState.ctaRouteKey === 'documents' ? () => setActiveInsuranceTab('documents') : null}
+                  onFooterPress={statusState.ctaRouteKey === 'documents' ? () => handleChangeInsuranceTab('documents') : null}
                 >
                   {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
                     <InsuranceSectionCard
@@ -1321,6 +1355,28 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                       helper={buildRenewalPrompt(latestInquiry).message}
                     />
                   ) : null}
+
+                  <InsuranceStatusDetailPanel
+                    eyebrow="History"
+                    title="Recorded vehicle updates"
+                    subtitle="Completed customer-safe insurance records for this vehicle."
+                    statusState={historyStatusState}
+                  >
+                    {sortedHistoryRecords.length ? (
+                      sortedHistoryRecords.map((record) => (
+                        <InsuranceSectionCard
+                          key={`${record.status}-${record.updatedAt ?? record.createdAt ?? record.id ?? record.policyNumber ?? record.inquiryTypeLabel ?? 'history'}`}
+                          title={buildHistoryRecordTitle(record)}
+                          helper={buildHistoryRecordSummary(record)}
+                        />
+                      ))
+                    ) : (
+                      <InsuranceSectionCard
+                        title="No completed records yet"
+                        helper="Completed insurance records will appear here after staff close and record them."
+                      />
+                    )}
+                  </InsuranceStatusDetailPanel>
                 </InsuranceStatusDetailPanel>
               ) : null}
             </InsuranceModeShell>
