@@ -5,6 +5,9 @@ import {
   buildInsuranceBroadcastRequest,
   buildInsuranceTableRow,
   buildInsuranceReminderRequest,
+  getInsuranceBroadcastComposerState,
+  getInsuranceQueueFilterSummary,
+  getInsuranceReminderComposerState,
   getNextInsuranceWorkspaceViewState,
   shouldApplyInsuranceAsyncResult,
   summarizeInsuranceBroadcastResult,
@@ -592,6 +595,98 @@ test('buildInsuranceBroadcastRequest rejects empty broadcast content or missing 
         message: 'Valid message',
       }),
     /selected_cases or filtered_results/i,
+  )
+})
+
+test('getInsuranceQueueFilterSummary explains visible queue counts and active filters', () => {
+  assert.deepEqual(
+    getInsuranceQueueFilterSummary({
+      totalCount: 6,
+      visibleCount: 2,
+      filters: {
+        status: 'needs_documents',
+        paymentStatus: 'all',
+        renewalStatus: 'upcoming',
+        search: 'toyota',
+      },
+    }),
+    {
+      headline: 'Showing 2 of 6 live cases',
+      detail: 'Server filters: Needs Documents, Upcoming. Search: “toyota”.',
+      hasActiveFilters: true,
+    },
+  )
+})
+
+test('getInsuranceReminderComposerState guides single-case sends before a case is selected', () => {
+  assert.deepEqual(
+    getInsuranceReminderComposerState({
+      targetMode: 'single_case',
+      selectedInquiryId: '',
+      selectedInquiryIds: [],
+      selectedVisibleInquiryIds: [],
+      filteredCount: 5,
+    }),
+    {
+      audienceLabel: 'No current case selected',
+      scopeLabel: 'Single Case',
+      readinessLabel: 'Pick a current case before sending a single reminder.',
+      canSend: false,
+    },
+  )
+})
+
+test('getInsuranceReminderComposerState summarizes selected-case reminder readiness', () => {
+  assert.deepEqual(
+    getInsuranceReminderComposerState({
+      targetMode: 'selected_cases',
+      selectedInquiryId: 'inq-1',
+      selectedInquiryIds: ['inq-1', 'inq-2', 'inq-3'],
+      selectedVisibleInquiryIds: ['inq-1', 'inq-2'],
+      filteredCount: 5,
+    }),
+    {
+      audienceLabel: '3 selected cases',
+      scopeLabel: '2 selected in the current queue',
+      readinessLabel: 'Ready to remind the selected cases.',
+      canSend: true,
+    },
+  )
+})
+
+test('getInsuranceBroadcastComposerState requires both audience and message content', () => {
+  assert.deepEqual(
+    getInsuranceBroadcastComposerState({
+      targetMode: 'filtered_results',
+      selectedInquiryIds: ['inq-1'],
+      filteredCount: 0,
+      title: ' Renewal push ',
+      message: '   ',
+    }),
+    {
+      audienceLabel: '0 filtered cases',
+      scopeLabel: 'Filtered Results',
+      readinessLabel: 'Add a message and keep at least one matching case in view.',
+      canSend: false,
+    },
+  )
+})
+
+test('getInsuranceBroadcastComposerState marks filtered broadcasts ready when content and cases exist', () => {
+  assert.deepEqual(
+    getInsuranceBroadcastComposerState({
+      targetMode: 'filtered_results',
+      selectedInquiryIds: ['inq-1'],
+      filteredCount: 4,
+      title: 'Renewal push',
+      message: 'Please review your renewal update in the app.',
+    }),
+    {
+      audienceLabel: '4 filtered cases',
+      scopeLabel: 'Filtered Results',
+      readinessLabel: 'Ready to broadcast to the filtered insurance audience.',
+      canSend: true,
+    },
   )
 })
 

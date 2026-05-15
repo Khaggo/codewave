@@ -10,6 +10,11 @@ const TERMINAL_INQUIRY_STATUSES = ['closed', 'cancelled', 'rejected']
 const EDITABLE_WORKFLOW_FIELDS = ['status', 'reviewNotes']
 const REMINDER_FILTER_FIELDS = ['purpose', 'status', 'paymentStatus', 'renewalStatus']
 const BROADCAST_TARGET_MODES = ['selected_cases', 'filtered_results']
+const TARGET_MODE_LABELS = {
+  single_case: 'Single Case',
+  selected_cases: 'Selected Cases',
+  filtered_results: 'Filtered Results',
+}
 
 const normalizeMeaningfulInsuranceFilters = (filters = {}, allowedFields = REMINDER_FILTER_FIELDS) =>
   allowedFields.reduce((result, field) => {
@@ -24,6 +29,8 @@ const normalizeMeaningfulInsuranceFilters = (filters = {}, allowedFields = REMIN
 
 const normalizeSelectedInsuranceIds = (selectedIds = []) =>
   [...new Set(selectedIds.map((value) => String(value ?? '').trim()).filter(Boolean))]
+
+const pluralize = (count, singular, plural = `${singular}s`) => `${count} ${count === 1 ? singular : plural}`
 
 const isTerminalInquiry = (inquiry) => TERMINAL_INQUIRY_STATUSES.includes(inquiry?.status)
 
@@ -322,4 +329,113 @@ export function summarizeInsuranceBroadcastResult({
   }
 
   return parts.join(' ')
+}
+
+export function getInsuranceQueueFilterSummary({
+  totalCount = 0,
+  visibleCount = 0,
+  filters = {},
+} = {}) {
+  const filterLabels = [
+    filters?.status && filters.status !== 'all' ? formatStatusLabel(filters.status) : null,
+    filters?.paymentStatus && filters.paymentStatus !== 'all' ? `${formatStatusLabel(filters.paymentStatus)} payment` : null,
+    filters?.renewalStatus && filters.renewalStatus !== 'all' ? formatStatusLabel(filters.renewalStatus) : null,
+  ].filter(Boolean)
+  const trimmedSearch = String(filters?.search ?? '').trim()
+
+  const detailParts = []
+
+  if (filterLabels.length) {
+    detailParts.push(`Server filters: ${filterLabels.join(', ')}.`)
+  }
+
+  if (trimmedSearch) {
+    detailParts.push(`Search: “${trimmedSearch}”.`)
+  }
+
+  return {
+    headline: `Showing ${visibleCount} of ${totalCount} live ${totalCount === 1 ? 'case' : 'cases'}`,
+    detail: detailParts.length ? detailParts.join(' ') : 'All live cases are currently in view.',
+    hasActiveFilters: Boolean(filterLabels.length || trimmedSearch),
+  }
+}
+
+export function getInsuranceReminderComposerState({
+  targetMode = 'selected_cases',
+  selectedInquiryId = '',
+  selectedInquiryIds = [],
+  selectedVisibleInquiryIds = [],
+  filteredCount = 0,
+} = {}) {
+  const normalizedTargetMode = String(targetMode ?? '').trim() || 'selected_cases'
+  const selectedCount = normalizeSelectedInsuranceIds(selectedInquiryIds).length
+  const visibleSelectedCount = normalizeSelectedInsuranceIds(selectedVisibleInquiryIds).length
+
+  if (normalizedTargetMode === 'single_case') {
+    return {
+      audienceLabel: selectedInquiryId ? 'Current case selected' : 'No current case selected',
+      scopeLabel: TARGET_MODE_LABELS.single_case,
+      readinessLabel: selectedInquiryId
+        ? 'Ready to remind the current case.'
+        : 'Pick a current case before sending a single reminder.',
+      canSend: Boolean(selectedInquiryId),
+    }
+  }
+
+  if (normalizedTargetMode === 'filtered_results') {
+    return {
+      audienceLabel: `${pluralize(filteredCount, 'filtered case')}`,
+      scopeLabel: TARGET_MODE_LABELS.filtered_results,
+      readinessLabel: filteredCount
+        ? 'Ready to remind the currently filtered insurance queue.'
+        : 'Keep at least one matching case in view before sending filtered reminders.',
+      canSend: filteredCount > 0,
+    }
+  }
+
+  return {
+    audienceLabel: `${pluralize(selectedCount, 'selected case')}`,
+    scopeLabel: `${visibleSelectedCount} selected in the current queue`,
+    readinessLabel: selectedCount
+      ? 'Ready to remind the selected cases.'
+      : 'Select one or more cases before sending reminders.',
+    canSend: selectedCount > 0,
+  }
+}
+
+export function getInsuranceBroadcastComposerState({
+  targetMode = 'selected_cases',
+  selectedInquiryIds = [],
+  filteredCount = 0,
+  title = '',
+  message = '',
+} = {}) {
+  const normalizedTargetMode = String(targetMode ?? '').trim() || 'selected_cases'
+  const selectedCount = normalizeSelectedInsuranceIds(selectedInquiryIds).length
+  const hasTitle = Boolean(String(title ?? '').trim())
+  const hasMessage = Boolean(String(message ?? '').trim())
+
+  if (normalizedTargetMode === 'filtered_results') {
+    const hasAudience = filteredCount > 0
+
+    return {
+      audienceLabel: `${pluralize(filteredCount, 'filtered case')}`,
+      scopeLabel: TARGET_MODE_LABELS.filtered_results,
+      readinessLabel:
+        hasAudience && hasTitle && hasMessage
+          ? 'Ready to broadcast to the filtered insurance audience.'
+          : 'Add a message and keep at least one matching case in view.',
+      canSend: hasAudience && hasTitle && hasMessage,
+    }
+  }
+
+  return {
+    audienceLabel: `${pluralize(selectedCount, 'selected case')}`,
+    scopeLabel: TARGET_MODE_LABELS.selected_cases,
+    readinessLabel:
+      selectedCount && hasTitle && hasMessage
+        ? 'Ready to broadcast to the selected insurance cases.'
+        : 'Select cases, add a title, and add a message before sending.',
+    canSend: selectedCount > 0 && hasTitle && hasMessage,
+  }
 }

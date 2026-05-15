@@ -32,8 +32,11 @@ import {
   buildInsuranceReminderRequest,
   buildInsuranceTableRow,
   formatStatusLabel,
+  getInsuranceBroadcastComposerState,
   getInsuranceDetailTabs,
   getNextInsuranceWorkspaceViewState,
+  getInsuranceQueueFilterSummary,
+  getInsuranceReminderComposerState,
   getInsuranceSummaryCards,
   shouldApplyInsuranceAsyncResult,
   summarizeInsuranceBroadcastResult,
@@ -191,19 +194,37 @@ const getTimelineItems = (inquiry) => [
 
 function SummaryTile({ icon: Icon, label, value, sub }) {
   return (
-    <div className="card p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs text-ink-muted">{label}</p>
-          <p className="mt-1 text-2xl font-black text-ink-primary">{value}</p>
-          {sub ? <p className="mt-1 text-[11px] text-ink-muted">{sub}</p> : null}
+    <div className="card h-full p-4 md:p-5">
+      <div className="flex h-full items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-muted">{label}</p>
+          <p className="mt-3 text-3xl font-black tracking-tight text-ink-primary">{value}</p>
+          {sub ? <p className="mt-2 max-w-[18rem] text-xs leading-5 text-ink-secondary">{sub}</p> : null}
         </div>
         <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#f07c00]/15"
           style={{ background: 'rgba(240, 124, 0, 0.14)', color: '#f07c00' }}
         >
           <Icon size={18} />
         </div>
+      </div>
+    </div>
+  )
+}
+
+function WorkspaceStatCard({ label, value, hint, tone = 'gray', badgeLabel = null }) {
+  const toneClassName =
+    tone === 'orange' ? 'badge-orange' : tone === 'green' ? 'badge-green' : tone === 'blue' ? 'badge-blue' : 'badge-gray'
+
+  return (
+    <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
+          <p className="mt-2 text-sm font-semibold text-ink-primary">{value}</p>
+          {hint ? <p className="mt-1 text-xs leading-5 text-ink-secondary">{hint}</p> : null}
+        </div>
+        {badgeLabel ? <span className={`badge ${toneClassName}`}>{badgeLabel}</span> : null}
       </div>
     </div>
   )
@@ -576,6 +597,15 @@ export default function InsuranceContent() {
     () => getInsuranceSummaryCards({ inquiries }),
     [inquiries],
   )
+  const queueFilterSummary = useMemo(
+    () =>
+      getInsuranceQueueFilterSummary({
+        totalCount: inquiries.length,
+        visibleCount: filteredInquiries.length,
+        filters,
+      }),
+    [filteredInquiries.length, filters, inquiries.length],
+  )
 
   const tableRows = useMemo(
     () => filteredInquiries.map((inquiry) => buildInsuranceTableRow(inquiry)),
@@ -602,12 +632,29 @@ export default function InsuranceContent() {
     }),
     [broadcastResults],
   )
-  const broadcastAudiencePreviewCount =
-    broadcastTargetMode === 'filtered_results' ? inquiries.length : selectedInquiryIds.length
-  const broadcastAudiencePreviewLabel =
-    broadcastTargetMode === 'filtered_results'
-      ? `${inquiries.length} server-filtered case${inquiries.length === 1 ? '' : 's'}`
-      : `${selectedInquiryIds.length} selected case${selectedInquiryIds.length === 1 ? '' : 's'}`
+  const reminderComposerState = useMemo(
+    () =>
+      getInsuranceReminderComposerState({
+        targetMode: reminderTargetMode,
+        selectedInquiryId,
+        selectedInquiryIds,
+        selectedVisibleInquiryIds,
+        filteredCount: filteredInquiries.length,
+      }),
+    [filteredInquiries.length, reminderTargetMode, selectedInquiryId, selectedInquiryIds, selectedVisibleInquiryIds],
+  )
+  const broadcastComposerState = useMemo(
+    () =>
+      getInsuranceBroadcastComposerState({
+        targetMode: broadcastTargetMode,
+        selectedInquiryIds,
+        filteredCount: filteredInquiries.length,
+        title: broadcastTitle,
+        message: broadcastMessage,
+      }),
+    [broadcastMessage, broadcastTargetMode, broadcastTitle, filteredInquiries.length, selectedInquiryIds],
+  )
+  const currentCaseLabel = selectedInquiry?.subject || selectedInquiry?.id || 'No case selected'
 
   const handleFilterChange = (field) => (event) => {
     const nextValue = event.target.value
@@ -846,6 +893,24 @@ export default function InsuranceContent() {
         eyebrow="Insurance Review Workspace"
         title="Live Staff Insurance Queue"
         description="Phase-1 insurance cases now load from the staff list contract, with workflow summary cards, queue filters, detail tabs, and follow-up updates in one workspace."
+        actions={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className={`badge ${selectedInquiryIds.length ? 'badge-orange' : 'badge-gray'}`}>
+              {selectedInquiryIds.length} selected
+            </span>
+            <span className={`badge ${filteredInquiries.length ? 'badge-blue' : 'badge-gray'}`}>
+              {filteredInquiries.length} visible
+            </span>
+            <button
+              onClick={() => setReloadTick((current) => current + 1)}
+              className="ops-action-secondary"
+              disabled={listState === 'loading'}
+            >
+              <RefreshCw size={14} className={listState === 'loading' ? 'animate-spin' : undefined} />
+              Refresh Queue
+            </button>
+          </div>
+        }
         meta={
           <>
             <span className="badge badge-green">Staff list ready</span>
@@ -857,7 +922,7 @@ export default function InsuranceContent() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="ops-summary-grid">
         {summaryCards.map((card) => {
           const Icon = SUMMARY_CARD_ICONS[card.label] ?? ClipboardList
           return <SummaryTile key={card.label} icon={Icon} {...card} />
@@ -865,17 +930,38 @@ export default function InsuranceContent() {
       </div>
 
       <div className="card p-4 md:p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-2xl">
             <p className="card-title">Queue Filters</p>
-            <p className="mt-1 text-xs text-ink-muted">
+            <p className="mt-1 text-xs leading-5 text-ink-muted">
               Status filters call the live staff list route. Search narrows the visible table without another request.
             </p>
+            <p className="mt-3 text-sm font-semibold text-ink-primary">{queueFilterSummary.headline}</p>
+            <p className="mt-1 text-xs leading-5 text-ink-secondary">{queueFilterSummary.detail}</p>
           </div>
-          <button onClick={() => setReloadTick((current) => current + 1)} className="btn-secondary">
-            <RefreshCw size={14} />
-            Refresh Queue
-          </button>
+          <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[480px] xl:max-w-[640px]">
+            <WorkspaceStatCard
+              label="Current case"
+              value={currentCaseLabel}
+              hint={selectedInquiry ? formatStatusLabel(selectedInquiry.status) : 'Select a row below to load detail tabs and workflow actions.'}
+              tone={selectedInquiry ? 'green' : 'gray'}
+              badgeLabel={selectedInquiry ? 'Focused' : 'Idle'}
+            />
+            <WorkspaceStatCard
+              label="Queue selection"
+              value={allVisibleSelected ? 'All visible cases selected' : `${selectedVisibleInquiryIds.length} visible selected`}
+              hint={selectedInquiryIds.length ? `${selectedInquiryIds.length} total case${selectedInquiryIds.length === 1 ? '' : 's'} checked` : 'Use checkboxes to prepare reminder or broadcast sends.'}
+              tone={selectedInquiryIds.length ? 'orange' : 'gray'}
+              badgeLabel={selectedInquiryIds.length ? 'Checked' : 'Empty'}
+            />
+            <WorkspaceStatCard
+              label="Queue health"
+              value={listState === 'loading' ? 'Refreshing live queue' : listState === 'load_failed' ? 'Attention needed' : 'Live queue ready'}
+              hint={listState === 'load_failed' ? 'Refresh the queue or relax one of the server filters.' : queueFilterSummary.hasActiveFilters ? 'Filters are active on the live queue.' : 'All live cases are currently in view.'}
+              tone={listState === 'load_failed' ? 'orange' : 'blue'}
+              badgeLabel={listState === 'load_failed' ? 'Watch' : listState === 'loading' ? 'Syncing' : 'Live'}
+            />
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -913,24 +999,18 @@ export default function InsuranceContent() {
 
         {listMessage ? <div className="status-message status-message-danger mt-4">{listMessage}</div> : null}
 
-        <div className="mt-4 rounded-xl border border-surface-border bg-surface-raised px-4 py-4">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-            <div>
+        <div className="mt-4 rounded-2xl border border-surface-border bg-surface-raised px-4 py-4 md:px-5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div className="max-w-2xl">
               <p className="text-sm font-semibold text-ink-primary">Manual Reminder Send</p>
-              <p className="mt-1 text-xs text-ink-muted">
+              <p className="mt-1 text-xs leading-5 text-ink-muted">
                 Send in-app insurance reminders to the current case, checked cases, or the current server-side queue filters.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <span className={`badge ${selectedInquiryId ? 'badge-green' : 'badge-gray'}`}>
-                Current case: {selectedInquiryId ? 'Ready' : 'None'}
-              </span>
-              <span className={`badge ${selectedInquiryIds.length ? 'badge-orange' : 'badge-gray'}`}>
-                {selectedInquiryIds.length} selected
-              </span>
-              <span className={`badge ${filteredInquiries.length ? 'badge-blue' : 'badge-gray'}`}>
-                {filteredInquiries.length} visible
-              </span>
+            <div className="flex flex-wrap gap-2 xl:max-w-[460px] xl:justify-end">
+              <span className={`badge ${selectedInquiryId ? 'badge-green' : 'badge-gray'}`}>Current case {selectedInquiryId ? 'ready' : 'missing'}</span>
+              <span className={`badge ${selectedInquiryIds.length ? 'badge-orange' : 'badge-gray'}`}>{selectedInquiryIds.length} selected</span>
+              <span className={`badge ${filteredInquiries.length ? 'badge-blue' : 'badge-gray'}`}>{filteredInquiries.length} visible</span>
             </div>
           </div>
 
@@ -961,34 +1041,45 @@ export default function InsuranceContent() {
               </select>
             </label>
 
-            <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Queue selection</p>
-              <p className="mt-2 text-sm text-ink-primary">
-                {allVisibleSelected ? 'All visible cases selected' : `${selectedVisibleInquiryIds.length} visible selected`}
-              </p>
-            </div>
+            <WorkspaceStatCard
+              label="Audience"
+              value={reminderComposerState.audienceLabel}
+              hint={reminderComposerState.scopeLabel}
+              tone={reminderComposerState.canSend ? 'green' : 'gray'}
+              badgeLabel={reminderComposerState.canSend ? 'Ready' : 'Pending'}
+            />
 
-            <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Reminder scope</p>
-              <p className="mt-2 text-sm text-ink-primary">{formatReminderTargetModeLabel(reminderTargetMode)}</p>
-            </div>
+            <WorkspaceStatCard
+              label="Readiness"
+              value={reminderComposerState.readinessLabel}
+              hint={reminderTargetMode === 'filtered_results' ? queueFilterSummary.detail : currentCaseLabel}
+              tone={reminderComposerState.canSend ? 'orange' : 'gray'}
+              badgeLabel={reminderComposerState.canSend ? 'Ready' : 'Hold'}
+            />
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button onClick={handleToggleAllVisible} disabled={!filteredInquiries.length} className="btn-secondary">
+          <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            <button onClick={handleToggleAllVisible} disabled={!filteredInquiries.length} className="ops-action-secondary">
               {allVisibleSelected ? 'Clear visible selection' : 'Select visible cases'}
             </button>
             <button
               onClick={() => setSelectedInquiryIds([])}
               disabled={!selectedInquiryIds.length}
-              className="btn-secondary"
+              className="ops-action-secondary"
             >
               Clear selected cases
             </button>
-            <button onClick={handleSendReminder} disabled={reminderState === 'submitting'} className="btn-primary">
+            <button
+              onClick={handleSendReminder}
+              disabled={reminderState === 'submitting' || !reminderComposerState.canSend}
+              className="ops-action-primary"
+            >
               {reminderState === 'submitting' ? <RefreshCw size={14} className="animate-spin" /> : <ShieldAlert size={14} />}
               Send Reminder
             </button>
+            <span className="text-xs text-ink-muted">
+              {reminderComposerState.canSend ? 'Send is scoped and ready.' : reminderComposerState.readinessLabel}
+            </span>
           </div>
 
           {reminderMessage ? (
@@ -1037,15 +1128,15 @@ export default function InsuranceContent() {
           ) : null}
         </div>
 
-        <div className="mt-4 rounded-xl border border-surface-border bg-surface-raised px-4 py-4">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-            <div>
+        <div className="mt-4 rounded-2xl border border-surface-border bg-surface-raised px-4 py-4 md:px-5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div className="max-w-2xl">
               <p className="text-sm font-semibold text-ink-primary">Custom Broadcast Send</p>
-              <p className="mt-1 text-xs text-ink-muted">
+              <p className="mt-1 text-xs leading-5 text-ink-muted">
                 Send a custom in-app broadcast to checked cases or the current server-filtered insurance queue audience.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 xl:max-w-[460px] xl:justify-end">
               <span className={`badge ${selectedInquiryIds.length ? 'badge-orange' : 'badge-gray'}`}>
                 {selectedInquiryIds.length} selected
               </span>
@@ -1074,22 +1165,29 @@ export default function InsuranceContent() {
               </select>
             </label>
 
-            <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Audience Preview</p>
-              <p className="mt-2 text-sm text-ink-primary">{broadcastAudiencePreviewLabel}</p>
-            </div>
+            <WorkspaceStatCard
+              label="Audience"
+              value={broadcastComposerState.audienceLabel}
+              hint={broadcastComposerState.scopeLabel}
+              tone={broadcastComposerState.canSend ? 'green' : 'gray'}
+              badgeLabel={broadcastComposerState.canSend ? 'Ready' : 'Pending'}
+            />
 
-            <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Broadcast Scope</p>
-              <p className="mt-2 text-sm text-ink-primary">{formatReminderTargetModeLabel(broadcastTargetMode)}</p>
-            </div>
+            <WorkspaceStatCard
+              label="Readiness"
+              value={broadcastComposerState.readinessLabel}
+              hint={broadcastTargetMode === 'filtered_results' ? queueFilterSummary.detail : `${selectedInquiryIds.length} manually selected case${selectedInquiryIds.length === 1 ? '' : 's'}`}
+              tone={broadcastComposerState.canSend ? 'orange' : 'gray'}
+              badgeLabel={broadcastComposerState.canSend ? 'Ready' : 'Hold'}
+            />
 
-            <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Message Readiness</p>
-              <p className="mt-2 text-sm text-ink-primary">
-                {broadcastTitle.trim() && broadcastMessage.trim() ? 'Ready to send' : 'Title and message required'}
-              </p>
-            </div>
+            <WorkspaceStatCard
+              label="Message health"
+              value={broadcastTitle.trim() ? 'Title ready' : 'Title required'}
+              hint={broadcastMessage.trim() ? 'Broadcast message is filled in.' : 'Add a concise in-app message before sending.'}
+              tone={broadcastTitle.trim() && broadcastMessage.trim() ? 'blue' : 'gray'}
+              badgeLabel={broadcastTitle.trim() && broadcastMessage.trim() ? 'Draft ready' : 'Drafting'}
+            />
           </div>
 
           <div className="mt-4 grid gap-3">
@@ -1117,18 +1215,22 @@ export default function InsuranceContent() {
             </label>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button onClick={handleToggleAllVisible} disabled={!filteredInquiries.length} className="btn-secondary">
+          <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            <button onClick={handleToggleAllVisible} disabled={!filteredInquiries.length} className="ops-action-secondary">
               {allVisibleSelected ? 'Clear visible selection' : 'Select visible cases'}
             </button>
             <button
               onClick={() => setSelectedInquiryIds([])}
               disabled={!selectedInquiryIds.length}
-              className="btn-secondary"
+              className="ops-action-secondary"
             >
               Clear selected cases
             </button>
-            <button onClick={handleSendBroadcast} disabled={broadcastState === 'submitting'} className="btn-primary">
+            <button
+              onClick={handleSendBroadcast}
+              disabled={broadcastState === 'submitting' || !broadcastComposerState.canSend}
+              className="ops-action-primary"
+            >
               {broadcastState === 'submitting' ? (
                 <RefreshCw size={14} className="animate-spin" />
               ) : (
@@ -1136,6 +1238,9 @@ export default function InsuranceContent() {
               )}
               Send Broadcast
             </button>
+            <span className="text-xs text-ink-muted">
+              {broadcastComposerState.canSend ? 'Custom broadcast is ready for the selected audience.' : broadcastComposerState.readinessLabel}
+            </span>
           </div>
 
           {broadcastStatusMessage ? (
@@ -1285,7 +1390,11 @@ export default function InsuranceContent() {
           ) : (
             <EmptyPanel
               title="No cases match the current filters"
-              copy="Adjust the live status filters or broaden search to bring cases back into view."
+              copy={
+                queueFilterSummary.hasActiveFilters
+                  ? 'Relax one of the active queue filters or refresh the live list to bring cases back into view.'
+                  : 'No live insurance cases are showing yet. Refresh the queue after new intake arrives.'
+              }
             />
           )}
         </section>
@@ -1302,7 +1411,7 @@ export default function InsuranceContent() {
               <button
                 onClick={handleRefreshDetail}
                 disabled={!selectedInquiry || detailState === 'loading'}
-                className="btn-secondary"
+                className="ops-action-secondary"
               >
                 {detailState === 'loading' ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                 Refresh Detail
@@ -1330,8 +1439,8 @@ export default function InsuranceContent() {
                   onClick={() => setActiveDetailTab(tab.key)}
                   className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
                     activeDetailTab === tab.key
-                      ? 'border-[#f07c00] bg-[#f07c00]/10 text-[#a65600]'
-                      : 'border-surface-border bg-surface-card text-ink-secondary hover:border-[#f07c00]/40'
+                      ? 'border-[#f07c00] bg-[#f07c00]/10 text-[#f5a13d]'
+                      : 'border-surface-border bg-surface-card text-ink-secondary hover:border-[#f07c00]/40 hover:text-ink-primary'
                   }`}
                 >
                   {tab.label}
@@ -1414,7 +1523,7 @@ export default function InsuranceContent() {
               <button
                 onClick={handleSaveStatus}
                 disabled={!selectedInquiry || !nextStatuses.length || updateState === 'status_update_submitting'}
-                className="btn-primary"
+                className="ops-action-primary"
               >
                 {updateState === 'status_update_submitting' ? (
                   <RefreshCw size={14} className="animate-spin" />
@@ -1423,7 +1532,13 @@ export default function InsuranceContent() {
                 )}
                 Save Workflow Update
               </button>
-              <span className="badge badge-gray">Status and review notes only</span>
+              <span className="badge badge-gray">
+                {!selectedInquiry
+                  ? 'Pick a case to edit'
+                  : nextStatuses.length
+                    ? 'Status and review notes only'
+                    : 'No transition available'}
+              </span>
             </div>
           </div>
         </div>
