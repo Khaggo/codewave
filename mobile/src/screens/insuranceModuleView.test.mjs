@@ -271,7 +271,61 @@ test('status state prioritizes renewal follow-up before payment follow-up', () =
       timeline: [
         { key: 'request', label: 'Request submitted', active: true },
         { key: 'documents', label: 'Documents complete', active: true },
-        { key: 'payment', label: 'Payment follow-up', active: false },
+        { key: 'payment', label: 'Payment follow-up', active: true },
+        { key: 'renewal', label: 'Renewal', active: true },
+      ],
+    },
+  )
+})
+
+test('status state surfaces overdue payment even when the shared timeline current step is active', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        status: 'active',
+        paymentStatus: 'overdue',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Payment is overdue.',
+    }),
+    {
+      title: 'Payment follow-up',
+      summary: 'Payment is the current blocker for this request.',
+      ctaLabel: 'Review payment',
+      ctaRouteKey: 'status',
+      latestUpdateLabel: 'Payment is overdue.',
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: true },
+        { key: 'renewal', label: 'Renewal', active: false },
+      ],
+    },
+  )
+})
+
+test('status state surfaces renewal follow-up even when the shared timeline current step is active', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        status: 'active',
+        paymentStatus: 'paid',
+        renewalStatus: 'awaiting_customer',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Renewal follow-up is waiting on the customer.',
+    }),
+    {
+      title: 'Renewal follow-up',
+      summary: 'Renewal is the current blocker for this request.',
+      ctaLabel: 'Review renewal',
+      ctaRouteKey: 'status',
+      latestUpdateLabel: 'Renewal follow-up is waiting on the customer.',
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: true },
         { key: 'renewal', label: 'Renewal', active: true },
       ],
     },

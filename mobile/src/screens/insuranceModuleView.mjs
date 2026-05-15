@@ -384,19 +384,38 @@ export const buildCustomerInsuranceStatusState = ({
   latestUpdateLabel = '--',
 } = {}) => {
   const missingCount = Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments.length : 0
+  const status = latestInquiry?.status ?? 'submitted'
+  const paymentStatus = latestInquiry?.paymentStatus ?? 'not_required'
+  const renewalStatus = latestInquiry?.renewalStatus ?? 'not_applicable'
   const workflowTimeline = getCustomerInsuranceTimeline({
-    status: latestInquiry?.status,
-    paymentStatus: latestInquiry?.paymentStatus,
-    renewalStatus: latestInquiry?.renewalStatus,
+    status,
+    paymentStatus,
+    renewalStatus,
   })
-  const currentWorkflowStep = workflowTimeline.find((step) => step.state === 'current')?.key ?? null
-  const hasPaymentFollowUp = currentWorkflowStep === 'payment'
-  const hasRenewalFollowUp = currentWorkflowStep === 'renewal'
+  const hasPaymentTimelineStep = workflowTimeline.some((step) => step.key === 'payment')
+  const hasRenewalTimelineStep = workflowTimeline.some((step) => step.key === 'renewal')
+  const hasPaymentFollowUp =
+    shouldShowCustomerInsuranceFollowUp({
+      status,
+      paymentStatus,
+      renewalStatus,
+      followUpType: 'payment',
+    }) &&
+    (status === 'payment_pending' ||
+      ['awaiting_payment', 'proof_submitted', 'verifying', 'overdue'].includes(paymentStatus))
+  const hasRenewalFollowUp =
+    shouldShowCustomerInsuranceFollowUp({
+      status,
+      paymentStatus,
+      renewalStatus,
+      followUpType: 'renewal',
+    }) &&
+    (status === 'for_renewal' || ['upcoming', 'quoted', 'awaiting_customer'].includes(renewalStatus))
   const buildTimeline = () => [
     { key: 'request', label: 'Request submitted', active: true },
     { key: 'documents', label: 'Documents complete', active: true },
-    { key: 'payment', label: 'Payment follow-up', active: hasPaymentFollowUp },
-    { key: 'renewal', label: 'Renewal', active: hasRenewalFollowUp },
+    { key: 'payment', label: 'Payment follow-up', active: hasPaymentTimelineStep || hasPaymentFollowUp },
+    { key: 'renewal', label: 'Renewal', active: hasRenewalTimelineStep || hasRenewalFollowUp },
   ]
 
   if (missingCount > 0) {
