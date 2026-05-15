@@ -204,6 +204,10 @@ test('task 4 follow-up keeps footer space constrained, restores attached files, 
   assert.match(screenSource, /latestUpdateLabel: latestStatusUpdateLabel,/)
   assert.match(screenSource, /const latestHistoryRecord = useMemo\(\s*\(\) => getLatestInsuranceRecord\(claimStatusUpdates\),/s)
   assert.match(screenSource, /const historyStatusState = useMemo\(/)
-  assert.match(screenSource, /footerLabel=\{statusState\.ctaRouteKey === 'documents' \? statusState\.ctaLabel : null\}/)
+  assert.match(screenSource, /footerLabel=\{statusState\.ctaLabel\}/)
+  assert.match(
+    screenSource,
+    /onFooterPress=\{\(\) => \{\s*if \(statusState\.ctaRouteKey === 'documents'\) \{\s*handleChangeModeSection\('documents'\);[\s\S]*?return;\s*\}[\s\S]*?if \(statusState\.ctaRouteKey && statusState\.ctaRouteKey !== activeModeSection\) \{\s*handleChangeModeSection\(statusState\.ctaRouteKey\);[\s\S]*?\}\s*}\}/s,
+  )
   assert.match(screenSource, /statusState=\{historyStatusState\}/)
 })

@@ -1360,10 +1360,15 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                     title="Current request status"
                     subtitle="Review the current blocker, latest update, and next action in one place."
                     statusState={statusState}
-                    footerLabel={statusState.ctaRouteKey === 'documents' ? statusState.ctaLabel : null}
+                    footerLabel={statusState.ctaLabel}
                     onFooterPress={() => {
                       if (statusState.ctaRouteKey === 'documents') {
                         handleChangeModeSection('documents');
+                        return;
+                      }
+
+                      if (statusState.ctaRouteKey && statusState.ctaRouteKey !== activeModeSection) {
+                        handleChangeModeSection(statusState.ctaRouteKey);
                       }
                     }}
                   >
