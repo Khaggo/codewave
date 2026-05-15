@@ -1,6 +1,7 @@
 import { ApiError } from './authClient.js';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
+const INSURANCE_REMINDER_FILTER_FIELDS = ['purpose', 'status', 'paymentStatus', 'renewalStatus'];
 const INSURANCE_BROADCAST_FILTER_FIELDS = ['purpose', 'status', 'paymentStatus', 'renewalStatus'];
 const INSURANCE_BROADCAST_TARGET_MODES = ['selected_cases', 'filtered_results'];
 
@@ -37,6 +38,55 @@ const trimOrNull = (value) => {
 const trimRequiredRequestValue = (value) => String(value ?? '').trim();
 
 const normalizeOptionalWorkflowValue = (value) => trimOrNull(value) ?? undefined;
+const normalizeMeaningfulReminderFilters = (filters = {}) =>
+  INSURANCE_REMINDER_FILTER_FIELDS.reduce((result, field) => {
+    const rawValue = String(filters?.[field] ?? '').trim();
+
+    if (rawValue && rawValue !== 'all') {
+      result[field] = rawValue;
+    }
+
+    return result;
+  }, {});
+const normalizeReminderSelectedIds = (selectedIds = []) =>
+  [...new Set(selectedIds.map((value) => String(value ?? '').trim()).filter(Boolean))];
+const buildReminderRequestBody = ({
+  reminderType,
+  targetMode,
+  selectedIds = [],
+  filters = {},
+} = {}) => {
+  const normalizedReminderType = String(reminderType ?? '').trim();
+  const normalizedTargetMode = String(targetMode ?? '').trim();
+
+  if (normalizedTargetMode === 'filtered_results') {
+    const normalizedFilters = normalizeMeaningfulReminderFilters(filters);
+
+    if (!Object.keys(normalizedFilters).length) {
+      throw new ApiError(
+        'Choose at least one server-side insurance filter before sending filtered reminders.',
+        400,
+        {
+          path: '/api/insurance/reminders/send',
+        },
+      );
+    }
+
+    return {
+      reminderType: normalizedReminderType,
+      targetMode: normalizedTargetMode,
+      filters: normalizedFilters,
+    };
+  }
+
+  const normalizedSelectedIds = normalizeReminderSelectedIds(selectedIds);
+
+  return {
+    reminderType: normalizedReminderType,
+    targetMode: normalizedTargetMode,
+    ...(normalizedSelectedIds.length ? { selectedIds: normalizedSelectedIds } : {}),
+  };
+};
 const normalizeMeaningfulBroadcastFilters = (filters = {}) =>
   INSURANCE_BROADCAST_FILTER_FIELDS.reduce((result, field) => {
     const rawValue = String(filters?.[field] ?? '').trim();
@@ -410,12 +460,12 @@ export const sendInsuranceReminders = async ({
   request('/api/insurance/reminders/send', {
     method: 'POST',
     headers: buildAuthorizedHeaders(accessToken),
-    body: {
+    body: buildReminderRequestBody({
       reminderType,
       targetMode,
-      ...(Array.isArray(selectedIds) ? { selectedIds } : {}),
-      ...(filters && typeof filters === 'object' ? { filters } : {}),
-    },
+      selectedIds,
+      filters,
+    }),
   });
 
 export const sendInsuranceBroadcasts = async ({

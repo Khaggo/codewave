@@ -676,6 +676,138 @@ test('sendInsuranceReminders posts the built manual reminder payload to the remi
   assert.equal(result?.results?.length, 2)
 })
 
+test('sendInsuranceReminders deduplicates selected ids before posting to the reminder route', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({
+      url,
+      options: {
+        ...options,
+        body: options.body,
+      },
+    })
+
+    return new Response(
+      JSON.stringify({
+        targetedCount: 2,
+        eligibleCount: 2,
+        sentCount: 2,
+        skippedCount: 0,
+        failedCount: 0,
+        results: [
+          { inquiryId: 'inq-1', reminderType: 'payment_pending', result: 'sent' },
+          { inquiryId: 'inq-2', reminderType: 'payment_pending', result: 'sent' },
+        ],
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }
+
+  try {
+    await sendInsuranceReminders({
+      reminderType: 'payment_pending',
+      targetMode: 'selected_cases',
+      selectedIds: ['inq-1', ' inq-1 ', 'inq-2'],
+      accessToken: 'token-1',
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert.equal(calls.length, 1)
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    reminderType: 'payment_pending',
+    targetMode: 'selected_cases',
+    selectedIds: ['inq-1', 'inq-2'],
+  })
+})
+
+test('sendInsuranceReminders strips meaningless filters before posting filtered-results payloads', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({
+      url,
+      options: {
+        ...options,
+        body: options.body,
+      },
+    })
+
+    return new Response(
+      JSON.stringify({
+        targetedCount: 2,
+        eligibleCount: 2,
+        sentCount: 2,
+        skippedCount: 0,
+        failedCount: 0,
+        results: [
+          { inquiryId: 'inq-1', reminderType: 'renewal_follow_up', result: 'sent' },
+          { inquiryId: 'inq-2', reminderType: 'renewal_follow_up', result: 'sent' },
+        ],
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }
+
+  try {
+    await sendInsuranceReminders({
+      reminderType: 'renewal_follow_up',
+      targetMode: 'filtered_results',
+      filters: {
+        purpose: 'renewal',
+        status: 'all',
+        paymentStatus: '',
+        renewalStatus: ' upcoming ',
+        search: 'local only',
+      },
+      accessToken: 'token-1',
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert.equal(calls.length, 1)
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    reminderType: 'renewal_follow_up',
+    targetMode: 'filtered_results',
+    filters: {
+      purpose: 'renewal',
+      renewalStatus: 'upcoming',
+    },
+  })
+})
+
+test('sendInsuranceReminders rejects filtered-results sends with no meaningful server-side filters', async () => {
+  await assert.rejects(
+    () =>
+      sendInsuranceReminders({
+        reminderType: 'renewal_follow_up',
+        targetMode: 'filtered_results',
+        filters: {
+          status: 'all',
+          paymentStatus: ' ',
+          search: 'local only',
+        },
+        accessToken: 'token-1',
+      }),
+    /choose at least one server-side insurance filter/i,
+  )
+})
+
 test('sendInsuranceBroadcasts posts the built broadcast payload to the broadcast route', async () => {
   const originalFetch = globalThis.fetch
   const calls = []
