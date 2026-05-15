@@ -52,7 +52,7 @@ import {
 import InsuranceDocumentsPanel from './insurance/InsuranceDocumentsPanel';
 import InsuranceHomePanel from './insurance/InsuranceHomePanel';
 import InsuranceModeShell from './insurance/InsuranceModeShell';
-import { InsuranceSectionCard } from './insurance/InsurancePanelPrimitives';
+import { InsuranceSectionDivider } from './insurance/InsurancePanelPrimitives';
 import InsuranceRequestPanel from './insurance/InsuranceRequestPanel';
 import InsuranceStatusDetailPanel from './insurance/InsuranceStatusDetailPanel';
 import { colors, radius } from '../theme';
@@ -276,7 +276,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const [selectedVehicleId, setSelectedVehicleId] = useState(initialVehicleId);
   const [activePanel, setActivePanel] = useState('home');
   const [activeInsuranceTab, setActiveInsuranceTab] = useState('home');
-  const [statusTabFocus, setStatusTabFocus] = useState('summary');
   const [isVehiclePickerOpen, setIsVehiclePickerOpen] = useState(false);
   const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
   const [documentDraft, setDocumentDraft] = useState(buildInitialDocumentUploadDraft());
@@ -305,7 +304,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   useEffect(() => {
     setActivePanel('home');
     setActiveInsuranceTab('home');
-    setStatusTabFocus('summary');
   }, [selectedVehicleId]);
 
   useEffect(() => {
@@ -1152,35 +1150,21 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   };
   const handleChangeInsuranceTab = (section) => {
     if (section === 'documents') {
-      setStatusTabFocus('summary');
       handleOpenPanel(section);
       setActiveInsuranceTab(section);
       return;
     }
 
-    setStatusTabFocus('summary');
     setActiveInsuranceTab(section);
     setActivePanel(section === 'home' ? 'home' : section);
   };
 
   const handleOpenInsuranceHomeSection = (section) => {
-    if (section === 'history') {
-      setActiveInsuranceTab('status');
-      setActivePanel('status');
-      setStatusTabFocus('history');
-      return;
-    }
-
     handleChangeInsuranceTab(section);
   };
 
   const historyStatusSection = (
-    <View
-      style={[
-        styles.statusInlineSection,
-        statusTabFocus === 'history' && styles.statusInlineSectionFocused,
-      ]}
-    >
+    <InsuranceSectionDivider title="History">
       <Text style={styles.statusSectionEyebrow}>History</Text>
       <Text style={styles.statusSectionTitle}>Recorded vehicle updates</Text>
       <Text style={styles.statusSectionSubtitle}>{historyStatusState.summary}</Text>
@@ -1191,20 +1175,23 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       ) : null}
 
       {sortedHistoryRecords.length ? (
-        sortedHistoryRecords.map((record) => (
-          <InsuranceSectionCard
-            key={`${record.status}-${record.updatedAt ?? record.createdAt ?? record.id ?? record.policyNumber ?? record.inquiryTypeLabel ?? 'history'}`}
-            title={buildHistoryRecordTitle(record)}
-            helper={buildHistoryRecordSummary(record)}
-          />
-        ))
+        <View style={styles.statusHistoryList}>
+          {sortedHistoryRecords.map((record) => (
+            <View
+              key={`${record.status}-${record.updatedAt ?? record.createdAt ?? record.id ?? record.policyNumber ?? record.inquiryTypeLabel ?? 'history'}`}
+              style={styles.statusHistoryRow}
+            >
+              <Text style={styles.statusHistoryLabel}>{buildHistoryRecordTitle(record)}</Text>
+              <Text style={styles.statusHistorySummary}>{buildHistoryRecordSummary(record)}</Text>
+            </View>
+          ))}
+        </View>
       ) : (
-        <InsuranceSectionCard
-          title="No completed records yet"
-          helper="Completed insurance records will appear here after staff close and record them."
-        />
+        <Text style={styles.statusHistoryEmpty}>
+          Completed insurance records will appear here after staff close and record them.
+        </Text>
       )}
-    </View>
+    </InsuranceSectionDivider>
   );
 
   const heroSubtitle = hasSession
@@ -1402,27 +1389,22 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   statusState={statusState}
                   isRefreshing={isRefreshing}
                   onRefresh={refreshTracking}
-                  footerLabel={statusState.ctaLabel}
-                  footerScrollTarget={statusState.ctaRouteKey === 'status' ? 'end' : null}
-                  onFooterPress={statusState.ctaRouteKey === 'documents' ? () => handleChangeInsuranceTab('documents') : null}
                 >
-                  {statusTabFocus === 'history' ? historyStatusSection : null}
-
                   {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
-                    <InsuranceSectionCard
-                      title="Payment"
-                      helper={paymentSummary.message}
-                    />
+                    <InsuranceSectionDivider title="Payment">
+                      <Text style={styles.statusSectionSubtitle}>{paymentSummary.message}</Text>
+                    </InsuranceSectionDivider>
                   ) : null}
 
                   {latestInquiry?.renewalStatus && latestInquiry.renewalStatus !== 'not_applicable' ? (
-                    <InsuranceSectionCard
-                      title="Renewal"
-                      helper={buildRenewalPrompt(latestInquiry).message}
-                    />
+                    <InsuranceSectionDivider title="Renewal">
+                      <Text style={styles.statusSectionSubtitle}>
+                        {buildRenewalPrompt(latestInquiry).message}
+                      </Text>
+                    </InsuranceSectionDivider>
                   ) : null}
 
-                  {statusTabFocus === 'history' ? null : historyStatusSection}
+                  {historyStatusSection}
                 </InsuranceStatusDetailPanel>
               ) : null}
             </InsuranceModeShell>
@@ -2165,16 +2147,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  statusInlineSection: {
-    gap: 10,
-  },
-  statusInlineSectionFocused: {
-    padding: 16,
-    borderRadius: radius.large,
-    borderWidth: 1,
-    borderColor: colors.primaryGlow,
-    backgroundColor: colors.primarySoft,
-  },
   statusSectionEyebrow: {
     color: colors.primary,
     fontSize: 12,
@@ -2198,5 +2170,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.4,
     textTransform: 'uppercase',
+  },
+  statusHistoryList: {
+    marginTop: 2,
+  },
+  statusHistoryRow: {
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    gap: 4,
+  },
+  statusHistoryLabel: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  statusHistorySummary: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  statusHistoryEmpty: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
   },
 });

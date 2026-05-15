@@ -23,16 +23,11 @@ test('insurance tab opens directly into the insurance shell without an extra ent
     "const handleChangeInsuranceTab = (section) => {",
     "if (section === 'documents') {",
     'handleOpenPanel(section)',
-    "const [statusTabFocus, setStatusTabFocus] = useState('summary')",
-    "if (section === 'history') {",
-    "setActiveInsuranceTab('status')",
-    "setStatusTabFocus('history')",
-    "setStatusTabFocus('summary')",
-    "statusTabFocus === 'history'",
     '<Text style={styles.statusSectionEyebrow}>History</Text>',
     '<Text style={styles.statusSectionTitle}>Recorded vehicle updates</Text>',
     '{historyStatusState.summary}',
     'sortedHistoryRecords.map((record) => (',
+    '{historyStatusSection}',
   ]
 
   for (const fragment of requiredFragments) {
@@ -43,6 +38,9 @@ test('insurance tab opens directly into the insurance shell without an extra ent
   assert.doesNotMatch(source, /Enter insurance mode/)
   assert.doesNotMatch(source, /Protection center/)
   assert.doesNotMatch(source, /onChangeSection=\{setActiveInsuranceTab\}/)
+  assert.doesNotMatch(source, /statusTabFocus/)
+  assert.doesNotMatch(source, /section === 'history'/)
+  assert.doesNotMatch(source, /statusInlineSectionFocused/)
   assert.equal((source.match(/<InsuranceStatusDetailPanel/g) ?? []).length, 1)
 })
 
@@ -132,6 +130,7 @@ test('insurance shell uses pull-to-refresh and removes the floating reload affor
 })
 
 test('home and status tabs use section-first layout with short copy and no extra top-level cards', () => {
+  const screenSource = read('./InsuranceInquiryScreen.js')
   const homeSource = read('./insurance/InsuranceHomePanel.js')
   const statusSource = read('./insurance/InsuranceStatusDetailPanel.js')
 
@@ -146,5 +145,16 @@ test('home and status tabs use section-first layout with short copy and no extra
 
   assert.match(statusSource, /title="Latest update"/)
   assert.match(statusSource, /timeline/i)
-  assert.match(statusSource, /history/i)
+  assert.match(screenSource, /History/)
+  assert.match(screenSource, /Recorded vehicle updates/)
+  assert.doesNotMatch(statusSource, /footerLabel/)
+  assert.doesNotMatch(statusSource, /footerScrollTarget/)
+  assert.doesNotMatch(statusSource, /onFooterPress/)
+  assert.doesNotMatch(statusSource, /showsFooter/)
+  assert.doesNotMatch(statusSource, /Boolean\(children\)/)
+  assert.doesNotMatch(statusSource, /contentWithFooter/)
+  assert.doesNotMatch(statusSource, /contentWithHistory/)
+  assert.doesNotMatch(screenSource, /footerLabel=\{statusState\.ctaLabel\}/)
+  assert.doesNotMatch(screenSource, /footerScrollTarget=/)
+  assert.doesNotMatch(screenSource, /onFooterPress=/)
 })
