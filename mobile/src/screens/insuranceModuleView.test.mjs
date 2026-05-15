@@ -235,6 +235,33 @@ test('status state prioritizes renewal follow-up before payment follow-up', () =
   )
 })
 
+test('status state keeps completed renewal out of the active blocker model', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        status: 'closed',
+        paymentStatus: 'paid',
+        renewalStatus: 'renewed',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Renewal completed.',
+    }),
+    {
+      title: 'Current request status',
+      summary: 'Review the latest customer-safe update and next step.',
+      ctaLabel: 'Review status',
+      ctaRouteKey: 'status',
+      latestUpdateLabel: 'Renewal completed.',
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: false },
+        { key: 'renewal', label: 'Renewal', active: false },
+      ],
+    },
+  )
+})
+
 test('status state keeps the empty default case on the current request fallback', () => {
   assert.deepEqual(
     buildCustomerInsuranceStatusState({

@@ -384,7 +384,7 @@ export const buildCustomerInsuranceStatusState = ({
   const hasRenewalFollowUp =
     Boolean(latestInquiry) &&
     (latestInquiry.status === 'for_renewal' ||
-      ['upcoming', 'quoted', 'awaiting_customer', 'renewed', 'expired'].includes(
+      ['upcoming', 'quoted', 'awaiting_customer'].includes(
         latestInquiry.renewalStatus,
       ))
 
@@ -420,7 +420,12 @@ export const buildCustomerInsuranceStatusState = ({
     }
   }
 
-  if (latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required') {
+  if (
+    latestInquiry?.status === 'payment_pending' ||
+    ['awaiting_payment', 'proof_submitted', 'verifying', 'overdue'].includes(
+      latestInquiry?.paymentStatus,
+    )
+  ) {
     return {
       title: 'Payment follow-up',
       summary: 'Payment is the current blocker for this request.',
