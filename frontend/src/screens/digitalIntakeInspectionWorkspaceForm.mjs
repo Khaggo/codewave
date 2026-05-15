@@ -30,11 +30,35 @@ const arrivalPhotoLabels = {
 
 const maxNotesLength = 1000
 const truncationMarker = '...'
+const defaultArrivalType = 'walk_in'
+const defaultVisitType = 'regular_service'
+const defaultNextRoute = 'service'
+
+const allowedArrivalTypes = new Set(['walk_in', 'with_booking'])
+const allowedVisitTypes = new Set([
+  'regular_service',
+  'insurance_related',
+  'back_job_complaint',
+  'inspection_only',
+])
+const allowedNextRoutes = new Set(['service', 'insurance', 'complaint', 'inspection'])
+const nextRouteByVisitType = Object.freeze({
+  regular_service: 'service',
+  insurance_related: 'insurance',
+  back_job_complaint: 'complaint',
+  inspection_only: 'inspection',
+})
 
 export const intakeFieldMaxLengths = Object.freeze({
+  arrivalType: 24,
+  visitType: 32,
+  reasonForVisit: 240,
+  requestedServiceSummary: 240,
   currentOdometerKm: 20,
   fuelLevel: 20,
   serviceConcern: 120,
+  missingRequirementsNote: 240,
+  nextRoute: 24,
   damageNotes: 90,
   customerItems: 90,
   customerSignatureName: 48,
@@ -61,17 +85,62 @@ const truncateText = (value, maxLength) => {
   return `${text.slice(0, maxLength - truncationMarker.length).trimEnd()}${truncationMarker}`
 }
 
-const buildCappedIntakeDraft = (draft) => ({
-  ...draft,
-  currentOdometerKm: truncateText(draft.currentOdometerKm, intakeFieldMaxLengths.currentOdometerKm),
-  fuelLevel: truncateText(draft.fuelLevel, intakeFieldMaxLengths.fuelLevel),
-  serviceConcern: truncateText(draft.serviceConcern, intakeFieldMaxLengths.serviceConcern),
-  damageNotes: truncateText(draft.damageNotes, intakeFieldMaxLengths.damageNotes),
-  customerItems: truncateText(draft.customerItems, intakeFieldMaxLengths.customerItems),
-  customerSignatureName: truncateText(draft.customerSignatureName, intakeFieldMaxLengths.customerSignatureName),
-  receivedByStaff: truncateText(draft.receivedByStaff, intakeFieldMaxLengths.receivedByStaff),
-  notes: truncateText(draft.notes, intakeFieldMaxLengths.notes),
+const normalizeControlValue = (value, allowedValues, fallbackValue) => {
+  const normalizedValue = String(value ?? '').trim()
+  return allowedValues.has(normalizedValue) ? normalizedValue : fallbackValue
+}
+
+const buildNormalizedRequirementsChecklist = (requirementsChecklist) => ({
+  bookingFound: Boolean(requirementsChecklist?.bookingFound),
+  orCrPresent: Boolean(requirementsChecklist?.orCrPresent),
+  validIdPresent: Boolean(requirementsChecklist?.validIdPresent),
+  oldPolicyPresent: Boolean(requirementsChecklist?.oldPolicyPresent),
+  supportingDocsPresent: Boolean(requirementsChecklist?.supportingDocsPresent),
 })
+
+const buildCappedIntakeDraft = (draft) => {
+  const visitType = normalizeControlValue(
+    draft.visitType,
+    allowedVisitTypes,
+    defaultVisitType,
+  )
+
+  return {
+    ...draft,
+    arrivalType: normalizeControlValue(
+      draft.arrivalType,
+      allowedArrivalTypes,
+      defaultArrivalType,
+    ),
+    visitType,
+    reasonForVisit: truncateText(draft.reasonForVisit, intakeFieldMaxLengths.reasonForVisit),
+    requestedServiceSummary: truncateText(
+      draft.requestedServiceSummary,
+      intakeFieldMaxLengths.requestedServiceSummary,
+    ),
+    currentOdometerKm: truncateText(draft.currentOdometerKm, intakeFieldMaxLengths.currentOdometerKm),
+    fuelLevel: truncateText(draft.fuelLevel, intakeFieldMaxLengths.fuelLevel),
+    serviceConcern: truncateText(draft.serviceConcern, intakeFieldMaxLengths.serviceConcern),
+    missingRequirementsNote: truncateText(
+      draft.missingRequirementsNote,
+      intakeFieldMaxLengths.missingRequirementsNote,
+    ),
+    requirementsChecklist: buildNormalizedRequirementsChecklist(draft.requirementsChecklist),
+    nextRoute: normalizeControlValue(
+      draft.nextRoute,
+      allowedNextRoutes,
+      nextRouteByVisitType[visitType] ?? defaultNextRoute,
+    ),
+    damageNotes: truncateText(draft.damageNotes, intakeFieldMaxLengths.damageNotes),
+    customerItems: truncateText(draft.customerItems, intakeFieldMaxLengths.customerItems),
+    customerSignatureName: truncateText(
+      draft.customerSignatureName,
+      intakeFieldMaxLengths.customerSignatureName,
+    ),
+    receivedByStaff: truncateText(draft.receivedByStaff, intakeFieldMaxLengths.receivedByStaff),
+    notes: truncateText(draft.notes, intakeFieldMaxLengths.notes),
+  }
+}
 
 const appendWithinNoteBudget = (baseNotes, extraNotes) => {
   if (!extraNotes) {
@@ -111,6 +180,21 @@ export const createInitialIntakeDraft = () => ({
   bookingId: '',
   status: 'pending',
   notes: '',
+  arrivalType: defaultArrivalType,
+  visitType: defaultVisitType,
+  reasonForVisit: '',
+  requestedServiceSummary: '',
+  isRepeatVisit: false,
+  urgencyFlag: false,
+  requirementsChecklist: {
+    bookingFound: false,
+    orCrPresent: false,
+    validIdPresent: false,
+    oldPolicyPresent: false,
+    supportingDocsPresent: false,
+  },
+  missingRequirementsNote: '',
+  nextRoute: defaultNextRoute,
   serviceConcern: '',
   currentOdometerKm: '',
   fuelLevel: '1/2',
@@ -201,6 +285,15 @@ export const buildIntakeInspectionPayload = ({ draft, userId }) => {
     status: cappedDraft.status || 'completed',
     bookingId: cappedDraft.bookingId.trim() || undefined,
     inspectorUserId: userId,
+    arrivalType: cappedDraft.arrivalType,
+    visitType: cappedDraft.visitType,
+    reasonForVisit: cappedDraft.reasonForVisit,
+    requestedServiceSummary: cappedDraft.requestedServiceSummary,
+    isRepeatVisit: Boolean(cappedDraft.isRepeatVisit),
+    urgencyFlag: Boolean(cappedDraft.urgencyFlag),
+    requirementsChecklist: buildNormalizedRequirementsChecklist(cappedDraft.requirementsChecklist),
+    missingRequirementsNote: cappedDraft.missingRequirementsNote,
+    nextRoute: cappedDraft.nextRoute,
     notes,
     attachmentRefs,
     findings,

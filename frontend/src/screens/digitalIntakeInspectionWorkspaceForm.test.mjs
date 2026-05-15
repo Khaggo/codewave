@@ -14,6 +14,21 @@ test('createInitialIntakeDraft returns the intake defaults', () => {
     bookingId: '',
     status: 'pending',
     notes: '',
+    arrivalType: 'walk_in',
+    visitType: 'regular_service',
+    reasonForVisit: '',
+    requestedServiceSummary: '',
+    isRepeatVisit: false,
+    urgencyFlag: false,
+    requirementsChecklist: {
+      bookingFound: false,
+      orCrPresent: false,
+      validIdPresent: false,
+      oldPolicyPresent: false,
+      supportingDocsPresent: false,
+    },
+    missingRequirementsNote: '',
+    nextRoute: 'service',
     serviceConcern: '',
     currentOdometerKm: '',
     fuelLevel: '1/2',
@@ -41,6 +56,89 @@ test('createInitialIntakeDraft returns the intake defaults', () => {
       allLightsFunctional: 'ok',
       brakePedalFeel: 'ok',
     },
+  })
+})
+
+test('buildIntakeInspectionPayload preserves intake triage and requirements fields', () => {
+  const payload = buildIntakeInspectionPayload({
+    draft: {
+      ...createInitialIntakeDraft(),
+      customerUserId: 'customer-1',
+      vehicleId: 'vehicle-1',
+      arrivalType: 'with_booking',
+      visitType: 'insurance_related',
+      reasonForVisit: 'Customer arrived for insurance claim support.',
+      requestedServiceSummary: 'Front bumper damage assessment.',
+      isRepeatVisit: true,
+      urgencyFlag: true,
+      requirementsChecklist: {
+        bookingFound: true,
+        orCrPresent: true,
+        validIdPresent: true,
+        oldPolicyPresent: true,
+        supportingDocsPresent: false,
+      },
+      missingRequirementsNote: 'Customer still needs to upload additional claim photos.',
+      nextRoute: 'insurance',
+      notes: 'Arrival inspection will continue below.',
+    },
+    userId: 'staff-iris',
+  })
+
+  assert.equal(payload.arrivalType, 'with_booking')
+  assert.equal(payload.visitType, 'insurance_related')
+  assert.equal(payload.reasonForVisit, 'Customer arrived for insurance claim support.')
+  assert.equal(payload.requestedServiceSummary, 'Front bumper damage assessment.')
+  assert.equal(payload.isRepeatVisit, true)
+  assert.equal(payload.urgencyFlag, true)
+  assert.deepEqual(payload.requirementsChecklist, {
+    bookingFound: true,
+    orCrPresent: true,
+    validIdPresent: true,
+    oldPolicyPresent: true,
+    supportingDocsPresent: false,
+  })
+  assert.equal(
+    payload.missingRequirementsNote,
+    'Customer still needs to upload additional claim photos.',
+  )
+  assert.equal(payload.nextRoute, 'insurance')
+})
+
+test('buildIntakeInspectionPayload normalizes invalid control-field values to stable defaults', () => {
+  const payload = buildIntakeInspectionPayload({
+    draft: {
+      ...createInitialIntakeDraft(),
+      arrivalType: 'walk_in_with_extremely_long_unexpected_value',
+      visitType: 'unknown_route_type',
+      nextRoute: 'definitely_not_supported',
+    },
+    userId: 'staff-11',
+  })
+
+  assert.equal(payload.arrivalType, 'walk_in')
+  assert.equal(payload.visitType, 'regular_service')
+  assert.equal(payload.nextRoute, 'service')
+})
+
+test('buildIntakeInspectionPayload coerces partial or missing requirementsChecklist values', () => {
+  const payload = buildIntakeInspectionPayload({
+    draft: {
+      ...createInitialIntakeDraft(),
+      requirementsChecklist: {
+        bookingFound: 1,
+        validIdPresent: 'yes',
+      },
+    },
+    userId: 'staff-12',
+  })
+
+  assert.deepEqual(payload.requirementsChecklist, {
+    bookingFound: true,
+    orCrPresent: false,
+    validIdPresent: true,
+    oldPolicyPresent: false,
+    supportingDocsPresent: false,
   })
 })
 
