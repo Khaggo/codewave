@@ -190,47 +190,71 @@ test('catalog, booking-service, and inventory workspaces use one-sentence descri
   assert.ok(inventory.includes('Review which inventory capabilities are live or planned.'))
 })
 
-test('catalog, inventory, staff, and analytics workspaces use concise operational copy', () => {
+test('catalog admin uses concise operational copy', () => {
   const catalog = read('frontend/src/screens/ShopProductAdmin.js')
-  const inventory = read('frontend/src/screens/InventoryWorkspace.js')
-  const staff = read('frontend/src/components/StaffProvisioningPanel.js')
-  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
 
   assert.ok(catalog.includes('Publish and manage customer-visible marketplace products.'))
+})
+
+test('inventory uses concise operational copy', () => {
+  const inventory = read('frontend/src/screens/InventoryWorkspace.js')
+
   assert.ok(inventory.includes('Track stock levels, restock needs, and item availability.'))
+})
+
+test('staff accounts uses concise operational copy', () => {
+  const staff = read('frontend/src/components/StaffProvisioningPanel.js')
+
   assert.ok(staff.includes('Create accounts, manage access, and keep operations staffing usable.'))
+})
+
+test('analytics uses concise operational copy', () => {
+  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
+
   assert.ok(analytics.includes("Review today's workload, bottlenecks, and live operational signals."))
 })
 
-test('admin operations workspaces move live queues ahead of secondary editors and summaries', () => {
+test('catalog admin keeps published products ahead of the editor form', () => {
   const catalog = read('frontend/src/screens/ShopProductAdmin.js')
-  const inventory = read('frontend/src/screens/InventoryWorkspace.js')
-  const staff = read('frontend/src/components/StaffProvisioningPanel.js')
-  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
 
   const catalogListIndex = catalog.indexOf('title="Published Products"')
   const catalogEditorIndex = catalog.indexOf('title="Create And Publish Product"')
-  const inventoryListIndex = inventory.indexOf('aria-label="Inventory visibility table"')
-  const inventoryDetailIndex = inventory.indexOf('title="Selected Product Detail"')
-  const inventoryCoverageIndex = inventory.indexOf('title="Inventory Coverage"')
-  const staffDirectoryIndex = staff.indexOf('Managed Account Directory')
-  const staffProvisioningIndex = staff.indexOf('Provision Operations Accounts')
-  const analyticsOperationsIndex = analytics.indexOf('Review booking-state counts from the operations snapshot.')
-  const analyticsDashboardIndex = analytics.indexOf('Review derived sales signals from the latest snapshot.')
 
   assert.notEqual(catalogListIndex, -1)
   assert.notEqual(catalogEditorIndex, -1)
   assert.ok(catalogListIndex < catalogEditorIndex)
+})
+
+test('inventory keeps product list before detail and coverage sections', () => {
+  const inventory = read('frontend/src/screens/InventoryWorkspace.js')
+
+  const inventoryListIndex = inventory.indexOf('aria-label="Inventory visibility table"')
+  const inventoryDetailIndex = inventory.indexOf('title="Selected Product Detail"')
+  const inventoryCoverageIndex = inventory.indexOf('title="Inventory Coverage"')
 
   assert.notEqual(inventoryListIndex, -1)
   assert.notEqual(inventoryDetailIndex, -1)
   assert.notEqual(inventoryCoverageIndex, -1)
   assert.ok(inventoryListIndex < inventoryDetailIndex)
   assert.ok(inventoryDetailIndex < inventoryCoverageIndex)
+})
+
+test('staff accounts keeps the managed directory ahead of provisioning controls', () => {
+  const staff = read('frontend/src/components/StaffProvisioningPanel.js')
+
+  const staffDirectoryIndex = staff.indexOf('Managed Account Directory')
+  const staffProvisioningIndex = staff.indexOf('Provision Operations Accounts')
 
   assert.notEqual(staffDirectoryIndex, -1)
   assert.notEqual(staffProvisioningIndex, -1)
   assert.ok(staffDirectoryIndex < staffProvisioningIndex)
+})
+
+test('analytics keeps current operations sections ahead of dashboard summaries', () => {
+  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
+
+  const analyticsOperationsIndex = analytics.indexOf('title="Booking Status Mix"')
+  const analyticsDashboardIndex = analytics.indexOf('title="Sales Signals"')
 
   assert.notEqual(analyticsOperationsIndex, -1)
   assert.notEqual(analyticsDashboardIndex, -1)
