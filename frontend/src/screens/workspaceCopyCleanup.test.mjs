@@ -79,15 +79,24 @@ test('service flow workspaces use queue-first copy and remove bulky dashboard wo
 test('job orders workspace keeps queue before detail actions', () => {
   const source = read('frontend/src/screens/JobOrderWorkbench.js')
 
-  const queueIndex = source.indexOf('Job Order Queue')
-  const detailIndex = source.indexOf('Selected Job Order')
-  const progressIndex = source.indexOf('Progress Updates')
+  const queueIndex = source.indexOf('<p className="card-title">Job Order Queue</p>')
+  const detailIndex = source.indexOf('<p className="card-title">Selected Job Order</p>', queueIndex + 1)
+  const assignmentsIndex = source.indexOf('<p className="card-title">Assignments</p>', detailIndex + 1)
+  const progressIndex = source.indexOf('<p className="card-title">Progress Updates</p>', assignmentsIndex + 1)
+  const evidenceIndex = source.indexOf('<p className="card-title">Evidence</p>', progressIndex + 1)
+  const finalizeIndex = source.indexOf('<p className="card-title">Finalize</p>', evidenceIndex + 1)
 
   assert.notEqual(queueIndex, -1)
   assert.notEqual(detailIndex, -1)
+  assert.notEqual(assignmentsIndex, -1)
   assert.notEqual(progressIndex, -1)
+  assert.notEqual(evidenceIndex, -1)
+  assert.notEqual(finalizeIndex, -1)
   assert.ok(queueIndex < detailIndex)
-  assert.ok(detailIndex < progressIndex)
+  assert.ok(detailIndex < assignmentsIndex)
+  assert.ok(assignmentsIndex < progressIndex)
+  assert.ok(progressIndex < evidenceIndex)
+  assert.ok(evidenceIndex < finalizeIndex)
 })
 
 test('intake workspace source keeps the guided front-desk section order', () => {
