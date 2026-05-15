@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import {
   InsurancePanelShell,
   InsuranceSectionDivider,
@@ -82,142 +82,144 @@ export default function InsuranceDocumentsPanel({
 
   return (
     <View style={styles.root}>
-      <InsurancePanelShell
-        eyebrow="Documents"
-        title="Manage supporting files"
-        subtitle="Work through the checklist, attach the next file, and keep the current request tidy."
-      >
-        <InsuranceSummaryStrip
-          label="Current request"
-          value={latestInquiry?.subject || 'No request submitted yet'}
-          helper={currentRequestSummary}
-        />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <InsurancePanelShell
+          eyebrow="Documents"
+          title="Manage supporting files"
+          subtitle="Work through the checklist, attach the next file, and keep the current request tidy."
+        >
+          <InsuranceSummaryStrip
+            label="Current request"
+            value={latestInquiry?.subject || 'No request submitted yet'}
+            helper={currentRequestSummary}
+          />
 
-        <View style={styles.sectionDivider}>
-          <InsuranceSectionDivider
-            title="Checklist"
-            helper="Keep the required files moving first, then add any optional support documents."
-          >
-            <ChecklistGroup title="Required" items={checklist.required} />
-            <ChecklistGroup title="Optional" items={checklist.optional} />
-          </InsuranceSectionDivider>
-        </View>
-
-        <View style={styles.sectionDivider}>
-          <InsuranceSectionDivider
-            title="Upload target"
-            helper="Choose which document type this file should satisfy before you pick or replace it."
-          >
-            <View style={styles.uploadTargetRow}>
-              {documentTypeOptions.map((option) => {
-                const isSelected = documentDraft.documentType === option.value
-
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[styles.targetChip, isSelected && styles.targetChipSelected]}
-                    onPress={() => onChangeDocumentDraft?.({ documentType: option.value })}
-                    activeOpacity={0.88}
-                    disabled={!canAcceptDocuments || isUploadingDocument}
-                  >
-                    <Text style={[styles.targetChipText, isSelected && styles.targetChipTextSelected]}>
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          </InsuranceSectionDivider>
-        </View>
-
-        <View style={styles.sectionDivider}>
-          <InsuranceSectionDivider
-            title="Selected file"
-            helper="Pick a PDF or image from your device, then review the upload target before sending it."
-          >
-            {documentDraft.fileName ? (
-              <View style={styles.selectedFileCard}>
-                <View style={styles.selectedFileHeader}>
-                  <View style={styles.selectedFileIconWrap}>
-                    <MaterialCommunityIcons
-                      name={documentDraft.mimeType?.startsWith('image/') ? 'file-image-outline' : 'file-pdf-box'}
-                      size={20}
-                      color={colors.primary}
-                    />
-                  </View>
-                  <View style={styles.selectedFileCopy}>
-                    <Text style={styles.selectedFileTitle}>{documentDraft.fileName}</Text>
-                    <Text style={styles.selectedFileMeta}>
-                      {[documentDraft.mimeType, documentDraft.fileSizeLabel].filter(Boolean).join(' | ')}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.fileActionRow}>
-                  <TouchableOpacity
-                    style={styles.secondaryButton}
-                    onPress={onPickDocument}
-                    activeOpacity={0.88}
-                    disabled={!canAcceptDocuments || isUploadingDocument}
-                  >
-                    <Text style={styles.secondaryButtonText}>Replace file</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.secondaryButton}
-                    onPress={onClearPickedDocument}
-                    activeOpacity={0.88}
-                    disabled={!canAcceptDocuments || isUploadingDocument}
-                  >
-                    <Text style={styles.secondaryButtonText}>Clear</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>No file selected</Text>
-                <Text style={styles.emptyText}>Pick a PDF or image from your device when you are ready.</Text>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={[styles.pickButton, (!canAcceptDocuments || isUploadingDocument) && styles.buttonDisabled]}
-              onPress={onPickDocument}
-              disabled={!canAcceptDocuments || isUploadingDocument}
-              activeOpacity={0.88}
+          <View style={styles.sectionDivider}>
+            <InsuranceSectionDivider
+              title="Checklist"
+              helper="Keep the required files moving first, then add any optional support documents."
             >
-              <MaterialCommunityIcons name="file-search-outline" size={18} color={colors.primary} />
-              <Text style={styles.pickButtonText}>
-                {documentDraft.fileName ? 'Select another document' : 'Select document'}
-              </Text>
-            </TouchableOpacity>
-          </InsuranceSectionDivider>
-        </View>
+              <ChecklistGroup title="Required" items={checklist.required} />
+              <ChecklistGroup title="Optional" items={checklist.optional} />
+            </InsuranceSectionDivider>
+          </View>
 
-        <View style={styles.sectionDivider}>
-          <InsuranceSectionDivider
-            title="Note for staff"
-            helper="Add short context only when it helps someone reviewing the upload."
-          >
-            <TextInput
-              value={documentDraft.notes}
-              onChangeText={(value) => onChangeDocumentDraft?.({ notes: value })}
-              placeholder="Optional note for staff review"
-              placeholderTextColor={colors.mutedText}
-              style={[styles.input, styles.multilineInput]}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-              editable={canAcceptDocuments && !isUploadingDocument}
-            />
-          </InsuranceSectionDivider>
-        </View>
+          <View style={styles.sectionDivider}>
+            <InsuranceSectionDivider
+              title="Upload target"
+              helper="Choose which document type this file should satisfy before you pick or replace it."
+            >
+              <View style={styles.uploadTargetRow}>
+                {documentTypeOptions.map((option) => {
+                  const isSelected = documentDraft.documentType === option.value
 
-        <UploadNotice
-          uploadState={uploadState}
-          uploadMessage={uploadMessage}
-          isUploadingDocument={isUploadingDocument}
-        />
-      </InsurancePanelShell>
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[styles.targetChip, isSelected && styles.targetChipSelected]}
+                      onPress={() => onChangeDocumentDraft?.({ documentType: option.value })}
+                      activeOpacity={0.88}
+                      disabled={!canAcceptDocuments || isUploadingDocument}
+                    >
+                      <Text style={[styles.targetChipText, isSelected && styles.targetChipTextSelected]}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+            </InsuranceSectionDivider>
+          </View>
+
+          <View style={styles.sectionDivider}>
+            <InsuranceSectionDivider
+              title="Selected file"
+              helper="Pick a PDF or image from your device, then review the upload target before sending it."
+            >
+              {documentDraft.fileName ? (
+                <View style={styles.selectedFileCard}>
+                  <View style={styles.selectedFileHeader}>
+                    <View style={styles.selectedFileIconWrap}>
+                      <MaterialCommunityIcons
+                        name={documentDraft.mimeType?.startsWith('image/') ? 'file-image-outline' : 'file-pdf-box'}
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </View>
+                    <View style={styles.selectedFileCopy}>
+                      <Text style={styles.selectedFileTitle}>{documentDraft.fileName}</Text>
+                      <Text style={styles.selectedFileMeta}>
+                        {[documentDraft.mimeType, documentDraft.fileSizeLabel].filter(Boolean).join(' | ')}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.fileActionRow}>
+                    <TouchableOpacity
+                      style={styles.secondaryButton}
+                      onPress={onPickDocument}
+                      activeOpacity={0.88}
+                      disabled={!canAcceptDocuments || isUploadingDocument}
+                    >
+                      <Text style={styles.secondaryButtonText}>Replace file</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.secondaryButton}
+                      onPress={onClearPickedDocument}
+                      activeOpacity={0.88}
+                      disabled={!canAcceptDocuments || isUploadingDocument}
+                    >
+                      <Text style={styles.secondaryButtonText}>Clear</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyTitle}>No file selected</Text>
+                  <Text style={styles.emptyText}>Pick a PDF or image from your device when you are ready.</Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.pickButton, (!canAcceptDocuments || isUploadingDocument) && styles.buttonDisabled]}
+                onPress={onPickDocument}
+                disabled={!canAcceptDocuments || isUploadingDocument}
+                activeOpacity={0.88}
+              >
+                <MaterialCommunityIcons name="file-search-outline" size={18} color={colors.primary} />
+                <Text style={styles.pickButtonText}>
+                  {documentDraft.fileName ? 'Select another document' : 'Select document'}
+                </Text>
+              </TouchableOpacity>
+            </InsuranceSectionDivider>
+          </View>
+
+          <View style={styles.sectionDivider}>
+            <InsuranceSectionDivider
+              title="Note for staff"
+              helper="Add short context only when it helps someone reviewing the upload."
+            >
+              <TextInput
+                value={documentDraft.notes}
+                onChangeText={(value) => onChangeDocumentDraft?.({ notes: value })}
+                placeholder="Optional note for staff review"
+                placeholderTextColor={colors.mutedText}
+                style={[styles.input, styles.multilineInput]}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                editable={canAcceptDocuments && !isUploadingDocument}
+              />
+            </InsuranceSectionDivider>
+          </View>
+
+          <UploadNotice
+            uploadState={uploadState}
+            uploadMessage={uploadMessage}
+            isUploadingDocument={isUploadingDocument}
+          />
+        </InsurancePanelShell>
+      </ScrollView>
 
       <View style={styles.footer}>
         <TouchableOpacity
@@ -236,8 +238,12 @@ export default function InsuranceDocumentsPanel({
 
 const styles = StyleSheet.create({
   root: {
+    flex: 1,
+    minHeight: 0,
+  },
+  content: {
     gap: 18,
-    paddingBottom: 8,
+    paddingBottom: 20,
   },
   sectionDivider: {
     gap: 12,

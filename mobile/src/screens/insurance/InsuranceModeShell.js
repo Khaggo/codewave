@@ -9,9 +9,9 @@ const SECTION_ITEMS = [
   { key: 'history', label: 'History' },
 ]
 
-export default function InsuranceModeShell({ activeSection, onChangeSection, onExitMode, children }) {
+export default function InsuranceModeShell({ activeSection, onChangeSection, onExitMode, children, style }) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, style]}>
       <TouchableOpacity onPress={onExitMode} activeOpacity={0.85}>
         <Text style={styles.backLink}>Back to insurance</Text>
       </TouchableOpacity>
@@ -42,7 +42,7 @@ export default function InsuranceModeShell({ activeSection, onChangeSection, onE
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 18 },
+  container: { gap: 18, minHeight: 0 },
   backLink: { color: colors.primary, fontSize: 14, fontWeight: '700' },
   eyebrow: { color: colors.primary, fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.4 },
   title: { color: colors.text, fontSize: 28, fontWeight: '900' },

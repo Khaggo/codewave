@@ -137,3 +137,24 @@ test('task 4 uses the redesigned overview, request, and document workspace struc
     assert.ok(documentsSource.includes(fragment), `Expected documents redesign fragment: ${fragment}`)
   }
 })
+
+test('request and documents sections own scrolling when sticky footers are enabled', () => {
+  const screenSource = read('./InsuranceInquiryScreen.js')
+  const modeShellSource = read('./insurance/InsuranceModeShell.js')
+  const requestSource = read('./insurance/InsuranceRequestPanel.js')
+  const documentsSource = read('./insurance/InsuranceDocumentsPanel.js')
+
+  assert.match(
+    screenSource,
+    /const insuranceModeUsesPanelScroll = isInInsuranceMode &&\s*\(activeModeSection === 'request' \|\| activeModeSection === 'documents'\);/,
+  )
+  assert.match(
+    screenSource,
+    /insuranceModeUsesPanelScroll \? <View style=\{styles\.fixedModeViewport\}>\{screenContent\}<\/View> : <ScrollView/s,
+  )
+  assert.match(modeShellSource, /style=\{\[styles\.container, style\]\}/)
+  assert.match(requestSource, /import \{ ActivityIndicator, ScrollView, StyleSheet/)
+  assert.match(requestSource, /<ScrollView contentContainerStyle=\{styles\.content\} showsVerticalScrollIndicator=\{false\}>/)
+  assert.match(documentsSource, /import \{ ActivityIndicator, ScrollView, StyleSheet/)
+  assert.match(documentsSource, /<ScrollView contentContainerStyle=\{styles\.content\} showsVerticalScrollIndicator=\{false\}>/)
+})

@@ -1249,17 +1249,10 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const heroSubtitle = hasSession
     ? 'Start a request quickly, upload the right documents, and follow review, payment, and renewal prompts without exposing staff-only workflow details.'
     : 'Sign in as a customer to start an insurance request and see customer-safe review, payment, and renewal updates.';
-
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.screen}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+  const insuranceModeUsesPanelScroll = isInInsuranceMode &&
+    (activeModeSection === 'request' || activeModeSection === 'documents');
+  const screenContent = (
+    <View style={[styles.content, insuranceModeUsesPanelScroll && styles.fixedModeContent]}>
           <View style={styles.heroCard}>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.88}>
               <MaterialCommunityIcons name="arrow-left" size={20} color={colors.text} />
@@ -1352,7 +1345,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             </View>
           ) : null}
 
-          <View style={styles.sectionCard}>
+          <View
+            style={[
+              styles.sectionCard,
+              insuranceModeUsesPanelScroll && styles.fixedModeWorkspaceCard,
+            ]}
+          >
             <View style={styles.sectionHeader}>
               <View>
                 <Text style={styles.sectionTitle}>Insurance workspace</Text>
@@ -1392,6 +1390,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 activeSection={activeModeSection}
                 onChangeSection={handleChangeModeSection}
                 onExitMode={closeInsuranceMode}
+                style={insuranceModeUsesPanelScroll ? styles.fixedModeShell : null}
               >
                 {activeModeSection === 'overview' ? (
                   <InsuranceHomePanel
@@ -1621,8 +1620,21 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               />
             ) : null}
 
-          </View>
-        </ScrollView>
+      </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.screen}
+      >
+        {insuranceModeUsesPanelScroll ? <View style={styles.fixedModeViewport}>{screenContent}</View> : <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {screenContent}
+        </ScrollView>}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1644,10 +1656,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    flexGrow: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 36,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  fixedModeViewport: {
+    flex: 1,
+  },
+  fixedModeContent: {
+    flex: 1,
+    minHeight: 0,
   },
   heroCard: {
     borderWidth: 1,
@@ -1710,6 +1731,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: 20,
     marginBottom: 18,
+  },
+  fixedModeWorkspaceCard: {
+    flex: 1,
+    minHeight: 0,
+    marginBottom: 0,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1856,6 +1882,10 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 14,
     fontWeight: '800',
+  },
+  fixedModeShell: {
+    flex: 1,
+    minHeight: 0,
   },
   homeCardGrid: {
     flexDirection: 'row',
