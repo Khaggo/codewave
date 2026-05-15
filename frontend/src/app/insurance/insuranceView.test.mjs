@@ -648,7 +648,7 @@ test('getInsuranceReminderComposerState summarizes selected-case reminder readin
     {
       audienceLabel: '3 selected cases',
       scopeLabel: '2 selected in the current queue',
-      readinessLabel: 'Ready to remind the selected cases.',
+      readinessLabel: 'Reminder request is ready for the selected cases. Terminal or ineligible cases will be skipped when you send.',
       canSend: true,
     },
   )
@@ -684,7 +684,7 @@ test('getInsuranceBroadcastComposerState marks filtered broadcasts ready when co
     {
       audienceLabel: '4 filtered cases',
       scopeLabel: 'Filtered Results',
-      readinessLabel: 'Ready to broadcast to the filtered insurance audience.',
+      readinessLabel: 'Broadcast request is ready for the filtered insurance audience. Terminal or ineligible cases will be skipped when you send.',
       canSend: true,
     },
   )

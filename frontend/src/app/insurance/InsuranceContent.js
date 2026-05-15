@@ -1046,7 +1046,7 @@ export default function InsuranceContent() {
               value={reminderComposerState.audienceLabel}
               hint={reminderComposerState.scopeLabel}
               tone={reminderComposerState.canSend ? 'green' : 'gray'}
-              badgeLabel={reminderComposerState.canSend ? 'Ready' : 'Pending'}
+              badgeLabel={reminderComposerState.canSend ? 'Prepared' : 'Pending'}
             />
 
             <WorkspaceStatCard
@@ -1054,7 +1054,7 @@ export default function InsuranceContent() {
               value={reminderComposerState.readinessLabel}
               hint={reminderTargetMode === 'filtered_results' ? queueFilterSummary.detail : currentCaseLabel}
               tone={reminderComposerState.canSend ? 'orange' : 'gray'}
-              badgeLabel={reminderComposerState.canSend ? 'Ready' : 'Hold'}
+              badgeLabel={reminderComposerState.canSend ? 'Validate on send' : 'Hold'}
             />
           </div>
 
@@ -1078,7 +1078,9 @@ export default function InsuranceContent() {
               Send Reminder
             </button>
             <span className="text-xs text-ink-muted">
-              {reminderComposerState.canSend ? 'Send is scoped and ready.' : reminderComposerState.readinessLabel}
+              {reminderComposerState.canSend
+                ? 'Send request is prepared. Final eligibility is checked when the backend evaluates each case.'
+                : reminderComposerState.readinessLabel}
             </span>
           </div>
 
@@ -1170,7 +1172,7 @@ export default function InsuranceContent() {
               value={broadcastComposerState.audienceLabel}
               hint={broadcastComposerState.scopeLabel}
               tone={broadcastComposerState.canSend ? 'green' : 'gray'}
-              badgeLabel={broadcastComposerState.canSend ? 'Ready' : 'Pending'}
+              badgeLabel={broadcastComposerState.canSend ? 'Prepared' : 'Pending'}
             />
 
             <WorkspaceStatCard
@@ -1178,7 +1180,7 @@ export default function InsuranceContent() {
               value={broadcastComposerState.readinessLabel}
               hint={broadcastTargetMode === 'filtered_results' ? queueFilterSummary.detail : `${selectedInquiryIds.length} manually selected case${selectedInquiryIds.length === 1 ? '' : 's'}`}
               tone={broadcastComposerState.canSend ? 'orange' : 'gray'}
-              badgeLabel={broadcastComposerState.canSend ? 'Ready' : 'Hold'}
+              badgeLabel={broadcastComposerState.canSend ? 'Validate on send' : 'Hold'}
             />
 
             <WorkspaceStatCard
@@ -1239,7 +1241,9 @@ export default function InsuranceContent() {
               Send Broadcast
             </button>
             <span className="text-xs text-ink-muted">
-              {broadcastComposerState.canSend ? 'Custom broadcast is ready for the selected audience.' : broadcastComposerState.readinessLabel}
+              {broadcastComposerState.canSend
+                ? 'Broadcast request is prepared. Final eligibility is checked when the backend evaluates each case.'
+                : broadcastComposerState.readinessLabel}
             </span>
           </div>
 

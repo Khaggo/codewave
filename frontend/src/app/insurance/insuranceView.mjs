@@ -376,7 +376,7 @@ export function getInsuranceReminderComposerState({
       audienceLabel: selectedInquiryId ? 'Current case selected' : 'No current case selected',
       scopeLabel: TARGET_MODE_LABELS.single_case,
       readinessLabel: selectedInquiryId
-        ? 'Ready to remind the current case.'
+        ? 'Reminder request is ready for the current case. Final eligibility is checked when you send.'
         : 'Pick a current case before sending a single reminder.',
       canSend: Boolean(selectedInquiryId),
     }
@@ -387,7 +387,7 @@ export function getInsuranceReminderComposerState({
       audienceLabel: `${pluralize(filteredCount, 'filtered case')}`,
       scopeLabel: TARGET_MODE_LABELS.filtered_results,
       readinessLabel: filteredCount
-        ? 'Ready to remind the currently filtered insurance queue.'
+        ? 'Reminder request is ready for the filtered queue. Terminal or ineligible cases will be skipped when you send.'
         : 'Keep at least one matching case in view before sending filtered reminders.',
       canSend: filteredCount > 0,
     }
@@ -397,7 +397,7 @@ export function getInsuranceReminderComposerState({
     audienceLabel: `${pluralize(selectedCount, 'selected case')}`,
     scopeLabel: `${visibleSelectedCount} selected in the current queue`,
     readinessLabel: selectedCount
-      ? 'Ready to remind the selected cases.'
+      ? 'Reminder request is ready for the selected cases. Terminal or ineligible cases will be skipped when you send.'
       : 'Select one or more cases before sending reminders.',
     canSend: selectedCount > 0,
   }
@@ -423,7 +423,7 @@ export function getInsuranceBroadcastComposerState({
       scopeLabel: TARGET_MODE_LABELS.filtered_results,
       readinessLabel:
         hasAudience && hasTitle && hasMessage
-          ? 'Ready to broadcast to the filtered insurance audience.'
+          ? 'Broadcast request is ready for the filtered insurance audience. Terminal or ineligible cases will be skipped when you send.'
           : 'Add a message and keep at least one matching case in view.',
       canSend: hasAudience && hasTitle && hasMessage,
     }
@@ -434,7 +434,7 @@ export function getInsuranceBroadcastComposerState({
     scopeLabel: TARGET_MODE_LABELS.selected_cases,
     readinessLabel:
       selectedCount && hasTitle && hasMessage
-        ? 'Ready to broadcast to the selected insurance cases.'
+        ? 'Broadcast request is ready for the selected insurance cases. Terminal or ineligible cases will be skipped when you send.'
         : 'Select cases, add a title, and add a message before sending.',
     canSend: selectedCount > 0 && hasTitle && hasMessage,
   }
