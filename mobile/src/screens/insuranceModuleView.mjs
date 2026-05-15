@@ -293,10 +293,10 @@ export const buildCustomerInsuranceHeroState = ({
     title: 'Review current request',
     message:
       claimStatusUpdateCount > 0
-        ? 'Your latest request and vehicle history are both ready to review.'
-        : 'Your latest request is ready to review.',
-    ctaLabel: 'Check status',
-    routeKey: INSURANCE_PANEL_KEYS.history,
+        ? 'Open the request panel to review the latest inquiry alongside vehicle history.'
+        : 'Open the request panel to review the latest inquiry and next steps.',
+    ctaLabel: 'Open request',
+    routeKey: INSURANCE_PANEL_KEYS.request,
     statusLabel: formatWorkflowLabel(latestInquiry.status),
     tone: 'success',
   }
@@ -335,12 +335,15 @@ export const buildCustomerInsuranceOverviewState = ({
         routeKey: INSURANCE_MODE_SECTION_KEYS.request,
       }
     : missingCount > 0
-      ? {
-          title: 'Upload required documents',
-          message: 'One required file is blocking review for this request.',
-          ctaLabel: 'Open docs',
-          routeKey: INSURANCE_MODE_SECTION_KEYS.documents,
-        }
+    ? {
+        title: 'Upload required documents',
+        message:
+          missingCount === 1
+            ? 'One required file is blocking review for this request.'
+            : `${missingCount} required files are blocking review for this request.`,
+        ctaLabel: 'Open docs',
+        routeKey: INSURANCE_MODE_SECTION_KEYS.documents,
+      }
       : {
           title: 'Review current request',
           message: 'See the latest status, payment follow-up, or renewal update in one place.',
@@ -381,12 +384,20 @@ export const buildCustomerInsuranceStatusState = ({
   latestUpdateLabel = '--',
 } = {}) => {
   const missingCount = Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments.length : 0
-  const hasRenewalFollowUp =
-    Boolean(latestInquiry) &&
-    (latestInquiry.status === 'for_renewal' ||
-      ['upcoming', 'quoted', 'awaiting_customer'].includes(
-        latestInquiry.renewalStatus,
-      ))
+  const workflowTimeline = getCustomerInsuranceTimeline({
+    status: latestInquiry?.status,
+    paymentStatus: latestInquiry?.paymentStatus,
+    renewalStatus: latestInquiry?.renewalStatus,
+  })
+  const currentWorkflowStep = workflowTimeline.find((step) => step.state === 'current')?.key ?? null
+  const hasPaymentFollowUp = currentWorkflowStep === 'payment'
+  const hasRenewalFollowUp = currentWorkflowStep === 'renewal'
+  const buildTimeline = () => [
+    { key: 'request', label: 'Request submitted', active: true },
+    { key: 'documents', label: 'Documents complete', active: true },
+    { key: 'payment', label: 'Payment follow-up', active: hasPaymentFollowUp },
+    { key: 'renewal', label: 'Renewal', active: hasRenewalFollowUp },
+  ]
 
   if (missingCount > 0) {
     return {
@@ -411,33 +422,18 @@ export const buildCustomerInsuranceStatusState = ({
       ctaLabel: 'Review renewal',
       ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
       latestUpdateLabel,
-      timeline: [
-        { key: 'request', label: 'Request submitted', active: true },
-        { key: 'documents', label: 'Documents complete', active: true },
-        { key: 'payment', label: 'Payment follow-up', active: true },
-        { key: 'renewal', label: 'Renewal', active: true },
-      ],
+      timeline: buildTimeline(),
     }
   }
 
-  if (
-    latestInquiry?.status === 'payment_pending' ||
-    ['awaiting_payment', 'proof_submitted', 'verifying', 'overdue'].includes(
-      latestInquiry?.paymentStatus,
-    )
-  ) {
+  if (hasPaymentFollowUp) {
     return {
       title: 'Payment follow-up',
       summary: 'Payment is the current blocker for this request.',
       ctaLabel: 'Review payment',
       ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
       latestUpdateLabel,
-      timeline: [
-        { key: 'request', label: 'Request submitted', active: true },
-        { key: 'documents', label: 'Documents complete', active: true },
-        { key: 'payment', label: 'Payment follow-up', active: true },
-        { key: 'renewal', label: 'Renewal', active: false },
-      ],
+      timeline: buildTimeline(),
     }
   }
 
@@ -447,12 +443,7 @@ export const buildCustomerInsuranceStatusState = ({
     ctaLabel: 'Review status',
     ctaRouteKey: INSURANCE_MODE_SECTION_KEYS.status,
     latestUpdateLabel,
-    timeline: [
-      { key: 'request', label: 'Request submitted', active: true },
-      { key: 'documents', label: 'Documents complete', active: true },
-      { key: 'payment', label: 'Payment follow-up', active: false },
-      { key: 'renewal', label: 'Renewal', active: false },
-    ],
+    timeline: buildTimeline(),
   }
 }
 

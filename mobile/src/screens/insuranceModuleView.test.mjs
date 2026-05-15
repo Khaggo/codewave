@@ -134,6 +134,31 @@ test('insurance hero routes renewal follow-up requests into renewal review', () 
   )
 })
 
+test('insurance hero routes the active request summary into the request panel', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceHeroState({
+      selectedVehicleLabel: '2024 Toyota Vios • DEMOREV001',
+      latestInquiry: {
+        id: 'inq-18',
+        status: 'active',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [],
+      claimStatusUpdateCount: 2,
+    }),
+    {
+      eyebrow: 'Current request',
+      title: 'Review current request',
+      message: 'Open the request panel to review the latest inquiry alongside vehicle history.',
+      ctaLabel: 'Open request',
+      routeKey: 'request',
+      statusLabel: 'Active',
+      tone: 'success',
+    },
+  )
+})
+
 test('entry state keeps the app-level insurance tab lightweight', () => {
   assert.deepEqual(
     buildCustomerInsuranceEntryState({
@@ -178,6 +203,24 @@ test('overview state routes users to the best next action inside insurance mode'
         { key: 'history', label: 'History', helper: 'Past completed insurance records for this vehicle.' },
       ],
     },
+  )
+})
+
+test('overview state pluralizes missing-document guidance for multiple files', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceOverviewState({
+      latestInquiry: {
+        id: 'inq-19',
+        status: 'needs_documents',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [
+        { type: 'policy', label: 'Policy copy' },
+        { type: 'valid_id', label: 'Valid ID' },
+      ],
+    }).message,
+    '2 required files are blocking review for this request.',
   )
 })
 
@@ -228,7 +271,7 @@ test('status state prioritizes renewal follow-up before payment follow-up', () =
       timeline: [
         { key: 'request', label: 'Request submitted', active: true },
         { key: 'documents', label: 'Documents complete', active: true },
-        { key: 'payment', label: 'Payment follow-up', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: false },
         { key: 'renewal', label: 'Renewal', active: true },
       ],
     },
@@ -282,6 +325,69 @@ test('status state keeps the empty default case on the current request fallback'
         { key: 'renewal', label: 'Renewal', active: false },
       ],
     },
+  )
+})
+
+test('status state keeps terminal closed, cancelled, and rejected cases on the fallback model', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        status: 'closed',
+        paymentStatus: 'paid',
+        renewalStatus: 'renewed',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Closed request.',
+    }),
+    {
+      title: 'Current request status',
+      summary: 'Review the latest customer-safe update and next step.',
+      ctaLabel: 'Review status',
+      ctaRouteKey: 'status',
+      latestUpdateLabel: 'Closed request.',
+      timeline: [
+        { key: 'request', label: 'Request submitted', active: true },
+        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'payment', label: 'Payment follow-up', active: false },
+        { key: 'renewal', label: 'Renewal', active: false },
+      ],
+    },
+  )
+
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        status: 'cancelled',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Cancelled request.',
+    }).timeline,
+    [
+      { key: 'request', label: 'Request submitted', active: true },
+      { key: 'documents', label: 'Documents complete', active: true },
+      { key: 'payment', label: 'Payment follow-up', active: false },
+      { key: 'renewal', label: 'Renewal', active: false },
+    ],
+  )
+
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        status: 'rejected',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Rejected request.',
+    }).timeline,
+    [
+      { key: 'request', label: 'Request submitted', active: true },
+      { key: 'documents', label: 'Documents complete', active: true },
+      { key: 'payment', label: 'Payment follow-up', active: false },
+      { key: 'renewal', label: 'Renewal', active: false },
+    ],
   )
 })
 
