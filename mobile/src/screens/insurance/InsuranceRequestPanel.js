@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import {
   InsurancePanelShell,
   InsuranceSectionDivider,
@@ -47,6 +47,8 @@ export default function InsuranceRequestPanel({
   selectedVehicleLabel,
   draft,
   inquiryTypeOptions,
+  isRefreshing,
+  onRefresh,
   onChangeDraft,
   onSubmit,
   isSubmitting,
@@ -59,6 +61,13 @@ export default function InsuranceRequestPanel({
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         <InsurancePanelShell
           eyebrow="Request"

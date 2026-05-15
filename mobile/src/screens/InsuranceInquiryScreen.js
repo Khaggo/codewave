@@ -1353,6 +1353,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   selectedVehicleLabel={selectedVehicleLabel}
                   draft={draft}
                   inquiryTypeOptions={inquiryTypeOptions}
+                  isRefreshing={isRefreshing}
+                  onRefresh={refreshTracking}
                   onChangeDraft={(patch) => {
                     setDraft((current) => ({ ...current, ...patch }))
                     handleDraftPatch()
@@ -1368,6 +1370,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                 <InsuranceDocumentsPanel
                   checklist={requirementsChecklist}
                   latestInquiry={latestInquiry}
+                  isRefreshing={isRefreshing}
+                  onRefresh={refreshTracking}
                   onChangeDocumentDraft={(patch) => {
                     setDocumentDraft((current) => ({ ...current, ...patch }))
                     handleDocumentDraftPatch()
@@ -1390,6 +1394,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   title="Current request status"
                   subtitle="Review the current blocker, latest update, and next action in one place."
                   statusState={statusState}
+                  isRefreshing={isRefreshing}
+                  onRefresh={refreshTracking}
                   footerLabel={statusState.ctaLabel}
                   footerScrollTarget={statusState.ctaRouteKey === 'status' ? 'end' : null}
                   onFooterPress={statusState.ctaRouteKey === 'documents' ? () => handleChangeInsuranceTab('documents') : null}

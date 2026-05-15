@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { InsurancePanelShell, InsuranceSectionCard } from './InsurancePanelPrimitives'
 import { colors, radius } from '../../theme'
 
@@ -8,6 +8,8 @@ export default function InsuranceStatusDetailPanel({
   title,
   subtitle,
   statusState,
+  isRefreshing,
+  onRefresh,
   footerLabel,
   footerScrollTarget,
   onFooterPress,
@@ -32,6 +34,13 @@ export default function InsuranceStatusDetailPanel({
         style={styles.scroll}
         contentContainerStyle={[styles.content, showsFooter && styles.contentWithFooter]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         <InsurancePanelShell eyebrow={eyebrow} title={title} subtitle={subtitle}>
           <InsuranceSectionCard
