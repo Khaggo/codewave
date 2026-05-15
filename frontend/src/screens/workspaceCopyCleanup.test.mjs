@@ -71,6 +71,21 @@ test('service flow workspaces use queue-first copy and remove bulky dashboard wo
   )
 })
 
+test('service workspaces use concise queue-first section labels', () => {
+  const jobOrders = read('frontend/src/screens/JobOrderWorkbench.js')
+  const qa = read('frontend/src/screens/QAAuditWorkspace.js')
+  const finance = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
+
+  assert.ok(jobOrders.includes('Job Order Queue'))
+  assert.ok(jobOrders.includes('Selected Job Order'))
+
+  assert.ok(qa.includes('QA Queue'))
+  assert.ok(qa.includes('Selected Audit'))
+
+  assert.ok(finance.includes('Invoice & Order Queue'))
+  assert.ok(finance.includes('Selected Record'))
+})
+
 test('qa audit workspace keeps release queue ahead of findings and verdict actions', () => {
   const source = read('frontend/src/screens/QAAuditWorkspace.js')
 

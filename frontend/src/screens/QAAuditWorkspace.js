@@ -602,7 +602,7 @@ export default function QAAuditWorkspace() {
 
         <SectionFrame
           title="Pre-Check Summary"
-          copy="Use the validator summary before recording a verdict."
+          copy="Review validator output before the verdict."
           badge={qualityGate ? <span className="badge badge-gray">{formatLabel(qualityGate.preCheckStatus)}</span> : null}
         >
           {qualityGate ? (
@@ -669,7 +669,7 @@ export default function QAAuditWorkspace() {
 
         <SectionFrame
           title="Review Needed"
-          copy="Check the items that still need QA attention."
+          copy="Review items still waiting on QA."
           badge={<span className="badge badge-orange">{reviewNeededFindings.length} review needed</span>}
         >
           {reviewGroups.length ? (
@@ -698,7 +698,7 @@ export default function QAAuditWorkspace() {
 
         <SectionFrame
           title="Verdict / Override"
-          copy="Record the final decision and keep overrides auditable."
+          copy="Record the release decision and keep overrides auditable."
           badge={<span className={releaseSummary.toneClass}>{releaseSummary.value}</span>}
         >
           <div className="grid gap-5 xl:grid-cols-2">
@@ -818,7 +818,7 @@ export default function QAAuditWorkspace() {
 
         <SectionFrame
           title="History"
-          copy="Review recent audit timing and linked release context."
+          copy="Review audit timing and release state."
           badge={qualityGate ? <span className="badge badge-gray">{getReleaseCopy(selectedReleaseState)}</span> : null}
         >
           {qualityGate ? (

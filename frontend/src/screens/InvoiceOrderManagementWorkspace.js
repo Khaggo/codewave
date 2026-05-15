@@ -750,14 +750,6 @@ export default function InvoiceOrderManagementWorkspace() {
                 <p className="text-sm font-bold text-ink-primary">Payment boundary</p>
                 <p className="mt-2 text-sm leading-6 text-ink-muted">{staffInvoiceOrderPaymentCopy}</p>
               </div>
-              <div className="ops-panel-muted">
-                <p className="text-sm font-bold text-ink-primary">Service payment record</p>
-                <p className="mt-2 text-sm leading-6 text-ink-muted">
-                  {serviceInvoice
-                    ? `${formatInvoiceOrderCurrency(serviceInvoice.amountPaidCents)} recorded against ${formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)} total after a ${formatInvoiceOrderCurrency(serviceInvoice.reservationFeeDeductionCents)} reservation-fee deduction.`
-                    : 'Service payment recording stays in the Job Order Workbench until a service invoice is loaded.'}
-                </p>
-              </div>
             </div>
 
             <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
@@ -771,7 +763,7 @@ export default function InvoiceOrderManagementWorkspace() {
             <div>
               <p className="card-title">Linked Orders</p>
               <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Keep the related service and ecommerce records close to the completion workspace.
+                Keep the related service and order records close by.
               </p>
             </div>
             <span className="badge badge-gray">{jobOrderState.jobOrder || ecommerceOrder ? 'Records linked' : 'No linked record loaded'}</span>
@@ -821,7 +813,7 @@ export default function InvoiceOrderManagementWorkspace() {
             <div>
               <p className="card-title">History</p>
               <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Use aging buckets and reminder policy history for follow-through context.
+                Review aging and reminder history.
               </p>
             </div>
             <button

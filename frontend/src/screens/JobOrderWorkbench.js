@@ -1585,10 +1585,10 @@ export default function JobOrderWorkbench() {
             ) : (
               <p className="sm:col-span-2 text-[11px] text-ink-muted">
                 {isTechnician
-                  ? 'Pick one of your assigned job orders from the selector before updating status, progress, or evidence.'
+                  ? 'Choose an assigned job order before updating it.'
                   : workbenchScope === 'history'
-                    ? 'History mode keeps finalized and cancelled job orders out of the active workbench queue while still letting you review or load them here.'
-                    : 'Use the selector instead of pasting raw job-order IDs so this workbench stays tied to known live records.'}
+                    ? 'History mode keeps completed work out of the live queue.'
+                    : 'Use the selector to load a known live record.'}
               </p>
             )}
           </div>
@@ -1605,8 +1605,8 @@ export default function JobOrderWorkbench() {
                   {isTechnician
                     ? 'These dates already have assigned job orders in the selected month.'
                     : workbenchScope === 'history'
-                      ? 'These dates contain history records so completed work stays out of the active workshop queue.'
-                      : 'These dates already have job orders or booking handoff queue in the selected month.'}
+                      ? 'These dates contain history records only.'
+                      : 'These dates already have job orders or booking handoffs.'}
                 </p>
               </div>
               <span className="badge badge-gray">
@@ -1670,16 +1670,6 @@ export default function JobOrderWorkbench() {
                   : 'No confirmed booking handoffs are queued for the selected date yet.'}
             </p>
           </div>
-          <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
-              Queue rule
-            </p>
-            <p className="mt-2 text-sm text-ink-primary">
-              {workbenchScope === 'history'
-                ? 'History stays available for review without mixing finalized work back into the live queue.'
-                : 'Use the queue and selector together so updates stay tied to known live records.'}
-            </p>
-          </div>
         </div>
       </section>
 
@@ -1689,8 +1679,8 @@ export default function JobOrderWorkbench() {
             <p className="card-title">Selected Job Order</p>
             <p className="mt-1 text-sm leading-6 text-ink-secondary">
               {isTechnician
-                ? 'Review the loaded assignment here before saving progress, evidence, or status changes.'
-                : 'Review the selected record here before saving assignments, progress, evidence, or finalization updates.'}
+                ? 'Review the loaded assignment before saving updates.'
+                : 'Review the selected record before saving updates.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1817,7 +1807,7 @@ export default function JobOrderWorkbench() {
                   <div>
                     <p className="text-sm font-bold text-ink-primary">Execution Control</p>
                     <p className="text-xs text-ink-muted mt-1">
-                      Move the selected job order through valid execution states before progress, evidence, or finalization follow-through.
+                      Move the selected job order through valid execution states.
                     </p>
                   </div>
                   <span className="badge badge-gray">
@@ -1857,10 +1847,7 @@ export default function JobOrderWorkbench() {
                       Transition Guide
                     </p>
                     <p className="text-sm text-ink-primary mt-1">
-                      Choose the next allowed status for the selected job order.
-                    </p>
-                    <p className="text-xs text-ink-muted mt-2">
-                      If no transition appears, the job order is already blocked, finalized, or waiting for another workflow step.
+                      Choose the next allowed status.
                     </p>
                   </div>
                   <label className="text-xs text-ink-muted md:col-span-2">
@@ -1924,7 +1911,7 @@ export default function JobOrderWorkbench() {
               <div>
                 <p className="card-title">Technician Workflow Notes</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  This workspace is focused on execution updates. Booking handoff, invoice finalization, and payment ownership stay with adviser or admin roles.
+                  Execution updates stay here; handoff and billing stay with advisers or admins.
                 </p>
               </div>
 
@@ -1955,7 +1942,7 @@ export default function JobOrderWorkbench() {
                 <div>
                   <p className="card-title">Execution Control</p>
                   <p className="text-xs text-ink-muted mt-1">
-                    Move the loaded job order through valid execution states as workshop work progresses.
+                    Move the loaded job order through valid execution states.
                   </p>
                 </div>
                 <span className="badge badge-gray">
@@ -1995,10 +1982,7 @@ export default function JobOrderWorkbench() {
                     Transition Guide
                   </p>
                   <p className="text-sm text-ink-primary mt-1">
-                    Use status updates to reflect the real workshop phase of the assigned job.
-                  </p>
-                  <p className="text-xs text-ink-muted mt-2">
-                    If no transition appears, this job order is waiting on another workflow step or is already complete.
+                    Use status updates to reflect the live workshop phase.
                   </p>
                 </div>
                 <label className="text-xs text-ink-muted md:col-span-2">
@@ -2254,7 +2238,7 @@ export default function JobOrderWorkbench() {
               <div>
                 <p className="card-title">Assignments</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Assign the selected job order and, when needed, create a new queued record from confirmed booking handoff without leaving this execution workspace.
+                  Assign the selected job order or create one from the handoff queue.
                 </p>
               </div>
               <span
