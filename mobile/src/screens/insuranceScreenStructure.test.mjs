@@ -57,7 +57,9 @@ test('insurance shell exposes direct-entry tabs and vehicle picker trigger', () 
     "{ key: 'status', label: 'Status' }",
     '<Text style={styles.title}>Insurance</Text>',
     "selectedVehicleLabel || 'Select vehicle'",
+    'isVehiclePickerAvailable',
     'onPress={onOpenVehiclePicker}',
+    'disabled={!isVehiclePickerAvailable}',
     'onPress={() => onChangeSection(item.key)}',
     '<View style={styles.body}>{children}</View>',
   ]
@@ -69,6 +71,14 @@ test('insurance shell exposes direct-entry tabs and vehicle picker trigger', () 
   assert.doesNotMatch(source, /Back to insurance/)
   assert.doesNotMatch(source, /Insurance mode/)
   assert.doesNotMatch(source, /History/)
+  assert.match(
+    source,
+    /style=\{\[\s*styles\.vehicleTrigger,\s*!isVehiclePickerAvailable && styles\.vehicleTriggerDisabled,\s*\]\}/,
+  )
+  assert.match(
+    source,
+    /style=\{\[\s*styles\.vehicleTriggerText,\s*!isVehiclePickerAvailable && styles\.vehicleTriggerTextDisabled,\s*\]\}/,
+  )
 })
 
 test('insurance shell uses a header-triggered vehicle picker instead of a body vehicle card', () => {
@@ -83,6 +93,8 @@ test('insurance shell uses a header-triggered vehicle picker instead of a body v
   assert.match(source, /setIsVehiclePickerOpen\(false\)/)
   assert.match(source, /setIsVehiclePickerOpen\(true\)/)
   assert.match(source, /<Modal[\s\S]*?visible=\{isVehiclePickerOpen\}/)
+  assert.match(source, /const isVehiclePickerAvailable = hasSession && ownedVehicles\.length > 0/)
+  assert.match(source, /isVehiclePickerAvailable=\{isVehiclePickerAvailable\}/)
   assert.match(source, /<ScrollView[\s\S]*?style=\{styles\.sheetList\}/)
   assert.match(source, /sheetList:\s*\{[\s\S]*?maxHeight:\s*\d+/)
   assert.doesNotMatch(source, /Choose vehicle context/)

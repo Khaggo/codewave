@@ -12,6 +12,7 @@ export default function InsuranceModeShell({
   activeSection,
   onChangeSection,
   selectedVehicleLabel,
+  isVehiclePickerAvailable,
   onOpenVehiclePicker,
   children,
 }) {
@@ -20,11 +21,20 @@ export default function InsuranceModeShell({
       <View style={styles.header}>
         <Text style={styles.title}>Insurance</Text>
         <TouchableOpacity
-          style={styles.vehicleTrigger}
+          style={[
+            styles.vehicleTrigger,
+            !isVehiclePickerAvailable && styles.vehicleTriggerDisabled,
+          ]}
           onPress={onOpenVehiclePicker}
+          disabled={!isVehiclePickerAvailable}
           activeOpacity={0.88}
         >
-          <Text style={styles.vehicleTriggerText}>
+          <Text
+            style={[
+              styles.vehicleTriggerText,
+              !isVehiclePickerAvailable && styles.vehicleTriggerTextDisabled,
+            ]}
+          >
             {selectedVehicleLabel || 'Select vehicle'}
           </Text>
         </TouchableOpacity>
@@ -79,10 +89,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceStrong,
     justifyContent: 'center',
   },
+  vehicleTriggerDisabled: {
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surface,
+    opacity: 0.58,
+  },
   vehicleTriggerText: {
     color: colors.text,
     fontSize: 13,
     fontWeight: '700',
+  },
+  vehicleTriggerTextDisabled: {
+    color: colors.mutedText,
   },
   tabRow: {
     flexDirection: 'row',

@@ -315,6 +315,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
   const selectedVehicle =
     ownedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const isVehiclePickerAvailable = hasSession && ownedVehicles.length > 0;
   const selectedVehicleLabel = selectedVehicle
     ? buildOwnedVehicleInsuranceLabel(selectedVehicle)
     : '';
@@ -1344,6 +1345,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               activeSection={activeInsuranceTab}
               onChangeSection={handleChangeInsuranceTab}
               selectedVehicleLabel={selectedVehicleLabel}
+              isVehiclePickerAvailable={isVehiclePickerAvailable}
               onOpenVehiclePicker={handleOpenVehiclePicker}
             >
               {activeInsuranceTab === 'home' ? (
