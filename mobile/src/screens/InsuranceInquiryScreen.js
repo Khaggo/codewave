@@ -41,18 +41,17 @@ import {
   getCustomerInsurancePaymentSummary,
   getVehicleScopedCustomerInquiryId,
   getRememberedInquiryForVehicle,
-  getCustomerInsuranceTimeline,
   hydrateRememberedInquiryMappings,
   isTerminalCustomerInquiryStatus,
   rememberInquiryForVehicle,
   serializeRememberedInquiryMappings,
   shouldDeferCustomerInsuranceTrackingRefresh,
-  shouldShowCustomerInsuranceFollowUp,
 } from './insuranceModuleView.mjs';
 import InsuranceDocumentsPanel from './insurance/InsuranceDocumentsPanel';
 import InsuranceEntryPanel from './insurance/InsuranceEntryPanel';
 import InsuranceHomePanel from './insurance/InsuranceHomePanel';
 import InsuranceModeShell from './insurance/InsuranceModeShell';
+import { InsuranceSectionCard } from './insurance/InsurancePanelPrimitives';
 import InsuranceRequestPanel from './insurance/InsuranceRequestPanel';
 import InsuranceStatusDetailPanel from './insurance/InsuranceStatusDetailPanel';
 import { colors, radius } from '../theme';
@@ -132,20 +131,6 @@ const inferMimeType = (fileName, fallbackType = 'application/pdf') => {
   return String(fallbackType ?? '').trim() || 'application/pdf';
 };
 
-const timelineStepCopy = {
-  submitted: 'Your request is recorded. Keep your details and supporting files ready.',
-  review: 'An adviser is reviewing the request and checking what still needs to happen next.',
-  documents: 'Upload the missing requirements so staff can continue the review.',
-  approval: 'The request is queued for final approval.',
-  approved: 'The request has passed review and is ready for the next insurance step.',
-  payment: 'Watch payment instructions closely and upload proof of payment when asked.',
-  active: 'Your insurance record is active and should now be easier to track.',
-  renewal: 'A renewal follow-up is coming up, so expect reminders or quote coordination.',
-  rejected: 'The request could not continue in its current state.',
-  cancelled: 'The request was cancelled before completion.',
-  closed: 'This request is closed and no longer accepting updates.',
-};
-
 const buildRenewalPrompt = (inquiry) => {
   switch (inquiry?.renewalStatus) {
     case 'upcoming':
@@ -185,6 +170,36 @@ const buildRenewalPrompt = (inquiry) => {
         tone: 'default',
       };
   }
+};
+
+const getLatestInsuranceRecord = (records) =>
+  (Array.isArray(records) ? records : []).reduce((currentLatest, record) => {
+    const currentValue = new Date(record?.updatedAt ?? record?.createdAt ?? 0).getTime();
+    const latestValue = new Date(
+      currentLatest?.updatedAt ?? currentLatest?.createdAt ?? 0,
+    ).getTime();
+
+    return currentValue > latestValue ? record : currentLatest;
+  }, null);
+
+const buildHistoryRecordTitle = (record) => {
+  const statusLabel = formatWorkflowLabel(record?.status);
+
+  return record?.inquiryTypeLabel
+    ? `${record.inquiryTypeLabel} - ${statusLabel}`
+    : statusLabel;
+};
+
+const buildHistoryRecordSummary = (record) => {
+  const latestUpdateLabel = formatTimestampLabel(record?.updatedAt ?? record?.createdAt);
+  const summaryParts = [
+    record?.statusHint,
+    latestUpdateLabel !== '--' ? `Latest update: ${latestUpdateLabel}` : null,
+    record?.providerName ? `Provider: ${record.providerName}` : null,
+    record?.policyNumber ? `Policy no.: ${record.policyNumber}` : null,
+  ].filter(Boolean);
+
+  return summaryParts.join(' ') || 'Completed insurance record.';
 };
 
 function InsuranceStatePanel({
@@ -228,75 +243,6 @@ function InsuranceStatePanel({
   );
 }
 
-function InquiryStatusBadge({ value }) {
-  return (
-    <View style={styles.statusBadge}>
-      <Text style={styles.statusBadgeText}>{value}</Text>
-    </View>
-  );
-}
-
-function DetailRow({ label, value }) {
-  if (!value) {
-    return null;
-  }
-
-  return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailRowLabel}>{label}</Text>
-      <Text style={styles.detailRowValue}>{value}</Text>
-    </View>
-  );
-}
-
-function InsuranceRecordCard({ title, subtitle, status, metadata = [] }) {
-  return (
-    <View style={styles.timelineCard}>
-      <View style={styles.timelineCardHeader}>
-        <View style={styles.timelineCardCopy}>
-          <Text style={styles.timelineCardTitle}>{title}</Text>
-          <Text style={styles.timelineCardSubtitle}>{subtitle}</Text>
-        </View>
-        <InquiryStatusBadge value={status} />
-      </View>
-
-      {metadata.map((item) => (
-        <DetailRow key={`${item.label}-${item.value}`} label={item.label} value={item.value} />
-      ))}
-    </View>
-  );
-}
-
-function TimelineStepRow({ step, updatedAtLabel, stepIndex, stepCount }) {
-  const isCurrent = step.state === 'current';
-  const isDone = step.state === 'done';
-
-  return (
-    <View style={styles.timelineStepRow}>
-      <View style={styles.timelineStepRail}>
-        <View
-          style={[
-            styles.timelineStepDot,
-            isDone && styles.timelineStepDotDone,
-            isCurrent && styles.timelineStepDotCurrent,
-          ]}
-        />
-      </View>
-      <View style={styles.timelineStepCopy}>
-        <View style={styles.timelineStepHeader}>
-          <Text style={styles.timelineStepTitle}>{step.label}</Text>
-          <InquiryStatusBadge value={formatWorkflowLabel(step.state)} />
-        </View>
-        <Text style={styles.timelineStepText}>
-          {timelineStepCopy[step.key] ?? 'We will keep this request updated as it moves forward.'}
-        </Text>
-        <Text style={styles.timelineStepMeta}>
-          Step {stepIndex + 1} of {stepCount} • Latest update: {updatedAtLabel}
-        </Text>
-      </View>
-    </View>
-  );
-}
 export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const accessToken = account?.accessToken ?? null;
   const userId = account?.userId ?? null;
@@ -360,6 +306,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   };
 
   const closeInsuranceMode = () => {
+    setActivePanel('home');
     setIsInInsuranceMode(false);
     setActiveModeSection('overview');
   };
@@ -381,15 +328,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       buildRequirementsChecklist({
         status: latestInquiry?.status,
         uploadedTypes: latestInquiry?.documents?.map((document) => document.documentType) ?? [],
-      }),
-    [latestInquiry],
-  );
-  const customerTimeline = useMemo(
-    () =>
-      getCustomerInsuranceTimeline({
-        status: latestInquiry?.status,
-        paymentStatus: latestInquiry?.paymentStatus,
-        renewalStatus: latestInquiry?.renewalStatus,
       }),
     [latestInquiry],
   );
@@ -431,14 +369,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return latestInquiry.statusHint;
     }
 
-    const latestRecord = claimStatusUpdates.reduce((currentLatest, record) => {
-      const currentValue = new Date(record?.updatedAt ?? record?.createdAt ?? 0).getTime();
-      const latestValue = new Date(
-        currentLatest?.updatedAt ?? currentLatest?.createdAt ?? 0,
-      ).getTime();
-
-      return currentValue > latestValue ? record : currentLatest;
-    }, null);
+    const latestRecord = getLatestInsuranceRecord(claimStatusUpdates);
 
     if (latestRecord?.statusHint) {
       return latestRecord.statusHint;
@@ -455,47 +386,25 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }),
     [latestInquiry, latestStatusUpdateLabel, missingRequiredDocuments],
   );
-  const statusPanelKey = useMemo(() => {
-    if (missingRequiredDocuments.length) {
-      return 'status';
-    }
-
-    const inquiryStatus = latestInquiry?.status ?? 'submitted';
-    const paymentWorkflowStatus = latestInquiry?.paymentStatus ?? 'not_required';
-    const renewalWorkflowStatus = latestInquiry?.renewalStatus ?? 'not_applicable';
-    const shouldShowRenewalFollowUp = shouldShowCustomerInsuranceFollowUp({
-      status: inquiryStatus,
-      paymentStatus: paymentWorkflowStatus,
-      renewalStatus: renewalWorkflowStatus,
-      followUpType: 'renewal',
-    });
-    const shouldShowPaymentFollowUp =
-      shouldShowCustomerInsuranceFollowUp({
-        status: inquiryStatus,
-        paymentStatus: paymentWorkflowStatus,
-        renewalStatus: renewalWorkflowStatus,
-        followUpType: 'payment',
-      }) &&
-      (inquiryStatus === 'payment_pending' ||
-        ['awaiting_payment', 'proof_submitted', 'verifying', 'overdue'].includes(
-          paymentWorkflowStatus,
-        ));
-
-    if (shouldShowRenewalFollowUp) {
-      return 'renewal';
-    }
-
-    if (shouldShowPaymentFollowUp) {
-      return 'payment';
-    }
-
-    return 'status';
-  }, [latestInquiry, missingRequiredDocuments]);
-  const currentTimelineStepLabel =
-    (
-      customerTimeline.find((step) => step.state === 'current') ??
-      customerTimeline[customerTimeline.length - 1]
-    )?.label;
+  const historySummary = claimStatusUpdates.length
+    ? `${claimStatusUpdates.length} recorded insurance update${claimStatusUpdates.length === 1 ? '' : 's'} ${claimStatusUpdates.length === 1 ? 'is' : 'are'} already available for this vehicle.`
+    : 'Vehicle-level insurance records will appear here after staff close and record a customer-safe case.';
+  const latestHistoryRecord = useMemo(
+    () => getLatestInsuranceRecord(claimStatusUpdates),
+    [claimStatusUpdates],
+  );
+  const historyLatestUpdateLabel =
+    latestHistoryRecord?.statusHint ??
+    formatTimestampLabel(latestHistoryRecord?.updatedAt ?? latestHistoryRecord?.createdAt);
+  const historyStatusState = useMemo(
+    () => ({
+      title: claimStatusUpdates.length ? 'Completed records' : 'No history yet',
+      summary: historySummary,
+      latestUpdateLabel: historyLatestUpdateLabel,
+      timeline: [],
+    }),
+    [claimStatusUpdates.length, historyLatestUpdateLabel, historySummary],
+  );
   const heroState = useMemo(
     () =>
       buildCustomerInsuranceHeroState({
@@ -1243,33 +1152,24 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return;
     }
 
-    if (section === 'status') {
-      setActivePanel(statusPanelKey);
+    if (section === 'documents') {
+      handleOpenPanel(section);
       return;
     }
 
-    handleOpenPanel(section);
+    setActivePanel(section);
   };
-  const paymentStatusLabel = formatWorkflowLabel(latestInquiry?.paymentStatus ?? 'not_required');
-  const renewalStatusLabel = formatWorkflowLabel(latestInquiry?.renewalStatus ?? 'not_applicable');
-  const currentStatusDestinationKey = activeModeSection === 'status' ? statusPanelKey : activePanel;
-  const historySummary = claimStatusUpdates.length
-    ? `${claimStatusUpdates.length} recorded insurance update${claimStatusUpdates.length === 1 ? '' : 's'} ${claimStatusUpdates.length === 1 ? 'is' : 'are'} already available for this vehicle.`
-    : 'Vehicle-level insurance records will appear here after staff close and record a customer-safe case.';
-
-  useEffect(() => {
-    if (!isInInsuranceMode || activeModeSection !== 'status' || activePanel === statusPanelKey) {
-      return;
-    }
-
-    setActivePanel(statusPanelKey);
-  }, [activeModeSection, activePanel, isInInsuranceMode, statusPanelKey]);
 
   const heroSubtitle = hasSession
     ? 'Start a request quickly, upload the right documents, and follow review, payment, and renewal prompts without exposing staff-only workflow details.'
     : 'Sign in as a customer to start an insurance request and see customer-safe review, payment, and renewal updates.';
   const insuranceModeUsesPanelScroll = isInInsuranceMode &&
-    (activeModeSection === 'request' || activeModeSection === 'documents');
+    (
+      activeModeSection === 'request' ||
+      activeModeSection === 'documents' ||
+      activeModeSection === 'status' ||
+      activeModeSection === 'history'
+    );
   const screenContent = (
     <View style={[styles.content, insuranceModeUsesPanelScroll && styles.fixedModeContent]}>
           <View style={styles.heroCard}>
@@ -1456,139 +1356,29 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
                 {activeModeSection === 'status' ? (
                   <InsuranceStatusDetailPanel
-                    eyebrow={
-                      currentStatusDestinationKey === 'renewal'
-                        ? 'Renewal'
-                        : currentStatusDestinationKey === 'payment'
-                        ? 'Payment'
-                        : 'Status'
-                    }
-                    title={
-                      currentStatusDestinationKey === 'renewal'
-                        ? 'Renewal follow-up'
-                        : currentStatusDestinationKey === 'payment'
-                        ? 'Payment follow-up'
-                        : 'Current request status'
-                    }
-                    subtitle={
-                      currentStatusDestinationKey === 'renewal'
-                        ? 'Watch renewal prompts here so you can respond quickly when a quote, reminder, or next step is ready.'
-                        : currentStatusDestinationKey === 'payment'
-                        ? 'Review the latest customer-safe payment instruction here, then head to documents if you need to send proof of payment.'
-                        : 'Review the latest customer-safe status update, visible timeline, and next step for this request.'
-                    }
-                    statusLabel={
-                      currentStatusDestinationKey === 'renewal'
-                        ? renewalStatusLabel
-                        : currentStatusDestinationKey === 'payment'
-                        ? paymentStatusLabel
-                        : formatWorkflowLabel(latestInquiry?.status ?? 'submitted')
-                    }
-                    summary={
-                      currentStatusDestinationKey === 'renewal'
-                        ? renewalSummary.message
-                        : currentStatusDestinationKey === 'payment'
-                        ? paymentSummary.message
-                        : statusState.summary
-                    }
-                    onBack={() => handleChangeModeSection('overview')}
+                    eyebrow="Status"
+                    title="Current request status"
+                    subtitle="Review the current blocker, latest update, and next action in one place."
+                    statusState={statusState}
+                    footerLabel={statusState.ctaRouteKey === 'documents' ? statusState.ctaLabel : null}
+                    onFooterPress={() => {
+                      if (statusState.ctaRouteKey === 'documents') {
+                        handleChangeModeSection('documents');
+                      }
+                    }}
                   >
-                    <InsuranceStatePanel
-                      icon={
-                        currentStatusDestinationKey === 'renewal'
-                          ? 'calendar-refresh'
-                          : currentStatusDestinationKey === 'payment'
-                          ? 'credit-card-check-outline'
-                          : 'clipboard-text-clock-outline'
-                      }
-                      title={
-                        currentStatusDestinationKey === 'renewal'
-                          ? renewalSummary.title
-                          : currentStatusDestinationKey === 'payment'
-                          ? paymentSummary.title
-                          : statusState.title
-                      }
-                      message={
-                        currentStatusDestinationKey === 'renewal'
-                          ? renewalSummary.message
-                          : currentStatusDestinationKey === 'payment'
-                          ? paymentSummary.message
-                          : statusState.latestUpdateLabel
-                      }
-                      tone={
-                        currentStatusDestinationKey === 'renewal'
-                          ? renewalSummary.tone
-                          : currentStatusDestinationKey === 'payment'
-                          ? paymentSummary.tone
-                          : 'default'
-                      }
-                    />
-                    <View style={styles.timelineCard}>
-                      <View style={styles.timelineCardHeader}>
-                        <View style={styles.timelineCardCopy}>
-                          <Text style={styles.timelineCardTitle}>
-                            {currentStatusDestinationKey === 'renewal'
-                              ? 'Renewal tracking'
-                              : currentStatusDestinationKey === 'payment'
-                              ? 'Current request snapshot'
-                              : 'Status timeline'}
-                          </Text>
-                          <Text style={styles.timelineCardSubtitle}>
-                            {currentStatusDestinationKey === 'renewal'
-                              ? 'Renewal follow-up stays customer-safe here while staff continue the internal workflow.'
-                              : currentStatusDestinationKey === 'payment'
-                              ? 'Keep the latest request state handy before you upload a receipt or ask for help.'
-                              : 'Review the latest customer-safe request update and next visible step.'}
-                          </Text>
-                        </View>
-                        <InquiryStatusBadge
-                          value={
-                            currentStatusDestinationKey === 'renewal'
-                              ? renewalStatusLabel
-                              : currentStatusDestinationKey === 'payment'
-                              ? paymentStatusLabel
-                              : formatWorkflowLabel(latestInquiry?.status ?? 'submitted')
-                          }
-                        />
-                      </View>
-                      <DetailRow label="Latest update" value={statusState.latestUpdateLabel} />
-                      <DetailRow label="Current step" value={currentTimelineStepLabel} />
-                    </View>
-                    {currentStatusDestinationKey === 'payment' ? (
-                      latestInquiry?.id && latestInquiryCanAcceptDocuments ? (
-                        <TouchableOpacity
-                          style={styles.secondaryActionButton}
-                          onPress={() => {
-                            setActiveModeSection('documents');
-                            openDocumentsPanel({
-                              documentType: 'proof_of_payment',
-                              message: 'Use the documents workspace to send proof of payment.',
-                            });
-                          }}
-                          activeOpacity={0.88}
-                        >
-                          <MaterialCommunityIcons
-                            name="file-upload-outline"
-                            size={18}
-                            color={colors.primary}
-                          />
-                          <Text style={styles.secondaryActionButtonText}>Send proof of payment</Text>
-                        </TouchableOpacity>
-                      ) : latestInquiry?.id ? (
-                        <View style={styles.emptyDocumentCard}>
-                          <Text style={styles.emptyDocumentTitle}>Proof upload unavailable</Text>
-                          <Text style={styles.emptyDocumentText}>
-                            This inquiry is no longer accepting supporting documents, so proof of payment cannot be added from this payment view.
-                          </Text>
-                        </View>
-                      ) : (
-                        <View style={styles.emptyDocumentCard}>
-                          <Text style={styles.emptyDocumentTitle}>No payment request yet</Text>
-                          <Text style={styles.emptyDocumentText}>
-                            Start an insurance request first so this payment view can point you to the right proof-of-payment upload workspace.
-                          </Text>
-                        </View>
-                      )
+                    {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
+                      <InsuranceSectionCard
+                        title="Payment"
+                        helper={paymentSummary.message}
+                      />
+                    ) : null}
+
+                    {latestInquiry?.renewalStatus && latestInquiry.renewalStatus !== 'not_applicable' ? (
+                      <InsuranceSectionCard
+                        title="Renewal"
+                        helper={buildRenewalPrompt(latestInquiry).message}
+                      />
                     ) : null}
                   </InsuranceStatusDetailPanel>
                 ) : null}
@@ -1597,33 +1387,22 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                   <InsuranceStatusDetailPanel
                     eyebrow="History"
                     title="Recorded vehicle updates"
-                    subtitle="Review the customer-safe insurance records already logged for your selected vehicle."
-                    statusLabel={String(claimStatusUpdates.length)}
-                    summary={historySummary}
-                    onBack={() => handleChangeModeSection('overview')}
+                    subtitle="Completed customer-safe insurance records for this vehicle."
+                    statusState={historyStatusState}
                   >
                     {claimStatusUpdates.length ? (
                       claimStatusUpdates.map((record) => (
-                        <InsuranceRecordCard
-                          key={record.id}
-                          title={`${record.inquiryTypeLabel} vehicle record`}
-                          subtitle={record.statusHint}
-                          status={formatWorkflowLabel(record.status)}
-                          metadata={[
-                            { label: 'Recorded', value: formatTimestampLabel(record.createdAt) },
-                            { label: 'Latest update', value: formatTimestampLabel(record.updatedAt) },
-                            { label: 'Provider', value: record.providerName },
-                            { label: 'Policy no.', value: record.policyNumber },
-                          ]}
+                        <InsuranceSectionCard
+                          key={`${record.status}-${record.updatedAt ?? record.createdAt ?? record.id ?? record.policyNumber ?? record.inquiryTypeLabel ?? 'history'}`}
+                          title={buildHistoryRecordTitle(record)}
+                          helper={buildHistoryRecordSummary(record)}
                         />
                       ))
                     ) : (
-                      <View style={styles.emptyDocumentCard}>
-                        <Text style={styles.emptyDocumentTitle}>No insurance history yet</Text>
-                        <Text style={styles.emptyDocumentText}>
-                          Once staff close and record a customer-safe insurance case for this vehicle, it will show up here.
-                        </Text>
-                      </View>
+                      <InsuranceSectionCard
+                        title="No completed records yet"
+                        helper="Completed insurance records will appear here after staff close and record them."
+                      />
                     )}
                   </InsuranceStatusDetailPanel>
                 ) : null}
@@ -1639,6 +1418,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               />
             ) : null}
 
+        </View>
       </View>
   );
 

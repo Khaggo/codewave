@@ -19,7 +19,6 @@ test('insurance screen uses the hybrid panel architecture', () => {
   assert.match(source, /const \[activeModeSection, setActiveModeSection\] = useState\('overview'\);/)
   assert.match(source, /const entryState = useMemo\(/)
   assert.match(source, /const overviewState = useMemo\(/)
-  assert.match(source, /const statusPanelKey = useMemo\(\(\) => {/)
   assert.doesNotMatch(source, /statusState\.title === 'Renewal follow-up'/)
   assert.match(source, /const handleChangeModeSection = \(section\) => {/)
   assert.match(
@@ -28,22 +27,14 @@ test('insurance screen uses the hybrid panel architecture', () => {
   )
   assert.match(
     source,
-    /const statusPanelKey = useMemo\(\(\) => {[\s\S]*?return 'renewal';[\s\S]*?return 'payment';[\s\S]*?return 'status';[\s\S]*?}\s*, \[[\s\S]*?\]\);/s,
-  )
-  assert.match(
-    source,
-    /const handleChangeModeSection = \(section\) => {\s*setActiveModeSection\(section\);[\s\S]*?if \(section === 'overview'\) {\s*setActivePanel\('home'\);[\s\S]*?return;\s*}[\s\S]*?if \(section === 'status'\) {[\s\S]*?setActivePanel\(statusPanelKey\);[\s\S]*?return;\s*}[\s\S]*?handleOpenPanel\(section\);[\s\S]*?};/s,
+    /const handleChangeModeSection = \(section\) => {\s*setActiveModeSection\(section\);[\s\S]*?if \(section === 'overview'\) {\s*setActivePanel\('home'\);[\s\S]*?return;\s*}[\s\S]*?if \(section === 'documents'\) {[\s\S]*?handleOpenPanel\(section\);[\s\S]*?return;\s*}[\s\S]*?setActivePanel\(section\);[\s\S]*?};/s,
   )
   assert.match(
     source,
     /{!isInInsuranceMode \? \(\s*<InsuranceEntryPanel[\s\S]*?onEnterMode=\{\(\) => openInsuranceMode\('overview'\)\}[\s\S]*?\) : \(\s*<InsuranceModeShell[\s\S]*?activeSection=\{activeModeSection\}[\s\S]*?onChangeSection=\{handleChangeModeSection\}[\s\S]*?activeModeSection === 'overview'[\s\S]*?<InsuranceHomePanel[\s\S]*?activeModeSection === 'request'[\s\S]*?<InsuranceRequestPanel[\s\S]*?activeModeSection === 'documents'[\s\S]*?<InsuranceDocumentsPanel[\s\S]*?activeModeSection === 'status'[\s\S]*?<InsuranceStatusDetailPanel[\s\S]*?activeModeSection === 'history'[\s\S]*?<InsuranceStatusDetailPanel[\s\S]*?\)}/s,
   )
-  assert.match(
-    source,
-    /const currentStatusDestinationKey = activeModeSection === 'status' \? statusPanelKey : activePanel;/,
-  )
-  assert.match(source, /currentStatusDestinationKey === 'payment' \? \(/)
-  assert.match(source, /: statusState\.summary/)
+  assert.doesNotMatch(source, /statusPanelKey/)
+  assert.doesNotMatch(source, /currentStatusDestinationKey/)
 })
 
 test('task 3 panel dependencies are tracked for clean checkouts', () => {
@@ -81,6 +72,8 @@ test('insurance mode renders overview, request, docs, status, and history destin
     '<InsuranceRequestPanel',
     '<InsuranceDocumentsPanel',
     '<InsuranceStatusDetailPanel',
+    'eyebrow="Status"',
+    'eyebrow="History"',
   ]
 
   for (const fragment of requiredFragments) {
@@ -146,7 +139,7 @@ test('request and documents sections own scrolling when sticky footers are enabl
 
   assert.match(
     screenSource,
-    /const insuranceModeUsesPanelScroll = isInInsuranceMode &&\s*\(activeModeSection === 'request' \|\| activeModeSection === 'documents'\);/,
+    /const insuranceModeUsesPanelScroll = isInInsuranceMode &&\s*\(\s*activeModeSection === 'request' \|\|[\s\S]*?activeModeSection === 'documents' \|\|[\s\S]*?activeModeSection === 'status' \|\|[\s\S]*?activeModeSection === 'history'[\s\S]*?\);/,
   )
   assert.match(
     screenSource,
@@ -163,6 +156,17 @@ test('request and documents sections own scrolling when sticky footers are enabl
     documentsSource,
     /<ScrollView[\s\S]*?contentContainerStyle=\{styles\.content\}[\s\S]*?showsVerticalScrollIndicator=\{false\}[\s\S]*?>/,
   )
+})
+
+test('status detail panel exposes a unified tracking surface with timeline and optional footer CTA', () => {
+  const panelSource = read('./insurance/InsuranceStatusDetailPanel.js')
+
+  assert.match(panelSource, /import \{ ScrollView, StyleSheet, Text, TouchableOpacity, View \} from 'react-native'/)
+  assert.match(panelSource, /statusState\.timeline\.map\(\(item\) => \(/)
+  assert.match(panelSource, /title="Latest update"/)
+  assert.match(panelSource, /const showsFooter = Boolean\(footerLabel && onFooterPress\)/)
+  assert.match(panelSource, /\{showsFooter \? \(/)
+  assert.match(panelSource, /paddingBottom:\s*140,/)
 })
 
 test('task 4 follow-up keeps footer space constrained, restores attached files, and uses stable status data', () => {
@@ -198,7 +202,8 @@ test('task 4 follow-up keeps footer space constrained, restores attached files, 
     /const latestStatusUpdateLabel = useMemo\(\(\) => \{\s*if \(latestInquiry\?\.updatedAt\) \{\s*return formatTimestampLabel\(latestInquiry\.updatedAt\);/s,
   )
   assert.match(screenSource, /latestUpdateLabel: latestStatusUpdateLabel,/)
-  assert.match(screenSource, /const currentStatusDestinationKey = activeModeSection === 'status' \? statusPanelKey : activePanel;/)
-  assert.match(screenSource, /currentStatusDestinationKey === 'renewal'/)
-  assert.match(screenSource, /currentStatusDestinationKey === 'payment'/)
+  assert.match(screenSource, /const latestHistoryRecord = useMemo\(\s*\(\) => getLatestInsuranceRecord\(claimStatusUpdates\),/s)
+  assert.match(screenSource, /const historyStatusState = useMemo\(/)
+  assert.match(screenSource, /footerLabel=\{statusState\.ctaRouteKey === 'documents' \? statusState\.ctaLabel : null\}/)
+  assert.match(screenSource, /statusState=\{historyStatusState\}/)
 })
