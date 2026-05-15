@@ -307,6 +307,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setStatusTabFocus('summary');
   }, [selectedVehicleId]);
 
+  useEffect(() => {
+    if (!hasSession || !ownedVehicles.length) {
+      setIsVehiclePickerOpen(false);
+    }
+  }, [hasSession, ownedVehicles.length]);
+
   const selectedVehicle =
     ownedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
   const selectedVehicleLabel = selectedVehicle
@@ -863,6 +869,15 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setDocumentUploadMessage('');
   };
 
+  const handleOpenVehiclePicker = () => {
+    if (!hasSession || !ownedVehicles.length) {
+      setIsVehiclePickerOpen(false);
+      return;
+    }
+
+    setIsVehiclePickerOpen(true);
+  };
+
   const handleSelectVehicle = (vehicleId) => {
     setSelectedVehicleId(vehicleId);
     setTrackingMessage('');
@@ -1264,25 +1279,27 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               >
                 <Pressable style={styles.sheetCard}>
                   <Text style={styles.sheetTitle}>Choose vehicle</Text>
-                  {ownedVehicles.map((vehicle) => {
-                    const vehicleLabel = buildOwnedVehicleInsuranceLabel(vehicle);
-                    const selected = vehicle.id === selectedVehicleId;
+                  <ScrollView style={styles.sheetList} contentContainerStyle={styles.sheetListContent}>
+                    {ownedVehicles.map((vehicle) => {
+                      const vehicleLabel = buildOwnedVehicleInsuranceLabel(vehicle);
+                      const selected = vehicle.id === selectedVehicleId;
 
-                    return (
-                      <TouchableOpacity
-                        key={vehicle.id}
-                        style={[styles.sheetRow, selected && styles.sheetRowSelected]}
-                        onPress={() => {
-                          handleSelectVehicle(vehicle.id);
-                          setIsVehiclePickerOpen(false);
-                        }}
-                        activeOpacity={0.88}
-                      >
-                        <Text style={styles.sheetRowLabel}>{vehicleLabel}</Text>
-                        {selected ? <Text style={styles.sheetRowMeta}>Current</Text> : null}
-                      </TouchableOpacity>
-                    );
-                  })}
+                      return (
+                        <TouchableOpacity
+                          key={vehicle.id}
+                          style={[styles.sheetRow, selected && styles.sheetRowSelected]}
+                          onPress={() => {
+                            handleSelectVehicle(vehicle.id);
+                            setIsVehiclePickerOpen(false);
+                          }}
+                          activeOpacity={0.88}
+                        >
+                          <Text style={styles.sheetRowLabel}>{vehicleLabel}</Text>
+                          {selected ? <Text style={styles.sheetRowMeta}>Current</Text> : null}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
                 </Pressable>
               </Pressable>
             </Modal>
@@ -1327,7 +1344,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               activeSection={activeInsuranceTab}
               onChangeSection={handleChangeInsuranceTab}
               selectedVehicleLabel={selectedVehicleLabel}
-              onOpenVehiclePicker={() => setIsVehiclePickerOpen(true)}
+              onOpenVehiclePicker={handleOpenVehiclePicker}
             >
               {activeInsuranceTab === 'home' ? (
                 <InsuranceHomePanel
@@ -1560,6 +1577,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: 20,
     gap: 10,
+  },
+  sheetList: {
+    maxHeight: 360,
+  },
+  sheetListContent: {
+    paddingBottom: 4,
   },
   sheetTitle: {
     color: colors.text,
