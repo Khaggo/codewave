@@ -19,6 +19,8 @@ import { ApiError } from '@/lib/authClient'
 import {
   getInsuranceInquiryById,
   listInsuranceInquiries,
+  sendInsuranceBroadcasts,
+  sendInsuranceReminders,
   updateInsuranceInquiryStatus,
 } from '@/lib/insuranceStaffClient'
 import {
@@ -26,12 +28,16 @@ import {
   insuranceReviewStaffRoles,
 } from '@/lib/api/generated/insurance/staff-web-insurance'
 import {
+  buildInsuranceBroadcastRequest,
+  buildInsuranceReminderRequest,
   buildInsuranceTableRow,
   formatStatusLabel,
   getInsuranceDetailTabs,
   getNextInsuranceWorkspaceViewState,
   getInsuranceSummaryCards,
   shouldApplyInsuranceAsyncResult,
+  summarizeInsuranceBroadcastResult,
+  summarizeInsuranceReminderResult,
 } from './insuranceView.mjs'
 
 const INQUIRY_STATUS_OPTIONS = [
@@ -48,7 +54,6 @@ const INQUIRY_STATUS_OPTIONS = [
   'cancelled',
 ]
 
-const DOCUMENT_STATUS_OPTIONS = ['incomplete', 'under_verification', 'complete', 'rejected']
 const PAYMENT_STATUS_OPTIONS = ['not_required', 'unpaid', 'proof_submitted', 'verifying', 'paid', 'overdue']
 const RENEWAL_STATUS_OPTIONS = [
   'not_applicable',
@@ -58,6 +63,9 @@ const RENEWAL_STATUS_OPTIONS = [
   'renewed',
   'expired',
 ]
+const REMINDER_TYPE_OPTIONS = ['missing_documents', 'payment_pending', 'overdue_payment', 'renewal_follow_up']
+const REMINDER_TARGET_MODE_OPTIONS = ['single_case', 'selected_cases', 'filtered_results']
+const BROADCAST_TARGET_MODE_OPTIONS = ['selected_cases', 'filtered_results']
 
 const POSITIVE_BADGE_VALUES = new Set(['approved', 'active', 'complete', 'paid', 'renewed'])
 const WARNING_BADGE_VALUES = new Set([
@@ -92,15 +100,11 @@ const DEFAULT_FILTERS = {
 
 const DEFAULT_UPDATE_DRAFT = {
   status: 'submitted',
-  documentStatus: 'incomplete',
-  paymentStatus: 'not_required',
-  renewalStatus: 'not_applicable',
-  paymentDueAt: '',
-  policyExpiryAt: '',
-  renewalDueAt: '',
-  assignedStaffId: '',
   reviewNotes: '',
 }
+const DEFAULT_REMINDER_TYPE = 'missing_documents'
+const DEFAULT_REMINDER_TARGET_MODE = 'selected_cases'
+const DEFAULT_BROADCAST_TARGET_MODE = 'selected_cases'
 
 const normalizeFilterValue = (value) => (value && value !== 'all' ? value : undefined)
 
@@ -109,6 +113,19 @@ const getBadgeClassName = (value) => {
   if (WARNING_BADGE_VALUES.has(value)) return 'badge-orange'
   if (INFO_BADGE_VALUES.has(value)) return 'badge-blue'
   return 'badge-gray'
+}
+
+const formatReminderTargetModeLabel = (value) => {
+  switch (value) {
+    case 'single_case':
+      return 'Single Case'
+    case 'selected_cases':
+      return 'Selected Cases'
+    case 'filtered_results':
+      return 'Filtered Results'
+    default:
+      return formatStatusLabel(value)
+  }
 }
 
 const formatDateTime = (value) => {
@@ -402,6 +419,18 @@ export default function InsuranceContent() {
   const [updateMessage, setUpdateMessage] = useState('')
   const [updateDraft, setUpdateDraft] = useState(DEFAULT_UPDATE_DRAFT)
   const [reloadTick, setReloadTick] = useState(0)
+  const [selectedInquiryIds, setSelectedInquiryIds] = useState([])
+  const [reminderType, setReminderType] = useState(DEFAULT_REMINDER_TYPE)
+  const [reminderTargetMode, setReminderTargetMode] = useState(DEFAULT_REMINDER_TARGET_MODE)
+  const [reminderState, setReminderState] = useState('idle')
+  const [reminderMessage, setReminderMessage] = useState('')
+  const [reminderResults, setReminderResults] = useState([])
+  const [broadcastTitle, setBroadcastTitle] = useState('')
+  const [broadcastMessage, setBroadcastMessage] = useState('')
+  const [broadcastTargetMode, setBroadcastTargetMode] = useState(DEFAULT_BROADCAST_TARGET_MODE)
+  const [broadcastState, setBroadcastState] = useState('idle')
+  const [broadcastStatusMessage, setBroadcastStatusMessage] = useState('')
+  const [broadcastResults, setBroadcastResults] = useState([])
   const previousSelectedInquiryIdRef = useRef('')
   const selectedInquiryIdRef = useRef('')
   const workspaceStateRef = useRef({
@@ -551,6 +580,33 @@ export default function InsuranceContent() {
     () => filteredInquiries.map((inquiry) => buildInsuranceTableRow(inquiry)),
     [filteredInquiries],
   )
+  const selectedVisibleInquiryIds = useMemo(
+    () => filteredInquiries.filter((inquiry) => selectedInquiryIds.includes(inquiry.id)).map((inquiry) => inquiry.id),
+    [filteredInquiries, selectedInquiryIds],
+  )
+  const allVisibleSelected =
+    filteredInquiries.length > 0 && selectedVisibleInquiryIds.length === filteredInquiries.length
+  const reminderResultBreakdown = useMemo(
+    () => ({
+      skipped: reminderResults.filter((result) => result.result === 'skipped'),
+      failed: reminderResults.filter((result) => result.result === 'failed'),
+    }),
+    [reminderResults],
+  )
+  const broadcastResultBreakdown = useMemo(
+    () => ({
+      sent: broadcastResults.filter((result) => result.status === 'sent'),
+      skipped: broadcastResults.filter((result) => result.status === 'skipped'),
+      failed: broadcastResults.filter((result) => result.status === 'failed'),
+    }),
+    [broadcastResults],
+  )
+  const broadcastAudiencePreviewCount =
+    broadcastTargetMode === 'filtered_results' ? filteredInquiries.length : selectedInquiryIds.length
+  const broadcastAudiencePreviewLabel =
+    broadcastTargetMode === 'filtered_results'
+      ? `${filteredInquiries.length} visible case${filteredInquiries.length === 1 ? '' : 's'}`
+      : `${selectedInquiryIds.length} selected case${selectedInquiryIds.length === 1 ? '' : 's'}`
 
   const handleFilterChange = (field) => (event) => {
     const nextValue = event.target.value
@@ -559,6 +615,36 @@ export default function InsuranceContent() {
       ...current,
       [field]: nextValue,
     }))
+  }
+
+  useEffect(() => {
+    setSelectedInquiryIds((currentIds) =>
+      currentIds.filter((inquiryId) => inquiries.some((inquiry) => inquiry.id === inquiryId)),
+    )
+  }, [inquiries])
+
+  const toggleInquirySelection = (inquiryId) => {
+    setSelectedInquiryIds((currentIds) =>
+      currentIds.includes(inquiryId)
+        ? currentIds.filter((currentId) => currentId !== inquiryId)
+        : [...currentIds, inquiryId],
+    )
+  }
+
+  const handleToggleAllVisible = () => {
+    if (!filteredInquiries.length) {
+      return
+    }
+
+    setSelectedInquiryIds((currentIds) => {
+      const visibleIds = filteredInquiries.map((inquiry) => inquiry.id)
+
+      if (visibleIds.every((id) => currentIds.includes(id))) {
+        return currentIds.filter((id) => !visibleIds.includes(id))
+      }
+
+      return [...new Set([...currentIds, ...visibleIds])]
+    })
   }
 
   const handleRefreshDetail = async () => {
@@ -633,13 +719,6 @@ export default function InsuranceContent() {
       const updatedInquiry = await updateInsuranceInquiryStatus({
         inquiryId: requestInquiryId,
         status: updateDraft.status,
-        documentStatus: updateDraft.documentStatus,
-        paymentStatus: updateDraft.paymentStatus,
-        renewalStatus: updateDraft.renewalStatus,
-        paymentDueAt: updateDraft.paymentDueAt,
-        policyExpiryAt: updateDraft.policyExpiryAt,
-        renewalDueAt: updateDraft.renewalDueAt,
-        assignedStaffId: updateDraft.assignedStaffId,
         reviewNotes: updateDraft.reviewNotes,
         accessToken: user.accessToken,
       })
@@ -680,6 +759,73 @@ export default function InsuranceContent() {
     }
   }
 
+  const handleSendReminder = async () => {
+    if (!user?.accessToken) {
+      setReminderState('failed')
+      setReminderMessage('A valid staff session is required before sending insurance reminders.')
+      return
+    }
+
+    setReminderState('submitting')
+    setReminderMessage('')
+    setReminderResults([])
+
+    try {
+      const reminderPayload = buildInsuranceReminderRequest({
+        reminderType,
+        targetMode: reminderTargetMode,
+        selectedIds: reminderTargetMode === 'single_case' ? [selectedInquiryId] : selectedInquiryIds,
+        filters,
+      })
+
+      const reminderSummary = await sendInsuranceReminders({
+        ...reminderPayload,
+        accessToken: user.accessToken,
+      })
+
+      setReminderState('sent')
+      setReminderResults(Array.isArray(reminderSummary?.results) ? reminderSummary.results : [])
+      setReminderMessage(summarizeInsuranceReminderResult(reminderSummary))
+    } catch (error) {
+      setReminderState('failed')
+      setReminderMessage(error?.message || 'Insurance reminders could not be sent.')
+    }
+  }
+
+  const handleSendBroadcast = async () => {
+    if (!user?.accessToken) {
+      setBroadcastState('failed')
+      setBroadcastStatusMessage('A valid staff session is required before sending custom broadcasts.')
+      return
+    }
+
+    setBroadcastState('submitting')
+    setBroadcastStatusMessage('')
+    setBroadcastResults([])
+
+    try {
+      const broadcastPayload = buildInsuranceBroadcastRequest({
+        targetMode: broadcastTargetMode,
+        selectedIds: selectedInquiryIds,
+        filters,
+        title: broadcastTitle,
+        message: broadcastMessage,
+      })
+
+      const broadcastSummary = await sendInsuranceBroadcasts({
+        ...broadcastPayload,
+        accessToken: user.accessToken,
+      })
+
+      setBroadcastState('sent')
+      setBroadcastResults(Array.isArray(broadcastSummary?.results) ? broadcastSummary.results : [])
+      setBroadcastStatusMessage(summarizeInsuranceBroadcastResult(broadcastSummary))
+    } catch (error) {
+      setBroadcastState('failed')
+      setBroadcastStatusMessage(error?.message || 'Custom insurance broadcasts could not be sent.')
+    }
+  }
+
   if (!canReviewInsurance) {
     return (
       <div className="space-y-5">
@@ -702,6 +848,8 @@ export default function InsuranceContent() {
             <span className="badge badge-green">Staff list ready</span>
             <span className="badge badge-orange">Payment follow-up ready</span>
             <span className="badge badge-green">Renewal review ready</span>
+            <span className="badge badge-orange">Manual reminders ready</span>
+            <span className="badge badge-green">Custom broadcasts ready</span>
           </>
         }
       />
@@ -761,6 +909,280 @@ export default function InsuranceContent() {
         </div>
 
         {listMessage ? <div className="status-message status-message-danger mt-4">{listMessage}</div> : null}
+
+        <div className="mt-4 rounded-xl border border-surface-border bg-surface-raised px-4 py-4">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-ink-primary">Manual Reminder Send</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                Send in-app insurance reminders to the current case, checked cases, or the current server-side queue filters.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className={`badge ${selectedInquiryId ? 'badge-green' : 'badge-gray'}`}>
+                Current case: {selectedInquiryId ? 'Ready' : 'None'}
+              </span>
+              <span className={`badge ${selectedInquiryIds.length ? 'badge-orange' : 'badge-gray'}`}>
+                {selectedInquiryIds.length} selected
+              </span>
+              <span className={`badge ${filteredInquiries.length ? 'badge-blue' : 'badge-gray'}`}>
+                {filteredInquiries.length} visible
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label className="label">
+              Reminder Type
+              <select value={reminderType} onChange={(event) => setReminderType(event.target.value)} className="select">
+                {REMINDER_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {formatStatusLabel(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="label">
+              Target Mode
+              <select
+                value={reminderTargetMode}
+                onChange={(event) => setReminderTargetMode(event.target.value)}
+                className="select"
+              >
+                {REMINDER_TARGET_MODE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {formatReminderTargetModeLabel(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Queue selection</p>
+              <p className="mt-2 text-sm text-ink-primary">
+                {allVisibleSelected ? 'All visible cases selected' : `${selectedVisibleInquiryIds.length} visible selected`}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Reminder scope</p>
+              <p className="mt-2 text-sm text-ink-primary">{formatReminderTargetModeLabel(reminderTargetMode)}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button onClick={handleToggleAllVisible} disabled={!filteredInquiries.length} className="btn-secondary">
+              {allVisibleSelected ? 'Clear visible selection' : 'Select visible cases'}
+            </button>
+            <button
+              onClick={() => setSelectedInquiryIds([])}
+              disabled={!selectedInquiryIds.length}
+              className="btn-secondary"
+            >
+              Clear selected cases
+            </button>
+            <button onClick={handleSendReminder} disabled={reminderState === 'submitting'} className="btn-primary">
+              {reminderState === 'submitting' ? <RefreshCw size={14} className="animate-spin" /> : <ShieldAlert size={14} />}
+              Send Reminder
+            </button>
+          </div>
+
+          {reminderMessage ? (
+            <div
+              className={`mt-4 ${
+                reminderState === 'sent'
+                  ? 'status-message status-message-success'
+                  : 'status-message status-message-danger'
+              }`}
+            >
+              {reminderMessage}
+            </div>
+          ) : null}
+
+          {reminderResults.length ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+                <p className="text-sm font-semibold text-ink-primary">Skipped cases</p>
+                {reminderResultBreakdown.skipped.length ? (
+                  <ul className="mt-2 space-y-2 text-xs text-ink-secondary">
+                    {reminderResultBreakdown.skipped.map((result) => (
+                      <li key={`${result.inquiryId}-${result.result}`}>
+                        {result.inquiryId}: {formatStatusLabel(result.reason ?? 'skipped')}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-xs text-ink-muted">No cases were skipped in the last reminder send.</p>
+                )}
+              </div>
+              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+                <p className="text-sm font-semibold text-ink-primary">Failed cases</p>
+                {reminderResultBreakdown.failed.length ? (
+                  <ul className="mt-2 space-y-2 text-xs text-ink-secondary">
+                    {reminderResultBreakdown.failed.map((result) => (
+                      <li key={`${result.inquiryId}-${result.result}`}>
+                        {result.inquiryId}: {formatStatusLabel(result.reason ?? 'failed')}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-xs text-ink-muted">No cases failed in the last reminder send.</p>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 rounded-xl border border-surface-border bg-surface-raised px-4 py-4">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-ink-primary">Custom Broadcast Send</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                Send a custom in-app broadcast to checked cases or the currently visible insurance queue audience.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className={`badge ${selectedInquiryIds.length ? 'badge-orange' : 'badge-gray'}`}>
+                {selectedInquiryIds.length} selected
+              </span>
+              <span className={`badge ${filteredInquiries.length ? 'badge-blue' : 'badge-gray'}`}>
+                {filteredInquiries.length} visible
+              </span>
+              <span className={`badge ${broadcastResults.length ? 'badge-green' : 'badge-gray'}`}>
+                {broadcastResults.length} last result{broadcastResults.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label className="label">
+              Target Mode
+              <select
+                value={broadcastTargetMode}
+                onChange={(event) => setBroadcastTargetMode(event.target.value)}
+                className="select"
+              >
+                {BROADCAST_TARGET_MODE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {formatReminderTargetModeLabel(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Audience Preview</p>
+              <p className="mt-2 text-sm text-ink-primary">{broadcastAudiencePreviewLabel}</p>
+            </div>
+
+            <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Broadcast Scope</p>
+              <p className="mt-2 text-sm text-ink-primary">{formatReminderTargetModeLabel(broadcastTargetMode)}</p>
+            </div>
+
+            <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Message Readiness</p>
+              <p className="mt-2 text-sm text-ink-primary">
+                {broadcastTitle.trim() && broadcastMessage.trim() ? 'Ready to send' : 'Title and message required'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3">
+            <label className="label">
+              Broadcast Title
+              <input
+                value={broadcastTitle}
+                onChange={(event) => setBroadcastTitle(event.target.value)}
+                className="input"
+                maxLength={120}
+                placeholder="Insurance update for your app inbox"
+              />
+            </label>
+
+            <label className="label">
+              Broadcast Message
+              <textarea
+                value={broadcastMessage}
+                onChange={(event) => setBroadcastMessage(event.target.value)}
+                rows={4}
+                maxLength={1000}
+                className="input min-h-[140px] resize-y"
+                placeholder="Share the next action customers should take for the selected insurance audience."
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button onClick={handleToggleAllVisible} disabled={!filteredInquiries.length} className="btn-secondary">
+              {allVisibleSelected ? 'Clear visible selection' : 'Select visible cases'}
+            </button>
+            <button
+              onClick={() => setSelectedInquiryIds([])}
+              disabled={!selectedInquiryIds.length}
+              className="btn-secondary"
+            >
+              Clear selected cases
+            </button>
+            <button onClick={handleSendBroadcast} disabled={broadcastState === 'submitting'} className="btn-primary">
+              {broadcastState === 'submitting' ? (
+                <RefreshCw size={14} className="animate-spin" />
+              ) : (
+                <ShieldCheck size={14} />
+              )}
+              Send Broadcast
+            </button>
+          </div>
+
+          {broadcastStatusMessage ? (
+            <div
+              className={`mt-4 ${
+                broadcastState === 'sent'
+                  ? 'status-message status-message-success'
+                  : 'status-message status-message-danger'
+              }`}
+            >
+              {broadcastStatusMessage}
+            </div>
+          ) : null}
+
+          {broadcastResults.length ? (
+            <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+                <p className="text-sm font-semibold text-ink-primary">Broadcast Results</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className={`badge ${broadcastResultBreakdown.sent.length ? 'badge-green' : 'badge-gray'}`}>
+                    {broadcastResultBreakdown.sent.length} sent
+                  </span>
+                  <span className={`badge ${broadcastResultBreakdown.skipped.length ? 'badge-orange' : 'badge-gray'}`}>
+                    {broadcastResultBreakdown.skipped.length} skipped
+                  </span>
+                  <span className={`badge ${broadcastResultBreakdown.failed.length ? 'badge-red' : 'badge-gray'}`}>
+                    {broadcastResultBreakdown.failed.length} failed
+                  </span>
+                </div>
+                <p className="mt-3 text-xs text-ink-muted">
+                  Audience preview at send time: {broadcastAudiencePreviewCount} case
+                  {broadcastAudiencePreviewCount === 1 ? '' : 's'}.
+                </p>
+              </div>
+              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+                <p className="text-sm font-semibold text-ink-primary">Last Broadcast Results</p>
+                <ul className="mt-3 space-y-2 text-xs text-ink-secondary">
+                  {broadcastResults.map((result) => (
+                    <li key={`${result.inquiryId}-${result.customerId ?? 'no-customer'}-${result.status}`}>
+                      <span className="font-semibold text-ink-primary">{result.inquiryId}</span>
+                      {`: ${formatStatusLabel(result.status)}`}
+                      {result.customerId ? ` | ${result.customerId}` : ' | No customer linked'}
+                      {result.reason ? ` | ${formatStatusLabel(result.reason)}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
@@ -784,6 +1206,14 @@ export default function InsuranceContent() {
               <table className="data-table min-w-[920px]">
                 <thead>
                   <tr>
+                    <th>
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={handleToggleAllVisible}
+                        aria-label="Select all visible insurance cases"
+                      />
+                    </th>
                     <th>Customer</th>
                     <th>Vehicle</th>
                     <th>Status</th>
@@ -804,6 +1234,14 @@ export default function InsuranceContent() {
                         className={isSelected ? 'bg-[#f07c00]/10' : undefined}
                         style={{ cursor: 'pointer' }}
                       >
+                        <td onClick={(event) => event.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedInquiryIds.includes(inquiry.id)}
+                            onChange={() => toggleInquirySelection(inquiry.id)}
+                            aria-label={`Select insurance case ${inquiry.subject || inquiry.id}`}
+                          />
+                        </td>
                         <td>
                           <div className="space-y-1">
                             <p className="font-semibold text-ink-primary">{row.customer}</p>
@@ -898,7 +1336,7 @@ export default function InsuranceContent() {
               <div>
                 <p className="card-title">Workflow Update</p>
                 <p className="mt-1 text-xs text-ink-muted">
-                  Phase-1 fields stay editable here so staff can move status, document review, payment, and renewal follow-up together.
+                  This save form follows the live backend contract. Other workflow fields stay visible in the detail tabs for review.
                 </p>
               </div>
               <span className={`badge ${nextStatuses.length ? 'badge-green' : 'badge-gray'}`}>
@@ -929,87 +1367,6 @@ export default function InsuranceContent() {
                     </option>
                   )}
                 </select>
-              </label>
-
-              <FilterSelect
-                label="Document Status"
-                value={updateDraft.documentStatus}
-                onChange={(event) =>
-                  setUpdateDraft((current) => ({ ...current, documentStatus: event.target.value }))
-                }
-                options={DOCUMENT_STATUS_OPTIONS}
-                includeAll={false}
-                disabled={!selectedInquiry}
-              />
-
-              <FilterSelect
-                label="Payment Status"
-                value={updateDraft.paymentStatus}
-                onChange={(event) =>
-                  setUpdateDraft((current) => ({ ...current, paymentStatus: event.target.value }))
-                }
-                options={PAYMENT_STATUS_OPTIONS}
-                includeAll={false}
-                disabled={!selectedInquiry}
-              />
-
-              <FilterSelect
-                label="Renewal Status"
-                value={updateDraft.renewalStatus}
-                onChange={(event) =>
-                  setUpdateDraft((current) => ({ ...current, renewalStatus: event.target.value }))
-                }
-                options={RENEWAL_STATUS_OPTIONS}
-                includeAll={false}
-                disabled={!selectedInquiry}
-              />
-
-              <label className="label">
-                Payment Due
-                <input
-                  type="date"
-                  value={updateDraft.paymentDueAt}
-                  onChange={(event) =>
-                    setUpdateDraft((current) => ({ ...current, paymentDueAt: event.target.value }))
-                  }
-                  className="input"
-                />
-              </label>
-
-              <label className="label">
-                Policy Expiry
-                <input
-                  type="date"
-                  value={updateDraft.policyExpiryAt}
-                  onChange={(event) =>
-                    setUpdateDraft((current) => ({ ...current, policyExpiryAt: event.target.value }))
-                  }
-                  className="input"
-                />
-              </label>
-
-              <label className="label">
-                Renewal Due
-                <input
-                  type="date"
-                  value={updateDraft.renewalDueAt}
-                  onChange={(event) =>
-                    setUpdateDraft((current) => ({ ...current, renewalDueAt: event.target.value }))
-                  }
-                  className="input"
-                />
-              </label>
-
-              <label className="label">
-                Assigned Staff Id
-                <input
-                  value={updateDraft.assignedStaffId}
-                  onChange={(event) =>
-                    setUpdateDraft((current) => ({ ...current, assignedStaffId: event.target.value }))
-                  }
-                  className="input"
-                  placeholder="service-adviser-id"
-                />
               </label>
 
               <label className="label md:col-span-2">
@@ -1053,7 +1410,7 @@ export default function InsuranceContent() {
                 )}
                 Save Workflow Update
               </button>
-              <span className="badge badge-gray">Status, workflow tags, assignee, due dates, and notes</span>
+              <span className="badge badge-gray">Status and review notes only</span>
             </div>
           </div>
         </div>
