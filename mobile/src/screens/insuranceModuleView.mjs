@@ -200,6 +200,28 @@ export const buildCustomerInsuranceHomeFocus = ({
   missingRequiredDocuments = [],
   claimStatusUpdateCount = 0,
 } = {}) => {
+  if (!latestInquiry?.id) {
+    if (claimStatusUpdateCount > 0) {
+      return {
+        icon: 'history',
+        title: 'Insurance history available',
+        message: `${claimStatusUpdateCount} recorded insurance update${claimStatusUpdateCount === 1 ? '' : 's'} ${claimStatusUpdateCount === 1 ? 'is' : 'are'} already available for this vehicle.`,
+        actionLabel: 'Review history',
+        tone: 'default',
+        highlightedCardKey: 'history',
+      }
+    }
+
+    return {
+      icon: 'shield-plus-outline',
+      title: 'Start a fresh request',
+      message: 'Begin with a short concern summary, then use this same screen to upload documents and track the workflow.',
+      actionLabel: 'Start now',
+      tone: 'default',
+      highlightedCardKey: 'start',
+    }
+  }
+
   const requiredCount = Array.isArray(missingRequiredDocuments)
     ? missingRequiredDocuments.length
     : 0
@@ -240,35 +262,13 @@ export const buildCustomerInsuranceHomeFocus = ({
     }
   }
 
-  if (latestInquiry?.id) {
-    return {
-      icon: 'clipboard-check-outline',
-      title: 'Current request in view',
-      message: 'This home screen is already synced to your latest inquiry, timeline, and upload steps.',
-      actionLabel: 'Refresh status',
-      tone: 'success',
-      highlightedCardKey: 'active',
-    }
-  }
-
-  if (claimStatusUpdateCount > 0) {
-    return {
-      icon: 'history',
-      title: 'Insurance history available',
-      message: `${claimStatusUpdateCount} recorded insurance update${claimStatusUpdateCount === 1 ? '' : 's'} ${claimStatusUpdateCount === 1 ? 'is' : 'are'} already available for this vehicle.`,
-      actionLabel: 'Review history',
-      tone: 'default',
-      highlightedCardKey: 'history',
-    }
-  }
-
   return {
-    icon: 'shield-plus-outline',
-    title: 'Start a fresh request',
-    message: 'Begin with a short concern summary, then use this same screen to upload documents and track the workflow.',
-    actionLabel: 'Start now',
-    tone: 'default',
-    highlightedCardKey: 'start',
+    icon: 'clipboard-check-outline',
+    title: 'Current request in view',
+    message: 'This home screen is already synced to your latest inquiry, timeline, and upload steps.',
+    actionLabel: 'Refresh status',
+    tone: 'success',
+    highlightedCardKey: 'active',
   }
 }
 

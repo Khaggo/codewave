@@ -76,6 +76,28 @@ test('insurance home focus falls back to vehicle history once there is no active
   )
 })
 
+test('insurance home focus keeps first-run users on start even when checklist defaults would be incomplete', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceHomeFocus({
+      latestInquiry: null,
+      missingRequiredDocuments: [
+        { type: 'or_cr', label: 'OR/CR' },
+        { type: 'policy', label: 'Policy copy' },
+      ],
+      claimStatusUpdateCount: 0,
+    }),
+    {
+      icon: 'shield-plus-outline',
+      title: 'Start a fresh request',
+      message:
+        'Begin with a short concern summary, then use this same screen to upload documents and track the workflow.',
+      actionLabel: 'Start now',
+      tone: 'default',
+      highlightedCardKey: 'start',
+    },
+  )
+})
+
 test('requirements checklist separates required and optional documents', () => {
   const checklist = buildRequirementsChecklist({
     status: 'needs_documents',

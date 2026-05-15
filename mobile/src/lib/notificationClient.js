@@ -86,6 +86,7 @@ const sourceTypeChannelMap = {
 };
 
 const notificationUnreadStatuses = new Set(['queued', 'sent', 'failed']);
+const notificationActionableStatuses = new Set(['queued', 'sent', 'failed']);
 
 const notificationDisplayStateByStatus = {
   cancelled: 'cancelled_hidden',
@@ -341,6 +342,22 @@ const normalizeNotificationChannel = (notification) => {
   return 'email';
 };
 
+const isCustomerNotificationActionable = ({ category, sourceType, channel, status }) => {
+  if (!notificationActionableStatuses.has(status)) {
+    return false;
+  }
+
+  if (channel === 'in_app') {
+    return true;
+  }
+
+  if (category === 'insurance_update' || sourceType === 'insurance_inquiry') {
+    return true;
+  }
+
+  return false;
+};
+
 export const normalizeCustomerNotificationPreferences = (preferences) => {
   if (!preferences || typeof preferences !== 'object') {
     return null;
@@ -368,12 +385,19 @@ export const normalizeCustomerNotification = (notification) => {
   const syncMetadata = normalizeNotificationSyncMetadata(notification);
   const timestamp = pickNotificationTimestamp(notification);
   const status = notification.status ?? 'queued';
+  const channel = normalizeNotificationChannel(notification);
+  const requiresAction = isCustomerNotificationActionable({
+    category: notification.category ?? null,
+    sourceType: notification.sourceType ?? null,
+    channel,
+    status,
+  });
 
   return {
     id: notification.id ?? notification.dedupeKey ?? null,
     key: notification.id ?? notification.dedupeKey ?? `notification-${notification.sourceId ?? 'unknown'}`,
     category: notification.category ?? null,
-    channel: normalizeNotificationChannel(notification),
+    channel,
     sourceType: notification.sourceType ?? null,
     sourceId: notification.sourceId ?? null,
     title: trimOrNull(notification.title) ?? 'Customer notification',
@@ -395,6 +419,7 @@ export const normalizeCustomerNotification = (notification) => {
     readStateSource: 'local-session-only',
     canPersistReadState: false,
     unread: notificationUnreadStatuses.has(status),
+    requiresAction,
     consistencyModel: syncMetadata.consistencyModel,
     ownerDomain: syncMetadata.ownerDomain,
     sourceDomain: syncMetadata.sourceDomain,
@@ -427,17 +452,17 @@ export const markAllCustomerNotificationsReadLocally = (notifications) =>
 export const buildCustomerNotificationPanelSummary = (notifications) => {
   const normalizedNotifications = asArray(notifications).filter(Boolean);
   const unreadCount = normalizedNotifications.filter((notification) => notification.unread).length;
-  const actionNeededCount = unreadCount;
+  const actionNeededCount = normalizedNotifications.filter((notification) => notification.requiresAction).length;
   const informationalCount = Math.max(normalizedNotifications.length - actionNeededCount, 0);
 
   const reminderLabel =
     actionNeededCount === 1
-      ? '1 reminder needs your attention'
-      : `${actionNeededCount} reminders need your attention`;
+      ? '1 reminder still needs follow-up'
+      : `${actionNeededCount} reminders still need follow-up`;
   const updateLabel =
     informationalCount === 1
-      ? '1 update is only for visibility'
-      : `${informationalCount} updates are only for visibility`;
+      ? '1 update is for visibility only'
+      : `${informationalCount} updates are for visibility only`;
 
   return {
     unreadCount,
@@ -447,7 +472,7 @@ export const buildCustomerNotificationPanelSummary = (notifications) => {
       actionNeededCount > 0
         ? reminderLabel
         : normalizedNotifications.length > 0
-          ? 'Everything is already reviewed'
+          ? 'No active follow-up reminders in view'
           : 'No reminders in view yet',
     secondaryTitle:
       normalizedNotifications.length > 0

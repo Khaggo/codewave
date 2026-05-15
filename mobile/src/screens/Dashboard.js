@@ -1157,7 +1157,8 @@ function ProfileAvatarButton({
 }
 
 function NotificationRow({ item, onDismiss, onOpen }) {
-  const requiresAction = item.unread;
+  const requiresAction = item.requiresAction;
+  const statusLabel = requiresAction ? (item.unread ? 'Action needed' : 'Still pending') : (item.unread ? 'New update' : 'Viewed');
 
   return (
     <View style={styles.notificationRow}>
@@ -1185,7 +1186,7 @@ function NotificationRow({ item, onDismiss, onOpen }) {
                   : styles.notificationStatusPillTextInformational,
               ]}
             >
-              {requiresAction ? 'Action needed' : 'Reviewed'}
+              {statusLabel}
             </Text>
           </View>
         </View>

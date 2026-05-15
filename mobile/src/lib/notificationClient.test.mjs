@@ -30,6 +30,7 @@ test('normalizeCustomerNotification keeps in-app insurance reminders visible and
   assert.equal(normalized.readStateSource, 'local-session-only');
   assert.equal(normalized.canPersistReadState, false);
   assert.equal(normalized.unread, true);
+  assert.equal(normalized.requiresAction, true);
 });
 
 test('markCustomerNotificationReadLocally sets sent notifications to delivered_local_read', () => {
@@ -48,6 +49,7 @@ test('markCustomerNotificationReadLocally sets sent notifications to delivered_l
   assert.equal(locallyRead.status, 'sent');
   assert.equal(locallyRead.displayState, 'delivered_local_read');
   assert.equal(locallyRead.unread, false);
+  assert.equal(locallyRead.requiresAction, true);
   assert.equal(locallyRead.readStateSource, 'local-session-only');
   assert.equal(locallyRead.canPersistReadState, false);
 });
@@ -147,7 +149,7 @@ test('buildCustomerNotificationPanelSummary separates action-needed reminders fr
     unreadCount: 2,
     actionNeededCount: 2,
     informationalCount: 1,
-    primaryTitle: '2 reminders need your attention',
-    secondaryTitle: '1 update is only for visibility',
+    primaryTitle: '2 reminders still need follow-up',
+    secondaryTitle: '1 update is for visibility only',
   });
 });
