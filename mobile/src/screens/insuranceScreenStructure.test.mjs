@@ -19,6 +19,8 @@ test('insurance screen uses the hybrid panel architecture', () => {
   assert.match(source, /const \[activeModeSection, setActiveModeSection\] = useState\('overview'\);/)
   assert.match(source, /const entryState = useMemo\(/)
   assert.match(source, /const overviewState = useMemo\(/)
+  assert.match(source, /const statusPanelKey = useMemo\(\(\) => {/)
+  assert.doesNotMatch(source, /statusState\.title === 'Renewal follow-up'/)
   assert.match(source, /const handleChangeModeSection = \(section\) => {/)
   assert.match(
     source,
@@ -26,12 +28,22 @@ test('insurance screen uses the hybrid panel architecture', () => {
   )
   assert.match(
     source,
-    /const handleChangeModeSection = \(section\) => {\s*setActiveModeSection\(section\);[\s\S]*?if \(section === 'overview'\) {\s*setActivePanel\('home'\);[\s\S]*?return;\s*}[\s\S]*?if \(section === 'status'\) {[\s\S]*?setActivePanel\([\s\S]*?\);[\s\S]*?return;\s*}[\s\S]*?handleOpenPanel\(section\);[\s\S]*?};/s,
+    /const statusPanelKey = useMemo\(\(\) => {[\s\S]*?return 'renewal';[\s\S]*?return 'payment';[\s\S]*?return 'status';[\s\S]*?}\s*, \[[\s\S]*?\]\);/s,
+  )
+  assert.match(
+    source,
+    /const handleChangeModeSection = \(section\) => {\s*setActiveModeSection\(section\);[\s\S]*?if \(section === 'overview'\) {\s*setActivePanel\('home'\);[\s\S]*?return;\s*}[\s\S]*?if \(section === 'status'\) {[\s\S]*?setActivePanel\(statusPanelKey\);[\s\S]*?return;\s*}[\s\S]*?handleOpenPanel\(section\);[\s\S]*?};/s,
   )
   assert.match(
     source,
     /{!isInInsuranceMode \? \(\s*<InsuranceEntryPanel[\s\S]*?onEnterMode=\{\(\) => openInsuranceMode\('overview'\)\}[\s\S]*?\) : \(\s*<InsuranceModeShell[\s\S]*?activeSection=\{activeModeSection\}[\s\S]*?onChangeSection=\{handleChangeModeSection\}[\s\S]*?activeModeSection === 'overview'[\s\S]*?<InsuranceHomePanel[\s\S]*?activeModeSection === 'request'[\s\S]*?<InsuranceRequestPanel[\s\S]*?activeModeSection === 'documents'[\s\S]*?<InsuranceDocumentsPanel[\s\S]*?activeModeSection === 'status'[\s\S]*?<InsuranceStatusDetailPanel[\s\S]*?activeModeSection === 'history'[\s\S]*?<InsuranceStatusDetailPanel[\s\S]*?\)}/s,
   )
+  assert.match(
+    source,
+    /activePanel === 'renewal'[\s\S]*?activePanel === 'payment'[\s\S]*?: 'Current request status'/s,
+  )
+  assert.match(source, /activePanel === 'payment' \? \(/)
+  assert.match(source, /: statusState\.summary/)
 })
 
 test('task 3 panel dependencies are tracked for clean checkouts', () => {

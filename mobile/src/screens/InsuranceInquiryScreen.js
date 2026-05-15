@@ -436,7 +436,42 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }),
     [latestInquiry, missingRequiredDocuments, timeline],
   );
-  const statusPanelKey = statusState.title === 'Renewal follow-up' ? 'renewal' : 'payment';
+  const statusPanelKey = useMemo(() => {
+    if (missingRequiredDocuments.length) {
+      return 'status';
+    }
+
+    const inquiryStatus = latestInquiry?.status ?? 'submitted';
+    const paymentWorkflowStatus = latestInquiry?.paymentStatus ?? 'not_required';
+    const renewalWorkflowStatus = latestInquiry?.renewalStatus ?? 'not_applicable';
+    const shouldShowRenewalFollowUp = shouldShowCustomerInsuranceFollowUp({
+      status: inquiryStatus,
+      paymentStatus: paymentWorkflowStatus,
+      renewalStatus: renewalWorkflowStatus,
+      followUpType: 'renewal',
+    });
+    const shouldShowPaymentFollowUp =
+      shouldShowCustomerInsuranceFollowUp({
+        status: inquiryStatus,
+        paymentStatus: paymentWorkflowStatus,
+        renewalStatus: renewalWorkflowStatus,
+        followUpType: 'payment',
+      }) &&
+      (inquiryStatus === 'payment_pending' ||
+        ['awaiting_payment', 'proof_submitted', 'verifying', 'overdue'].includes(
+          paymentWorkflowStatus,
+        ));
+
+    if (shouldShowRenewalFollowUp) {
+      return 'renewal';
+    }
+
+    if (shouldShowPaymentFollowUp) {
+      return 'payment';
+    }
+
+    return 'status';
+  }, [latestInquiry, missingRequiredDocuments]);
   const currentTimelineStepLabel =
     (
       customerTimeline.find((step) => step.state === 'current') ??
@@ -1424,43 +1459,105 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
                 {activeModeSection === 'status' ? (
                   <InsuranceStatusDetailPanel
-                    eyebrow={activePanel === 'renewal' ? 'Renewal' : 'Payment'}
-                    title={activePanel === 'renewal' ? 'Renewal follow-up' : 'Payment follow-up'}
+                    eyebrow={
+                      activePanel === 'renewal'
+                        ? 'Renewal'
+                        : activePanel === 'payment'
+                        ? 'Payment'
+                        : 'Status'
+                    }
+                    title={
+                      activePanel === 'renewal'
+                        ? 'Renewal follow-up'
+                        : activePanel === 'payment'
+                        ? 'Payment follow-up'
+                        : 'Current request status'
+                    }
                     subtitle={
                       activePanel === 'renewal'
                         ? 'Watch renewal prompts here so you can respond quickly when a quote, reminder, or next step is ready.'
-                        : 'Review the latest customer-safe payment instruction here, then head to documents if you need to send proof of payment.'
+                        : activePanel === 'payment'
+                        ? 'Review the latest customer-safe payment instruction here, then head to documents if you need to send proof of payment.'
+                        : 'Review the latest customer-safe status update, visible timeline, and next step for this request.'
                     }
-                    statusLabel={activePanel === 'renewal' ? renewalStatusLabel : paymentStatusLabel}
-                    summary={activePanel === 'renewal' ? renewalSummary.message : paymentSummary.message}
+                    statusLabel={
+                      activePanel === 'renewal'
+                        ? renewalStatusLabel
+                        : activePanel === 'payment'
+                        ? paymentStatusLabel
+                        : formatWorkflowLabel(latestInquiry?.status ?? 'submitted')
+                    }
+                    summary={
+                      activePanel === 'renewal'
+                        ? renewalSummary.message
+                        : activePanel === 'payment'
+                        ? paymentSummary.message
+                        : statusState.summary
+                    }
                     onBack={() => handleChangeModeSection('overview')}
                   >
                     <InsuranceStatePanel
-                      icon={activePanel === 'renewal' ? 'calendar-refresh' : 'credit-card-check-outline'}
-                      title={activePanel === 'renewal' ? renewalSummary.title : paymentSummary.title}
-                      message={activePanel === 'renewal' ? renewalSummary.message : paymentSummary.message}
-                      tone={activePanel === 'renewal' ? renewalSummary.tone : paymentSummary.tone}
+                      icon={
+                        activePanel === 'renewal'
+                          ? 'calendar-refresh'
+                          : activePanel === 'payment'
+                          ? 'credit-card-check-outline'
+                          : 'clipboard-text-clock-outline'
+                      }
+                      title={
+                        activePanel === 'renewal'
+                          ? renewalSummary.title
+                          : activePanel === 'payment'
+                          ? paymentSummary.title
+                          : statusState.title
+                      }
+                      message={
+                        activePanel === 'renewal'
+                          ? renewalSummary.message
+                          : activePanel === 'payment'
+                          ? paymentSummary.message
+                          : statusState.latestUpdateLabel
+                      }
+                      tone={
+                        activePanel === 'renewal'
+                          ? renewalSummary.tone
+                          : activePanel === 'payment'
+                          ? paymentSummary.tone
+                          : 'default'
+                      }
                     />
                     <View style={styles.timelineCard}>
                       <View style={styles.timelineCardHeader}>
                         <View style={styles.timelineCardCopy}>
                           <Text style={styles.timelineCardTitle}>
-                            {activePanel === 'renewal' ? 'Renewal tracking' : 'Current request snapshot'}
+                            {activePanel === 'renewal'
+                              ? 'Renewal tracking'
+                              : activePanel === 'payment'
+                              ? 'Current request snapshot'
+                              : 'Status timeline'}
                           </Text>
                           <Text style={styles.timelineCardSubtitle}>
                             {activePanel === 'renewal'
                               ? 'Renewal follow-up stays customer-safe here while staff continue the internal workflow.'
-                              : 'Keep the latest request state handy before you upload a receipt or ask for help.'}
+                              : activePanel === 'payment'
+                              ? 'Keep the latest request state handy before you upload a receipt or ask for help.'
+                              : 'Review the latest customer-safe request update and next visible step.'}
                           </Text>
                         </View>
                         <InquiryStatusBadge
-                          value={activePanel === 'renewal' ? renewalStatusLabel : paymentStatusLabel}
+                          value={
+                            activePanel === 'renewal'
+                              ? renewalStatusLabel
+                              : activePanel === 'payment'
+                              ? paymentStatusLabel
+                              : formatWorkflowLabel(latestInquiry?.status ?? 'submitted')
+                          }
                         />
                       </View>
                       <DetailRow label="Latest update" value={latestInquiryUpdatedAtLabel} />
                       <DetailRow label="Current step" value={currentTimelineStepLabel} />
                     </View>
-                    {activePanel !== 'renewal' ? (
+                    {activePanel === 'payment' ? (
                       latestInquiry?.id && latestInquiryCanAcceptDocuments ? (
                         <TouchableOpacity
                           style={styles.secondaryActionButton}
