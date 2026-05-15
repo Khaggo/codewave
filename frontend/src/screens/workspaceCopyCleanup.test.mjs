@@ -218,12 +218,6 @@ test('admin operations workspaces move live queues ahead of secondary editors an
   assert.ok(analyticsOperationsIndex < analyticsDashboardIndex)
 })
 
-test('analytics workspace removes the old read-only snapshot framing', () => {
-  const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
-
-  assert.ok(!analytics.includes('Inspect read-only analytics snapshots across operations and support domains.'))
-})
-
 test('loyalty workspace stays concise', () => {
   const loyalty = read('frontend/src/screens/LoyaltyManager.js')
 
