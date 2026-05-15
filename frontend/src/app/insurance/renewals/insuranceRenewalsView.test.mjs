@@ -6,6 +6,8 @@ import {
   mergeRenewalInquiryUpdate,
   buildRenewalUpdateDraft,
   buildRenewalsTableRow,
+  filterRenewalItems,
+  getRenewalsFilterSummary,
   getRenewalsSummaryCards,
   getRenewalTimeWindow,
   shouldApplyRenewalAsyncResult,
@@ -293,6 +295,77 @@ test('buildRenewalUpdateDraft keeps renewal workflow metadata editable for the r
       renewalDueAt: '2026-06-15',
       assignedStaffId: 'staff-1',
       reviewNotes: 'Preparing quote',
+    },
+  )
+})
+
+test('filterRenewalItems keeps renewals scannable by combining time-window, stage, manual-only, and search filters', () => {
+  const items = [
+    {
+      inquiry: buildInquiryFixture({
+        id: 'renewal-quoted',
+        renewalStatus: 'quoted',
+        renewalDueAt: '2026-05-21T00:00:00.000Z',
+        purpose: 'renewal',
+      }),
+      row: buildRenewalsTableRow(
+        buildInquiryFixture({
+          id: 'renewal-quoted',
+          renewalStatus: 'quoted',
+          renewalDueAt: '2026-05-21T00:00:00.000Z',
+          purpose: 'renewal',
+        }),
+        { now: '2026-05-14T00:00:00.000Z' },
+      ),
+    },
+    {
+      inquiry: buildInquiryFixture({
+        id: 'renewal-upcoming',
+        renewalStatus: 'upcoming',
+        renewalDueAt: '2026-06-13T00:00:00.000Z',
+        purpose: 'claim',
+      }),
+      row: buildRenewalsTableRow(
+        buildInquiryFixture({
+          id: 'renewal-upcoming',
+          renewalStatus: 'upcoming',
+          renewalDueAt: '2026-06-13T00:00:00.000Z',
+          purpose: 'claim',
+        }),
+        { now: '2026-05-14T00:00:00.000Z' },
+      ),
+    },
+  ]
+
+  assert.deepEqual(
+    filterRenewalItems(items, {
+      filters: {
+        timeWindow: 'Due in 7 Days',
+        renewalStatus: 'quoted',
+        manualOnly: true,
+        search: 'casey',
+      },
+    }).map(({ inquiry }) => inquiry.id),
+    ['renewal-quoted'],
+  )
+})
+
+test('getRenewalsFilterSummary explains the active renewal queue in plain language', () => {
+  assert.deepEqual(
+    getRenewalsFilterSummary({
+      filters: {
+        timeWindow: 'Due in 7 Days',
+        renewalStatus: 'awaiting_customer',
+        manualOnly: true,
+        search: 'policy',
+      },
+      visibleCount: 1,
+      totalCount: 6,
+    }),
+    {
+      tone: 'urgent',
+      title: '1 renewal needs attention now',
+      detail: 'Showing Due in 7 Days renewals, awaiting customer, manual follow-ups only, matching "policy". 5 other renewals are outside this focus view.',
     },
   )
 })

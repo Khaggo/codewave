@@ -170,3 +170,83 @@ export function buildRenewalUpdateDraft(inquiry = {}) {
     reviewNotes: typeof inquiry?.reviewNotes === 'string' ? inquiry.reviewNotes : '',
   }
 }
+
+export function filterRenewalItems(renewalItems = [], { filters = {} } = {}) {
+  const searchNeedle = String(filters.search ?? '').trim().toLowerCase()
+
+  return renewalItems.filter(({ inquiry, row }) => {
+    if (filters.renewalStatus && filters.renewalStatus !== 'all' && inquiry?.renewalStatus !== filters.renewalStatus) {
+      return false
+    }
+
+    if (filters.timeWindow && filters.timeWindow !== 'all' && row?.timeWindow !== filters.timeWindow) {
+      return false
+    }
+
+    if (filters.manualOnly && inquiry?.purpose !== 'renewal') {
+      return false
+    }
+
+    if (!searchNeedle) {
+      return true
+    }
+
+    return [
+      inquiry?.id,
+      inquiry?.customerDisplayName,
+      inquiry?.vehicleLabel,
+      inquiry?.subject,
+      inquiry?.policyNumber,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(searchNeedle))
+  })
+}
+
+const describeRenewalWindow = (timeWindow) => {
+  if (!timeWindow || timeWindow === 'all') {
+    return 'all renewal windows'
+  }
+
+  return `${timeWindow} renewals`
+}
+
+const describeRenewalStatus = (renewalStatus) => {
+  if (!renewalStatus || renewalStatus === 'all') {
+    return null
+  }
+
+  return formatStatusLabel(renewalStatus).toLowerCase()
+}
+
+export function getRenewalsFilterSummary({ filters = {}, visibleCount = 0, totalCount = 0 } = {}) {
+  const descriptors = [describeRenewalWindow(filters.timeWindow)]
+
+  const renewalStatusDescriptor = describeRenewalStatus(filters.renewalStatus)
+  if (renewalStatusDescriptor) {
+    descriptors.push(renewalStatusDescriptor)
+  }
+
+  if (filters.manualOnly) {
+    descriptors.push('manual follow-ups only')
+  }
+
+  const trimmedSearch = String(filters.search ?? '').trim()
+  if (trimmedSearch) {
+    descriptors.push(`matching "${trimmedSearch}"`)
+  }
+
+  const hiddenCount = Math.max(totalCount - visibleCount, 0)
+  const tone = filters.timeWindow === 'Overdue' || filters.timeWindow === 'Due in 7 Days' ? 'urgent' : visibleCount ? 'focused' : 'empty'
+  const noun = visibleCount === 1 ? 'renewal needs' : 'renewals need'
+  const hiddenCopy =
+    hiddenCount > 0
+      ? ` ${hiddenCount} other ${hiddenCount === 1 ? 'renewal is' : 'renewals are'} outside this focus view.`
+      : ''
+
+  return {
+    tone,
+    title: `${visibleCount} ${noun} attention now`,
+    detail: `Showing ${descriptors.join(', ')}.${hiddenCopy}`.trim(),
+  }
+}

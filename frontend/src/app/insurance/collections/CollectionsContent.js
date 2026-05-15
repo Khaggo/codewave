@@ -28,6 +28,7 @@ import {
   filterCollectionsItems,
   formatStatusLabel,
   getCollectionsActionState,
+  getCollectionsFilterSummary,
   getCollectionsSummaryCards,
 } from './insuranceCollectionsView.mjs'
 import {
@@ -38,6 +39,8 @@ import {
   FilterSelect,
   formatDateOnly,
   SummaryTile,
+  WorkspaceFocusBanner,
+  WorkspaceSignalCard,
   WorkflowBadge,
 } from './CollectionsPanels'
 
@@ -196,6 +199,16 @@ export default function CollectionsContent() {
   const summaryCards = useMemo(
     () => getCollectionsSummaryCards({ inquiries }),
     [inquiries],
+  )
+
+  const filterSummary = useMemo(
+    () =>
+      getCollectionsFilterSummary({
+        filters,
+        visibleCount: filteredItems.length,
+        totalCount: collectionItems.length,
+      }),
+    [collectionItems.length, filteredItems.length, filters],
   )
 
   const nextStatuses = useMemo(() => {
@@ -381,6 +394,19 @@ export default function CollectionsContent() {
           </button>
         </div>
 
+        <div className="mt-4">
+          <WorkspaceFocusBanner
+            title={filterSummary.title}
+            detail={filterSummary.detail}
+            tone={filterSummary.tone}
+            meta={[
+              { label: `${collectionItems.length} total loaded` },
+              { label: `${filteredItems.length} visible now` },
+              { label: selectedInquiry ? 'Detail panel ready' : 'Pick a case to review' },
+            ]}
+          />
+        </div>
+
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="label xl:col-span-1">
             Search
@@ -424,6 +450,39 @@ export default function CollectionsContent() {
         </div>
 
         {listMessage ? <div className="status-message status-message-danger mt-4">{listMessage}</div> : null}
+
+        <div className="mt-4 grid gap-3 xl:grid-cols-3">
+          <WorkspaceSignalCard
+            eyebrow="Current queue"
+            title={filters.overdueOnly ? 'Overdue follow-up mode' : 'Broad collections review'}
+            detail={
+              filters.overdueOnly
+                ? 'Only late payments stay visible so staff can triage urgent accounts first.'
+                : 'Use payment status first, then narrow by proof and search when the queue gets busy.'
+            }
+            tone={filters.overdueOnly ? 'warning' : 'neutral'}
+          />
+          <WorkspaceSignalCard
+            eyebrow="Proof review"
+            title={filteredItems.some(({ row }) => row.hasProofOfPayment) ? 'Proof documents are available' : 'Proof uploads are still missing'}
+            detail={
+              filteredItems.some(({ row }) => row.hasProofOfPayment)
+                ? 'Proof-ready cases can move into verification from the workflow panel.'
+                : 'Use this queue to spot unpaid cases before staff starts verification.'
+            }
+            tone={filteredItems.some(({ row }) => row.hasProofOfPayment) ? 'positive' : 'neutral'}
+          />
+          <WorkspaceSignalCard
+            eyebrow="Current selection"
+            title={selectedInquiry ? selectedInquiry.customerDisplayName || 'Collections case selected' : 'No case selected yet'}
+            detail={
+              selectedInquiry
+                ? `Review ${selectedRow?.paymentStatus ?? 'payment state'} details, then save through the workflow panel on the right.`
+                : 'Pick a queue row to load proof, due dates, activity, and quick collections actions.'
+            }
+            tone={selectedInquiry ? 'positive' : 'neutral'}
+          />
+        </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
@@ -435,9 +494,14 @@ export default function CollectionsContent() {
                 The table keeps payment visibility front and center so advisers can sort through collections work fast.
               </p>
             </div>
-            <span className={`badge ${filteredItems.length ? 'badge-orange' : 'badge-gray'}`}>
-              {filteredItems.length} visible case{filteredItems.length === 1 ? '' : 's'}
-            </span>
+            <div className="flex flex-wrap gap-2">
+              <span className={`badge ${filteredItems.length ? 'badge-orange' : 'badge-gray'}`}>
+                {filteredItems.length} visible case{filteredItems.length === 1 ? '' : 's'}
+              </span>
+              <span className="badge badge-gray">
+                {selectedInquiry ? `Selected ${selectedInquiry.customerDisplayName || selectedInquiry.id}` : 'No active selection'}
+              </span>
+            </div>
           </div>
 
           {listState === 'loading' ? (
@@ -555,6 +619,7 @@ export default function CollectionsContent() {
             updateDraft={updateDraft}
             updateMessage={updateMessage}
             updateState={updateState}
+            selectedRow={selectedRow}
           />
         </div>
       </div>

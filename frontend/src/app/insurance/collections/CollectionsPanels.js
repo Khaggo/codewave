@@ -62,19 +62,70 @@ export const formatDateOnly = (value) => {
 export function SummaryTile({ icon: Icon, label, value, sub }) {
   return (
     <div className="card p-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs text-ink-muted">{label}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">{label}</p>
           <p className="mt-1 text-2xl font-black text-ink-primary">{value}</p>
-          {sub ? <p className="mt-1 text-[11px] text-ink-muted">{sub}</p> : null}
+          {sub ? <p className="mt-2 max-w-[22ch] text-[11px] leading-5 text-ink-muted">{sub}</p> : null}
         </div>
         <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/5 shadow-[0_18px_40px_rgba(0,0,0,0.16)]"
           style={{ background: 'rgba(240, 124, 0, 0.14)', color: '#f07c00' }}
         >
           <Icon size={18} />
         </div>
       </div>
+    </div>
+  )
+}
+
+const getFocusToneClasses = (tone) => {
+  if (tone === 'urgent') {
+    return 'border-[#f07c00]/30 bg-[#f07c00]/10 text-[#ffddb8]'
+  }
+
+  if (tone === 'empty') {
+    return 'border-white/8 bg-white/[0.03] text-ink-muted'
+  }
+
+  return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
+}
+
+export function WorkspaceFocusBanner({ title, detail, tone = 'focused', meta = [] }) {
+  return (
+    <div className={`rounded-2xl border px-4 py-4 ${getFocusToneClasses(tone)}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-inherit/80">{detail}</p>
+        </div>
+        {meta.length ? (
+          <div className="flex flex-wrap gap-2">
+            {meta.map((item) => (
+              <span key={item.label} className="badge badge-gray">
+                {item.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+export function WorkspaceSignalCard({ eyebrow, title, detail, tone = 'neutral' }) {
+  const toneClasses =
+    tone === 'positive'
+      ? 'border-emerald-500/15 bg-emerald-500/10'
+      : tone === 'warning'
+        ? 'border-[#f07c00]/20 bg-[#f07c00]/10'
+        : 'border-surface-border bg-surface-raised'
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${toneClasses}`}>
+      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">{eyebrow}</p>
+      <p className="mt-2 text-sm font-semibold text-ink-primary">{title}</p>
+      {detail ? <p className="mt-1 text-xs leading-5 text-ink-muted">{detail}</p> : null}
     </div>
   )
 }
@@ -276,11 +327,34 @@ export function CollectionsWorkflowPanel({
   onFlagOverdue,
   selectedActionState,
   selectedInquiry,
+  selectedRow,
   submitDisabled,
   updateDraft,
   updateMessage,
   updateState,
 }) {
+  const actionHeadline = !selectedInquiry
+    ? 'Pick a collections case first'
+    : isTerminalInquiry
+      ? 'This case is read only'
+      : selectedActionState.canMarkAsPaid
+        ? 'Payment proof is ready for final confirmation'
+        : selectedActionState.canReviewProofOfPayment
+          ? 'Proof is ready for review'
+          : selectedActionState.canSendPaymentReminder
+            ? 'This case still needs collections follow-up'
+            : 'Use this panel to keep payment metadata up to date'
+
+  const actionDetail = !selectedInquiry
+    ? 'The workflow panel unlocks after you choose a live collections case from the queue.'
+    : isTerminalInquiry
+      ? 'Closed, cancelled, and rejected inquiries stay visible for history but cannot be edited here.'
+      : selectedRow?.daysOverdue > 0
+        ? `The case is already ${selectedRow.daysOverdue} day${selectedRow.daysOverdue === 1 ? '' : 's'} overdue, so overdue tagging and reminders should be your first check.`
+        : selectedActionState.canReviewProofOfPayment
+          ? 'Start verification when the uploaded proof looks complete, then mark the case paid only after staff confirmation.'
+          : 'Save status, due date, and review notes together so the next collections handoff is easy to understand.'
+
   return (
     <div className="card p-4 md:p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -295,6 +369,31 @@ export function CollectionsWorkflowPanel({
             {isTerminalInquiry ? 'Read only' : 'Collections editable'}
           </span>
           <span className="badge badge-gray">Workflow route only</span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <WorkspaceSignalCard
+          eyebrow="Next best step"
+          title={actionHeadline}
+          detail={actionDetail}
+          tone={
+            !selectedInquiry || isTerminalInquiry
+              ? 'neutral'
+              : selectedActionState.canSendPaymentReminder || selectedRow?.daysOverdue > 0
+                ? 'warning'
+                : selectedActionState.canReviewProofOfPayment || selectedActionState.canMarkAsPaid
+                  ? 'positive'
+                  : 'neutral'
+          }
+        />
+        <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Quick action ladder</p>
+          <ol className="mt-2 space-y-2 text-xs leading-5 text-ink-muted">
+            <li>1. Confirm the due date and current payment status.</li>
+            <li>2. Review proof when it lands, then move the case into verification.</li>
+            <li>3. Mark paid only after the receipt has been checked by staff.</li>
+          </ol>
         </div>
       </div>
 

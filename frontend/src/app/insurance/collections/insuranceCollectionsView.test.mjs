@@ -6,6 +6,7 @@ import {
   buildCollectionsTableRow,
   filterCollectionsItems,
   getCollectionsActionState,
+  getCollectionsFilterSummary,
   getCollectionsSummaryCards,
 } from './insuranceCollectionsView.mjs'
 
@@ -241,5 +242,25 @@ test('filterCollectionsItems re-applies the local payment-status filter after li
       },
     }).map(({ inquiry }) => inquiry.id),
     ['inq-unpaid'],
+  )
+})
+
+test('getCollectionsFilterSummary explains the active queue scope and overdue/proof narrowing', () => {
+  assert.deepEqual(
+    getCollectionsFilterSummary({
+      filters: {
+        paymentStatus: 'verifying',
+        overdueOnly: true,
+        hasProof: 'with_proof',
+        search: 'casey',
+      },
+      visibleCount: 2,
+      totalCount: 9,
+    }),
+    {
+      tone: 'urgent',
+      title: '2 collections cases in focus',
+      detail: 'Showing verifying cases, overdue only, with proof, matching "casey". 7 other cases are hidden by the current filters.',
+    },
   )
 })

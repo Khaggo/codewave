@@ -153,6 +153,56 @@ export function filterCollectionsItems(collectionItems = [], { filters = {} } = 
   })
 }
 
+const describeCollectionsPaymentFilter = (paymentStatus) => {
+  if (!paymentStatus || paymentStatus === 'all') {
+    return 'all payment states'
+  }
+
+  return `${formatStatusLabel(paymentStatus).toLowerCase()} cases`
+}
+
+const describeProofFilter = (hasProof) => {
+  if (hasProof === 'with_proof') {
+    return 'with proof'
+  }
+
+  if (hasProof === 'without_proof') {
+    return 'without proof'
+  }
+
+  return null
+}
+
+export function getCollectionsFilterSummary({ filters = {}, visibleCount = 0, totalCount = 0 } = {}) {
+  const descriptors = [describeCollectionsPaymentFilter(filters.paymentStatus)]
+
+  if (filters.overdueOnly) {
+    descriptors.push('overdue only')
+  }
+
+  const proofDescriptor = describeProofFilter(filters.hasProof)
+  if (proofDescriptor) {
+    descriptors.push(proofDescriptor)
+  }
+
+  const trimmedSearch = String(filters.search ?? '').trim()
+  if (trimmedSearch) {
+    descriptors.push(`matching "${trimmedSearch}"`)
+  }
+
+  const hiddenCount = Math.max(totalCount - visibleCount, 0)
+  const tone = filters.overdueOnly || filters.paymentStatus === 'overdue' ? 'urgent' : visibleCount ? 'focused' : 'empty'
+  const noun = visibleCount === 1 ? 'case' : 'cases'
+  const hiddenCopy =
+    hiddenCount > 0 ? ` ${hiddenCount} other ${hiddenCount === 1 ? 'case is' : 'cases are'} hidden by the current filters.` : ''
+
+  return {
+    tone,
+    title: `${visibleCount} collections ${noun} in focus`,
+    detail: `Showing ${descriptors.join(', ')}.${hiddenCopy}`.trim(),
+  }
+}
+
 export function getCollectionsSummaryCards({ inquiries = [], now } = {}) {
   return [
     {

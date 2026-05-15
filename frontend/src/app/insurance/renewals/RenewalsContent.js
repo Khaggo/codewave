@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, AlertTriangle, CalendarClock } from 'lucide-react'
+import { Activity, AlertTriangle, CalendarClock, Search } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import { ApiError } from '@/lib/authClient'
 import {
@@ -19,6 +19,8 @@ import {
   ACTIVE_RENEWAL_WORKSPACE_STATUSES,
   buildRenewalUpdateDraft,
   buildRenewalsTableRow,
+  filterRenewalItems,
+  getRenewalsFilterSummary,
   getRenewalsSummaryCards,
   isRenewalWorkspaceInquiry,
   mergeRenewalInquiryUpdate,
@@ -33,6 +35,8 @@ import {
   RenewalsDetailPanel,
   RenewalsWorkflowPanel,
   SummaryTile,
+  WorkspaceFocusBanner,
+  WorkspaceSignalCard,
   WorkflowBadge,
   formatDateOnly,
 } from './RenewalsPanels'
@@ -157,35 +161,7 @@ export default function RenewalsContent() {
   }, [renewalQueue])
 
   const filteredItems = useMemo(() => {
-    const searchNeedle = filters.search.trim().toLowerCase()
-
-    return renewalItems.filter(({ inquiry, row }) => {
-      if (filters.renewalStatus !== 'all' && inquiry?.renewalStatus !== filters.renewalStatus) {
-        return false
-      }
-
-      if (filters.timeWindow !== 'all' && row.timeWindow !== filters.timeWindow) {
-        return false
-      }
-
-      if (filters.manualOnly && inquiry?.purpose !== 'renewal') {
-        return false
-      }
-
-      if (!searchNeedle) {
-        return true
-      }
-
-      return [
-        inquiry?.id,
-        inquiry?.customerDisplayName,
-        inquiry?.vehicleLabel,
-        inquiry?.subject,
-        inquiry?.policyNumber,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(searchNeedle))
-    })
+    return filterRenewalItems(renewalItems, { filters })
   }, [filters, renewalItems])
 
   useEffect(() => {
@@ -233,6 +209,16 @@ export default function RenewalsContent() {
   const summaryCards = useMemo(
     () => getRenewalsSummaryCards({ inquiries: renewalQueue, now: new Date().toISOString() }),
     [renewalQueue],
+  )
+
+  const filterSummary = useMemo(
+    () =>
+      getRenewalsFilterSummary({
+        filters,
+        visibleCount: filteredItems.length,
+        totalCount: renewalItems.length,
+      }),
+    [filteredItems.length, filters, renewalItems.length],
   )
 
   const nextStatuses = useMemo(() => {
@@ -466,15 +452,31 @@ export default function RenewalsContent() {
           </button>
         </div>
 
+        <div className="mt-4">
+          <WorkspaceFocusBanner
+            title={filterSummary.title}
+            detail={filterSummary.detail}
+            tone={filterSummary.tone}
+            meta={[
+              { label: `${renewalItems.length} renewals loaded` },
+              { label: `${filteredItems.length} visible now` },
+              { label: selectedInquiry ? 'Detail panel ready' : 'Select a renewal to continue' },
+            ]}
+          />
+        </div>
+
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="label xl:col-span-1">
             Search
-            <input
-              value={filters.search}
-              onChange={handleFilterChange('search')}
-              className="input"
-              placeholder="Customer, vehicle, policy, or case id"
-            />
+            <div className="relative">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim" />
+              <input
+                value={filters.search}
+                onChange={handleFilterChange('search')}
+                className="input pl-9"
+                placeholder="Customer, vehicle, policy, or case id"
+              />
+            </div>
           </label>
 
           <FilterSelect
@@ -506,6 +508,47 @@ export default function RenewalsContent() {
         </div>
 
         {listMessage ? <div className="status-message status-message-danger mt-4">{listMessage}</div> : null}
+
+        <div className="mt-4 grid gap-3 xl:grid-cols-3">
+          <WorkspaceSignalCard
+            eyebrow="Timing lens"
+            title={
+              filters.timeWindow === 'Overdue'
+                ? 'Overdue renewals only'
+                : filters.timeWindow === 'Due in 7 Days'
+                  ? 'Urgent renewal follow-up'
+                  : 'Balanced renewal queue'
+            }
+            detail={
+              filters.timeWindow === 'Overdue'
+                ? 'This view isolates missed renewal targets so staff can recover at-risk customers first.'
+                : filters.timeWindow === 'Due in 7 Days'
+                  ? 'The current queue spotlights renewals that need near-term follow-up before they slip.'
+                  : 'Use time windows to tighten urgency, then filter by stage when the queue needs a more tactical pass.'
+            }
+            tone={filters.timeWindow === 'Overdue' || filters.timeWindow === 'Due in 7 Days' ? 'warning' : 'neutral'}
+          />
+          <WorkspaceSignalCard
+            eyebrow="Manual follow-up"
+            title={filters.manualOnly ? 'Staff-created follow-ups only' : 'Mixed queue of linked and manual renewals'}
+            detail={
+              filters.manualOnly
+                ? 'Only purpose=renewal cases remain, which is useful when advisers are doing proactive outreach.'
+                : 'This queue includes both existing insurance cases and manual renewal follow-ups so nothing slips between routes.'
+            }
+            tone={filters.manualOnly ? 'positive' : 'neutral'}
+          />
+          <WorkspaceSignalCard
+            eyebrow="Current selection"
+            title={selectedInquiry ? selectedInquiry.customerDisplayName || 'Renewal case selected' : 'No renewal selected yet'}
+            detail={
+              selectedInquiry
+                ? `Review the ${selectedRow?.timeWindow ?? 'current'} timing, then update stage and assignee from the workflow panel.`
+                : 'Pick a renewal row to load timing context, policy metadata, and follow-up actions on the right.'
+            }
+            tone={selectedInquiry ? 'positive' : 'neutral'}
+          />
+        </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
@@ -517,9 +560,14 @@ export default function RenewalsContent() {
                 Timing stays visible in the table so staff can scan urgent renewals before they open the detail panel.
               </p>
             </div>
-            <span className={`badge ${filteredItems.length ? 'badge-orange' : 'badge-gray'}`}>
-              {filteredItems.length} visible renewal{filteredItems.length === 1 ? '' : 's'}
-            </span>
+            <div className="flex flex-wrap gap-2">
+              <span className={`badge ${filteredItems.length ? 'badge-orange' : 'badge-gray'}`}>
+                {filteredItems.length} visible renewal{filteredItems.length === 1 ? '' : 's'}
+              </span>
+              <span className="badge badge-gray">
+                {selectedInquiry ? `Selected ${selectedInquiry.customerDisplayName || selectedInquiry.id}` : 'No active selection'}
+              </span>
+            </div>
           </div>
 
           {listState === 'loading' ? (
