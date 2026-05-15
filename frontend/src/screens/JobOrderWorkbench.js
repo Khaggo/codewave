@@ -1405,8 +1405,123 @@ export default function JobOrderWorkbench() {
         )}
       />
 
-      <section className="ops-control-strip">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+      <section className="ops-summary-grid">
+        {isTechnician ? (
+          <SummaryTile
+            icon={ClipboardList}
+            label={workbenchScope === 'history' ? 'Assigned History' : 'Assigned Queue'}
+            value={activeJobOrder ? 'Loaded' : 'Awaiting load'}
+            sub={
+              activeJobOrder
+                ? `Job order ${activeJobOrder.id.slice(0, 8).toUpperCase()} is ready for technician updates`
+                : workbenchScope === 'history'
+                  ? 'Choose one of your finalized or cancelled assigned job orders to review'
+                  : 'Choose one of your assigned job orders to begin'
+            }
+          />
+        ) : (
+          <SummaryTile
+            icon={ClipboardList}
+            label={workbenchScope === 'history' ? 'Job Order History' : 'Booking Handoff Queue'}
+            value={workbenchScope === 'history' ? monthJobOrders.length : handoffCandidates.length}
+            sub={
+              workbenchScope === 'history'
+                ? 'Finalized and cancelled work stays here instead of the live workshop queue.'
+                : handoffState.status === 'handoff_empty'
+                  ? 'No confirmed booking source is ready today'
+                  : 'Ready for job-order handoff'
+            }
+          />
+        )}
+        <SummaryTile
+          icon={Wrench}
+          label="Active Phase"
+          value={activeJobOrder ? formatStatusLabel(executionPhase) : 'Awaiting load'}
+          sub={
+            activeJobOrder
+              ? `Current status: ${formatStatusLabel(activeJobOrder.status)}`
+              : 'Load or create a job order to begin execution'
+          }
+        />
+        <SummaryTile
+          icon={ShieldCheck}
+          label={isTechnician ? 'Progress Access' : 'Assignment State'}
+          value={
+            isTechnician
+              ? activeJobOrder
+                ? canAppendProgress
+                  ? 'Assigned'
+                  : 'Read only'
+                : 'Awaiting load'
+              : activeJobOrder
+                ? activeJobOrder.assignedTechnicianIds.length > 0
+                  ? `${activeJobOrder.assignedTechnicianIds.length} assigned`
+                  : 'Unassigned'
+                : selectedCandidate
+                  ? 'Ready to assign'
+                  : 'Awaiting source'
+          }
+          sub={
+            isTechnician
+              ? activeJobOrder
+                ? canAppendProgress
+                  ? 'You can append technician progress entries to this job order.'
+                  : 'Only the assigned technician can append progress for this job order.'
+                : 'Load a job order to confirm assignment access.'
+              : activeJobOrder
+                ? activeJobOrder.assignedTechnicianIds.join(', ') || 'No technician assigned'
+                : selectedCandidate
+                  ? selectedCandidate.serviceSummary
+                  : 'Select a confirmed booking handoff first'
+          }
+        />
+        <SummaryTile
+          icon={isTechnician ? FileStack : FileStack}
+          label={isTechnician ? 'Photo Evidence' : 'Finalize & Payment'}
+          value={
+            isTechnician
+              ? activeJobOrder
+                ? `${activeJobOrder.photos.length} attached`
+                : 'Awaiting load'
+              : activeJobOrder?.invoiceRecord
+                ? formatStatusLabel(activeJobOrder.invoiceRecord.paymentStatus)
+                : activeJobOrder
+                  ? 'Not finalized'
+                  : 'No invoice record'
+          }
+          sub={
+            isTechnician
+              ? activeJobOrder?.photos[0]?.caption ??
+                activeJobOrder?.photos[0]?.fileName ??
+                'Attach before-and-after evidence while the work is active.'
+              : activeJobOrder?.invoiceRecord
+                ? activeJobOrder.invoiceRecord.invoiceReference
+                : 'Finalization creates the invoice-ready record'
+          }
+        />
+      </section>
+
+      <section className="ops-panel">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="card-title">Job Order Queue</p>
+            <p className="mt-1 text-sm leading-6 text-ink-secondary">
+              Focus on the live execution queue first.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className={`badge ${workbenchScope === 'history' ? 'badge-blue' : 'badge-orange'}`}>
+              {workbenchScope === 'history' ? 'History queue' : 'Live queue'}
+            </span>
+            <span className="badge badge-gray">
+              {isTechnician
+                ? `${selectedDateJobOrders.length} assigned on this date`
+                : `${handoffCandidates.length} handoff source${handoffCandidates.length === 1 ? '' : 's'}`}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
           <label>
             <span className="label">
               {workbenchScope === 'history' ? 'History date' : isTechnician ? 'Assigned work date' : 'Schedule date'}
@@ -1537,123 +1652,6 @@ export default function JobOrderWorkbench() {
                 </p>
               )}
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="ops-summary-grid">
-        {isTechnician ? (
-          <SummaryTile
-            icon={ClipboardList}
-            label={workbenchScope === 'history' ? 'Assigned History' : 'Assigned Queue'}
-            value={activeJobOrder ? 'Loaded' : 'Awaiting load'}
-            sub={
-              activeJobOrder
-                ? `Job order ${activeJobOrder.id.slice(0, 8).toUpperCase()} is ready for technician updates`
-                : workbenchScope === 'history'
-                  ? 'Choose one of your finalized or cancelled assigned job orders to review'
-                  : 'Choose one of your assigned job orders to begin'
-            }
-          />
-        ) : (
-          <SummaryTile
-            icon={ClipboardList}
-            label={workbenchScope === 'history' ? 'Job Order History' : 'Booking Handoff Queue'}
-            value={workbenchScope === 'history' ? monthJobOrders.length : handoffCandidates.length}
-            sub={
-              workbenchScope === 'history'
-                ? 'Finalized and cancelled work stays here instead of the live workshop queue.'
-                : handoffState.status === 'handoff_empty'
-                  ? 'No confirmed booking source is ready today'
-                  : 'Ready for job-order handoff'
-            }
-          />
-        )}
-        <SummaryTile
-          icon={Wrench}
-          label="Active Phase"
-          value={activeJobOrder ? formatStatusLabel(executionPhase) : 'Awaiting load'}
-          sub={
-            activeJobOrder
-              ? `Current status: ${formatStatusLabel(activeJobOrder.status)}`
-              : 'Load or create a job order to begin execution'
-          }
-        />
-        <SummaryTile
-          icon={ShieldCheck}
-          label={isTechnician ? 'Progress Access' : 'Assignment State'}
-          value={
-            isTechnician
-              ? activeJobOrder
-                ? canAppendProgress
-                  ? 'Assigned'
-                  : 'Read only'
-                : 'Awaiting load'
-              : activeJobOrder
-                ? activeJobOrder.assignedTechnicianIds.length > 0
-                  ? `${activeJobOrder.assignedTechnicianIds.length} assigned`
-                  : 'Unassigned'
-                : selectedCandidate
-                  ? 'Ready to assign'
-                  : 'Awaiting source'
-          }
-          sub={
-            isTechnician
-              ? activeJobOrder
-                ? canAppendProgress
-                  ? 'You can append technician progress entries to this job order.'
-                  : 'Only the assigned technician can append progress for this job order.'
-                : 'Load a job order to confirm assignment access.'
-              : activeJobOrder
-                ? activeJobOrder.assignedTechnicianIds.join(', ') || 'No technician assigned'
-                : selectedCandidate
-                  ? selectedCandidate.serviceSummary
-                  : 'Select a confirmed booking handoff first'
-          }
-        />
-        <SummaryTile
-          icon={isTechnician ? FileStack : FileStack}
-          label={isTechnician ? 'Photo Evidence' : 'Finalize & Payment'}
-          value={
-            isTechnician
-              ? activeJobOrder
-                ? `${activeJobOrder.photos.length} attached`
-                : 'Awaiting load'
-              : activeJobOrder?.invoiceRecord
-                ? formatStatusLabel(activeJobOrder.invoiceRecord.paymentStatus)
-                : activeJobOrder
-                  ? 'Not finalized'
-                  : 'No invoice record'
-          }
-          sub={
-            isTechnician
-              ? activeJobOrder?.photos[0]?.caption ??
-                activeJobOrder?.photos[0]?.fileName ??
-                'Attach before-and-after evidence while the work is active.'
-              : activeJobOrder?.invoiceRecord
-                ? activeJobOrder.invoiceRecord.invoiceReference
-                : 'Finalization creates the invoice-ready record'
-          }
-        />
-      </section>
-
-      <section className="ops-panel">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="card-title">Job Order Queue</p>
-            <p className="mt-1 text-sm leading-6 text-ink-secondary">
-              Focus on the live execution queue first.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className={`badge ${workbenchScope === 'history' ? 'badge-blue' : 'badge-orange'}`}>
-              {workbenchScope === 'history' ? 'History queue' : 'Live queue'}
-            </span>
-            <span className="badge badge-gray">
-              {isTechnician
-                ? `${selectedDateJobOrders.length} assigned on this date`
-                : `${handoffCandidates.length} handoff source${handoffCandidates.length === 1 ? '' : 's'}`}
-            </span>
           </div>
         </div>
 
