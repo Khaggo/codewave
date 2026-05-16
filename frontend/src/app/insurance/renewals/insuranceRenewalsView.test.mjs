@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   ACTIVE_RENEWAL_WORKSPACE_STATUSES,
+  buildRenewalsFocusHighlights,
   mergeRenewalInquiryUpdate,
   buildRenewalUpdateDraft,
   buildRenewalsTableRow,
@@ -364,8 +365,42 @@ test('getRenewalsFilterSummary explains the active renewal queue in plain langua
     }),
     {
       tone: 'urgent',
-      title: '1 renewal needs attention now',
-      detail: 'Showing Due in 7 Days renewals, awaiting customer, manual follow-ups only, matching "policy". 5 other renewals are outside this focus view.',
+      title: '1 renewal needs attention',
+      detail: 'Due in 7 Days, awaiting customer, manual only, matching "policy". 5 hidden.',
     },
+  )
+})
+
+test('buildRenewalsFocusHighlights keeps the renewal guidance compact', () => {
+  assert.deepEqual(
+    buildRenewalsFocusHighlights({
+      filters: {
+        timeWindow: 'Overdue',
+        manualOnly: true,
+      },
+      selectedInquiry: buildInquiryFixture({
+        id: 'inq-awaiting',
+        customerDisplayName: 'Casey Customer',
+        renewalStatus: 'awaiting_customer',
+      }),
+      selectedRow: {
+        timeWindow: 'Overdue',
+      },
+      visibleCount: 2,
+    }),
+    [
+      {
+        label: 'Queue',
+        value: '2 visible',
+        hint: 'Overdue, manual only',
+        tone: 'warning',
+      },
+      {
+        label: 'Selected',
+        value: 'Casey Customer',
+        hint: 'Overdue',
+        tone: 'warning',
+      },
+    ],
   )
 })

@@ -9,13 +9,13 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError, listCustomerVehicles } from '../lib/authClient';
 import {
@@ -50,7 +50,11 @@ import {
 import InsuranceDocumentsPanel from './insurance/InsuranceDocumentsPanel';
 import InsuranceHomePanel from './insurance/InsuranceHomePanel';
 import InsuranceModeShell from './insurance/InsuranceModeShell';
-import { InsuranceSectionDivider } from './insurance/InsurancePanelPrimitives';
+import {
+  insuranceFonts,
+  insurancePalette,
+  InsuranceSectionDivider,
+} from './insurance/InsurancePanelPrimitives';
 import InsuranceRequestPanel from './insurance/InsuranceRequestPanel';
 import InsuranceStatusDetailPanel from './insurance/InsuranceStatusDetailPanel';
 import { colors, radius } from '../theme';
@@ -59,6 +63,133 @@ const inquiryTypeOptions = [
   { value: 'comprehensive', label: 'Comprehensive' },
   { value: 'ctpl', label: 'CTPL' },
 ];
+
+const purposeOptions = [
+  { value: 'new_application', label: 'New' },
+  { value: 'renewal', label: 'Renewal' },
+  { value: 'claim', label: 'Claim' },
+  { value: 'quotation', label: 'Quotation' },
+];
+
+const getPurposeLabel = (value) =>
+  purposeOptions.find((option) => option.value === value)?.label ?? 'Request';
+
+const getRequestGuidance = ({ purpose = 'claim' } = {}) => {
+  switch (purpose) {
+    case 'new_application':
+      return {
+        sectionHelper: 'Start a fresh application for this vehicle.',
+        processLine: 'Estimate and approval happen after staff review the first details.',
+        subjectPlaceholder: 'New insurance application',
+        descriptionPlaceholder: 'Share the vehicle use, coverage need, or concern.',
+        notesPlaceholder: 'Optional application note',
+        providerPlaceholder: 'Preferred insurer or broker',
+        policyPlaceholder: 'Leave blank if no old policy',
+      };
+    case 'renewal':
+      return {
+        sectionHelper: 'Prepare the next renewal quote and confirm the current policy details.',
+        processLine: 'Renewal quote, confirmation, and follow-up updates will show in Status.',
+        subjectPlaceholder: 'Renewal request',
+        descriptionPlaceholder: 'Share the renewal request, timing, or concern.',
+        notesPlaceholder: 'Optional renewal note',
+        providerPlaceholder: 'Current insurer or broker',
+        policyPlaceholder: 'Current policy number',
+      };
+    case 'quotation':
+      return {
+        sectionHelper: 'Ask for coverage pricing or a policy estimate.',
+        processLine: 'Staff review the request first, then prepare the quotation or estimate.',
+        subjectPlaceholder: 'Insurance quotation request',
+        descriptionPlaceholder: 'Tell staff what coverage or pricing you need.',
+        notesPlaceholder: 'Optional quotation note',
+        providerPlaceholder: 'Preferred insurer or broker',
+        policyPlaceholder: 'Policy reference if available',
+      };
+    case 'claim':
+    default:
+      return {
+        sectionHelper: 'Start the claim intake and capture the incident clearly.',
+        processLine: 'Estimate and approval move next once the first documents are on file.',
+        subjectPlaceholder: 'Accident repair inquiry',
+        descriptionPlaceholder: 'Describe the incident, damage, or claim concern.',
+        notesPlaceholder: 'Optional claim note',
+        providerPlaceholder: 'Insurer or broker',
+        policyPlaceholder: 'Policy number',
+      };
+  }
+};
+
+const buildProcessStepState = ({ active, done }) => ({
+  active: Boolean(active || done),
+  done: Boolean(done),
+});
+
+const getInsuranceProcessSteps = ({
+  latestInquiry = null,
+  missingRequiredDocuments = [],
+} = {}) => {
+  const status = latestInquiry?.status ?? 'submitted';
+  const paymentStatus = latestInquiry?.paymentStatus ?? 'not_required';
+  const renewalStatus = latestInquiry?.renewalStatus ?? 'not_applicable';
+  const missingCount = Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments.length : 0;
+  const reviewReached = ['under_review', 'for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status);
+  const approvalReached = ['for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status);
+  const paymentReached =
+    status === 'payment_pending' ||
+    ['proof_submitted', 'verifying', 'paid', 'overdue', 'unpaid', 'awaiting_payment'].includes(paymentStatus);
+  const renewalReached =
+    status === 'for_renewal' ||
+    ['upcoming', 'quoted', 'awaiting_customer', 'renewed', 'expired'].includes(renewalStatus);
+
+  return [
+    {
+      key: 'intake',
+      label: 'Inquiry received',
+      ...buildProcessStepState({ active: true, done: Boolean(latestInquiry?.id) }),
+    },
+    {
+      key: 'documents',
+      label: missingCount > 0 ? 'Documents needed' : 'Documents ready',
+      ...buildProcessStepState({
+        active: Boolean(latestInquiry?.id),
+        done: Boolean(latestInquiry?.id) && missingCount === 0,
+      }),
+    },
+    {
+      key: 'review',
+      label: 'Estimate and review',
+      ...buildProcessStepState({
+        active: reviewReached,
+        done: ['for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status),
+      }),
+    },
+    {
+      key: 'approval',
+      label: 'Approval',
+      ...buildProcessStepState({
+        active: approvalReached,
+        done: ['approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status),
+      }),
+    },
+    {
+      key: 'payment',
+      label: 'Payment follow-up',
+      ...buildProcessStepState({
+        active: paymentReached,
+        done: paymentStatus === 'paid',
+      }),
+    },
+    {
+      key: 'renewal',
+      label: 'Renewal',
+      ...buildProcessStepState({
+        active: renewalReached,
+        done: renewalStatus === 'renewed',
+      }),
+    },
+  ];
+};
 
 const formatTimestampLabel = (value) => {
   if (!value) {
@@ -243,6 +374,7 @@ function InsuranceStatePanel({
 }
 
 export default function InsuranceInquiryScreen({ account, navigation, route }) {
+  const insets = useSafeAreaInsets();
   const accessToken = account?.accessToken ?? null;
   const userId = account?.userId ?? null;
   const accountOwnedVehicles = useMemo(
@@ -317,13 +449,19 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     ? buildOwnedVehicleInsuranceLabel(selectedVehicle)
     : '';
   const latestInquiryCanAcceptDocuments = canAttachCustomerInsuranceDocument(latestInquiry);
+  const activePurpose = latestInquiry?.purpose ?? draft.purpose;
+  const requestGuidance = useMemo(
+    () => getRequestGuidance({ purpose: activePurpose }),
+    [activePurpose],
+  );
   const requirementsChecklist = useMemo(
     () =>
       buildRequirementsChecklist({
+        purpose: activePurpose,
         status: latestInquiry?.status,
         uploadedTypes: latestInquiry?.documents?.map((document) => document.documentType) ?? [],
       }),
-    [latestInquiry],
+    [activePurpose, latestInquiry],
   );
   const missingRequiredDocuments = useMemo(
     () => requirementsChecklist.required.filter((item) => !item.complete),
@@ -370,6 +508,52 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }),
     [latestInquiry, latestStatusUpdateLabel, missingRequiredDocuments],
   );
+  const processSteps = useMemo(
+    () =>
+      getInsuranceProcessSteps({
+        latestInquiry,
+        missingRequiredDocuments,
+      }),
+    [latestInquiry, missingRequiredDocuments],
+  );
+  const currentRequestSummary = useMemo(() => {
+    if (!latestInquiry?.id) {
+      return {
+        purposeLabel: getPurposeLabel(activePurpose),
+        inquiryTypeLabel:
+          inquiryTypeOptions.find((option) => option.value === draft.inquiryType)?.label ??
+          'Insurance',
+        stageLabel: 'Not submitted',
+        statusHint: requestGuidance.sectionHelper,
+      };
+    }
+
+    return {
+      purposeLabel: getPurposeLabel(latestInquiry.purpose),
+      inquiryTypeLabel: latestInquiry.inquiryTypeLabel ?? 'Insurance',
+      stageLabel: formatWorkflowLabel(latestInquiry.status),
+      statusHint: latestInquiry.statusHint ?? requestGuidance.sectionHelper,
+    };
+  }, [activePurpose, draft.inquiryType, latestInquiry, requestGuidance.sectionHelper]);
+  const shellSummaryChips = useMemo(() => {
+    const missingCount = missingRequiredDocuments.length;
+    return [
+      {
+        label: 'Purpose',
+        value: currentRequestSummary.purposeLabel,
+      },
+      {
+        label: 'Stage',
+        value: currentRequestSummary.stageLabel,
+      },
+      {
+        label: 'Docs',
+        value: missingCount > 0 ? `${missingCount} missing` : 'Ready',
+        icon: missingCount > 0 ? 'alert-circle-outline' : 'check-circle-outline',
+        emphasis: missingCount > 0,
+      },
+    ];
+  }, [currentRequestSummary.purposeLabel, currentRequestSummary.stageLabel, missingRequiredDocuments.length]);
   const sortedHistoryRecords = useMemo(() => {
     return [...claimStatusUpdates].sort((left, right) => {
       const leftTimestamp = new Date(left?.updatedAt ?? left?.createdAt ?? 0).getTime();
@@ -394,9 +578,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }),
     [historyLatestUpdateLabel, historySummary, sortedHistoryRecords.length],
   );
-  const homeTitle = 'Overview';
+  const homeTitle = 'Home';
   const statusTitle = 'Status';
-  const statusSubtitle = 'Current status and next step';
+  const statusSubtitle = 'Track review, approval, and next action';
   const getSettledRememberedInquiryIdForSelectedVehicle = () => {
     if (!selectedVehicleId) {
       return undefined;
@@ -957,6 +1141,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       const createdInquiry = await createInsuranceInquiry({
         userId,
         vehicleId: selectedVehicle.id,
+        purpose: draft.purpose,
         inquiryType: draft.inquiryType,
         subject: draft.subject,
         description: draft.description,
@@ -1163,8 +1348,18 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     activeInsuranceTab === 'request' ||
     activeInsuranceTab === 'documents' ||
     activeInsuranceTab === 'status';
+  const contentInsetStyle = {
+    paddingTop: Math.max(insets.top, 18),
+    paddingBottom: Math.max(insets.bottom, 24),
+  };
   const screenContent = (
-    <View style={[styles.content, insuranceModeUsesPanelScroll && styles.fixedModeContent]}>
+    <View
+      style={[
+        styles.content,
+        contentInsetStyle,
+        insuranceModeUsesPanelScroll && styles.fixedModeContent,
+      ]}
+    >
       {!hasSession ? (
         <InsuranceStatePanel
           icon="lock-outline"
@@ -1261,11 +1456,13 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         selectedVehicleLabel={selectedVehicleLabel}
         isVehiclePickerAvailable={isVehiclePickerAvailable}
         onOpenVehiclePicker={handleOpenVehiclePicker}
+        summaryChips={shellSummaryChips}
       >
         {activeInsuranceTab === 'home' ? (
           <InsuranceHomePanel
             title={homeTitle}
             selectedVehicleLabel={selectedVehicleLabel}
+            currentRequestSummary={currentRequestSummary}
             overviewState={overviewState}
             statusState={statusState}
             onOpenSection={handleOpenInsuranceHomeSection}
@@ -1274,9 +1471,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
         {activeInsuranceTab === 'request' ? (
           <InsuranceRequestPanel
+            bottomInset={insets.bottom}
             selectedVehicleLabel={selectedVehicleLabel}
             draft={draft}
+            purposeOptions={purposeOptions}
             inquiryTypeOptions={inquiryTypeOptions}
+            requestGuidance={requestGuidance}
             isRefreshing={isRefreshing}
             onRefresh={refreshTracking}
             onChangeDraft={(patch) => {
@@ -1292,8 +1492,10 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
         {activeInsuranceTab === 'documents' ? (
           <InsuranceDocumentsPanel
+            bottomInset={insets.bottom}
             checklist={requirementsChecklist}
             latestInquiry={latestInquiry}
+            purposeLabel={getPurposeLabel(activePurpose)}
             isRefreshing={isRefreshing}
             onRefresh={refreshTracking}
             onChangeDocumentDraft={(patch) => {
@@ -1318,9 +1520,37 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             title={statusTitle}
             subtitle={statusSubtitle}
             statusState={statusState}
+            processSteps={processSteps}
             isRefreshing={isRefreshing}
             onRefresh={refreshTracking}
           >
+            <InsuranceSectionDivider title="Request path">
+              <Text style={styles.statusSectionMeta}>
+                {currentRequestSummary.purposeLabel} • {currentRequestSummary.inquiryTypeLabel}
+              </Text>
+              <Text style={styles.statusSectionSubtitle}>{currentRequestSummary.statusHint}</Text>
+            </InsuranceSectionDivider>
+
+            {latestInquiry?.paymentDueAt || latestInquiry?.renewalDueAt || latestInquiry?.policyExpiryAt ? (
+              <InsuranceSectionDivider title="Deadlines">
+                {latestInquiry?.paymentDueAt ? (
+                  <Text style={styles.statusSectionMeta}>
+                    Payment due: {formatTimestampLabel(latestInquiry.paymentDueAt)}
+                  </Text>
+                ) : null}
+                {latestInquiry?.renewalDueAt ? (
+                  <Text style={styles.statusSectionMeta}>
+                    Renewal due: {formatTimestampLabel(latestInquiry.renewalDueAt)}
+                  </Text>
+                ) : null}
+                {latestInquiry?.policyExpiryAt ? (
+                  <Text style={styles.statusSectionMeta}>
+                    Policy expiry: {formatTimestampLabel(latestInquiry.policyExpiryAt)}
+                  </Text>
+                ) : null}
+              </InsuranceSectionDivider>
+            ) : null}
+
             {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
               <InsuranceSectionDivider title="Payment">
                 <Text style={styles.statusSectionSubtitle}>{paymentSummary.message}</Text>
@@ -1353,7 +1583,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.screen}
@@ -1393,8 +1623,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 36,
   },
   scrollContent: {
     flexGrow: 1,
@@ -1995,27 +2223,31 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   statusSectionEyebrow: {
-    color: colors.primary,
-    fontSize: 12,
+    color: insurancePalette.amber,
+    fontFamily: insuranceFonts.body,
+    fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 1.2,
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
   },
   statusSectionTitle: {
-    color: colors.text,
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   statusSectionSubtitle: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 20,
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 14,
+    lineHeight: 22,
   },
   statusSectionMeta: {
-    color: colors.labelText,
+    color: insurancePalette.textDim,
+    fontFamily: insuranceFonts.body,
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.4,
+    letterSpacing: 1.1,
     textTransform: 'uppercase',
   },
   statusHistoryList: {
@@ -2024,17 +2256,19 @@ const styles = StyleSheet.create({
   statusHistoryRow: {
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.borderSoft,
+    borderTopColor: insurancePalette.divider,
     gap: 4,
   },
   statusHistoryLabel: {
-    color: colors.text,
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
     lineHeight: 20,
   },
   statusHistorySummary: {
-    color: colors.mutedText,
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
     fontSize: 13,
     lineHeight: 20,
   },

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 
 import {
   buildInsuranceBroadcastRequest,
+  buildInsurancePrimaryFocus,
+  buildInsuranceWorkspaceSections,
   buildInsuranceTableRow,
   buildInsuranceReminderRequest,
   getInsuranceBroadcastComposerState,
@@ -479,6 +481,61 @@ test('buildInsuranceReminderRequest deduplicates selected ids for selected-cases
   )
 })
 
+test('buildInsurancePrimaryFocus prioritizes selecting a case before sending actions', () => {
+  assert.deepEqual(
+    buildInsurancePrimaryFocus({
+      selectedInquiry: null,
+      selectedCount: 0,
+      filteredCount: 3,
+      activeFilterCount: 1,
+    }),
+    {
+      title: 'Pick a case first',
+      description: 'Choose one case from the queue before sending reminders or editing workflow.',
+      tone: 'attention',
+    },
+  )
+
+  assert.deepEqual(
+    buildInsurancePrimaryFocus({
+      selectedInquiry: { id: 'inq-1', subject: 'DEMO_INS_payment_overdue' },
+      selectedCount: 2,
+      filteredCount: 3,
+      activeFilterCount: 1,
+    }),
+    {
+      title: 'Case ready',
+      description: 'You can now review details, update workflow, or send a targeted follow-up.',
+      tone: 'ready',
+    },
+  )
+})
+
+test('buildInsuranceWorkspaceSections keeps the insurance page grouped into queue, detail, and actions', () => {
+  assert.deepEqual(
+    buildInsuranceWorkspaceSections({
+      selectedInquiry: { id: 'inq-1' },
+      selectedCount: 2,
+      filteredCount: 3,
+      activeFilterCount: 2,
+    }),
+    {
+      queue: {
+        title: '1. Filter and pick a case',
+        description: 'Narrow the live queue, then open the case you want to work on.',
+      },
+      detail: {
+        title: '2. Review the selected case',
+        description: 'Use the tabs to check documents, payment, renewal, and activity in one place.',
+      },
+      actions: {
+        title: '3. Take the next action',
+        description: 'Update workflow first, then send reminders or broadcasts only when needed.',
+      },
+    },
+  )
+})
+
 test('buildInsuranceReminderRequest keeps only meaningful server filters for filtered-results sends', () => {
   assert.deepEqual(
     buildInsuranceReminderRequest({
@@ -628,9 +685,10 @@ test('getInsuranceReminderComposerState guides single-case sends before a case i
       filteredCount: 5,
     }),
     {
-      audienceLabel: 'No current case selected',
+      audienceLabel: 'No case selected',
       scopeLabel: 'Single Case',
-      readinessLabel: 'Pick a current case before sending a single reminder.',
+      readinessLabel: 'Select a case to send a reminder.',
+      summaryLabel: 'Select a case to send a reminder.',
       canSend: false,
     },
   )
@@ -648,7 +706,8 @@ test('getInsuranceReminderComposerState summarizes selected-case reminder readin
     {
       audienceLabel: '3 selected cases',
       scopeLabel: '2 selected in the current queue',
-      readinessLabel: 'Reminder request is ready for the selected cases. Terminal or ineligible cases will be skipped when you send.',
+      readinessLabel: 'Ready for selected cases.',
+      summaryLabel: 'Ready for selected cases.',
       canSend: true,
     },
   )
@@ -666,7 +725,8 @@ test('getInsuranceBroadcastComposerState requires both audience and message cont
     {
       audienceLabel: '0 filtered cases',
       scopeLabel: 'Filtered Results',
-      readinessLabel: 'Add a message and keep at least one matching case in view.',
+      readinessLabel: 'Keep at least 1 case in view.',
+      summaryLabel: 'Keep at least 1 case in view.',
       canSend: false,
     },
   )
@@ -684,7 +744,8 @@ test('getInsuranceBroadcastComposerState marks filtered broadcasts ready when co
     {
       audienceLabel: '4 filtered cases',
       scopeLabel: 'Filtered Results',
-      readinessLabel: 'Broadcast request is ready for the filtered insurance audience. Terminal or ineligible cases will be skipped when you send.',
+      readinessLabel: 'Ready for filtered cases.',
+      summaryLabel: 'Ready for filtered cases.',
       canSend: true,
     },
   )

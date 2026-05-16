@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Archive, FolderPlus, ImagePlus, PackagePlus, PencilLine, Tag, X } from 'lucide-react'
 import {
   addCatalogCategory,
@@ -18,7 +19,6 @@ const EMPTY_PRODUCT_FORM = {
   name: '',
   category: '',
   price: '',
-  stock: '',
   sku: '',
   description: '',
   images: '',
@@ -29,7 +29,6 @@ const EMPTY_MODAL_FORM = {
   name: '',
   category: '',
   price: '',
-  stock: '',
   sku: '',
   description: '',
   imageInput: '',
@@ -143,18 +142,6 @@ function ProductEditModal({
                     />
                   </div>
 
-                  <div>
-                    <label className="label" htmlFor="edit-product-stock">Stock</label>
-                    <input
-                      id="edit-product-stock"
-                      type="number"
-                      min="0"
-                      className="input"
-                      value={form.stock}
-                      onChange={(event) => onChange('stock', event.target.value)}
-                    />
-                  </div>
-
                   <div className="md:col-span-2">
                     <label className="label" htmlFor="edit-product-sku">SKU</label>
                     <div className="relative">
@@ -253,6 +240,7 @@ function ProductEditModal({
 }
 
 export default function ShopProductAdmin() {
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const categories = useCatalogCategories()
   const publishedProducts = usePublishedCatalogProducts()
@@ -260,17 +248,11 @@ export default function ShopProductAdmin() {
   const [categoryName, setCategoryName] = useState('')
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM)
   const [editForm, setEditForm] = useState(EMPTY_MODAL_FORM)
-  const [selectedProductId, setSelectedProductId] = useState(null)
   const [editorProductId, setEditorProductId] = useState(null)
   const [submittingCategory, setSubmittingCategory] = useState(false)
   const [submittingProduct, setSubmittingProduct] = useState(false)
   const [savingProduct, setSavingProduct] = useState(false)
   const [archivingProductId, setArchivingProductId] = useState(null)
-
-  const selectedProduct = useMemo(
-    () => publishedProducts.find((product) => product.id === selectedProductId) ?? null,
-    [publishedProducts, selectedProductId],
-  )
   const editorProduct = useMemo(
     () => publishedProducts.find((product) => product.id === editorProductId) ?? null,
     [editorProductId, publishedProducts],
@@ -288,15 +270,16 @@ export default function ShopProductAdmin() {
   }, [catalogQuery, publishedProducts])
 
   useEffect(() => {
-    if (!publishedProducts.length) {
-      setSelectedProductId(null)
+    const requestedEditorProductId = searchParams?.get('product')
+
+    if (!requestedEditorProductId) {
       return
     }
 
-    if (!selectedProductId || !publishedProducts.some((product) => product.id === selectedProductId)) {
-      setSelectedProductId(publishedProducts[0].id)
+    if (publishedProducts.some((product) => product.id === requestedEditorProductId)) {
+      setEditorProductId(requestedEditorProductId)
     }
-  }, [publishedProducts, selectedProductId])
+  }, [publishedProducts, searchParams])
 
   function updateProductForm(field, value) {
     setProductForm((current) => ({
@@ -359,7 +342,7 @@ export default function ShopProductAdmin() {
         name: productForm.name,
         category: productForm.category,
         price: productForm.price,
-        stock: productForm.stock,
+        stock: 0,
         sku: productForm.sku,
         description: productForm.description,
         images: parseImageUrls(productForm.images),
@@ -374,7 +357,7 @@ export default function ShopProductAdmin() {
       toast({
         type: 'success',
         title: 'Product published',
-        message: `${createdProduct.name} is now live in the catalog.`,
+        message: `${createdProduct.name} is now live in the catalog. Manage stock from Inventory.`,
       })
     } catch (error) {
       toast({
@@ -415,7 +398,6 @@ export default function ShopProductAdmin() {
         name: editForm.name,
         category: editForm.category,
         price: editForm.price,
-        stock: editForm.stock,
         sku: editForm.sku,
         description: editForm.description,
         images: editForm.images,
@@ -504,7 +486,7 @@ export default function ShopProductAdmin() {
 
         <div className="table-surface">
           <div className="table-scroll">
-            <table className="data-table min-w-[860px]" aria-label="Published products">
+            <table className="data-table w-full min-w-[860px]" aria-label="Published products">
               <thead>
                 <tr>
                   <th>Product</th>
@@ -533,14 +515,10 @@ export default function ShopProductAdmin() {
                   visibleProducts.map((product) => (
                     <tr key={product.id}>
                       <td>
-                        <button
-                          type="button"
-                          className="text-left"
-                          onClick={() => setSelectedProductId(product.id)}
-                        >
+                        <div className="text-left">
                           <p className="font-semibold text-ink-primary">{product.name}</p>
                           <p className="mt-1 text-xs text-ink-muted">{product.sku || 'No SKU assigned'}</p>
-                        </button>
+                        </div>
                       </td>
                       <td>{product.category}</td>
                       <td className="font-semibold text-ink-primary">{formatCurrency(product.price)}</td>
@@ -551,6 +529,12 @@ export default function ShopProductAdmin() {
                       <td>{product.images.length}</td>
                       <td>
                         <div className="flex flex-wrap gap-2">
+                          <a
+                            href={`/admin/inventory?product=${product.id}`}
+                            className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
+                          >
+                            Manage Stock
+                          </a>
                           <button
                             type="button"
                             className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
@@ -578,98 +562,6 @@ export default function ShopProductAdmin() {
             </table>
           </div>
         </div>
-      </SectionShell>
-
-      <SectionShell
-        title="Selected Product"
-        description="Choose a product from the list to review publishing details."
-        action={selectedProduct ? <span className="badge badge-gray">{selectedProduct.status}</span> : null}
-      >
-        {selectedProduct ? (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-bold text-ink-primary">{selectedProduct.name}</p>
-                    <p className="mt-1 text-sm text-ink-muted">{selectedProduct.description || 'No product description yet.'}</p>
-                  </div>
-                  <span className="badge badge-green">{selectedProduct.status}</span>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Category</p>
-                    <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedProduct.category}</p>
-                  </div>
-                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Price</p>
-                    <p className="mt-2 text-sm font-semibold text-ink-primary">{formatCurrency(selectedProduct.price)}</p>
-                  </div>
-                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Stock</p>
-                    <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedProduct.stock}</p>
-                  </div>
-                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">SKU</p>
-                    <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedProduct.sku || 'Not assigned'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Publishing Notes</p>
-                <p className="mt-2 text-sm text-ink-muted">
-                  Keep customer-facing copy, price, stock, and image coverage aligned before opening the editor.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Images</p>
-                <div className="mt-3 space-y-3">
-                  {selectedProduct.images.length ? (
-                    selectedProduct.images.map((image, index) => (
-                      <div key={`${image}-${index}`} className="rounded-xl border border-surface-border bg-surface-card p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-                          Image {index + 1}
-                        </p>
-                        <p className="mt-2 break-all text-sm text-ink-primary">{image}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="empty-panel px-4 py-6 text-sm text-ink-muted">
-                      No product images added yet.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Actions</p>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button type="button" className="ops-action-primary min-w-[144px]" onClick={() => openProductEditor(selectedProduct)}>
-                    <PencilLine size={14} />
-                    Edit Product
-                  </button>
-                  <button
-                    type="button"
-                    className="ops-action-danger min-w-[144px]"
-                    onClick={() => handleArchiveProduct(selectedProduct.id, selectedProduct.name)}
-                    disabled={archivingProductId === selectedProduct.id}
-                  >
-                    <Archive size={14} />
-                    {archivingProductId === selectedProduct.id ? 'Archiving...' : 'Archive Product'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="empty-panel px-4 py-6 text-sm text-ink-muted">
-            Select a published product to review category, pricing, stock, and image details.
-          </div>
-        )}
       </SectionShell>
 
       <SectionShell
@@ -726,7 +618,7 @@ export default function ShopProductAdmin() {
           <div className="rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Create And Publish Product</p>
             <p className="mt-2 text-sm text-ink-muted">
-              Publish products with fields that match the shared catalog store.
+              Publish products with customer-facing fields only. Set stock later from Inventory.
             </p>
 
             <form className="mt-4 space-y-4" onSubmit={handlePublishProduct}>
@@ -768,19 +660,6 @@ export default function ShopProductAdmin() {
                     className="input"
                     value={productForm.price}
                     onChange={(event) => updateProductForm('price', event.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="catalog-product-stock">Stock</label>
-                  <input
-                    id="catalog-product-stock"
-                    type="number"
-                    min="0"
-                    className="input"
-                    value={productForm.stock}
-                    onChange={(event) => updateProductForm('stock', event.target.value)}
                     placeholder="0"
                   />
                 </div>

@@ -4,12 +4,14 @@ import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { enableScreens } from 'react-native-screens';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import LandingPage from './src/screens/LandingPage';
 import RegisterPage from './src/screens/RegisterPage';
 import LoginPage from './src/screens/LoginPage';
 import OTPScreen from './src/screens/OTPScreen';
 import CompleteOnboardingPage from './src/screens/CompleteOnboardingPage';
 import Dashboard from './src/screens/Dashboard';
+import TechnicianDashboard from './src/screens/TechnicianDashboard';
 import ForgotPasswordEmail from './src/screens/ForgotPasswordEmail';
 import ForgotPasswordOTP from './src/screens/ForgotPasswordOTP';
 import ResetPassword from './src/screens/ResetPassword';
@@ -35,8 +37,10 @@ import {
   verifyDeleteAccountOtp,
   verifyRegistrationOtp,
 } from './src/lib/authClient';
+import { getMobileAppSessionAccessState } from './src/lib/mobileSessionAccess';
 import { cloneDate, formatVehicleDisplayName } from './src/utils/validation';
 import { colors } from './src/theme';
+import { ThemeProvider } from './src/theme/ThemeProvider';
 
 enableScreens(false);
 
@@ -146,7 +150,23 @@ function MenuScreen(props) {
     handleStartDeleteAccountOtp,
   } = useAppSessionContext();
   const currentAccount = activeAccount || registeredAccount;
-  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+  const accessState = getMobileAppSessionAccessState(currentAccount);
+
+  if (accessState === 'technician_session_active') {
+    return (
+      <TechnicianDashboard
+        {...props}
+        account={currentAccount}
+        onSignOut={() => {
+          clearCustomerSession();
+          props.navigation.reset({
+            index: 0,
+            routes: [{ name: 'Landing' }],
+          });
+        }}
+      />
+    );
+  }
 
   if (accessState !== 'customer_session_active') {
     return (
@@ -990,10 +1010,12 @@ export default function App() {
   };
 
   return (
-    <View style={styles.appRoot}>
-      <StatusBar style="light" backgroundColor={colors.background} translucent={false} />
-      <AppSessionContext.Provider value={appSessionContextValue}>
-        <NavigationContainer theme={navigationTheme}>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <View style={styles.appRoot}>
+          <StatusBar style="light" backgroundColor={colors.background} translucent={false} />
+          <AppSessionContext.Provider value={appSessionContextValue}>
+            <NavigationContainer theme={navigationTheme}>
           <Stack.Navigator
             initialRouteName="Landing"
             detachInactiveScreens={false}
@@ -1104,10 +1126,12 @@ export default function App() {
               component={ChatbotMobileScreen}
               options={{ headerShown: false }}
             />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </AppSessionContext.Provider>
-    </View>
+              </Stack.Navigator>
+            </NavigationContainer>
+          </AppSessionContext.Provider>
+        </View>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 

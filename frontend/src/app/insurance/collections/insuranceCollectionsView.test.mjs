@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  buildCollectionsFocusHighlights,
   buildCollectionsUpdateDraft,
   buildCollectionsTableRow,
   filterCollectionsItems,
@@ -259,8 +260,39 @@ test('getCollectionsFilterSummary explains the active queue scope and overdue/pr
     }),
     {
       tone: 'urgent',
-      title: '2 collections cases in focus',
-      detail: 'Showing verifying cases, overdue only, with proof, matching "casey". 7 other cases are hidden by the current filters.',
+      title: '2 collections cases in view',
+      detail: 'Verifying, overdue only, with proof, matching "casey". 7 hidden.',
     },
+  )
+})
+
+test('buildCollectionsFocusHighlights keeps the queue guidance compact', () => {
+  assert.deepEqual(
+    buildCollectionsFocusHighlights({
+      filters: {
+        overdueOnly: true,
+      },
+      selectedInquiry: buildInquiryFixture({
+        id: 'inq-proof',
+        customerDisplayName: 'Casey Customer',
+        paymentStatus: 'proof_submitted',
+      }),
+      hasProofInView: true,
+      visibleCount: 3,
+    }),
+    [
+      {
+        label: 'Queue',
+        value: '3 visible',
+        hint: 'Overdue only',
+        tone: 'warning',
+      },
+      {
+        label: 'Selected',
+        value: 'Casey Customer',
+        hint: 'Proof submitted',
+        tone: 'positive',
+      },
+    ],
   )
 })

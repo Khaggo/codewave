@@ -5,6 +5,8 @@ import {
   buildIntakeInspectionNotes,
   buildIntakeInspectionPayload,
   createInitialIntakeDraft,
+  getIntakeRequirementOptions,
+  resolveIntakeNextRoute,
 } from './digitalIntakeInspectionWorkspaceForm.mjs'
 
 test('createInitialIntakeDraft returns the intake defaults', () => {
@@ -275,4 +277,69 @@ test('buildIntakeInspectionPayload preserves later intake sections when long tex
   assert.match(payload.notes, /CUSTOMER ACKNOWLEDGMENT/)
   assert.match(payload.notes, /Customer signature:/)
   assert.match(payload.notes, /Received by staff:/)
+})
+
+test('buildIntakeInspectionPayload defaults regular service to service routing', () => {
+  const payload = buildIntakeInspectionPayload({
+    draft: {
+      ...createInitialIntakeDraft(),
+      visitType: 'regular_service',
+      nextRoute: 'insurance',
+    },
+    userId: 'staff-77',
+  })
+
+  assert.equal(payload.nextRoute, 'service')
+})
+
+test('buildIntakeInspectionPayload keeps insurance-related routing when selected', () => {
+  const payload = buildIntakeInspectionPayload({
+    draft: {
+      ...createInitialIntakeDraft(),
+      visitType: 'insurance_related',
+      nextRoute: 'service',
+    },
+    userId: 'staff-78',
+  })
+
+  assert.equal(payload.nextRoute, 'insurance')
+})
+
+test('resolveIntakeNextRoute follows visit-type intent over stale route values', () => {
+  assert.equal(resolveIntakeNextRoute('regular_service', 'insurance'), 'service')
+  assert.equal(resolveIntakeNextRoute('insurance_related', 'service'), 'insurance')
+  assert.equal(resolveIntakeNextRoute('back_job_complaint', 'inspection'), 'complaint')
+})
+
+test('getIntakeRequirementOptions keeps booking optional for walk-ins', () => {
+  const options = getIntakeRequirementOptions({
+    arrivalType: 'walk_in',
+    visitType: 'regular_service',
+  })
+
+  assert.deepEqual(
+    options.map(({ value, required }) => ({ value, required })),
+    [
+      { value: 'bookingFound', required: false },
+      { value: 'orCrPresent', required: true },
+    ],
+  )
+})
+
+test('getIntakeRequirementOptions surfaces insurance-specific requirement checks', () => {
+  const options = getIntakeRequirementOptions({
+    arrivalType: 'with_booking',
+    visitType: 'insurance_related',
+  })
+
+  assert.deepEqual(
+    options.map(({ value, required }) => ({ value, required })),
+    [
+      { value: 'bookingFound', required: true },
+      { value: 'orCrPresent', required: true },
+      { value: 'validIdPresent', required: true },
+      { value: 'oldPolicyPresent', required: true },
+      { value: 'supportingDocsPresent', required: true },
+    ],
+  )
 })

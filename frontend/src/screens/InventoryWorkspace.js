@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
   Boxes,
   Eye,
   Package,
   PencilLine,
-  RefreshCcw,
   ShieldAlert,
   Warehouse,
 } from 'lucide-react'
@@ -103,6 +105,7 @@ const formatLabel = (value) =>
     .join(' ')
 
 export default function InventoryWorkspace() {
+  const searchParams = useSearchParams()
   const user = useUser()
   const { toast } = useToast()
   const products = useInventoryProducts()
@@ -116,6 +119,8 @@ export default function InventoryWorkspace() {
     ACTION.INVENTORY_MANAGE,
   )
 
+  const requestedProductId = searchParams?.get('product')
+
   useEffect(() => {
     setSelectedProductId((currentProductId) =>
       products.some((product) => product.id === currentProductId)
@@ -123,6 +128,16 @@ export default function InventoryWorkspace() {
         : products[0]?.id ?? null,
     )
   }, [products])
+
+  useEffect(() => {
+    if (!requestedProductId) {
+      return
+    }
+
+    if (products.some((product) => product.id === requestedProductId)) {
+      setSelectedProductId(requestedProductId)
+    }
+  }, [products, requestedProductId])
 
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) ?? null,
@@ -143,12 +158,8 @@ export default function InventoryWorkspace() {
 
   const summary = useMemo(() => buildInventorySummary(products), [products])
 
-  const handleRefresh = () => {
-    toast({
-      type: 'info',
-      title: 'Inventory queue refreshed',
-      message: 'The page is already reading the live local stock workspace.',
-    })
+  const handleSelectProduct = (productId) => {
+    setSelectedProductId(productId)
   }
 
   const handleThresholdSubmit = (event) => {
@@ -273,20 +284,7 @@ export default function InventoryWorkspace() {
         />
       </section>
 
-      <SectionShell
-        title="Inventory Queue"
-        description="Search existing catalog products and act on the live stock queue."
-        action={
-          <button
-            type="button"
-            className="ops-action-secondary min-w-[132px] self-start xl:self-auto"
-            onClick={handleRefresh}
-          >
-            <RefreshCcw size={15} />
-            Refresh
-          </button>
-        }
-      >
+      <SectionShell title="Inventory Queue" description="Search existing catalog products and act on the live stock queue.">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <label className="min-w-[260px] flex-1">
             <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
@@ -332,58 +330,283 @@ export default function InventoryWorkspace() {
                   <th>Low-Stock Threshold</th>
                   <th>Stock State</th>
                   <th>Updated</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredProducts.map((product) => {
                   const stockMeta = getInventoryStockStateMeta(product.stockState)
                   const isSelected = product.id === selectedProductId
+                  const rowHistory = adjustmentHistory.filter((record) => record.productId === product.id)
 
                   return (
-                    <tr key={product.id} className={isSelected ? 'bg-brand-orange/8' : undefined}>
-                      <td>
-                        <button
-                          type="button"
-                          className="flex items-center gap-3 text-left"
-                          onClick={() => setSelectedProductId(product.id)}
-                        >
-                          <div
-                            className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${
-                              isSelected
-                                ? 'border-brand-orange/30 bg-brand-orange/10 text-brand-orange'
-                                : 'border-surface-border bg-surface-raised text-ink-muted'
-                            }`}
+                    <Fragment key={product.id}>
+                      <tr key={product.id} className={isSelected ? 'bg-brand-orange/8' : undefined}>
+                        <td>
+                          <button
+                            type="button"
+                            className="flex items-center gap-3 text-left"
+                            onClick={() => handleSelectProduct(product.id)}
                           >
-                            <Package size={16} />
+                            <div
+                              className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${
+                                isSelected
+                                  ? 'border-brand-orange/30 bg-brand-orange/10 text-brand-orange'
+                                  : 'border-surface-border bg-surface-raised text-ink-muted'
+                              }`}
+                            >
+                              <Package size={16} />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-ink-primary">{product.name}</p>
+                              <p className="mt-1 text-xs text-ink-muted">
+                                {product.description || 'No product description recorded.'}
+                              </p>
+                            </div>
+                          </button>
+                        </td>
+                        <td>
+                          <span className="rounded-lg bg-surface-raised px-2 py-1 font-mono text-xs font-semibold text-ink-primary">
+                            {product.sku || 'No SKU'}
+                          </span>
+                        </td>
+                        <td className="text-ink-secondary">{product.category}</td>
+                        <td>
+                          <span className={`badge ${product.status === 'published' ? 'badge-green' : 'badge-gray'}`}>
+                            {formatInventoryVisibility(product.status)}
+                          </span>
+                        </td>
+                        <td className="font-semibold text-ink-primary">{product.stock}</td>
+                        <td className="text-ink-secondary">{product.lowStockThreshold}</td>
+                        <td>
+                          <span className={stockMeta.badgeClassName}>{stockMeta.label}</span>
+                        </td>
+                        <td className="text-ink-secondary">
+                          {formatInventoryTimestamp(product.updatedAt ?? product.createdAt)}
+                        </td>
+                        <td>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-2 rounded-xl border border-brand-orange/20 bg-brand-orange/10 px-3 py-2 text-xs font-semibold text-brand-orange transition-colors hover:bg-brand-orange/15"
+                              onClick={() => handleSelectProduct(product.id)}
+                            >
+                              <PencilLine size={14} />
+                              Adjust stock
+                            </button>
+                            <a
+                              href="/admin/catalog"
+                              className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
+                            >
+                              Manage in Catalog
+                            </a>
                           </div>
-                          <div>
-                            <p className="font-semibold text-ink-primary">{product.name}</p>
-                            <p className="mt-1 text-xs text-ink-muted">
-                              {product.description || 'No product description recorded.'}
-                            </p>
-                          </div>
-                        </button>
-                      </td>
-                      <td>
-                        <span className="rounded-lg bg-surface-raised px-2 py-1 font-mono text-xs font-semibold text-ink-primary">
-                          {product.sku || 'No SKU'}
-                        </span>
-                      </td>
-                      <td className="text-ink-secondary">{product.category}</td>
-                      <td>
-                        <span className={`badge ${product.status === 'published' ? 'badge-green' : 'badge-gray'}`}>
-                          {formatInventoryVisibility(product.status)}
-                        </span>
-                      </td>
-                      <td className="font-semibold text-ink-primary">{product.stock}</td>
-                      <td className="text-ink-secondary">{product.lowStockThreshold}</td>
-                      <td>
-                        <span className={stockMeta.badgeClassName}>{stockMeta.label}</span>
-                      </td>
-                      <td className="text-ink-secondary">
-                        {formatInventoryTimestamp(product.updatedAt ?? product.createdAt)}
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      {isSelected ? (
+                        <tr>
+                          <td colSpan={9} className="bg-brand-orange/4 px-4 py-4">
+                            <div className="grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+                              <div className="space-y-4">
+                                <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className={stockMeta.badgeClassName}>{stockMeta.label}</span>
+                                    <span className={`badge ${product.status === 'published' ? 'badge-green' : 'badge-gray'}`}>
+                                      {formatInventoryVisibility(product.status)}
+                                    </span>
+                                  </div>
+                                  <p className="mt-3 text-lg font-semibold text-ink-primary">{product.name}</p>
+                                  <p className="mt-1 text-sm text-ink-secondary">
+                                    {product.description || 'No product description recorded.'}
+                                  </p>
+                                  <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                    <div className="rounded-xl border border-surface-border bg-surface-raised px-3 py-3">
+                                      <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-muted">On hand</dt>
+                                      <dd className="mt-2 text-base font-semibold text-ink-primary">{product.stock}</dd>
+                                    </div>
+                                    <div className="rounded-xl border border-surface-border bg-surface-raised px-3 py-3">
+                                      <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-muted">Threshold</dt>
+                                      <dd className="mt-2 text-base font-semibold text-ink-primary">{product.lowStockThreshold}</dd>
+                                    </div>
+                                    <div className="rounded-xl border border-surface-border bg-surface-raised px-3 py-3">
+                                      <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-muted">SKU</dt>
+                                      <dd className="mt-2 text-base font-semibold text-ink-primary">{product.sku || 'No SKU'}</dd>
+                                    </div>
+                                    <div className="rounded-xl border border-surface-border bg-surface-raised px-3 py-3">
+                                      <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-muted">Updated</dt>
+                                      <dd className="mt-2 text-base font-semibold text-ink-primary">
+                                        {formatInventoryTimestamp(product.updatedAt ?? product.createdAt)}
+                                      </dd>
+                                    </div>
+                                  </dl>
+                                </div>
+
+                                <form
+                                  className="rounded-2xl border border-surface-border bg-surface-card p-4"
+                                  onSubmit={handleThresholdSubmit}
+                                >
+                                  <div className="flex flex-wrap items-end gap-3">
+                                    <label className="min-w-[180px] flex-1">
+                                      <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                                        Low-stock threshold
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        inputMode="numeric"
+                                        className="input"
+                                        value={thresholdDraft}
+                                        onChange={(event) => setThresholdDraft(event.target.value)}
+                                      />
+                                    </label>
+                                    <button type="submit" className="ops-action-secondary min-w-[180px] justify-center">
+                                      <PencilLine size={14} />
+                                      Update threshold
+                                    </button>
+                                  </div>
+                                </form>
+                              </div>
+
+                              <div className="space-y-4">
+                                <form className="rounded-2xl border border-surface-border bg-surface-card p-4" onSubmit={handleAdjustmentSubmit}>
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-ink-primary">Stock adjustment</p>
+                                      <p className="mt-1 text-sm text-ink-secondary">Update this product without leaving the queue.</p>
+                                    </div>
+                                  </div>
+                                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                    <label>
+                                      <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                                        Action
+                                      </span>
+                                      <select
+                                        className="input"
+                                        value={adjustmentDraft.actionType}
+                                        onChange={(event) =>
+                                          setAdjustmentDraft((currentDraft) => ({
+                                            ...currentDraft,
+                                            actionType: event.target.value,
+                                          }))
+                                        }
+                                      >
+                                        <option value="add">Add stock</option>
+                                        <option value="subtract">Subtract stock</option>
+                                      </select>
+                                    </label>
+                                    <label>
+                                      <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                                        Quantity
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        inputMode="numeric"
+                                        className="input"
+                                        value={adjustmentDraft.quantity}
+                                        onChange={(event) =>
+                                          setAdjustmentDraft((currentDraft) => ({
+                                            ...currentDraft,
+                                            quantity: event.target.value,
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="md:col-span-2">
+                                      <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                                        Reason
+                                      </span>
+                                      <input
+                                        className="input"
+                                        value={adjustmentDraft.reason}
+                                        onChange={(event) =>
+                                          setAdjustmentDraft((currentDraft) => ({
+                                            ...currentDraft,
+                                            reason: event.target.value,
+                                          }))
+                                        }
+                                        placeholder="Required reason for the stock change"
+                                      />
+                                    </label>
+                                    <label className="md:col-span-2">
+                                      <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                                        Note
+                                      </span>
+                                      <textarea
+                                        className="input min-h-[92px] resize-y py-3"
+                                        value={adjustmentDraft.note}
+                                        onChange={(event) =>
+                                          setAdjustmentDraft((currentDraft) => ({
+                                            ...currentDraft,
+                                            note: event.target.value,
+                                          }))
+                                        }
+                                        placeholder="Optional context for the stock change"
+                                      />
+                                    </label>
+                                  </div>
+                                  <div className="mt-4 flex justify-end">
+                                    <button type="submit" className="ops-action-primary min-w-[172px] justify-center">
+                                      {adjustmentDraft.actionType === 'add' ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+                                      Submit adjustment
+                                    </button>
+                                  </div>
+                                </form>
+
+                                <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-ink-primary">Latest adjustments</p>
+                                      <p className="mt-1 text-sm text-ink-secondary">Recent stock changes for this product.</p>
+                                    </div>
+                                    <a href="/admin/catalog" className="ops-action-secondary min-w-[168px] justify-center">
+                                      Manage in Catalog
+                                    </a>
+                                  </div>
+                                  <div className="mt-4 space-y-3">
+                                    {rowHistory.length === 0 ? (
+                                      <div className="rounded-2xl border border-dashed border-surface-border bg-surface-raised px-4 py-6 text-sm text-ink-secondary">
+                                        No stock adjustments recorded yet.
+                                      </div>
+                                    ) : (
+                                      rowHistory.slice(0, 3).map((record) => (
+                                        <div
+                                          key={record.id}
+                                          className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-4"
+                                        >
+                                          <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div>
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <span className={`badge ${record.actionType === 'add' ? 'badge-green' : 'badge-orange'}`}>
+                                                  {formatLabel(record.actionType)}
+                                                </span>
+                                                <span className="rounded-lg bg-surface-card px-2 py-1 font-mono text-xs font-semibold text-ink-primary">
+                                                  {formatInventoryDelta(record.delta)}
+                                                </span>
+                                              </div>
+                                              <p className="mt-3 text-sm font-semibold text-ink-primary">{record.reason}</p>
+                                              <p className="mt-1 text-sm text-ink-secondary">
+                                                {record.previousQuantity} to {record.newQuantity} on hand
+                                              </p>
+                                            </div>
+                                            <div className="text-right text-sm text-ink-secondary">
+                                              <p>{record.actor}</p>
+                                              <p className="mt-1">{formatInventoryTimestamp(record.timestamp)}</p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   )
                 })}
               </tbody>
@@ -404,287 +627,6 @@ export default function InventoryWorkspace() {
         ) : null}
       </SectionShell>
 
-      <SectionShell
-        title="Selected Product"
-        description="Review the selected product before updating stock or threshold settings."
-        action={
-          selectedProduct ? (
-            <a href="/admin/catalog" className="ops-action-secondary min-w-[168px] justify-center">
-              Manage in Catalog
-            </a>
-          ) : null
-        }
-      >
-        {!selectedProduct ? (
-          <div className="empty-panel min-h-[180px]">
-            <Eye size={22} className="mx-auto text-ink-muted" />
-            <p className="mt-3 text-sm font-semibold text-ink-primary">Select a product</p>
-            <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
-              Choose a queue row to review its stock and update controls.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            <div className="rounded-3xl border border-surface-border bg-surface-raised p-5">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={getInventoryStockStateMeta(selectedProduct.stockState).badgeClassName}>
-                      {getInventoryStockStateMeta(selectedProduct.stockState).label}
-                    </span>
-                    <span className={`badge ${selectedProduct.status === 'published' ? 'badge-green' : 'badge-gray'}`}>
-                      {formatInventoryVisibility(selectedProduct.status)}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-2xl font-bold tracking-tight text-ink-primary">
-                    {selectedProduct.name}
-                  </p>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
-                    {selectedProduct.description || 'No product description recorded.'}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3 text-right">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-                    Last updated
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-ink-primary">
-                    {formatInventoryTimestamp(selectedProduct.updatedAt ?? selectedProduct.createdAt)}
-                  </p>
-                </div>
-              </div>
-
-              <dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
-                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">SKU</dt>
-                  <dd className="mt-2 text-base font-semibold text-ink-primary">
-                    {selectedProduct.sku || 'No SKU'}
-                  </dd>
-                </div>
-                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
-                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Category</dt>
-                  <dd className="mt-2 text-base font-semibold text-ink-primary">
-                    {selectedProduct.category}
-                  </dd>
-                </div>
-                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
-                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">On Hand</dt>
-                  <dd className="mt-2 text-base font-semibold text-ink-primary">
-                    {selectedProduct.stock}
-                  </dd>
-                </div>
-                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
-                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">
-                    Low-Stock Threshold
-                  </dt>
-                  <dd className="mt-2 text-base font-semibold text-ink-primary">
-                    {selectedProduct.lowStockThreshold}
-                  </dd>
-                </div>
-                <div
-                  className={`rounded-2xl border px-4 py-3 ${getInventoryStockStateMeta(selectedProduct.stockState).fieldClassName}`}
-                >
-                  <dt className="text-xs font-semibold uppercase tracking-[0.16em]">Stock State</dt>
-                  <dd className="mt-2 text-base font-semibold">
-                    {getInventoryStockStateMeta(selectedProduct.stockState).label}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-
-            <form
-              className="rounded-3xl border border-surface-border bg-surface-card p-5"
-              onSubmit={handleThresholdSubmit}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-ink-primary">Low-stock threshold</p>
-                  <p className="mt-1 text-sm text-ink-secondary">
-                    Set the quantity where this product moves into low-stock status.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-end gap-3">
-                  <label className="min-w-[180px]">
-                    <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-                      Threshold
-                    </span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      inputMode="numeric"
-                      className="input"
-                      value={thresholdDraft}
-                      onChange={(event) => setThresholdDraft(event.target.value)}
-                    />
-                  </label>
-                  <button type="submit" className="ops-action-primary min-w-[156px]">
-                    <PencilLine size={15} />
-                    Update threshold
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        )}
-      </SectionShell>
-
-      <SectionShell
-        title="Stock Adjustment"
-        description="Record a live stock change for the selected product."
-      >
-        {!selectedProduct ? (
-          <div className="empty-panel min-h-[160px]">
-            <Package size={20} className="mx-auto text-ink-muted" />
-            <p className="mt-3 text-sm font-semibold text-ink-primary">No product selected</p>
-            <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
-              Select a product from the queue before recording a stock movement.
-            </p>
-          </div>
-        ) : (
-          <form className="grid gap-4 xl:grid-cols-[1fr_1fr]" onSubmit={handleAdjustmentSubmit}>
-            <label>
-              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-                Adjustment type
-              </span>
-              <select
-                className="input"
-                value={adjustmentDraft.actionType}
-                onChange={(event) =>
-                  setAdjustmentDraft((currentDraft) => ({
-                    ...currentDraft,
-                    actionType: event.target.value,
-                  }))
-                }
-              >
-                <option value="add">Add</option>
-                <option value="subtract">Subtract</option>
-              </select>
-            </label>
-
-            <label>
-              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-                Quantity
-              </span>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                inputMode="numeric"
-                className="input"
-                value={adjustmentDraft.quantity}
-                onChange={(event) =>
-                  setAdjustmentDraft((currentDraft) => ({
-                    ...currentDraft,
-                    quantity: event.target.value,
-                  }))
-                }
-              />
-            </label>
-
-            <label className="xl:col-span-2">
-              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-                Reason
-              </span>
-              <input
-                className="input"
-                value={adjustmentDraft.reason}
-                onChange={(event) =>
-                  setAdjustmentDraft((currentDraft) => ({
-                    ...currentDraft,
-                    reason: event.target.value,
-                  }))
-                }
-                placeholder="Required reason for the stock change"
-              />
-            </label>
-
-            <label className="xl:col-span-2">
-              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-                Note
-              </span>
-              <textarea
-                className="input min-h-[112px] resize-y py-3"
-                value={adjustmentDraft.note}
-                onChange={(event) =>
-                  setAdjustmentDraft((currentDraft) => ({
-                    ...currentDraft,
-                    note: event.target.value,
-                  }))
-                }
-                placeholder="Optional context for the stock change"
-              />
-            </label>
-
-            <div className="xl:col-span-2 flex justify-end">
-              <button type="submit" className="ops-action-primary min-w-[156px]">
-                Submit adjustment
-              </button>
-            </div>
-          </form>
-        )}
-      </SectionShell>
-
-      <SectionShell
-        title="Adjustment History"
-        description="Review the latest stock changes for this product."
-      >
-        {!selectedProduct ? (
-          <div className="empty-panel min-h-[160px]">
-            <Package size={20} className="mx-auto text-ink-muted" />
-            <p className="mt-3 text-sm font-semibold text-ink-primary">No history to show</p>
-            <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
-              Select a product first to review its stock movement history.
-            </p>
-          </div>
-        ) : adjustmentHistory.length === 0 ? (
-          <div className="empty-panel min-h-[160px]">
-            <Package size={20} className="mx-auto text-ink-muted" />
-            <p className="mt-3 text-sm font-semibold text-ink-primary">
-              No stock adjustments recorded yet
-            </p>
-            <p className="mt-1 max-w-md text-sm leading-6 text-ink-secondary">
-              The first live stock adjustment for this product will appear here.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {adjustmentHistory.map((record) => (
-              <div
-                key={record.id}
-                className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`badge ${
-                          record.actionType === 'add' ? 'badge-green' : 'badge-orange'
-                        }`}
-                      >
-                        {formatLabel(record.actionType)}
-                      </span>
-                      <span className="rounded-lg bg-surface-card px-2 py-1 font-mono text-xs font-semibold text-ink-primary">
-                        {formatInventoryDelta(record.delta)}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-sm font-semibold text-ink-primary">{record.reason}</p>
-                    <p className="mt-1 text-sm text-ink-secondary">
-                      {record.previousQuantity} to {record.newQuantity} on hand
-                    </p>
-                    {record.note ? (
-                      <p className="mt-2 text-sm leading-6 text-ink-secondary">{record.note}</p>
-                    ) : null}
-                  </div>
-                  <div className="text-right text-sm text-ink-secondary">
-                    <p>{record.actor}</p>
-                    <p className="mt-1">{formatInventoryTimestamp(record.timestamp)}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionShell>
     </div>
   )
 }

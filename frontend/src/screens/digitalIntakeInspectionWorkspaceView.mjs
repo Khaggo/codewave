@@ -13,6 +13,14 @@ const PRIMARY_ACTION_LABELS = {
 export const getIntakeWorkspacePrimaryActionLabel = (visitType) =>
   PRIMARY_ACTION_LABELS[visitType] ?? 'Save Intake'
 
+export const getArrivalPhotoTemporaryRef = (slot) => `upload://vehicle/${slot}`
+
+export const getArrivalPhotoButtonLabel = (fileName) =>
+  String(fileName ?? '').trim() ? 'Replace photo' : 'Add photo'
+
+export const getArrivalPhotoDisplayLabel = (fileName) =>
+  String(fileName ?? '').trim() || 'No photo selected'
+
 const REQUIREMENTS_CHECKLIST_FIELDS = [
   'bookingFound',
   'orCrPresent',

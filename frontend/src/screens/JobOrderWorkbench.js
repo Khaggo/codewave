@@ -2992,7 +2992,6 @@ export default function JobOrderWorkbench() {
               </div>
             </div>
           </div>
-        </div>
         </section>
       )}
     </div>

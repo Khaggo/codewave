@@ -158,7 +158,7 @@ const describeCollectionsPaymentFilter = (paymentStatus) => {
     return 'all payment states'
   }
 
-  return `${formatStatusLabel(paymentStatus).toLowerCase()} cases`
+  return formatStatusLabel(paymentStatus).toLowerCase()
 }
 
 const describeProofFilter = (hasProof) => {
@@ -193,14 +193,54 @@ export function getCollectionsFilterSummary({ filters = {}, visibleCount = 0, to
   const hiddenCount = Math.max(totalCount - visibleCount, 0)
   const tone = filters.overdueOnly || filters.paymentStatus === 'overdue' ? 'urgent' : visibleCount ? 'focused' : 'empty'
   const noun = visibleCount === 1 ? 'case' : 'cases'
-  const hiddenCopy =
-    hiddenCount > 0 ? ` ${hiddenCount} other ${hiddenCount === 1 ? 'case is' : 'cases are'} hidden by the current filters.` : ''
-
   return {
     tone,
-    title: `${visibleCount} collections ${noun} in focus`,
-    detail: `Showing ${descriptors.join(', ')}.${hiddenCopy}`.trim(),
+    title: `${visibleCount} collections ${noun} in view`,
+    detail: `${descriptors
+      .map((descriptor, index) => (index === 0 ? descriptor.charAt(0).toUpperCase() + descriptor.slice(1) : descriptor))
+      .join(', ')}.${hiddenCount > 0 ? ` ${hiddenCount} hidden.` : ''}`.trim(),
   }
+}
+
+export function buildCollectionsFocusHighlights({
+  filters = {},
+  selectedInquiry = null,
+  hasProofInView = false,
+  visibleCount = 0,
+} = {}) {
+  const queueHints = []
+
+  if (filters.paymentStatus && filters.paymentStatus !== 'all') {
+    queueHints.push(formatStatusLabel(filters.paymentStatus))
+  }
+
+  if (filters.overdueOnly) {
+    queueHints.push('Overdue only')
+  }
+
+  if (filters.hasProof === 'with_proof') {
+    queueHints.push('With proof')
+  } else if (filters.hasProof === 'without_proof') {
+    queueHints.push('No proof')
+  }
+
+  return [
+    {
+      label: 'Queue',
+      value: `${visibleCount} visible`,
+      hint: queueHints.join(', ') || 'All payment cases',
+      tone: filters.overdueOnly ? 'warning' : 'neutral',
+    },
+    {
+      label: 'Selected',
+      value: selectedInquiry?.customerDisplayName || 'No case selected',
+      hint: selectedInquiry
+        ? formatStatusLabel(selectedInquiry.paymentStatus).charAt(0).toUpperCase() +
+          formatStatusLabel(selectedInquiry.paymentStatus).slice(1).toLowerCase()
+        : 'Choose a row',
+      tone: selectedInquiry ? 'positive' : 'neutral',
+    },
+  ]
 }
 
 export function getCollectionsSummaryCards({ inquiries = [], now } = {}) {

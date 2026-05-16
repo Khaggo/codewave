@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   BadgeCheck,
   FileSearch,
   Loader2,
+  Plus,
 } from 'lucide-react'
 
 import PageHeader from '@/components/ui/PageHeader'
@@ -28,9 +30,14 @@ import {
   createInitialIntakeDraft,
   damageAreaOptions,
   fuelLevelOptions,
+  getIntakeRequirementOptions,
   intakeFieldMaxLengths,
+  resolveIntakeNextRoute,
 } from './digitalIntakeInspectionWorkspaceForm.mjs'
 import {
+  getArrivalPhotoButtonLabel,
+  getArrivalPhotoDisplayLabel,
+  getArrivalPhotoTemporaryRef,
   getIntakeRequirementsBadge,
   getIntakeWorkspaceHeroCopy,
   getIntakeWorkspacePrimaryActionLabel,
@@ -57,14 +64,6 @@ const visitTypeOptions = [
   { value: 'insurance_related', label: 'Insurance', nextRoute: 'insurance' },
   { value: 'back_job_complaint', label: 'Back Job', nextRoute: 'complaint' },
   { value: 'inspection_only', label: 'Inspection Only', nextRoute: 'inspection' },
-]
-
-const requirementsChecklistOptions = [
-  { value: 'bookingFound', label: 'Booking confirmed' },
-  { value: 'orCrPresent', label: 'OR/CR present' },
-  { value: 'validIdPresent', label: 'Valid ID present' },
-  { value: 'oldPolicyPresent', label: 'Old policy present' },
-  { value: 'supportingDocsPresent', label: 'Supporting docs present' },
 ]
 
 const nextRouteLabels = {
@@ -190,11 +189,16 @@ function InspectionCard({ inspection, isSelected, onSelect }) {
   )
 }
 
-function IntakeSection({ title, description, badge, children }) {
+function IntakeSection({ step, title, description, badge, children }) {
   return (
     <section className="rounded-2xl border border-surface-border bg-surface-card p-4 md:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
+          {step ? (
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-orange">
+              Step {step}
+            </p>
+          ) : null}
           <p className="text-sm font-bold text-ink-primary">{title}</p>
           {description ? <p className="mt-1 text-sm text-ink-muted">{description}</p> : null}
         </div>
@@ -224,6 +228,8 @@ export default function DigitalIntakeInspectionWorkspace() {
     message: '',
   })
   const [submitIntent, setSubmitIntent] = useState(null)
+  const [arrivalPhotoUploads, setArrivalPhotoUploads] = useState({})
+  const arrivalPhotoInputRefs = useRef({})
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -290,10 +296,28 @@ export default function DigitalIntakeInspectionWorkspace() {
   const isSubmittingCompleted = captureState.status === 'capture_submitting' && submitIntent === 'completed'
   const selectedVisitTypeMeta =
     visitTypeOptions.find((option) => option.value === draft.visitType) ?? visitTypeOptions[0]
-  const nextRouteLabel = nextRouteLabels[draft.nextRoute] ?? formatLabel(draft.nextRoute) || 'Next handoff'
+  const effectiveNextRoute = resolveIntakeNextRoute(draft.visitType, draft.nextRoute)
+  const nextRouteLabel =
+    nextRouteLabels[effectiveNextRoute] ?? (formatLabel(effectiveNextRoute) || 'Next handoff')
   const primaryActionLabel = getIntakeWorkspacePrimaryActionLabel(draft.visitType)
+  const visibleRequirementOptions = useMemo(
+    () =>
+      getIntakeRequirementOptions({
+        arrivalType: draft.arrivalType,
+        visitType: draft.visitType,
+      }),
+    [draft.arrivalType, draft.visitType],
+  )
+  const activeRequirementsChecklist = useMemo(
+    () =>
+      visibleRequirementOptions.reduce((accumulator, option) => {
+        accumulator[option.value] = draft.requirementsChecklist[option.value]
+        return accumulator
+      }, {}),
+    [draft.requirementsChecklist, visibleRequirementOptions],
+  )
   const requirementsBadge = getIntakeRequirementsBadge(
-    draft.requirementsChecklist,
+    activeRequirementsChecklist,
     draft.missingRequirementsNote,
   )
 
@@ -347,12 +371,10 @@ export default function DigitalIntakeInspectionWorkspace() {
   }
 
   const updateVisitType = (visitType) => {
-    const selectedOption = visitTypeOptions.find((option) => option.value === visitType)
-
     setDraft((current) => ({
       ...current,
       visitType,
-      nextRoute: selectedOption?.nextRoute ?? current.nextRoute,
+      nextRoute: resolveIntakeNextRoute(visitType, current.nextRoute),
     }))
   }
 
@@ -374,6 +396,43 @@ export default function DigitalIntakeInspectionWorkspace() {
         [slot]: value,
       },
     }))
+  }
+
+  const updateArrivalPhotoFile = (slot, file) => {
+    if (!file || typeof FileReader === 'undefined') {
+      updateArrivalPhoto(slot, '')
+      setArrivalPhotoUploads((current) => ({
+        ...current,
+        [slot]: null,
+      }))
+      return
+    }
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      setArrivalPhotoUploads((current) => ({
+        ...current,
+        [slot]: {
+          fileName: file.name,
+          previewUrl: typeof reader.result === 'string' ? reader.result : '',
+        },
+      }))
+      updateArrivalPhoto(slot, getArrivalPhotoTemporaryRef(slot))
+      if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
+    }
+
+    reader.onerror = () => {
+      setArrivalPhotoUploads((current) => ({
+        ...current,
+        [slot]: null,
+      }))
+      updateArrivalPhoto(slot, '')
+    }
+
+    reader.readAsDataURL(file)
   }
 
   const updateChecklistItem = (item, value) => {
@@ -567,9 +626,9 @@ export default function DigitalIntakeInspectionWorkspace() {
         <div className="card p-5 md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="card-title">Reception Intake Flow</p>
+              <p className="card-title">Front-Desk Flow</p>
               <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                Check in the arrival, confirm the visit, and record the handoff condition.
+                Capture the visit, then record the vehicle condition.
               </p>
             </div>
             <span className={draftStatus.badgeClassName}>{draftStatus.label}</span>
@@ -577,8 +636,9 @@ export default function DigitalIntakeInspectionWorkspace() {
 
           <div className="mt-5 space-y-4">
             <IntakeSection
+              step="1"
               title="Arrival"
-              description="Choose how the vehicle arrived."
+              description="Identify the arrival and link the right record."
               badge={draft.arrivalType === 'with_booking' ? 'Booking arrival' : 'Walk-in arrival'}
             >
               <div className="grid gap-3 md:grid-cols-2">
@@ -697,7 +757,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                     </div>
                   ) : (
                     <p className="mt-3 text-sm text-ink-muted">
-                      Select a customer and vehicle, or paste the assigned vehicle reference first.
+                      Link the customer and vehicle before you move forward.
                     </p>
                   )}
                 </div>
@@ -705,8 +765,9 @@ export default function DigitalIntakeInspectionWorkspace() {
             </IntakeSection>
 
             <IntakeSection
+              step="2"
               title="Visit Type"
-              description="Set the handoff lane."
+              description="Pick the handoff lane."
               badge={selectedVisitTypeMeta.label}
             >
               <div className="space-y-4">
@@ -755,6 +816,7 @@ export default function DigitalIntakeInspectionWorkspace() {
             </IntakeSection>
 
             <IntakeSection
+              step="3"
               title="Customer Concern"
               description="Capture the front-desk summary."
               badge={draft.serviceConcern.trim() ? 'Concern captured' : 'Waiting for concern'}
@@ -796,12 +858,13 @@ export default function DigitalIntakeInspectionWorkspace() {
             </IntakeSection>
 
             <IntakeSection
+              step="4"
               title="Requirements"
-              description="Confirm intake requirements."
+              description="Check what the customer already brought in."
               badge={requirementsBadge}
             >
               <div className="grid gap-3 sm:grid-cols-2">
-                {requirementsChecklistOptions.map((option) => (
+                {visibleRequirementOptions.map((option) => (
                   <label
                     key={option.value}
                     className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary"
@@ -812,7 +875,13 @@ export default function DigitalIntakeInspectionWorkspace() {
                       onChange={(event) => updateRequirement(option.value, event.target.checked)}
                       className="h-4 w-4 accent-[#f07c00]"
                     />
-                    {option.label}
+                    <span>
+                      <span className="font-medium text-ink-primary">{option.label}</span>
+                      <span className="mt-1 block text-xs text-ink-muted">
+                        {option.required ? 'Required for this visit.' : 'Optional for this visit.'}
+                        {option.helper ? ` ${option.helper}` : ''}
+                      </span>
+                    </span>
                   </label>
                 ))}
               </div>
@@ -830,8 +899,9 @@ export default function DigitalIntakeInspectionWorkspace() {
             </IntakeSection>
 
             <IntakeSection
+              step="5"
               title="Arrival Inspection"
-              description="Keep the arrival condition visible."
+              description="Record the condition before handoff."
               badge={draft.damageAreas.length ? `${draft.damageAreas.length} marked area(s)` : 'No damage marked'}
             >
               <div className="grid gap-4">
@@ -906,15 +976,59 @@ export default function DigitalIntakeInspectionWorkspace() {
                   <p className="label">Arrival photos</p>
                   <div className="grid gap-3 md:grid-cols-2">
                     {arrivalPhotoSlots.map((slot) => (
-                      <label key={slot.value} className="label">
-                        {slot.label}
+                      <div key={slot.value}>
+                        <p className="label">{slot.label}</p>
                         <input
-                          value={draft.arrivalPhotos[slot.value]}
-                          onChange={(event) => updateArrivalPhoto(slot.value, event.target.value)}
-                          className="input"
-                          placeholder={`upload://vehicle/${slot.value}`}
+                          ref={(node) => {
+                            arrivalPhotoInputRefs.current[slot.value] = node
+                          }}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => {
+                            const [file] = Array.from(event.target.files ?? [])
+                            updateArrivalPhotoFile(slot.value, file)
+                            event.target.value = ''
+                          }}
                         />
-                      </label>
+                        <button
+                          type="button"
+                          onClick={() => arrivalPhotoInputRefs.current[slot.value]?.click()}
+                          className="group flex h-[188px] w-full flex-col justify-between rounded-2xl border border-dashed border-surface-border bg-surface-raised p-4 text-left transition-colors hover:border-brand-orange/50 hover:bg-surface-hover"
+                        >
+                          {arrivalPhotoUploads[slot.value]?.previewUrl ? (
+                            <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+                              <Image
+                                src={arrivalPhotoUploads[slot.value].previewUrl}
+                                alt={`${slot.label} preview`}
+                                width={640}
+                                height={192}
+                                className="h-24 w-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex h-24 items-center justify-center rounded-xl border border-surface-border bg-surface-card text-ink-muted transition-colors group-hover:text-brand-orange">
+                              <div className="flex flex-col items-center gap-2 text-center">
+                                <span className="flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-surface-raised">
+                                  <Plus size={18} />
+                                </span>
+                                <span className="text-xs font-semibold uppercase tracking-[0.18em]">
+                                  Add photo
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <p className="text-sm font-semibold text-ink-primary">
+                              {getArrivalPhotoButtonLabel(arrivalPhotoUploads[slot.value]?.fileName)}
+                            </p>
+                            <p className="truncate text-sm leading-6 text-ink-muted">
+                              {getArrivalPhotoDisplayLabel(arrivalPhotoUploads[slot.value]?.fileName)}
+                            </p>
+                          </div>
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -1051,7 +1165,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                   <AlertTriangle size={26} className="mx-auto text-brand-orange" />
                   <p className="mt-3 text-sm font-bold text-ink-primary">No inspection records loaded</p>
                   <p className="mt-2 text-sm text-ink-muted">
-                    Enter a vehicle id and load history, or save a first inspection for that vehicle.
+                    Load history or save the first inspection for this vehicle.
                   </p>
                 </div>
               )}
@@ -1065,7 +1179,7 @@ export default function DigitalIntakeInspectionWorkspace() {
                 <p className="mt-2 text-sm leading-6 text-ink-secondary">
                   {isTechnician
                     ? 'Review evidence before continuing work.'
-                    : 'Review evidence for the selected inspection.'}
+                    : 'Review the selected inspection evidence.'}
                 </p>
               </div>
               {selectedInspection ? (
@@ -1138,24 +1252,39 @@ export default function DigitalIntakeInspectionWorkspace() {
           <div>
             <p className="card-title">Next Step Actions</p>
             <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              Save progress or hand off the arrival.
+              Save the intake or continue the handoff.
             </p>
           </div>
           <span className="badge badge-gray">{nextRouteLabel}</span>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,0.9fr)_auto] md:items-start">
-          <div className="rounded-2xl border border-surface-border bg-surface-raised p-4">
+          <div className="rounded-2xl border border-brand-orange/20 bg-brand-orange/5 p-4">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Handoff plan</p>
             <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedVisitTypeMeta.label}</p>
             <p className="mt-1 text-sm text-ink-muted">{nextRouteLabel}</p>
             <p className="mt-3 text-sm text-ink-muted">
-              {draft.arrivalType === 'with_booking'
-                ? 'Booking arrivals keep the scheduled visit attached when you save.'
-                : 'Walk-ins can stay unbooked or be linked later.'}
+              {draft.visitType === 'insurance_related'
+                ? 'Continue this arrival in insurance after save.'
+                : draft.arrivalType === 'with_booking'
+                  ? 'Keep the booking linked when you hand this off.'
+                  : 'Walk-ins can stay unbooked until the next handoff.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void saveInspection('completed')}
+              disabled={captureState.status === 'capture_submitting'}
+              className="btn-primary"
+            >
+              {isSubmittingCompleted ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <BadgeCheck size={15} />
+              )}
+              {primaryActionLabel}
+            </button>
             <button
               type="button"
               onClick={() => void saveInspection('pending')}
@@ -1169,19 +1298,6 @@ export default function DigitalIntakeInspectionWorkspace() {
               )}
               Save Pending Draft
             </button>
-              <button
-                type="button"
-                onClick={() => void saveInspection('completed')}
-              disabled={captureState.status === 'capture_submitting'}
-              className="btn-primary"
-              >
-                {isSubmittingCompleted ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <BadgeCheck size={15} />
-                )}
-                {primaryActionLabel}
-              </button>
             <button type="button" onClick={loadHistory} className="btn-ghost">
               <FileSearch size={15} />
               Load Vehicle History

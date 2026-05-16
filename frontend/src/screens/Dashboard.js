@@ -7,54 +7,13 @@ import {
   CalendarCheck,
   ClipboardCheck,
   ClipboardList,
-  FileSearch,
   ReceiptText,
-  ShieldCheck,
   Users,
   Wrench,
 } from 'lucide-react'
 
 import { appointments, jobOrders, timelineEvents, vehicles } from '@/lib/mockData'
 import { useUser } from '@/lib/userContext'
-
-const quickActions = [
-  {
-    href: '/bookings',
-    label: 'Start booking',
-    description: 'Open the daily schedule and booking queue.',
-    icon: CalendarCheck,
-  },
-  {
-    href: '/bookings',
-    label: 'Open pending bookings',
-    description: 'Review reservations awaiting confirmation or payment.',
-    icon: ClipboardCheck,
-  },
-  {
-    href: '/admin/job-orders',
-    label: 'Create job order',
-    description: 'Move confirmed work into execution.',
-    icon: ClipboardList,
-  },
-  {
-    href: '/admin/intake-inspections',
-    label: 'Continue intake inspection',
-    description: 'Capture or review vehicle condition before service.',
-    icon: FileSearch,
-  },
-  {
-    href: '/admin/invoices',
-    label: 'View invoices',
-    description: 'Open invoice-ready work and order records.',
-    icon: ReceiptText,
-  },
-  {
-    href: '/admin/qa-audit',
-    label: 'QA review',
-    description: 'Review quality gates and release readiness.',
-    icon: ShieldCheck,
-  },
-]
 
 const adminShortcuts = [
   {
@@ -131,28 +90,6 @@ function StatCard({ label, value, description }) {
       <p className="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">{value}</p>
       <p className="mt-2 text-sm leading-6 text-ink-secondary">{description}</p>
     </div>
-  )
-}
-
-function QuickActionTile({ item }) {
-  const Icon = item.icon
-
-  return (
-    <PortalLink
-      href={item.href}
-      className="group flex h-full items-start gap-3 rounded-2xl border border-surface-border bg-surface-card px-4 py-4 transition-all duration-150 hover:border-brand-orange/30 hover:bg-surface-hover/40"
-    >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
-        <Icon size={18} />
-      </div>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-ink-primary">{item.label}</p>
-          <ArrowRight size={14} className="text-ink-dim transition-transform duration-150 group-hover:translate-x-0.5" />
-        </div>
-        <p className="mt-1 text-sm leading-6 text-ink-secondary">{item.description}</p>
-      </div>
-    </PortalLink>
   )
 }
 
@@ -440,12 +377,6 @@ export default function Dashboard() {
         }
         meta={<span className="badge badge-gray">{user?.roleLabel ?? user?.role ?? 'Staff access'}</span>}
       />
-
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {quickActions.map((item) => (
-          <QuickActionTile key={item.label} item={item} />
-        ))}
-      </section>
 
       <section className="ops-summary-grid">
         <StatCard

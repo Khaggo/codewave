@@ -1,4 +1,9 @@
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
+import { deriveApiBaseUrl } from './apiBaseUrl.mjs';
+
+const API_BASE_URL = deriveApiBaseUrl({
+  configuredBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000',
+  browserHostname: typeof window === 'undefined' ? undefined : window.location.hostname,
+});
 
 export const SESSION_STORAGE_KEY = 'cc_auth_session';
 

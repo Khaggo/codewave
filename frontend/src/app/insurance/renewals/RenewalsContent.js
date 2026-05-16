@@ -17,6 +17,7 @@ import {
 } from '@/lib/api/generated/insurance/staff-web-insurance'
 import {
   ACTIVE_RENEWAL_WORKSPACE_STATUSES,
+  buildRenewalsFocusHighlights,
   buildRenewalUpdateDraft,
   buildRenewalsTableRow,
   filterRenewalItems,
@@ -221,6 +222,17 @@ export default function RenewalsContent() {
     [filteredItems.length, filters, renewalItems.length],
   )
 
+  const focusHighlights = useMemo(
+    () =>
+      buildRenewalsFocusHighlights({
+        filters,
+        selectedInquiry,
+        selectedRow,
+        visibleCount: filteredItems.length,
+      }),
+    [filters, filteredItems.length, selectedInquiry, selectedRow],
+  )
+
   const nextStatuses = useMemo(() => {
     const currentStatus = selectedInquiry?.status ?? 'for_renewal'
     return Array.from(new Set([currentStatus, ...getAllowedInsuranceStatusTargets(currentStatus)]))
@@ -410,7 +422,7 @@ export default function RenewalsContent() {
       <div className="space-y-5">
         <BlockingState
           title="Insurance renewals is adviser/admin only"
-          copy="This workspace is reserved for service advisers and super admins, with direct navigation blocked for other roles."
+          copy="Only service advisers and super admins can open this workspace."
         />
       </div>
     )
@@ -421,7 +433,7 @@ export default function RenewalsContent() {
       <PageHeader
         eyebrow="Insurance Renewals Workspace"
         title="Renewal Timing And Follow-Up Queue"
-        description="This route stays focused on renewal operations: triage upcoming expiries, update renewal workflow metadata, and create manual follow-ups through the dedicated staff route."
+        description="Track renewal timing, update stages, and create follow-ups."
         meta={
           <>
             <span className="badge badge-orange">Time-window triage</span>
@@ -442,9 +454,7 @@ export default function RenewalsContent() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="card-title">Renewals Filters</p>
-            <p className="mt-1 text-xs text-ink-muted">
-              Renewal stage can hit the live list route, while timing, manual-only, and search filters narrow the loaded workspace locally.
-            </p>
+            <p className="mt-1 text-xs text-ink-muted">Filter by time, stage, or manual follow-up.</p>
           </div>
           <button onClick={() => setReloadTick((current) => current + 1)} className="btn-secondary">
             <CalendarClock size={14} />
@@ -458,9 +468,8 @@ export default function RenewalsContent() {
             detail={filterSummary.detail}
             tone={filterSummary.tone}
             meta={[
-              { label: `${renewalItems.length} renewals loaded` },
-              { label: `${filteredItems.length} visible now` },
-              { label: selectedInquiry ? 'Detail panel ready' : 'Select a renewal to continue' },
+              { label: `${filteredItems.length} visible` },
+              { label: selectedInquiry ? 'Renewal selected' : 'Pick a renewal' },
             ]}
           />
         </div>
@@ -502,63 +511,32 @@ export default function RenewalsContent() {
                 onChange={handleFilterChange('manualOnly')}
                 className="h-4 w-4"
               />
-              Show only staff-created renewal follow-up cases
+              Manual follow-ups only
             </span>
           </label>
         </div>
 
         {listMessage ? <div className="status-message status-message-danger mt-4">{listMessage}</div> : null}
 
-        <div className="mt-4 grid gap-3 xl:grid-cols-3">
-          <WorkspaceSignalCard
-            eyebrow="Timing lens"
-            title={
-              filters.timeWindow === 'Overdue'
-                ? 'Overdue renewals only'
-                : filters.timeWindow === 'Due in 7 Days'
-                  ? 'Urgent renewal follow-up'
-                  : 'Balanced renewal queue'
-            }
-            detail={
-              filters.timeWindow === 'Overdue'
-                ? 'This view isolates missed renewal targets so staff can recover at-risk customers first.'
-                : filters.timeWindow === 'Due in 7 Days'
-                  ? 'The current queue spotlights renewals that need near-term follow-up before they slip.'
-                  : 'Use time windows to tighten urgency, then filter by stage when the queue needs a more tactical pass.'
-            }
-            tone={filters.timeWindow === 'Overdue' || filters.timeWindow === 'Due in 7 Days' ? 'warning' : 'neutral'}
-          />
-          <WorkspaceSignalCard
-            eyebrow="Manual follow-up"
-            title={filters.manualOnly ? 'Staff-created follow-ups only' : 'Mixed queue of linked and manual renewals'}
-            detail={
-              filters.manualOnly
-                ? 'Only purpose=renewal cases remain, which is useful when advisers are doing proactive outreach.'
-                : 'This queue includes both existing insurance cases and manual renewal follow-ups so nothing slips between routes.'
-            }
-            tone={filters.manualOnly ? 'positive' : 'neutral'}
-          />
-          <WorkspaceSignalCard
-            eyebrow="Current selection"
-            title={selectedInquiry ? selectedInquiry.customerDisplayName || 'Renewal case selected' : 'No renewal selected yet'}
-            detail={
-              selectedInquiry
-                ? `Review the ${selectedRow?.timeWindow ?? 'current'} timing, then update stage and assignee from the workflow panel.`
-                : 'Pick a renewal row to load timing context, policy metadata, and follow-up actions on the right.'
-            }
-            tone={selectedInquiry ? 'positive' : 'neutral'}
-          />
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          {focusHighlights.map((item) => (
+            <WorkspaceSignalCard
+              key={item.label}
+              eyebrow={item.label}
+              title={item.value}
+              detail={item.hint}
+              tone={item.tone}
+            />
+          ))}
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+      <div className="grid gap-5">
         <section className="table-surface">
           <div className="flex flex-col gap-2 border-b border-surface-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="card-title">Renewals Queue</p>
-              <p className="mt-1 text-xs text-ink-muted">
-                Timing stays visible in the table so staff can scan urgent renewals before they open the detail panel.
-              </p>
+              <p className="mt-1 text-xs text-ink-muted">Timing stays visible for quick triage.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <span className={`badge ${filteredItems.length ? 'badge-orange' : 'badge-gray'}`}>
@@ -574,7 +552,7 @@ export default function RenewalsContent() {
             <div className="px-4 py-8 text-sm text-ink-muted">Loading live renewal cases...</div>
           ) : filteredItems.length ? (
             <div className="table-scroll">
-              <table className="data-table min-w-[980px]">
+              <table className="data-table w-full min-w-[1120px]">
                 <thead>
                   <tr>
                     <th>Customer</th>
@@ -630,12 +608,12 @@ export default function RenewalsContent() {
           ) : (
             <EmptyPanel
               title="No renewals match the current filters"
-              copy="Broaden the renewal filters or clear manual-only mode to bring cases back into the workspace."
+              copy="Broaden filters or clear manual-only mode."
             />
           )}
         </section>
 
-        <div className="space-y-5">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
           <RenewalsDetailPanel
             detailMessage={detailMessage}
             detailState={detailState}

@@ -208,7 +208,7 @@ const describeRenewalWindow = (timeWindow) => {
     return 'all renewal windows'
   }
 
-  return `${timeWindow} renewals`
+  return timeWindow
 }
 
 const describeRenewalStatus = (renewalStatus) => {
@@ -239,14 +239,60 @@ export function getRenewalsFilterSummary({ filters = {}, visibleCount = 0, total
   const hiddenCount = Math.max(totalCount - visibleCount, 0)
   const tone = filters.timeWindow === 'Overdue' || filters.timeWindow === 'Due in 7 Days' ? 'urgent' : visibleCount ? 'focused' : 'empty'
   const noun = visibleCount === 1 ? 'renewal needs' : 'renewals need'
-  const hiddenCopy =
-    hiddenCount > 0
-      ? ` ${hiddenCount} other ${hiddenCount === 1 ? 'renewal is' : 'renewals are'} outside this focus view.`
-      : ''
-
   return {
     tone,
-    title: `${visibleCount} ${noun} attention now`,
-    detail: `Showing ${descriptors.join(', ')}.${hiddenCopy}`.trim(),
+    title: `${visibleCount} ${noun} attention`,
+    detail: `${descriptors
+      .map((descriptor, index) => (index === 0 ? descriptor.charAt(0).toUpperCase() + descriptor.slice(1) : descriptor))
+      .join(', ')
+      .replace('manual follow-ups only', 'manual only')}.${hiddenCount > 0 ? ` ${hiddenCount} hidden.` : ''}`.trim(),
   }
+}
+
+export function buildRenewalsFocusHighlights({
+  filters = {},
+  selectedInquiry = null,
+  selectedRow = null,
+  visibleCount = 0,
+} = {}) {
+  const queueHints = []
+
+  if (filters.timeWindow && filters.timeWindow !== 'all') {
+    queueHints.push(filters.timeWindow)
+  }
+
+  if (filters.manualOnly) {
+    queueHints.push('manual only')
+  }
+
+  if (filters.renewalStatus && filters.renewalStatus !== 'all') {
+    queueHints.push(formatStatusLabel(filters.renewalStatus).toLowerCase())
+  }
+
+  return [
+    {
+      label: 'Queue',
+      value: `${visibleCount} visible`,
+      hint: queueHints.length
+        ? queueHints
+            .map((item, index) => (index === 0 ? item.charAt(0).toUpperCase() + item.slice(1) : item))
+            .join(', ')
+        : 'All renewal cases',
+      tone:
+        filters.timeWindow === 'Overdue' || filters.timeWindow === 'Due in 7 Days'
+          ? 'warning'
+          : 'neutral',
+    },
+    {
+      label: 'Selected',
+      value: selectedInquiry?.customerDisplayName || 'No renewal selected',
+      hint: selectedRow?.timeWindow || 'Choose a row',
+      tone:
+        selectedRow?.timeWindow === 'Overdue'
+          ? 'warning'
+          : selectedInquiry
+            ? 'positive'
+            : 'neutral',
+    },
+  ]
 }

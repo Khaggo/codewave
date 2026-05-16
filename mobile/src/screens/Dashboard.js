@@ -3206,6 +3206,11 @@ export default function Dashboard({
   }, [activeTab, menuScreen]);
 
   const handleTabPress = (tabKey) => {
+    if (tabKey === 'insurance') {
+      void navigateToInsuranceInquiry();
+      return;
+    }
+
     setActiveTab(tabKey);
   };
 
@@ -3908,12 +3913,7 @@ export default function Dashboard({
   };
 
   const navigateToInsurancePage = (vehicleId = null) => {
-    if (vehicleId) {
-      setSelectedGarageVehicleId(vehicleId);
-    }
-
-    setActiveTab('insurance');
-    setIsProfileTooltipVisible(false);
+    void navigateToInsuranceInquiry(vehicleId);
   };
 
   const navigateToProfileSection = (sectionKey) => {
@@ -5920,12 +5920,6 @@ export default function Dashboard({
     ));
 
   const renderInsuranceContent = () => {
-    const insuranceNotifications = notificationsFeed.filter(
-      (item) => item.action === 'insurance' || item.category === 'insurance_update',
-    );
-    const insuranceNotificationSummary = buildCustomerNotificationPanelSummary(
-      insuranceNotifications,
-    );
     const vehicles = digitalGarageState.vehicleSummaries?.length
       ? digitalGarageState.vehicleSummaries
       : (digitalGarageState.vehicles ?? account?.ownedVehicles ?? []).map((vehicle, index) => ({
@@ -5934,12 +5928,13 @@ export default function Dashboard({
           subtitle: [vehicle.plateNumber, vehicle.color].filter(Boolean).join(' - ') || 'Vehicle details saved',
           ordinalLabel: `Vehicle ${index + 1}`,
         }));
+    const selectedInsuranceVehicle =
+      vehicles.find((vehicle) => vehicle.id === selectedGarageVehicleId) ?? null;
 
     return renderScrollableContent(styles.menuRootContent, (
       <>
       <View style={styles.profileHomeHeader}>
         <View>
-          <Text style={styles.bookingEyebrow}>INSURANCE</Text>
           <Text style={styles.profileHomeTitle}>Insurance</Text>
         </View>
         <NotificationIconButton
@@ -5947,63 +5942,7 @@ export default function Dashboard({
           onPress={handleToggleNotifications}
         />
       </View>
-
-      <View style={styles.infoPanel}>
-        <View style={styles.infoPanelHeader}>
-          <View style={styles.infoPanelHeaderCopy}>
-            <Text style={styles.infoPanelTitle}>Insurance inquiry center</Text>
-            <Text style={styles.infoPanelText}>
-              Open your customer insurance home to start a request, upload documents, and follow payment or renewal prompts for a saved vehicle.
-            </Text>
-          </View>
-          <View style={styles.infoPanelPill}>
-            <Text style={styles.infoPanelPillText}>
-              {selectedGarageVehicleId ? 'Vehicle ready' : 'Choose vehicle'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.infoPanelSummaryRow}>
-          <View style={styles.infoPanelSummaryCard}>
-            <Text style={styles.infoPanelSummaryLabel}>Insurance reminders</Text>
-            <Text style={styles.infoPanelSummaryValue}>
-              {insuranceNotificationSummary.actionNeededCount}
-            </Text>
-            <Text style={styles.infoPanelSummaryText}>
-              {insuranceNotificationSummary.primaryTitle}
-            </Text>
-          </View>
-          <View style={styles.infoPanelSummaryCard}>
-            <Text style={styles.infoPanelSummaryLabel}>Visibility updates</Text>
-            <Text style={styles.infoPanelSummaryValueMuted}>
-              {insuranceNotificationSummary.informationalCount}
-            </Text>
-            <Text style={styles.infoPanelSummaryText}>
-              {insuranceNotificationSummary.secondaryTitle}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.infoPanelActionRow}>
-          <TouchableOpacity
-            style={[styles.primaryButton, styles.editProfileButton, styles.infoPanelPrimaryAction]}
-            onPress={() => navigateToInsuranceInquiry(selectedGarageVehicleId)}
-            activeOpacity={0.86}
-          >
-            <Text style={styles.primaryButtonText}>Open Insurance Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.infoPanelSecondaryAction}
-            onPress={handleToggleNotifications}
-            activeOpacity={0.86}
-          >
-            <MaterialCommunityIcons name="bell-outline" size={18} color={colors.text} />
-            <Text style={styles.infoPanelSecondaryActionText}>Review reminders</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <Text style={styles.sectionHeading}>Choose Vehicle Context</Text>
+      <Text style={styles.sectionHeading}>Select Vehicle</Text>
       {digitalGarageState.status === 'garage_loading' && !vehicles.length ? (
         <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>Loading vehicles</Text>
@@ -6039,13 +5978,6 @@ export default function Dashboard({
                     <Text style={styles.garageVehicleMeta}>{vehicle.subtitle}</Text>
                   </View>
                 </View>
-                <TouchableOpacity
-                  style={styles.garageActionButton}
-                  onPress={() => navigateToInsuranceInquiry(vehicle.id)}
-                  activeOpacity={0.86}
-                >
-                  <Text style={styles.garageActionText}>Open Insurance Home</Text>
-                </TouchableOpacity>
               </MotionPressable>
             );
           })}
@@ -6057,6 +5989,29 @@ export default function Dashboard({
             Add a vehicle first so insurance inquiries can stay tied to the correct ownership record.
           </Text>
         </View>
+      ) : null}
+
+      {vehicles.length ? (
+        <>
+        <Text style={styles.insuranceSelectionMeta}>
+          {selectedInsuranceVehicle
+            ? `Selected: ${selectedInsuranceVehicle.title}`
+            : 'Choose a vehicle to continue to insurance home.'}
+        </Text>
+        <TouchableOpacity
+          style={[
+            styles.primaryButton,
+            styles.editProfileButton,
+            styles.infoPanelPrimaryAction,
+            !selectedInsuranceVehicle && styles.insuranceLauncherDisabled,
+          ]}
+          onPress={() => selectedInsuranceVehicle && navigateToInsuranceInquiry(selectedInsuranceVehicle.id)}
+          activeOpacity={selectedInsuranceVehicle ? 0.86 : 1}
+          disabled={!selectedInsuranceVehicle}
+        >
+          <Text style={styles.primaryButtonText}>Open Insurance Home</Text>
+        </TouchableOpacity>
+        </>
       ) : null}
       </>
     ));
@@ -6113,7 +6068,7 @@ export default function Dashboard({
         icon: 'shield-outline',
         bgColor: colors.surfaceRaised,
         iconColor: colors.primary,
-        onPress: () => navigateToInsurancePage(),
+        onPress: () => navigateToInsuranceInquiry(),
       },
       {
         key: 'rewards',
@@ -11468,6 +11423,16 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minWidth: 170,
     marginTop: 0,
+  },
+  insuranceSelectionMeta: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: -2,
+    marginBottom: 10,
+  },
+  insuranceLauncherDisabled: {
+    opacity: 0.58,
   },
   infoPanelSecondaryAction: {
     minHeight: 54,

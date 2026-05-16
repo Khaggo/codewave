@@ -57,11 +57,11 @@ const ROUTE_META = {
   },
   '/admin/catalog': {
     title: 'Catalog Admin',
-    subtitle: 'Product listing visibility and merchandising controls',
+    subtitle: 'Marketplace publishing and customer-facing product visibility',
   },
   '/admin/inventory': {
     title: 'Inventory',
-    subtitle: 'Stock coverage, alerts, and quantity updates',
+    subtitle: 'Stock levels, restock needs, and item availability',
   },
   '/admin/summaries': {
     title: 'Analytics',

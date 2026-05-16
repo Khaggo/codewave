@@ -217,6 +217,16 @@ test('catalog admin uses marketplace publishing header copy', () => {
   assert.ok(catalog.includes('Choose a product from the list to review publishing details.'))
 })
 
+test('catalog admin keeps stock ownership in inventory', () => {
+  const catalog = read('frontend/src/screens/ShopProductAdmin.js')
+
+  assert.ok(catalog.includes('Manage Stock'))
+  assert.ok(catalog.includes('Inventory owns stock updates.'))
+  assert.ok(catalog.includes('Set stock later from Inventory.'))
+  assert.ok(!catalog.includes('catalog-product-stock'))
+  assert.ok(!catalog.includes('edit-product-stock'))
+})
+
 test('catalog admin keeps modal editor state separate from selected detail state', () => {
   const catalog = read('frontend/src/screens/ShopProductAdmin.js')
 

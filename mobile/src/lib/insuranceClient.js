@@ -10,7 +10,6 @@ const customerInsuranceStatusHints = {
   for_approval: 'The inquiry is waiting for final approval.',
   payment_pending: 'A payment step is still in progress for this inquiry.',
   for_renewal: 'The inquiry is now waiting on renewal follow-up.',
-  approved_for_record: 'The inquiry is approved for internal record tracking.',
   rejected: 'The inquiry cannot continue in its current state.',
   closed: 'The inquiry is closed and no longer accepting changes.',
   cancelled: 'The inquiry was cancelled before completion.',
@@ -198,6 +197,7 @@ export const buildOwnedVehicleInsuranceLabel = (vehicle) => {
 };
 
 export const createInitialCustomerInsuranceDraft = () => ({
+  purpose: 'claim',
   inquiryType: 'comprehensive',
   subject: '',
   description: '',
@@ -250,6 +250,7 @@ export const normalizeCustomerInsuranceInquiry = (inquiry) => {
     vehicleId: inquiry.vehicleId ?? null,
     inquiryType: inquiry.inquiryType ?? 'comprehensive',
     inquiryTypeLabel: humanizeInquiryType(inquiry.inquiryType),
+    purpose: inquiry.purpose ?? 'quotation',
     subject: String(inquiry.subject ?? '').trim(),
     description: String(inquiry.description ?? '').trim(),
     status: inquiry.status ?? 'submitted',
@@ -260,6 +261,10 @@ export const normalizeCustomerInsuranceInquiry = (inquiry) => {
     providerName: trimOrNull(inquiry.providerName),
     policyNumber: trimOrNull(inquiry.policyNumber),
     notes: trimOrNull(inquiry.notes),
+    reviewNotes: trimOrNull(inquiry.reviewNotes),
+    paymentDueAt: inquiry.paymentDueAt ?? null,
+    policyExpiryAt: inquiry.policyExpiryAt ?? null,
+    renewalDueAt: inquiry.renewalDueAt ?? null,
     documentCount: documents.length,
     documents,
     canAttachDocuments: !closedDocumentUploadStatuses.includes(inquiry.status),
@@ -321,6 +326,7 @@ export const createEmptyCustomerInsuranceSnapshot = ({
 export const createInsuranceInquiry = async ({
   userId,
   vehicleId,
+  purpose,
   inquiryType,
   subject,
   description,
@@ -355,6 +361,7 @@ export const createInsuranceInquiry = async ({
         userId,
         vehicleId,
         inquiryType,
+        purpose: trimOrNull(purpose) ?? 'quotation',
         subject: String(subject ?? '').trim(),
         description: String(description ?? '').trim(),
         providerName: trimOrNull(providerName) ?? undefined,

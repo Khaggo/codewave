@@ -8,7 +8,7 @@ import {
   ShieldAlert,
   Wallet,
 } from 'lucide-react'
-import { formatStatusLabel } from './insuranceCollectionsView.mjs'
+import { formatStatusLabel } from '../insuranceView.mjs'
 
 const POSITIVE_BADGE_VALUES = new Set(['active', 'paid'])
 const WARNING_BADGE_VALUES = new Set([
@@ -193,9 +193,7 @@ export function CollectionsDetailPanel({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="card-title">Case Detail</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            Payment due dates, proof uploads, and activity history stay together here so collections review stays focused.
-          </p>
+          <p className="mt-1 text-xs text-ink-muted">Payment, proof, and activity in one place.</p>
         </div>
         <button
           onClick={onRefreshDetail}
@@ -360,9 +358,7 @@ export function CollectionsWorkflowPanel({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="card-title">Workflow Update</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            This panel only edits collections metadata and saves through the broad workflow route.
-          </p>
+          <p className="mt-1 text-xs text-ink-muted">Update payment state and due date here.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <span className={`badge ${isTerminalInquiry ? 'badge-gray' : 'badge-green'}`}>
@@ -372,7 +368,7 @@ export function CollectionsWorkflowPanel({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px]">
         <WorkspaceSignalCard
           eyebrow="Next best step"
           title={actionHeadline}
@@ -388,12 +384,15 @@ export function CollectionsWorkflowPanel({
           }
         />
         <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Quick action ladder</p>
-          <ol className="mt-2 space-y-2 text-xs leading-5 text-ink-muted">
-            <li>1. Confirm the due date and current payment status.</li>
-            <li>2. Review proof when it lands, then move the case into verification.</li>
-            <li>3. Mark paid only after the receipt has been checked by staff.</li>
-          </ol>
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Quick state</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className={`badge ${selectedRow?.daysOverdue > 0 ? 'badge-orange' : 'badge-gray'}`}>
+              {selectedRow?.daysOverdue > 0 ? `${selectedRow.daysOverdue} overdue` : 'On time'}
+            </span>
+            <span className={`badge ${selectedActionState.canReviewProofOfPayment ? 'badge-blue' : 'badge-gray'}`}>
+              {selectedActionState.canReviewProofOfPayment ? 'Proof ready' : 'No proof review'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -510,8 +509,7 @@ export function CollectionsWorkflowPanel({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-ink-muted">
-        <span className="badge badge-gray">Due date keeps `YYYY-MM-DD` form for the workflow route</span>
-        <span className="badge badge-gray">Quick actions only update collections fields</span>
+        <span className="badge badge-gray">Collections fields only</span>
       </div>
     </div>
   )

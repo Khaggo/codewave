@@ -1,104 +1,218 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { radius } from '../../theme'
 import {
-  InsurancePanelShell,
+  insuranceFonts,
+  insurancePalette,
   InsuranceSectionDivider,
 } from './InsurancePanelPrimitives'
-import { colors, radius } from '../../theme'
 
-const LINK_ITEMS = [
-  { key: 'request', label: 'Request' },
-  { key: 'documents', label: 'Documents' },
-  { key: 'status', label: 'Status' },
-]
+const QUICK_NAV_ICON_MAP = {
+  request: 'shield-edit-outline',
+  documents: 'file-document-outline',
+  status: 'timeline-text-outline',
+}
 
 export default function InsuranceHomePanel({
-  title = 'Overview',
+  title = 'Home',
   selectedVehicleLabel,
+  currentRequestSummary,
   overviewState,
   statusState,
   onOpenSection,
 }) {
+  const routeRows = (overviewState.routeRows ?? [])
+    .filter((item) => item?.key && item.key !== 'history')
+
+  const quickNavItems = routeRows.map((item) => ({
+    ...item,
+    icon: QUICK_NAV_ICON_MAP[item.key] ?? 'chevron-right',
+    description: item.description ?? item.helper ?? 'Open this section',
+  }))
+
   return (
     <View style={styles.root} accessibilityLabel={title}>
-      <InsurancePanelShell title="Overview">
-        <InsuranceSectionDivider title="Current vehicle" leading>
+      <InsuranceSectionDivider title="Current vehicle" leading>
+        <View style={styles.vehiclePanel}>
           <Text style={styles.primaryValue}>{selectedVehicleLabel || 'No vehicle selected'}</Text>
-        </InsuranceSectionDivider>
+          <Text style={styles.vehicleMeta}>
+            {currentRequestSummary?.purposeLabel ?? 'Request'} •{' '}
+            {currentRequestSummary?.inquiryTypeLabel ?? 'Insurance'}
+          </Text>
+        </View>
+      </InsuranceSectionDivider>
 
-        <InsuranceSectionDivider title="Next step">
-          <Text style={styles.summaryText}>{overviewState.title}</Text>
+      <InsuranceSectionDivider title="Next step">
+        <View style={styles.actionCard}>
+          <Text style={styles.summaryTitle}>{overviewState.title}</Text>
+          {overviewState.message ? (
+            <Text style={styles.summaryText}>{overviewState.message}</Text>
+          ) : null}
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={() => onOpenSection(overviewState.routeKey)}
-            activeOpacity={0.88}
+            activeOpacity={0.9}
           >
-            <Text style={styles.primaryButtonText}>{overviewState.ctaLabel}</Text>
+            <Text style={styles.primaryButtonText}>Open request</Text>
           </TouchableOpacity>
-        </InsuranceSectionDivider>
+        </View>
+      </InsuranceSectionDivider>
 
-        <InsuranceSectionDivider title="Current status">
+      <InsuranceSectionDivider title="Current status">
+        <View style={styles.statusCard}>
+          <Text style={styles.statusHeading}>{statusState.title}</Text>
           <Text style={styles.summaryText}>{statusState.summary}</Text>
-        </InsuranceSectionDivider>
-      </InsurancePanelShell>
+        </View>
+      </InsuranceSectionDivider>
 
-      <View style={styles.linkList}>
-        {LINK_ITEMS.map((item) => (
-          <TouchableOpacity
-            key={item.key}
-            style={styles.linkRow}
-            onPress={() => onOpenSection(item.key)}
-            activeOpacity={0.88}
-          >
-            <Text style={styles.linkLabel}>{item.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <InsuranceSectionDivider title="Quick access">
+        <View style={styles.quickAccessList}>
+          {quickNavItems.map((item) => (
+            <TouchableOpacity
+              key={item.key}
+              style={styles.quickAccessCard}
+              onPress={() => onOpenSection(item.key)}
+              activeOpacity={0.9}
+            >
+              <View style={styles.quickAccessIconWrap}>
+                <MaterialCommunityIcons
+                  name={item.icon}
+                  size={18}
+                  color={insurancePalette.amber}
+                />
+              </View>
+              <View style={styles.quickAccessCopy}>
+                <Text style={styles.quickAccessTitle}>{item.label}</Text>
+                <Text style={styles.quickAccessDescription}>{item.description}</Text>
+              </View>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={18}
+                color={insurancePalette.textDim}
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+      </InsuranceSectionDivider>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   root: {
-    gap: 18,
+    gap: 20,
+  },
+  vehiclePanel: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.card,
+    padding: 18,
+    gap: 8,
+    shadowColor: insurancePalette.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 3,
   },
   primaryValue: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '700',
+  },
+  vehicleMeta: {
+    color: insurancePalette.textDim,
+    fontFamily: insuranceFonts.body,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  actionCard: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.card,
+    padding: 18,
+    gap: 12,
+  },
+  summaryTitle: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '700',
   },
   summaryText: {
-    color: colors.mutedText,
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
     fontSize: 14,
     lineHeight: 22,
   },
   primaryButton: {
-    minHeight: 50,
-    marginTop: 4,
+    minHeight: 52,
     borderRadius: radius.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: insurancePalette.amber,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    marginTop: 4,
   },
   primaryButtonText: {
-    color: colors.onPrimary,
+    color: insurancePalette.onAmber,
+    fontFamily: insuranceFonts.heading,
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '700',
   },
-  linkList: {
-    borderTopWidth: 1,
-    borderTopColor: colors.borderSoft,
+  statusCard: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.cardSoft,
+    padding: 18,
+    gap: 8,
   },
-  linkRow: {
-    minHeight: 48,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSoft,
+  statusHeading: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  quickAccessList: {
+    gap: 12,
+  },
+  quickAccessCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.card,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  quickAccessIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    backgroundColor: insurancePalette.amberSoft,
   },
-  linkLabel: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '800',
+  quickAccessCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  quickAccessTitle: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  quickAccessDescription: {
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 13,
+    lineHeight: 19,
   },
 })

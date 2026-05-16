@@ -149,7 +149,7 @@ export default function RegisterVehicleModal({ onClose, onRegistered }) {
             <div className="flex flex-col items-center justify-center py-12 px-6 gap-4 text-center">
               <div className="w-14 h-14 rounded-full flex items-center justify-center"
                    style={{ backgroundColor: 'rgba(34,197,94,0.1)', border: '2px solid #22c55e' }}>
-                <CheckCircle2 size={28} className="text-emerald-400" />
+                <CheckCircle2 size={28} className="text-theme-success" />
               </div>
               <div>
                 <p className="text-base font-bold text-ink-primary">Vehicle Registered!</p>

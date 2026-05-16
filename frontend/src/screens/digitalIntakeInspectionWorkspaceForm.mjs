@@ -48,6 +48,39 @@ const nextRouteByVisitType = Object.freeze({
   back_job_complaint: 'complaint',
   inspection_only: 'inspection',
 })
+const requirementOptionCatalog = Object.freeze({
+  bookingFound: {
+    value: 'bookingFound',
+    label: 'Booking confirmed',
+    helper: 'Optional for walk-ins, expected for scheduled arrivals.',
+  },
+  orCrPresent: {
+    value: 'orCrPresent',
+    label: 'OR/CR present',
+    helper: 'Confirm the vehicle papers are available at intake.',
+  },
+  validIdPresent: {
+    value: 'validIdPresent',
+    label: 'Valid ID present',
+    helper: 'Useful when the visit needs insurance-related identity checks.',
+  },
+  oldPolicyPresent: {
+    value: 'oldPolicyPresent',
+    label: 'Old policy present',
+    helper: 'Carry forward the latest policy when routing into insurance.',
+  },
+  supportingDocsPresent: {
+    value: 'supportingDocsPresent',
+    label: 'Supporting docs present',
+    helper: 'Claim photos, affidavits, or other insurance references.',
+  },
+})
+const requirementFieldsByVisitType = Object.freeze({
+  regular_service: ['bookingFound', 'orCrPresent'],
+  insurance_related: ['bookingFound', 'orCrPresent', 'validIdPresent', 'oldPolicyPresent', 'supportingDocsPresent'],
+  back_job_complaint: ['bookingFound', 'orCrPresent', 'supportingDocsPresent'],
+  inspection_only: ['bookingFound', 'orCrPresent'],
+})
 
 export const intakeFieldMaxLengths = Object.freeze({
   arrivalType: 24,
@@ -90,6 +123,38 @@ const normalizeControlValue = (value, allowedValues, fallbackValue) => {
   return allowedValues.has(normalizedValue) ? normalizedValue : fallbackValue
 }
 
+export const resolveIntakeNextRoute = (visitType, nextRoute) => {
+  const normalizedVisitType = normalizeControlValue(
+    visitType,
+    allowedVisitTypes,
+    defaultVisitType,
+  )
+  const visitTypeRoute = nextRouteByVisitType[normalizedVisitType] ?? defaultNextRoute
+  const normalizedNextRoute = normalizeControlValue(nextRoute, allowedNextRoutes, visitTypeRoute)
+
+  return normalizedNextRoute === visitTypeRoute ? normalizedNextRoute : visitTypeRoute
+}
+
+export const getIntakeRequirementOptions = ({ arrivalType, visitType }) => {
+  const normalizedArrivalType = normalizeControlValue(
+    arrivalType,
+    allowedArrivalTypes,
+    defaultArrivalType,
+  )
+  const normalizedVisitType = normalizeControlValue(
+    visitType,
+    allowedVisitTypes,
+    defaultVisitType,
+  )
+
+  return (requirementFieldsByVisitType[normalizedVisitType] ?? requirementFieldsByVisitType[defaultVisitType]).map(
+    (field) => ({
+      ...requirementOptionCatalog[field],
+      required: field === 'bookingFound' ? normalizedArrivalType === 'with_booking' : true,
+    }),
+  )
+}
+
 const buildNormalizedRequirementsChecklist = (requirementsChecklist) => ({
   bookingFound: Boolean(requirementsChecklist?.bookingFound),
   orCrPresent: Boolean(requirementsChecklist?.orCrPresent),
@@ -126,11 +191,7 @@ const buildCappedIntakeDraft = (draft) => {
       intakeFieldMaxLengths.missingRequirementsNote,
     ),
     requirementsChecklist: buildNormalizedRequirementsChecklist(draft.requirementsChecklist),
-    nextRoute: normalizeControlValue(
-      draft.nextRoute,
-      allowedNextRoutes,
-      nextRouteByVisitType[visitType] ?? defaultNextRoute,
-    ),
+    nextRoute: resolveIntakeNextRoute(visitType, draft.nextRoute),
     damageNotes: truncateText(draft.damageNotes, intakeFieldMaxLengths.damageNotes),
     customerItems: truncateText(draft.customerItems, intakeFieldMaxLengths.customerItems),
     customerSignatureName: truncateText(

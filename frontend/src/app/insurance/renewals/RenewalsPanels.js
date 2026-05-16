@@ -192,9 +192,7 @@ export function RenewalsDetailPanel({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="card-title">Renewal Detail</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            Renewal timing, policy metadata, and recent staff activity stay together here for quick follow-up review.
-          </p>
+          <p className="mt-1 text-xs text-ink-muted">Timing, policy data, and activity in one place.</p>
         </div>
         <button
           onClick={onRefreshDetail}
@@ -336,9 +334,7 @@ export function RenewalsWorkflowPanel({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="card-title">Renewal Workflow Update</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            This panel only edits renewal workflow metadata and saves through the broad workflow route.
-          </p>
+          <p className="mt-1 text-xs text-ink-muted">Update stage, timing, and owner here.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <span className={`badge ${isTerminalInquiry ? 'badge-gray' : 'badge-green'}`}>
@@ -348,7 +344,7 @@ export function RenewalsWorkflowPanel({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px]">
         <WorkspaceSignalCard
           eyebrow="Next best step"
           title={workflowHeadline}
@@ -362,12 +358,15 @@ export function RenewalsWorkflowPanel({
           }
         />
         <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Renewal handling ladder</p>
-          <ol className="mt-2 space-y-2 text-xs leading-5 text-ink-muted">
-            <li>1. Confirm the real target date before changing the stage.</li>
-            <li>2. Keep assignee and notes current so the next adviser knows the exact handoff.</li>
-            <li>3. Use Awaiting Customer only when the next move truly sits with the customer.</li>
-          </ol>
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Quick state</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className={`badge ${selectedRow?.timeWindow === 'Overdue' ? 'badge-orange' : 'badge-gray'}`}>
+              {selectedRow?.timeWindow ?? 'No target'}
+            </span>
+            <span className={`badge ${updateDraft.renewalStatus === 'awaiting_customer' ? 'badge-orange' : 'badge-gray'}`}>
+              {updateDraft.renewalStatus === 'awaiting_customer' ? 'Waiting on customer' : 'Staff-owned'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -491,8 +490,7 @@ export function RenewalsWorkflowPanel({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-ink-muted">
-        <span className="badge badge-gray">Expiry and due dates stay in `YYYY-MM-DD` form for the workflow route</span>
-        <span className="badge badge-gray">Renewal status and assignee remain editable here</span>
+        <span className="badge badge-gray">Renewal fields only</span>
       </div>
     </div>
   )
@@ -518,9 +516,7 @@ export function RenewalCreationPanel({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="card-title">Manual Renewal Follow-Up</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            Create a staff-owned renewal case through the dedicated follow-up route when a customer needs proactive outreach.
-          </p>
+          <p className="mt-1 text-xs text-ink-muted">Create a staff-owned renewal case.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <span className="badge badge-green">Manual follow-up route</span>
@@ -528,7 +524,7 @@ export function RenewalCreationPanel({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px]">
         <WorkspaceSignalCard
           eyebrow="Creation readiness"
           title={creationReady ? 'Ready for a staff-owned follow-up' : 'Needs the core renewal identifiers first'}
@@ -540,10 +536,13 @@ export function RenewalCreationPanel({
           tone={creationReady ? 'positive' : 'warning'}
         />
         <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Best use</p>
-          <p className="mt-2 text-xs leading-5 text-ink-muted">
-            Create a manual follow-up when staff needs to reach out before a customer opens a new insurance inquiry.
-          </p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Quick state</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className={`badge ${creationReady ? 'badge-green' : 'badge-gray'}`}>
+              {creationReady ? 'Ready' : 'Needs basics'}
+            </span>
+            <span className="badge badge-gray">Creates renewal purpose</span>
+          </div>
         </div>
       </div>
 
@@ -679,7 +678,7 @@ export function RenewalCreationPanel({
         </button>
         <div className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-[11px] text-ink-muted">
           <CalendarClock size={14} />
-          New cases return to the renewal queue immediately after creation.
+          Returns to the queue after save.
         </div>
       </div>
     </div>

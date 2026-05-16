@@ -588,26 +588,30 @@ export default function AdminAnalyticsWorkspace() {
         />
       ) : null}
 
-      <div className="flex gap-1 p-1 bg-surface-card border border-surface-border rounded-xl w-fit flex-wrap">
-        {visibleTabs.map((item) => {
-          const Icon = TAB_ICONS[item.key]
-          const active = item.key === tab
+      <div className="overflow-x-auto pb-1">
+        <div className="inline-flex w-max min-w-full flex-nowrap items-center gap-1 rounded-xl border border-surface-border bg-surface-card p-1">
+          {visibleTabs.map((item) => {
+            const Icon = TAB_ICONS[item.key]
+            const active = item.key === tab
 
-          return (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setTab(item.key)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                active ? 'text-white' : 'text-ink-muted hover:text-ink-secondary hover:bg-surface-hover'
-              }`}
-              style={active ? { background: '#f07c00' } : {}}
-            >
-              <Icon size={14} />
-              {item.label}
-            </button>
-          )
-        })}
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setTab(item.key)}
+                className={`inline-flex h-11 min-w-[164px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
+                  active
+                    ? 'text-white shadow-card-sm'
+                    : 'text-ink-muted hover:bg-surface-hover hover:text-ink-secondary'
+                }`}
+                style={active ? { background: '#f07c00' } : {}}
+              >
+                <Icon size={14} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {tab === 'overview' ? (

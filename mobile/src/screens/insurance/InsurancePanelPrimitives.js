@@ -1,6 +1,42 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
-import { colors, radius } from '../../theme'
+import { radius } from '../../theme'
+
+export const insurancePalette = {
+  base: '#0D0F14',
+  card: '#151820',
+  cardMuted: '#12151C',
+  cardSoft: 'rgba(255,255,255,0.03)',
+  border: 'rgba(255,255,255,0.06)',
+  divider: 'rgba(255,255,255,0.05)',
+  text: '#F8FAFC',
+  textMuted: '#94A3B8',
+  textDim: '#64748B',
+  amber: '#F59E0B',
+  amberSoft: 'rgba(245,158,11,0.14)',
+  amberBorder: 'rgba(245,158,11,0.34)',
+  onAmber: '#111318',
+  success: '#FBBF24',
+  shadow: '#000000',
+}
+
+export const insuranceFonts = {
+  heading: Platform.select({
+    ios: 'System',
+    android: 'sans-serif-medium',
+    default: 'System',
+  }),
+  body: Platform.select({
+    ios: 'System',
+    android: 'sans-serif',
+    default: 'System',
+  }),
+  mono: Platform.select({
+    ios: 'Menlo',
+    android: 'monospace',
+    default: 'monospace',
+  }),
+}
 
 export function InsurancePanelShell({ eyebrow, title, subtitle, children }) {
   return (
@@ -18,7 +54,7 @@ export function InsuranceActionRow({ icon, label, value, description, onPress })
     <TouchableOpacity style={styles.actionRow} onPress={onPress} activeOpacity={0.9}>
       <View style={styles.actionHeader}>
         <View style={styles.iconWrap}>
-          <MaterialCommunityIcons name={icon} size={18} color={colors.primary} />
+          <MaterialCommunityIcons name={icon} size={18} color={insurancePalette.amber} />
         </View>
         {value ? <Text style={styles.value}>{value}</Text> : null}
       </View>
@@ -61,23 +97,40 @@ export function InsuranceSectionDivider({ title, helper, leading = false, childr
 }
 
 const styles = StyleSheet.create({
-  shell: { gap: 12 },
+  shell: { gap: 18 },
   eyebrow: {
-    color: colors.primary,
-    fontSize: 12,
+    color: insurancePalette.amber,
+    fontFamily: insuranceFonts.body,
+    fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 1.4,
+    letterSpacing: 1.6,
     textTransform: 'uppercase',
   },
-  title: { color: colors.text, fontSize: 20, fontWeight: '800' },
-  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 22 },
+  title: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
+    fontSize: 24,
+    fontWeight: '700',
+    lineHeight: 30,
+  },
+  subtitle: {
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+  },
   actionRow: {
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.card,
     padding: 18,
     gap: 10,
+    shadowColor: insurancePalette.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 4,
   },
   actionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   iconWrap: {
@@ -86,75 +139,98 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primarySoft,
+    backgroundColor: insurancePalette.amberSoft,
   },
-  value: { color: colors.primary, fontSize: 12, fontWeight: '800' },
-  actionLabel: { color: colors.text, fontSize: 17, fontWeight: '800' },
-  actionDescription: { color: colors.mutedText, fontSize: 14, lineHeight: 21 },
+  value: {
+    color: insurancePalette.amber,
+    fontFamily: insuranceFonts.body,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  actionLabel: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  actionDescription: {
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 14,
+    lineHeight: 21,
+  },
   sectionCard: {
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.card,
     padding: 18,
     gap: 8,
+    shadowColor: insurancePalette.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    elevation: 3,
   },
   sectionCardTitle: {
-    color: colors.text,
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   sectionCardHelper: {
-    color: colors.mutedText,
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
     fontSize: 14,
     lineHeight: 22,
   },
   summaryStrip: {
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.cardMuted,
     paddingHorizontal: 18,
     paddingVertical: 16,
     gap: 4,
   },
   summaryStripLabel: {
-    color: colors.labelText,
-    fontSize: 12,
+    color: insurancePalette.textDim,
+    fontFamily: insuranceFonts.body,
+    fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1.2,
   },
   summaryStripValue: {
-    color: colors.text,
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   summaryStripHelper: {
-    color: colors.mutedText,
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
     fontSize: 13,
     lineHeight: 19,
   },
   sectionDivider: {
-    paddingTop: 18,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderSoft,
-    gap: 12,
+    gap: 10,
   },
   sectionDividerLeading: {
     paddingTop: 0,
-    borderTopWidth: 0,
   },
   sectionDividerHeader: {
-    gap: 4,
+    gap: 6,
   },
   sectionDividerTitle: {
-    color: colors.text,
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   sectionDividerHelper: {
-    color: colors.mutedText,
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
     fontSize: 13,
     lineHeight: 20,
   },

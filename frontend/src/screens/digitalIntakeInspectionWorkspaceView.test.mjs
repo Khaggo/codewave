@@ -2,6 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  getArrivalPhotoButtonLabel,
+  getArrivalPhotoDisplayLabel,
+  getArrivalPhotoTemporaryRef,
   getIntakeWorkspaceHeroCopy,
   getIntakeRequirementsBadge,
   getIntakeWorkspacePrimaryActionLabel,
@@ -85,4 +88,13 @@ test('requirements badge reflects checklist progress and missing notes', () => {
     ),
     'Needs follow-up',
   )
+})
+
+test('arrival photo helpers provide temporary refs and upload tile copy', () => {
+  assert.equal(getArrivalPhotoTemporaryRef('front'), 'upload://vehicle/front')
+  assert.equal(getArrivalPhotoTemporaryRef('dashboardOdometer'), 'upload://vehicle/dashboardOdometer')
+  assert.equal(getArrivalPhotoButtonLabel('front-view.jpg'), 'Replace photo')
+  assert.equal(getArrivalPhotoButtonLabel(''), 'Add photo')
+  assert.equal(getArrivalPhotoDisplayLabel('front-view.jpg'), 'front-view.jpg')
+  assert.equal(getArrivalPhotoDisplayLabel(''), 'No photo selected')
 })

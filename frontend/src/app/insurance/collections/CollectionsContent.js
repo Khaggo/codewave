@@ -23,14 +23,15 @@ import {
   insuranceReviewStaffRoles,
 } from '@/lib/api/generated/insurance/staff-web-insurance'
 import {
+  buildCollectionsFocusHighlights,
   buildCollectionsTableRow,
   buildCollectionsUpdateDraft,
   filterCollectionsItems,
-  formatStatusLabel,
   getCollectionsActionState,
   getCollectionsFilterSummary,
   getCollectionsSummaryCards,
 } from './insuranceCollectionsView.mjs'
+import { formatStatusLabel } from '../insuranceView.mjs'
 import {
   BlockingState,
   CollectionsDetailPanel,
@@ -211,6 +212,17 @@ export default function CollectionsContent() {
     [collectionItems.length, filteredItems.length, filters],
   )
 
+  const focusHighlights = useMemo(
+    () =>
+      buildCollectionsFocusHighlights({
+        filters,
+        selectedInquiry,
+        hasProofInView: filteredItems.some(({ row }) => row.hasProofOfPayment),
+        visibleCount: filteredItems.length,
+      }),
+    [filters, filteredItems, selectedInquiry],
+  )
+
   const nextStatuses = useMemo(() => {
     const currentStatus = selectedInquiry?.status ?? DEFAULT_UPDATE_DRAFT.status
     return Array.from(new Set([currentStatus, ...getAllowedInsuranceStatusTargets(currentStatus)]))
@@ -352,7 +364,7 @@ export default function CollectionsContent() {
       <div className="space-y-5">
         <BlockingState
           title="Insurance collections is adviser/admin only"
-          copy="This workspace is reserved for service advisers and super admins, with direct navigation blocked for other roles."
+          copy="Only service advisers and super admins can open this workspace."
         />
       </div>
     )
@@ -363,7 +375,7 @@ export default function CollectionsContent() {
       <PageHeader
         eyebrow="Insurance Collections Workspace"
         title="Payment Follow-Up And Verification"
-        description="This collections route stays focused on payment operations: triage unpaid cases, review proof, update due dates, and move inquiries forward with the broad workflow route."
+        description="Track unpaid cases, review proof, and move payment follow-ups forward."
         meta={
           <>
             <span className="badge badge-orange">Collections focused</span>
@@ -384,9 +396,7 @@ export default function CollectionsContent() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="card-title">Collections Filters</p>
-            <p className="mt-1 text-xs text-ink-muted">
-              Payment status uses the live list route, while overdue and proof filters narrow the loaded workspace locally.
-            </p>
+            <p className="mt-1 text-xs text-ink-muted">Filter the queue, pick a case, then act.</p>
           </div>
           <button onClick={() => setReloadTick((current) => current + 1)} className="btn-secondary">
             <RefreshCw size={14} />
@@ -400,9 +410,8 @@ export default function CollectionsContent() {
             detail={filterSummary.detail}
             tone={filterSummary.tone}
             meta={[
-              { label: `${collectionItems.length} total loaded` },
-              { label: `${filteredItems.length} visible now` },
-              { label: selectedInquiry ? 'Detail panel ready' : 'Pick a case to review' },
+              { label: `${filteredItems.length} visible` },
+              { label: selectedInquiry ? 'Case selected' : 'Pick a case' },
             ]}
           />
         </div>
@@ -444,55 +453,32 @@ export default function CollectionsContent() {
                 onChange={handleFilterChange('overdueOnly')}
                 className="h-4 w-4"
               />
-              Show only cases already past due
+              Past due only
             </span>
           </label>
         </div>
 
         {listMessage ? <div className="status-message status-message-danger mt-4">{listMessage}</div> : null}
 
-        <div className="mt-4 grid gap-3 xl:grid-cols-3">
-          <WorkspaceSignalCard
-            eyebrow="Current queue"
-            title={filters.overdueOnly ? 'Overdue follow-up mode' : 'Broad collections review'}
-            detail={
-              filters.overdueOnly
-                ? 'Only late payments stay visible so staff can triage urgent accounts first.'
-                : 'Use payment status first, then narrow by proof and search when the queue gets busy.'
-            }
-            tone={filters.overdueOnly ? 'warning' : 'neutral'}
-          />
-          <WorkspaceSignalCard
-            eyebrow="Proof review"
-            title={filteredItems.some(({ row }) => row.hasProofOfPayment) ? 'Proof documents are available' : 'Proof uploads are still missing'}
-            detail={
-              filteredItems.some(({ row }) => row.hasProofOfPayment)
-                ? 'Proof-ready cases can move into verification from the workflow panel.'
-                : 'Use this queue to spot unpaid cases before staff starts verification.'
-            }
-            tone={filteredItems.some(({ row }) => row.hasProofOfPayment) ? 'positive' : 'neutral'}
-          />
-          <WorkspaceSignalCard
-            eyebrow="Current selection"
-            title={selectedInquiry ? selectedInquiry.customerDisplayName || 'Collections case selected' : 'No case selected yet'}
-            detail={
-              selectedInquiry
-                ? `Review ${selectedRow?.paymentStatus ?? 'payment state'} details, then save through the workflow panel on the right.`
-                : 'Pick a queue row to load proof, due dates, activity, and quick collections actions.'
-            }
-            tone={selectedInquiry ? 'positive' : 'neutral'}
-          />
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          {focusHighlights.map((item) => (
+            <WorkspaceSignalCard
+              key={item.label}
+              eyebrow={item.label}
+              title={item.value}
+              detail={item.hint}
+              tone={item.tone}
+            />
+          ))}
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+      <div className="grid gap-5">
         <section className="table-surface">
           <div className="flex flex-col gap-2 border-b border-surface-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="card-title">Collections Queue</p>
-              <p className="mt-1 text-xs text-ink-muted">
-                The table keeps payment visibility front and center so advisers can sort through collections work fast.
-              </p>
+              <p className="mt-1 text-xs text-ink-muted">Payment state stays visible here.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <span className={`badge ${filteredItems.length ? 'badge-orange' : 'badge-gray'}`}>
@@ -508,7 +494,7 @@ export default function CollectionsContent() {
             <div className="px-4 py-8 text-sm text-ink-muted">Loading live collections cases...</div>
           ) : filteredItems.length ? (
             <div className="table-scroll">
-              <table className="data-table min-w-[1020px]">
+              <table className="data-table w-full min-w-[1120px]">
                 <thead>
                   <tr>
                     <th>Customer</th>
@@ -566,12 +552,12 @@ export default function CollectionsContent() {
           ) : (
             <EmptyPanel
               title="No collections cases match the current filters"
-              copy="Broaden the payment filters or search to bring more cases back into the workspace."
+              copy="Broaden the filters or search to show more cases."
             />
           )}
         </section>
 
-        <div className="space-y-5">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
           <CollectionsDetailPanel
             detailMessage={detailMessage}
             detailState={detailState}

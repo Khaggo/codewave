@@ -4,6 +4,26 @@ const REQUIRED_DOCUMENT_TYPES = [
   { type: 'valid_id', label: 'Valid ID' },
 ]
 
+const PURPOSE_REQUIRED_DOCUMENT_TYPES = Object.freeze({
+  renewal: [
+    { type: 'or_cr', label: 'OR/CR' },
+    { type: 'policy', label: 'Old policy' },
+    { type: 'valid_id', label: 'Valid ID' },
+  ],
+  new_application: [
+    { type: 'or_cr', label: 'OR/CR' },
+    { type: 'valid_id', label: 'Valid ID' },
+  ],
+  claim: [
+    { type: 'or_cr', label: 'OR/CR' },
+    { type: 'valid_id', label: 'Valid ID' },
+  ],
+  quotation: [
+    { type: 'or_cr', label: 'OR/CR' },
+    { type: 'valid_id', label: 'Valid ID' },
+  ],
+})
+
 const OPTIONAL_DOCUMENT_TYPES = [
   { type: 'photo', label: 'Damage photo' },
   { type: 'estimate', label: 'Repair estimate' },
@@ -11,6 +31,30 @@ const OPTIONAL_DOCUMENT_TYPES = [
   { type: 'proof_of_payment', label: 'Proof of payment' },
   { type: 'other', label: 'Other document' },
 ]
+
+const PURPOSE_SUPPORTING_DOCUMENT_TYPES = Object.freeze({
+  renewal: [
+    { type: 'estimate', label: 'Renewal quote notes' },
+    { type: 'other', label: 'Other document' },
+  ],
+  new_application: [
+    { type: 'policy', label: 'Old policy (if available)' },
+    { type: 'estimate', label: 'Quotation or estimate' },
+    { type: 'other', label: 'Other document' },
+  ],
+  claim: [
+    { type: 'policy', label: 'Policy copy' },
+    { type: 'photo', label: 'Damage photo' },
+    { type: 'estimate', label: 'Repair estimate' },
+    { type: 'police_report', label: 'Police report (if requested)' },
+    { type: 'other', label: 'Other claim document' },
+  ],
+  quotation: [
+    { type: 'policy', label: 'Policy copy (if available)' },
+    { type: 'estimate', label: 'Existing estimate' },
+    { type: 'other', label: 'Other document' },
+  ],
+})
 
 export const REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY =
   'codewave:insurance:remembered-inquiries'
@@ -660,13 +704,33 @@ export const buildCustomerInsuranceHomeFocus = ({
   }
 }
 
-export const buildRequirementsChecklist = ({ status = 'submitted', uploadedTypes = [] } = {}) => {
+export const buildRequirementsChecklist = ({
+  purpose,
+  status = 'submitted',
+  uploadedTypes = [],
+} = {}) => {
   const normalizedUploadedTypes = Array.isArray(uploadedTypes) ? uploadedTypes : []
+  const requiredTypes =
+    PURPOSE_REQUIRED_DOCUMENT_TYPES[purpose] ?? REQUIRED_DOCUMENT_TYPES
+  const supportingTypes = PURPOSE_SUPPORTING_DOCUMENT_TYPES[purpose] ?? []
+  const optionalTypes =
+    purpose
+      ? OPTIONAL_DOCUMENT_TYPES.filter(
+          (item) => !supportingTypes.some((supportingItem) => supportingItem.type === item.type),
+        )
+      : OPTIONAL_DOCUMENT_TYPES
 
   return {
+    purpose: purpose ?? null,
     status,
-    required: buildChecklistGroup(REQUIRED_DOCUMENT_TYPES, normalizedUploadedTypes),
-    optional: buildChecklistGroup(OPTIONAL_DOCUMENT_TYPES, normalizedUploadedTypes),
+    required: buildChecklistGroup(requiredTypes, normalizedUploadedTypes),
+    supporting: buildChecklistGroup(supportingTypes, normalizedUploadedTypes),
+    optional: buildChecklistGroup(optionalTypes, normalizedUploadedTypes),
+    guidance: [
+      'Readable digital copies accepted',
+      'Submit early to avoid late filing',
+      'Police report only when requested',
+    ],
   }
 }
 

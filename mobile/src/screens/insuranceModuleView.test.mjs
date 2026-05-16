@@ -25,6 +25,7 @@ import {
 } from './insuranceModuleView.mjs'
 import {
   addInsuranceInquiryDocument,
+  createInsuranceInquiry,
   normalizeCustomerInsuranceInquiry,
   uploadInsuranceInquiryDocumentFile,
 } from '../lib/insuranceClient.js'
@@ -662,6 +663,41 @@ test('requirements checklist separates required and optional documents', () => {
   assert.equal(checklist.status, 'needs_documents')
 })
 
+test('requirements checklist makes old policy required for renewals but optional for new applications', () => {
+  const renewalChecklist = buildRequirementsChecklist({
+    purpose: 'renewal',
+    status: 'needs_documents',
+    uploadedTypes: ['or_cr'],
+  })
+  const newApplicationChecklist = buildRequirementsChecklist({
+    purpose: 'new_application',
+    status: 'needs_documents',
+    uploadedTypes: ['or_cr'],
+  })
+  const claimChecklist = buildRequirementsChecklist({
+    purpose: 'claim',
+    status: 'needs_documents',
+    uploadedTypes: [],
+  })
+
+  assert.deepEqual(
+    renewalChecklist.required.map((item) => item.type),
+    ['or_cr', 'policy', 'valid_id'],
+  )
+  assert.deepEqual(
+    newApplicationChecklist.required.map((item) => item.type),
+    ['or_cr', 'valid_id'],
+  )
+  assert.equal(
+    newApplicationChecklist.supporting.find((item) => item.type === 'policy')?.label,
+    'Old policy (if available)',
+  )
+  assert.equal(
+    claimChecklist.supporting.find((item) => item.type === 'police_report')?.label,
+    'Police report (if requested)',
+  )
+})
+
 test('customer timeline shows submitted, review, and document follow-up states', () => {
   assert.deepEqual(
     getCustomerInsuranceTimeline({
@@ -967,12 +1003,17 @@ test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for 
     normalizeCustomerInsuranceInquiry({
       id: 'inq-1',
       inquiryType: 'comprehensive',
+      purpose: 'renewal',
       subject: 'Insurance follow-up',
       description: 'Customer inquiry',
       status: 'payment_pending',
       documentStatus: 'complete',
       paymentStatus: 'proof_submitted',
       renewalStatus: 'upcoming',
+      reviewNotes: 'Renewal quote is waiting for customer confirmation.',
+      paymentDueAt: '2026-05-18T00:00:00.000Z',
+      policyExpiryAt: '2026-06-02T00:00:00.000Z',
+      renewalDueAt: '2026-05-28T00:00:00.000Z',
       documents: [],
     }),
     {
@@ -981,6 +1022,7 @@ test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for 
       vehicleId: null,
       inquiryType: 'comprehensive',
       inquiryTypeLabel: 'Comprehensive',
+      purpose: 'renewal',
       subject: 'Insurance follow-up',
       description: 'Customer inquiry',
       status: 'payment_pending',
@@ -991,6 +1033,10 @@ test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for 
       providerName: null,
       policyNumber: null,
       notes: null,
+      reviewNotes: 'Renewal quote is waiting for customer confirmation.',
+      paymentDueAt: '2026-05-18T00:00:00.000Z',
+      policyExpiryAt: '2026-06-02T00:00:00.000Z',
+      renewalDueAt: '2026-05-28T00:00:00.000Z',
       documentCount: 0,
       documents: [],
       canAttachDocuments: true,
@@ -998,6 +1044,76 @@ test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for 
       updatedAt: null,
     },
   )
+})
+
+test('createInsuranceInquiry sends the web-aligned purpose field to the backend', async () => {
+  const originalFetch = globalThis.fetch
+  const originalInsuranceClientRuntime = globalThis.__insuranceClientRuntime
+  const calls = []
+
+  globalThis.__insuranceClientRuntime = {
+    ApiError: class ApiError extends Error {
+      constructor(message, status, details) {
+        super(message)
+        this.name = 'ApiError'
+        this.status = status
+        this.details = details
+      }
+    },
+    getApiBaseUrl: () => 'http://127.0.0.1:3000',
+  }
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options })
+
+    return new Response(
+      JSON.stringify({
+        id: 'inq-purpose-1',
+        userId: 'user-1',
+        vehicleId: 'vehicle-1',
+        inquiryType: 'comprehensive',
+        purpose: 'renewal',
+        subject: 'Renewal request',
+        description: 'Prepare a renewal quote.',
+        status: 'submitted',
+        documentStatus: 'incomplete',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+        documents: [],
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }
+
+  try {
+    await createInsuranceInquiry({
+      userId: 'user-1',
+      vehicleId: 'vehicle-1',
+      inquiryType: 'comprehensive',
+      purpose: 'renewal',
+      subject: ' Renewal request ',
+      description: ' Prepare a renewal quote. ',
+      accessToken: 'token-1',
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+    globalThis.__insuranceClientRuntime = originalInsuranceClientRuntime
+  }
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'http://127.0.0.1:3000/api/insurance/inquiries')
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    userId: 'user-1',
+    vehicleId: 'vehicle-1',
+    inquiryType: 'comprehensive',
+    purpose: 'renewal',
+    subject: 'Renewal request',
+    description: 'Prepare a renewal quote.',
+  })
 })
 
 test('uploadInsuranceInquiryDocumentFile posts multipart form data without forcing json headers', async () => {

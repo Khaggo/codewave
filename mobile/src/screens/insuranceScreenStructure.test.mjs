@@ -64,6 +64,11 @@ test('insurance shell exposes direct-entry tabs and vehicle picker trigger', () 
     'disabled={!isVehiclePickerAvailable}',
     'onPress={() => onChangeSection(item.key)}',
     '<View style={styles.body}>{children}</View>',
+    'summaryChips.map((item) => (',
+    'item.emphasis && styles.summaryChipEmphasis',
+    "item.icon ? item.icon : 'alert-circle-outline'",
+    'styles.summaryChipValueMono',
+    'styles.tabRowInner',
   ]
 
   for (const fragment of requiredFragments) {
@@ -73,6 +78,8 @@ test('insurance shell exposes direct-entry tabs and vehicle picker trigger', () 
   assert.doesNotMatch(source, /Back to insurance/)
   assert.doesNotMatch(source, /Insurance mode/)
   assert.doesNotMatch(source, /History/)
+  assert.match(source, /container:\s*\{[\s\S]*?flex:\s*1/)
+  assert.match(source, /body:\s*\{[\s\S]*?flex:\s*1/)
   assert.match(
     source,
     /style=\{\[\s*styles\.vehicleTrigger,\s*!isVehiclePickerAvailable && styles\.vehicleTriggerDisabled,\s*\]\}/,
@@ -133,22 +140,32 @@ test('insurance shell uses pull-to-refresh and removes the floating reload affor
   )
 })
 
-test('home and status tabs use section-first layout with short copy and no extra top-level cards', () => {
+test('home and status tabs use the premium dark redesign structure', () => {
   const screenSource = read('./InsuranceInquiryScreen.js')
   const homeSource = read('./insurance/InsuranceHomePanel.js')
   const statusSource = read('./insurance/InsuranceStatusDetailPanel.js')
 
-  assert.match(homeSource, /title="Overview"/)
+  assert.match(homeSource, /overviewState\.routeRows/)
+  assert.match(homeSource, /quickNavItems/)
+  assert.match(homeSource, /Quick access/)
+  assert.match(homeSource, /item\.description/)
+  assert.match(homeSource, /item\.icon/)
+  assert.match(homeSource, /chevron-right/)
   assert.match(homeSource, /current vehicle/i)
   assert.match(homeSource, /next step/i)
-  assert.match(homeSource, /Request/)
-  assert.match(homeSource, /Documents/)
-  assert.match(homeSource, /Status/)
+  assert.match(homeSource, /Current status/)
+  assert.match(homeSource, /onOpenSection\(item\.key\)/)
   assert.doesNotMatch(homeSource, /Protection center/)
   assert.doesNotMatch(homeSource, /Open the dedicated insurance workspace/)
 
-  assert.match(statusSource, /title="Latest update"/)
-  assert.match(statusSource, /timeline/i)
+  assert.match(statusSource, /title = 'Status'/)
+  assert.match(statusSource, /subtitle = 'Track review, approval, and next action'/)
+  assert.match(statusSource, /Current status/)
+  assert.match(statusSource, /Timeline/)
+  assert.match(statusSource, /Process/)
+  assert.match(statusSource, /Latest update/)
+  assert.match(statusSource, /StepDot/)
+  assert.match(statusSource, /Animated\.loop/)
   assert.match(screenSource, /History/)
   assert.match(screenSource, /Recorded vehicle updates/)
   assert.doesNotMatch(statusSource, /footerLabel/)
@@ -163,29 +180,87 @@ test('home and status tabs use section-first layout with short copy and no extra
   assert.doesNotMatch(screenSource, /onFooterPress=/)
 })
 
-test('request and documents tabs use minimal section-first layouts', () => {
+test('request and documents tabs use the redesigned premium layouts', () => {
   const requestSource = read('./insurance/InsuranceRequestPanel.js')
   const documentsSource = read('./insurance/InsuranceDocumentsPanel.js')
 
   assert.match(requestSource, /title="Request"/)
+  assert.match(requestSource, /Request purpose/)
   assert.match(requestSource, /Inquiry type/)
-  assert.match(requestSource, /Claim details/)
+  assert.match(requestSource, /Claim request/)
+  assert.match(requestSource, /Estimate and approval/)
+  assert.match(requestSource, /Request details/)
   assert.match(requestSource, /Insurance details/)
   assert.match(requestSource, /Selected vehicle/)
   assert.match(requestSource, /Submit request/)
+  assert.match(requestSource, /stickyFooter/)
   assert.doesNotMatch(requestSource, /InsuranceSummaryStrip/)
   assert.doesNotMatch(requestSource, /Start a customer-safe insurance request/)
   assert.doesNotMatch(requestSource, /Step 1 of 5/)
   assert.doesNotMatch(requestSource, /This request stays tied to the active vehicle in insurance mode\./)
 
   assert.match(documentsSource, /title="Documents"/)
+  assert.match(documentsSource, /eyebrow="Documents"/)
   assert.match(documentsSource, /Checklist/)
+  assert.match(documentsSource, /Upload notes/)
   assert.match(documentsSource, /Already on file/)
   assert.match(documentsSource, /Upload target/)
   assert.match(documentsSource, /Selected file/)
+  assert.match(documentsSource, /No file selected\./)
+  assert.match(documentsSource, /horizontal/)
+  assert.match(documentsSource, /ChecklistItemRow/)
+  assert.match(documentsSource, /useState/)
+  assert.match(documentsSource, /toggleChecklistItem/)
   assert.match(documentsSource, /Upload file/)
   assert.match(documentsSource, /Note/)
   assert.doesNotMatch(documentsSource, /InsuranceSummaryStrip/)
   assert.doesNotMatch(documentsSource, /Manage supporting files/)
   assert.doesNotMatch(documentsSource, /Work through the checklist, attach the next file, and keep the current request tidy\./)
+})
+
+test('request and documents tabs reflect the real insurance workflow from intake notes', () => {
+  const requestSource = read('./insurance/InsuranceRequestPanel.js')
+  const documentsSource = read('./insurance/InsuranceDocumentsPanel.js')
+  const screenSource = read('./InsuranceInquiryScreen.js')
+  const viewModelSource = read('./insuranceModuleView.mjs')
+
+  assert.match(requestSource, /Request purpose/)
+  assert.match(requestSource, /Estimate and approval/)
+  assert.match(screenSource, /value: 'new_application', label: 'New'/)
+  assert.match(screenSource, /value: 'renewal', label: 'Renewal'/)
+  assert.match(screenSource, /value: 'claim', label: 'Claim'/)
+  assert.match(screenSource, /value: 'quotation', label: 'Quotation'/)
+  assert.match(documentsSource, /Required now/)
+  assert.match(documentsSource, /Helpful next/)
+  assert.match(viewModelSource, /Readable digital copies accepted/)
+  assert.match(viewModelSource, /Submit early to avoid late filing/)
+  assert.match(viewModelSource, /Police report only when requested/)
+  assert.match(screenSource, /purposeOptions/)
+})
+
+test('dashboard insurance tab uses one launcher CTA and no legacy duplicate insurance home blocks', () => {
+  const dashboardSource = read('./Dashboard.js')
+
+  assert.doesNotMatch(dashboardSource, /Insurance inquiry center/)
+  assert.doesNotMatch(dashboardSource, /Choose Vehicle Context/)
+  assert.doesNotMatch(dashboardSource, /Review reminders/)
+  assert.doesNotMatch(dashboardSource, /bookingEyebrow}>INSURANCE/)
+  assert.equal((dashboardSource.match(/Open Insurance Home/g) ?? []).length, 1)
+  assert.match(dashboardSource, /if \(tabKey === 'insurance'\) \{/)
+  assert.match(dashboardSource, /void navigateToInsuranceInquiry\(\)/)
+})
+
+test('insurance screen and action footers respect safe-area top and bottom insets', () => {
+  const screenSource = read('./InsuranceInquiryScreen.js')
+  const requestSource = read('./insurance/InsuranceRequestPanel.js')
+  const documentsSource = read('./insurance/InsuranceDocumentsPanel.js')
+
+  assert.match(screenSource, /useSafeAreaInsets/)
+  assert.match(screenSource, /paddingTop:\s*Math\.max\(insets\.top,\s*\d+\)/)
+  assert.match(screenSource, /paddingBottom:\s*Math\.max\(insets\.bottom,\s*\d+\)/)
+  assert.match(screenSource, /bottomInset=\{insets\.bottom\}/)
+  assert.match(requestSource, /bottomInset\s*=\s*0/)
+  assert.match(requestSource, /paddingBottom:\s*Math\.max\(bottomInset,\s*\d+\)/)
+  assert.match(documentsSource, /bottomInset\s*=\s*0/)
+  assert.match(documentsSource, /paddingBottom:\s*Math\.max\(bottomInset,\s*\d+\)/)
 })

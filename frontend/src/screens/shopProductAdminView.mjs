@@ -11,7 +11,6 @@ export function buildModalForm(product) {
     name: product.name ?? '',
     category: product.category ?? '',
     price: String(product.price ?? ''),
-    stock: String(product.stock ?? ''),
     sku: product.sku ?? '',
     description: product.description ?? '',
     imageInput: '',

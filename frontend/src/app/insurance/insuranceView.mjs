@@ -127,6 +127,60 @@ export function getInsuranceSummaryCards(input = {}) {
   ]
 }
 
+export function buildInsurancePrimaryFocus({
+  selectedInquiry = null,
+  selectedCount = 0,
+  filteredCount = 0,
+  activeFilterCount = 0,
+} = {}) {
+  if (selectedInquiry) {
+    return {
+      title: 'Case ready',
+      description: 'You can now review details, update workflow, or send a targeted follow-up.',
+      tone: 'ready',
+    }
+  }
+
+  if (filteredCount > 0) {
+    return {
+      title: 'Pick a case first',
+      description: 'Choose one case from the queue before sending reminders or editing workflow.',
+      tone: activeFilterCount > 0 ? 'attention' : 'neutral',
+    }
+  }
+
+  if (selectedCount > 0) {
+    return {
+      title: 'Selection waiting',
+      description: 'Clear or refresh the queue to bring the selected cases back into view.',
+      tone: 'neutral',
+    }
+  }
+
+  return {
+    title: 'Start with the queue',
+    description: 'Use the filters to find the cases that need review, payment follow-up, or renewal work.',
+    tone: 'neutral',
+  }
+}
+
+export function buildInsuranceWorkspaceSections() {
+  return {
+    queue: {
+      title: '1. Filter and pick a case',
+      description: 'Narrow the live queue, then open the case you want to work on.',
+    },
+    detail: {
+      title: '2. Review the selected case',
+      description: 'Use the tabs to check documents, payment, renewal, and activity in one place.',
+    },
+    actions: {
+      title: '3. Take the next action',
+      description: 'Update workflow first, then send reminders or broadcasts only when needed.',
+    },
+  }
+}
+
 export function getInsuranceDetailTabs() {
   return [
     {
@@ -373,11 +427,10 @@ export function getInsuranceReminderComposerState({
 
   if (normalizedTargetMode === 'single_case') {
     return {
-      audienceLabel: selectedInquiryId ? 'Current case selected' : 'No current case selected',
+      audienceLabel: selectedInquiryId ? 'Current case' : 'No case selected',
       scopeLabel: TARGET_MODE_LABELS.single_case,
-      readinessLabel: selectedInquiryId
-        ? 'Reminder request is ready for the current case. Final eligibility is checked when you send.'
-        : 'Pick a current case before sending a single reminder.',
+      readinessLabel: selectedInquiryId ? 'Ready for the current case.' : 'Select a case to send a reminder.',
+      summaryLabel: selectedInquiryId ? 'Ready for the current case.' : 'Select a case to send a reminder.',
       canSend: Boolean(selectedInquiryId),
     }
   }
@@ -386,9 +439,8 @@ export function getInsuranceReminderComposerState({
     return {
       audienceLabel: `${pluralize(filteredCount, 'filtered case')}`,
       scopeLabel: TARGET_MODE_LABELS.filtered_results,
-      readinessLabel: filteredCount
-        ? 'Reminder request is ready for the filtered queue. Terminal or ineligible cases will be skipped when you send.'
-        : 'Keep at least one matching case in view before sending filtered reminders.',
+      readinessLabel: filteredCount ? 'Ready for filtered cases.' : 'Keep at least 1 case in view.',
+      summaryLabel: filteredCount ? 'Ready for filtered cases.' : 'Keep at least 1 case in view.',
       canSend: filteredCount > 0,
     }
   }
@@ -396,9 +448,8 @@ export function getInsuranceReminderComposerState({
   return {
     audienceLabel: `${pluralize(selectedCount, 'selected case')}`,
     scopeLabel: `${visibleSelectedCount} selected in the current queue`,
-    readinessLabel: selectedCount
-      ? 'Reminder request is ready for the selected cases. Terminal or ineligible cases will be skipped when you send.'
-      : 'Select one or more cases before sending reminders.',
+    readinessLabel: selectedCount ? 'Ready for selected cases.' : 'Select at least 1 case.',
+    summaryLabel: selectedCount ? 'Ready for selected cases.' : 'Select at least 1 case.',
     canSend: selectedCount > 0,
   }
 }
@@ -417,25 +468,38 @@ export function getInsuranceBroadcastComposerState({
 
   if (normalizedTargetMode === 'filtered_results') {
     const hasAudience = filteredCount > 0
+    const summaryLabel =
+      hasAudience && hasTitle && hasMessage
+        ? 'Ready for filtered cases.'
+        : !hasAudience
+          ? 'Keep at least 1 case in view.'
+          : !hasTitle
+            ? 'Add a title.'
+            : 'Add a message.'
 
     return {
       audienceLabel: `${pluralize(filteredCount, 'filtered case')}`,
       scopeLabel: TARGET_MODE_LABELS.filtered_results,
-      readinessLabel:
-        hasAudience && hasTitle && hasMessage
-          ? 'Broadcast request is ready for the filtered insurance audience. Terminal or ineligible cases will be skipped when you send.'
-          : 'Add a message and keep at least one matching case in view.',
+      readinessLabel: summaryLabel,
+      summaryLabel,
       canSend: hasAudience && hasTitle && hasMessage,
     }
   }
 
+  const summaryLabel =
+    selectedCount && hasTitle && hasMessage
+      ? 'Ready for selected cases.'
+      : !selectedCount
+        ? 'Select at least 1 case.'
+        : !hasTitle
+          ? 'Add a title.'
+          : 'Add a message.'
+
   return {
     audienceLabel: `${pluralize(selectedCount, 'selected case')}`,
     scopeLabel: TARGET_MODE_LABELS.selected_cases,
-    readinessLabel:
-      selectedCount && hasTitle && hasMessage
-        ? 'Broadcast request is ready for the selected insurance cases. Terminal or ineligible cases will be skipped when you send.'
-        : 'Select cases, add a title, and add a message before sending.',
+    readinessLabel: summaryLabel,
+    summaryLabel,
     canSend: selectedCount > 0 && hasTitle && hasMessage,
   }
 }
