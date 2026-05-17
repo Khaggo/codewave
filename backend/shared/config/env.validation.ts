@@ -17,15 +17,6 @@ export const validateEnv = (config: EnvRecord): EnvRecord => {
     throw new Error('Missing required environment variable: RABBITMQ_URL');
   }
 
-  const resendKeys = ['RESEND_API_KEY', 'RESEND_FROM_EMAIL'] as const;
-  const hasAnyResendValue = resendKeys.some((key) => Boolean(config[key]));
-  const missingResendKeys = resendKeys.filter((key) => !config[key]);
-  if (hasAnyResendValue && missingResendKeys.length > 0) {
-    throw new Error(
-      `Missing required Resend environment variables: ${missingResendKeys.join(', ')}`,
-    );
-  }
-
   const paymongoKeys = [
     'PAYMONGO_PUBLIC_KEY',
     'PAYMONGO_SECRET_KEY',

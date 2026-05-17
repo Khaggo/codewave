@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -48,8 +49,9 @@ export class VehicleLifecycleService {
     private readonly jobOrdersRepository: JobOrdersRepository,
     private readonly qualityGatesRepository: QualityGatesRepository,
     private readonly vehicleLifecycleSummaryProvider: VehicleLifecycleSummaryProviderService,
+    @Optional()
     @InjectQueue(AI_WORKER_QUEUE_NAME)
-    private readonly aiWorkerQueue: Queue,
+    private readonly aiWorkerQueue?: Queue | null,
   ) {}
 
   async findByVehicleId(vehicleId: string, actor?: LifecycleActor) {
@@ -104,23 +106,45 @@ export class VehicleLifecycleService {
       provenance: this.buildQueuedSummaryProvenance(timelineEvents),
     });
 
-    await this.aiWorkerQueue.add(
-      GENERATE_VEHICLE_LIFECYCLE_SUMMARY_JOB_NAME,
-      {
-        summaryId: createdSummary.id,
-        requestedAt,
-      },
-      {
-        jobId,
-        attempts: DEFAULT_AI_WORKER_JOB_ATTEMPTS,
-        backoff: {
-          type: 'fixed',
-          delay: DEFAULT_AI_WORKER_JOB_BACKOFF_MS,
+    try {
+      if (!this.aiWorkerQueue) {
+        throw new Error('AI worker queue is unavailable');
+      }
+
+      await this.aiWorkerQueue.add(
+        GENERATE_VEHICLE_LIFECYCLE_SUMMARY_JOB_NAME,
+        {
+          summaryId: createdSummary.id,
+          requestedAt,
         },
-        removeOnComplete: 50,
-        removeOnFail: 50,
-      },
-    );
+        {
+          jobId,
+          attempts: DEFAULT_AI_WORKER_JOB_ATTEMPTS,
+          backoff: {
+            type: 'fixed',
+            delay: DEFAULT_AI_WORKER_JOB_BACKOFF_MS,
+          },
+          removeOnComplete: 50,
+          removeOnFail: 50,
+        },
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'AI worker queue is unavailable';
+
+      return this.vehicleLifecycleRepository.failSummaryGeneration(createdSummary.id, {
+        summaryText: `Lifecycle summary generation failed: ${message}`,
+        generationJob: {
+          ...queuedGenerationJob,
+          status: 'failed',
+          failedAt: new Date().toISOString(),
+          completedAt: null,
+          lastError: message,
+        },
+      });
+    }
 
     return createdSummary;
   }

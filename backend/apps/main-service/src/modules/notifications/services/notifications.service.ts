@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -84,8 +85,9 @@ export class NotificationsService {
     private readonly usersService: UsersService,
     private readonly notificationTriggerPlanner: NotificationTriggerPlannerService,
     private readonly mailDeliveryService: MailDeliveryService,
+    @Optional()
     @InjectQueue(NOTIFICATIONS_QUEUE_NAME)
-    private readonly notificationsQueue: Queue,
+    private readonly notificationsQueue?: Queue | null,
   ) {}
 
   async getPreferences(userId: string, actor: NotificationActor) {
@@ -134,6 +136,10 @@ export class NotificationsService {
     });
 
     try {
+      if (!this.notificationsQueue) {
+        throw new Error('Notification queue is unavailable');
+      }
+
       await this.notificationsQueue.add(
         'deliver-notification',
         {

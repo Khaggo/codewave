@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 
 import { AuthModule } from '@main-modules/auth/auth.module';
 import { UsersModule } from '@main-modules/users/users.module';
+import { hasRedisRuntimeConfig } from '@shared/queue/runtime-queue-config';
 
 import { NotificationsController } from './controllers/notifications.controller';
 import { NOTIFICATIONS_QUEUE_NAME } from './notifications.constants';
@@ -12,18 +13,20 @@ import { NotificationTriggerPlannerService } from './services/notification-trigg
 import { NotificationsService } from './services/notifications.service';
 import { MailDeliveryService } from './services/mail-delivery.service';
 
+const notificationsQueueEnabled = hasRedisRuntimeConfig();
+
 @Module({
   imports: [
     forwardRef(() => AuthModule),
     UsersModule,
-    BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE_NAME }),
+    ...(notificationsQueueEnabled ? [BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE_NAME })] : []),
   ],
   controllers: [NotificationsController],
   providers: [
     NotificationsRepository,
     NotificationTriggerPlannerService,
     NotificationsService,
-    NotificationsProcessor,
+    ...(notificationsQueueEnabled ? [NotificationsProcessor] : []),
     MailDeliveryService,
   ],
   exports: [NotificationsRepository, NotificationsService, MailDeliveryService],

@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
@@ -54,8 +54,9 @@ export class QualityGatesService {
     private readonly eventBus: AutocareEventBusService,
     private readonly qualityGateDiscrepancyEngine: QualityGateDiscrepancyEngineService,
     private readonly qualityGateSemanticAuditor: QualityGateSemanticAuditorService,
+    @Optional()
     @InjectQueue(AI_WORKER_QUEUE_NAME)
-    private readonly aiWorkerQueue: Queue,
+    private readonly aiWorkerQueue?: Queue | null,
   ) {}
 
   async beginQualityGate(jobOrderId: string) {
@@ -90,6 +91,10 @@ export class QualityGatesService {
     }
 
     try {
+      if (!this.aiWorkerQueue) {
+        throw new Error('AI worker queue is unavailable');
+      }
+
       await this.aiWorkerQueue.add(
         RUN_QUALITY_GATE_AUDIT_JOB_NAME,
         {
