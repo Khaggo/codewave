@@ -211,6 +211,106 @@ describe('BackJobsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('requires a completed return inspection before a back-job can be approved for rework', async () => {
+    const backJobsRepository = {
+      findById: jest
+        .fn()
+        .mockResolvedValueOnce({
+          id: 'back-job-1',
+          status: 'inspected',
+          vehicleId: 'vehicle-1',
+          customerUserId: 'customer-1',
+          returnInspectionId: 'inspection-1',
+          reworkJobOrderId: null,
+          findings: [{ id: 'finding-1' }],
+        })
+        .mockResolvedValueOnce({
+          id: 'back-job-1',
+          status: 'inspected',
+          vehicleId: 'vehicle-1',
+          customerUserId: 'customer-1',
+          returnInspectionId: 'inspection-1',
+          reworkJobOrderId: null,
+          findings: [{ id: 'finding-1' }],
+        }),
+      updateStatus: jest.fn().mockResolvedValue({
+        id: 'back-job-1',
+        status: 'approved_for_rework',
+      }),
+    };
+
+    const inspectionsRepository = {
+      findById: jest
+        .fn()
+        .mockResolvedValueOnce({
+          id: 'inspection-1',
+          vehicleId: 'vehicle-1',
+          inspectionType: 'return',
+          status: 'needs_followup',
+          findings: [{ id: 'inspection-finding-1' }],
+        })
+        .mockResolvedValueOnce({
+          id: 'inspection-1',
+          vehicleId: 'vehicle-1',
+          inspectionType: 'return',
+          status: 'completed',
+          findings: [{ id: 'inspection-finding-1' }],
+        }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        BackJobsService,
+        { provide: BackJobsRepository, useValue: backJobsRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: VehiclesService, useValue: { findById: jest.fn() } },
+        { provide: InspectionsRepository, useValue: inspectionsRepository },
+        { provide: JobOrdersRepository, useValue: { findById: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(BackJobsService);
+
+    await expect(
+      service.updateStatus(
+        'back-job-1',
+        {
+          status: 'approved_for_rework',
+        },
+        {
+          userId: 'adviser-1',
+          role: 'service_adviser',
+        },
+      ),
+    ).rejects.toThrow('Approved rework requires a completed return inspection');
+
+    await expect(
+      service.updateStatus(
+        'back-job-1',
+        {
+          status: 'approved_for_rework',
+        },
+        {
+          userId: 'adviser-1',
+          role: 'service_adviser',
+        },
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        status: 'approved_for_rework',
+      }),
+    );
+  });
+
   it('blocks resolving or closing a back-job until the linked rework job order is finalized', async () => {
     const backJobsRepository = {
       findById: jest.fn().mockResolvedValue({

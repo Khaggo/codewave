@@ -13,6 +13,7 @@ import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inqui
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
 import { insuranceActivities } from '../schemas/insurance-activity.schema';
 import {
+  insuranceCasePurposeEnum,
   insuranceDocuments,
   insuranceInquiries,
   insuranceDocumentTypeEnum,
@@ -66,6 +67,16 @@ export type UpsertInsuranceRecordInput = {
   providerName?: string | null;
   policyNumber?: string | null;
   status: (typeof insuranceInquiryStatusEnum.enumValues)[number];
+};
+
+const purposeRequiredDocumentTypes: Record<
+  (typeof insuranceCasePurposeEnum.enumValues)[number],
+  Array<(typeof insuranceDocumentTypeEnum.enumValues)[number]>
+> = {
+  renewal: ['or_cr', 'policy'],
+  new_application: ['or_cr'],
+  claim: ['or_cr'],
+  quotation: ['or_cr'],
 };
 
 @Injectable()
@@ -290,18 +301,22 @@ export class InsuranceRepository extends BaseRepository {
   }
 
   async addDocument(id: string, payload: AddInsuranceDocumentDto, uploadedByUserId: string) {
-    const inquiry = await this.findById(id);
+    return this.db.transaction(async (tx) => {
+      const inquiry = await this.findById(id, tx);
 
-    await this.db.insert(insuranceDocuments).values({
-      inquiryId: inquiry.id,
-      fileName: payload.fileName,
-      fileUrl: payload.fileUrl,
-      documentType: payload.documentType,
-      notes: payload.notes ?? null,
-      uploadedByUserId,
+      await tx.insert(insuranceDocuments).values({
+        inquiryId: inquiry.id,
+        fileName: payload.fileName,
+        fileUrl: payload.fileUrl,
+        documentType: payload.documentType,
+        notes: payload.notes ?? null,
+        uploadedByUserId,
+      });
+
+      await this.syncDocumentReviewStatus(id, inquiry, tx, payload.documentType);
+
+      return this.findById(id, tx);
     });
-
-    return this.findById(id);
   }
 
   async addUploadedDocument(id: string, payload: UploadInsuranceDocumentPersistenceInput) {
@@ -324,6 +339,8 @@ export class InsuranceRepository extends BaseRepository {
         documentType: payload.activity.documentType ?? null,
         notes: payload.activity.notes ?? null,
       });
+
+      await this.syncDocumentReviewStatus(id, inquiry, tx, payload.document.documentType);
 
       return this.findById(id, tx);
     });
@@ -439,6 +456,53 @@ export class InsuranceRepository extends BaseRepository {
       ...inquiry,
       activities: activitiesByInquiryId.get(inquiry.id) ?? [],
     }));
+  }
+
+  private async syncDocumentReviewStatus(
+    inquiryId: string,
+    inquiry: Awaited<ReturnType<InsuranceRepository['findById']>>,
+    tx: AppDatabase,
+    nextDocumentType?: (typeof insuranceDocumentTypeEnum.enumValues)[number],
+  ) {
+    const nextDocumentStatus = this.computeDocumentReviewStatus({
+      purpose: inquiry.purpose,
+      documentTypes: [
+        ...(Array.isArray(inquiry.documents) ? inquiry.documents.map((document) => document.documentType) : []),
+        ...(nextDocumentType ? [nextDocumentType] : []),
+      ],
+    });
+
+    if (nextDocumentStatus === inquiry.documentStatus) {
+      return;
+    }
+
+    await tx
+      .update(insuranceInquiries)
+      .set({
+        documentStatus: nextDocumentStatus,
+        updatedAt: new Date(),
+      })
+      .where(eq(insuranceInquiries.id, inquiryId));
+  }
+
+  private computeDocumentReviewStatus({
+    purpose,
+    documentTypes = [],
+  }: {
+    purpose?: (typeof insuranceCasePurposeEnum.enumValues)[number] | null;
+    documentTypes?: Array<(typeof insuranceDocumentTypeEnum.enumValues)[number] | null | undefined>;
+  }) {
+    const requiredDocumentTypes =
+      purposeRequiredDocumentTypes[purpose ?? 'quotation'] ?? purposeRequiredDocumentTypes.quotation;
+    const uploadedDocumentTypes = new Set(
+      (Array.isArray(documentTypes) ? documentTypes : []).filter(
+        (documentType): documentType is (typeof insuranceDocumentTypeEnum.enumValues)[number] => Boolean(documentType),
+      ),
+    );
+
+    return requiredDocumentTypes.every((documentType) => uploadedDocumentTypes.has(documentType))
+      ? 'complete'
+      : 'incomplete';
   }
 
   private buildCustomerDisplayName(

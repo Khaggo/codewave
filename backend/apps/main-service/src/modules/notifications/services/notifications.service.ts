@@ -24,7 +24,7 @@ import {
   NotificationTriggerPlanAction,
   NotificationTriggerPlannerService,
 } from './notification-trigger-planner.service';
-import { SmtpMailService } from './smtp-mail.service';
+import { MailDeliveryService } from './mail-delivery.service';
 
 type NotificationActor = {
   userId: string;
@@ -83,7 +83,7 @@ export class NotificationsService {
     private readonly notificationsRepository: NotificationsRepository,
     private readonly usersService: UsersService,
     private readonly notificationTriggerPlanner: NotificationTriggerPlannerService,
-    private readonly smtpMailService: SmtpMailService,
+    private readonly mailDeliveryService: MailDeliveryService,
     @InjectQueue(NOTIFICATIONS_QUEUE_NAME)
     private readonly notificationsQueue: Queue,
   ) {}
@@ -363,7 +363,7 @@ export class NotificationsService {
     const user = await this.assertTargetUser(notification.userId, true);
 
     try {
-      const result = await this.smtpMailService.sendMail({
+      const result = await this.mailDeliveryService.sendMail({
         to: user.email,
         subject: notification.title,
         text: notification.message,

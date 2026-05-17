@@ -11,7 +11,8 @@ import { randomUUID } from 'crypto';
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jobs.repository';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
-import { SmtpMailService } from '@main-modules/notifications/services/smtp-mail.service';
+import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
+import { MailDeliveryService } from '@main-modules/notifications/services/mail-delivery.service';
 import { QualityGatesService } from '@main-modules/quality-gates/services/quality-gates.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
@@ -31,6 +32,7 @@ import { UploadJobOrderPhotoDto } from '../dto/upload-job-order-photo.dto';
 import { JobOrdersRepository } from '../repositories/job-orders.repository';
 import { jobOrderStatusEnum } from '../schemas/job-orders.schema';
 import { JobOrderEvidenceStorageService } from './job-order-evidence-storage.service';
+import { JobOrderInvoicePaymongoService } from './job-order-invoice-paymongo.service';
 import { JobOrderInvoicePdfService } from './job-order-invoice-pdf.service';
 
 type JobOrderActorRole = 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
@@ -84,7 +86,10 @@ export class JobOrdersService {
     @Optional()
     private readonly invoicePdfService: JobOrderInvoicePdfService,
     @Optional()
-    private readonly smtpMailService: SmtpMailService,
+    private readonly mailDeliveryService: MailDeliveryService,
+    @Optional()
+    private readonly jobOrderInvoicePaymongoService: JobOrderInvoicePaymongoService,
+    @Optional() private readonly inspectionsRepository?: InspectionsRepository,
   ) {}
 
   async create(payload: CreateJobOrderDto, actor: JobOrderActor) {
@@ -192,7 +197,7 @@ export class JobOrdersService {
       const startDate = `${month}-01`;
       const endDate = `${month}-31`;
       const queueBookings = await this.bookingsRepository.findByScheduledDateRange(startDate, endDate, {
-        statuses: ['confirmed', 'rescheduled'],
+        statuses: ['confirmed', 'in_service'],
       });
 
       queueBookings.forEach((booking) => {
@@ -652,7 +657,7 @@ export class JobOrdersService {
       await this.syncBackJobLifecycleForCompletion(finalizedJobOrder.sourceId);
     }
 
-    if (this.invoicePdfService && this.smtpMailService) {
+    if (this.invoicePdfService && this.mailDeliveryService) {
       await this.generateInvoiceArtifacts(finalizedJobOrder, { attemptEmail: true });
     }
 
@@ -774,6 +779,157 @@ export class JobOrdersService {
     return updatedJobOrder;
   }
 
+  async createInvoicePaymongoCheckout(id: string, actor: JobOrderActor) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    const actorInfo = {
+      userId: resolvedActor.id,
+      role: resolvedActor.role as JobOrderActorRole,
+    };
+
+    if (!['service_adviser', 'super_admin'].includes(actorInfo.role)) {
+      throw new ForbiddenException('Only service advisers or super admins can start service invoice checkout');
+    }
+
+    const jobOrder = await this.jobOrdersRepository.findById(id);
+    if (actorInfo.role === 'service_adviser' && actorInfo.userId !== jobOrder.serviceAdviserUserId) {
+      throw new ForbiddenException('Service advisers can only start checkout for their own job orders');
+    }
+
+    const invoiceRecord = this.assertInvoiceReadyForPayment(jobOrder);
+    if (!this.jobOrderInvoicePaymongoService) {
+      throw new ConflictException('PayMongo service-invoice checkout is not configured');
+    }
+
+    const customer = await this.usersService.findById(jobOrder.customerUserId);
+    const checkoutSession = await this.jobOrderInvoicePaymongoService.createCheckoutSession({
+      jobOrderId: jobOrder.id,
+      invoiceRecordId: invoiceRecord.id,
+      invoiceReference: invoiceRecord.invoiceReference,
+      amountCents: invoiceRecord.totalAmountCents,
+      currencyCode: invoiceRecord.currencyCode,
+      customerName: customer
+        ? `${customer.profile.firstName} ${customer.profile.lastName}`.trim() || 'AUTOCARE Customer'
+        : 'AUTOCARE Customer',
+      customerEmail: customer?.email ?? null,
+    });
+
+    await this.jobOrdersRepository.updateInvoiceRecord(jobOrder.id, {
+      paymentChannel: 'online_provider',
+      onlinePaymentProvider: 'paymongo',
+      onlinePaymentStatus: checkoutSession.status,
+      onlinePaymentSessionId: checkoutSession.providerPaymentId,
+      onlinePaymentCheckoutUrl: checkoutSession.checkoutUrl,
+      onlinePaymentReference: checkoutSession.referenceNumber,
+      onlinePaymentPaidAt: checkoutSession.paidAt,
+      onlinePaymentFailureReason: checkoutSession.failureReason,
+    });
+
+    if (checkoutSession.status === 'paid') {
+      return this.applyOnlineInvoicePayment(
+        await this.jobOrdersRepository.findById(jobOrder.id),
+        checkoutSession,
+      );
+    }
+
+    return this.jobOrdersRepository.findById(jobOrder.id);
+  }
+
+  async reconcileInvoicePaymongoCheckout(id: string, actor: JobOrderActor) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    const actorInfo = {
+      userId: resolvedActor.id,
+      role: resolvedActor.role as JobOrderActorRole,
+    };
+
+    if (!['service_adviser', 'super_admin'].includes(actorInfo.role)) {
+      throw new ForbiddenException('Only service advisers or super admins can refresh service invoice checkout');
+    }
+
+    const jobOrder = await this.jobOrdersRepository.findById(id);
+    if (actorInfo.role === 'service_adviser' && actorInfo.userId !== jobOrder.serviceAdviserUserId) {
+      throw new ForbiddenException('Service advisers can only refresh checkout for their own job orders');
+    }
+
+    const invoiceRecord = this.assertInvoiceReadyForPayment(jobOrder);
+    if (!invoiceRecord.onlinePaymentSessionId) {
+      throw new ConflictException('No PayMongo checkout session exists for this service invoice');
+    }
+
+    if (!this.jobOrderInvoicePaymongoService) {
+      throw new ConflictException('PayMongo service-invoice checkout is not configured');
+    }
+
+    const checkoutSession = await this.jobOrderInvoicePaymongoService.retrieveCheckoutSession(
+      invoiceRecord.onlinePaymentSessionId,
+    );
+
+    if (checkoutSession.status === 'paid') {
+      return this.applyOnlineInvoicePayment(jobOrder, checkoutSession);
+    }
+
+    await this.jobOrdersRepository.updateInvoiceRecord(jobOrder.id, {
+      paymentChannel: 'online_provider',
+      onlinePaymentProvider: 'paymongo',
+      onlinePaymentStatus: checkoutSession.status,
+      onlinePaymentSessionId: checkoutSession.providerPaymentId ?? invoiceRecord.onlinePaymentSessionId,
+      onlinePaymentCheckoutUrl: checkoutSession.checkoutUrl ?? invoiceRecord.onlinePaymentCheckoutUrl ?? null,
+      onlinePaymentReference: checkoutSession.referenceNumber ?? invoiceRecord.onlinePaymentReference ?? null,
+      onlinePaymentPaidAt: checkoutSession.paidAt ?? invoiceRecord.onlinePaymentPaidAt ?? null,
+      onlinePaymentFailureReason: checkoutSession.failureReason,
+    });
+
+    return this.jobOrdersRepository.findById(jobOrder.id);
+  }
+
+  async handlePaymongoWebhook(rawPayload: Buffer | string, signatureHeader?: string | null) {
+    if (!this.jobOrderInvoicePaymongoService) {
+      throw new ConflictException('PayMongo service-invoice checkout is not configured');
+    }
+
+    const event = this.jobOrderInvoicePaymongoService.parseWebhook(rawPayload, signatureHeader);
+    if (
+      event.eventType !== 'checkout_session.payment.paid' ||
+      event.status !== 'paid' ||
+      event.metadata.sourceType !== 'service_invoice'
+    ) {
+      return {
+        received: true,
+        ignored: true,
+        eventType: event.eventType,
+      };
+    }
+
+    const metadataJobOrderId =
+      typeof event.metadata.jobOrderId === 'string' ? event.metadata.jobOrderId : null;
+    const jobOrder =
+      (metadataJobOrderId ? await this.jobOrdersRepository.findOptionalById(metadataJobOrderId) : null) ??
+      (event.providerPaymentId
+        ? await this.jobOrdersRepository.findByInvoiceOnlinePaymentSessionId(event.providerPaymentId)
+        : null);
+
+    if (!jobOrder?.invoiceRecord || jobOrder.invoiceRecord.paymentStatus === 'paid') {
+      return {
+        received: true,
+        ignored: true,
+        eventType: event.eventType,
+        jobOrderId: metadataJobOrderId,
+      };
+    }
+
+    await this.applyOnlineInvoicePayment(jobOrder, {
+      ...event,
+      provider: 'paymongo',
+      checkoutUrl: jobOrder.invoiceRecord.onlinePaymentCheckoutUrl ?? null,
+    });
+
+    return {
+      received: true,
+      ignored: false,
+      eventType: event.eventType,
+      jobOrderId: jobOrder.id,
+    };
+  }
+
   private async assertSource(payload: CreateJobOrderDto) {
     if (payload.sourceType === 'back_job') {
       const backJob = await this.backJobsRepository.findOptionalById(payload.sourceId);
@@ -783,6 +939,26 @@ export class JobOrdersService {
 
       if (backJob.status !== 'approved_for_rework') {
         throw new ConflictException('Only approved back jobs can create rework job orders');
+      }
+
+      if (!backJob.returnInspectionId) {
+        throw new ConflictException('Approved back jobs must keep a linked return inspection before rework creation');
+      }
+
+      const returnInspection =
+        backJob.returnInspection
+        ?? (this.inspectionsRepository ? await this.inspectionsRepository.findById(backJob.returnInspectionId) : null);
+
+      if (!returnInspection) {
+        throw new ConflictException('Back-job rework requires the linked return inspection to be available');
+      }
+
+      if (returnInspection.vehicleId !== backJob.vehicleId || returnInspection.inspectionType !== 'return') {
+        throw new ConflictException('Back-job rework requires a linked return inspection for the same vehicle');
+      }
+
+      if (returnInspection.status !== 'completed') {
+        throw new ConflictException('Only back jobs with a completed return inspection can create rework job orders');
       }
 
       if (backJob.reworkJobOrderId) {
@@ -1024,7 +1200,86 @@ export class JobOrdersService {
     return `PHP ${((amountCents ?? 0) / 100).toFixed(2)}`;
   }
 
-  private formatPaymentMethodLabel(paymentMethod?: string | null) {
+  private assertInvoiceReadyForPayment(jobOrder: Awaited<ReturnType<JobOrdersRepository['findById']>>) {
+    if (jobOrder.status !== 'finalized') {
+      throw new ConflictException('Only finalized job orders can start service invoice payment');
+    }
+
+    if (!jobOrder.invoiceRecord) {
+      throw new ConflictException('Finalize the job order before starting service invoice payment');
+    }
+
+    if (jobOrder.invoiceRecord.paymentStatus === 'paid') {
+      throw new ConflictException('This service invoice is already marked as paid');
+    }
+
+    if (jobOrder.invoiceRecord.totalAmountCents <= 0) {
+      throw new ConflictException('Service invoice total must be greater than zero before checkout can start');
+    }
+
+    return jobOrder.invoiceRecord;
+  }
+
+  private async applyOnlineInvoicePayment(
+    jobOrder: Awaited<ReturnType<JobOrdersRepository['findById']>>,
+    payment: {
+      provider: 'paymongo';
+      providerPaymentId: string | null;
+      checkoutUrl: string | null;
+      referenceNumber: string | null;
+      paidAt: Date | null;
+      failureReason: string | null;
+    },
+  ) {
+    const invoiceRecord = this.assertInvoiceReadyForPayment(jobOrder);
+    const paidAt = payment.paidAt ?? new Date();
+    const updatedJobOrder = await this.jobOrdersRepository.updateInvoiceRecord(jobOrder.id, {
+      paymentStatus: 'paid',
+      amountPaidCents: invoiceRecord.totalAmountCents,
+      paymentMethod: null,
+      paymentChannel: 'online_provider',
+      paymentReference: payment.referenceNumber,
+      onlinePaymentProvider: payment.provider,
+      onlinePaymentStatus: 'paid',
+      onlinePaymentSessionId: payment.providerPaymentId ?? invoiceRecord.onlinePaymentSessionId ?? null,
+      onlinePaymentCheckoutUrl: payment.checkoutUrl ?? invoiceRecord.onlinePaymentCheckoutUrl ?? null,
+      onlinePaymentReference: payment.referenceNumber,
+      onlinePaymentPaidAt: paidAt,
+      onlinePaymentFailureReason: payment.failureReason,
+      paidAt,
+      recordedByUserId: null,
+    });
+
+    const serviceAccrualMetadata = await this.resolveServiceAccrualMetadata(updatedJobOrder);
+    this.eventBus.publish('service.payment_recorded', {
+      jobOrderId: updatedJobOrder.id,
+      invoiceRecordId: updatedJobOrder.invoiceRecord.id,
+      invoiceReference: updatedJobOrder.invoiceRecord.invoiceReference,
+      customerUserId: updatedJobOrder.customerUserId,
+      vehicleId: updatedJobOrder.vehicleId,
+      serviceAdviserUserId: updatedJobOrder.serviceAdviserUserId,
+      serviceAdviserCode: updatedJobOrder.serviceAdviserCode,
+      recordedByUserId: null,
+      sourceType: updatedJobOrder.sourceType,
+      sourceId: updatedJobOrder.sourceId,
+      amountPaidCents: updatedJobOrder.invoiceRecord.amountPaidCents ?? invoiceRecord.totalAmountCents,
+      currencyCode: 'PHP',
+      paidAt: (updatedJobOrder.invoiceRecord.paidAt ?? paidAt).toISOString(),
+      settlementStatus: 'paid',
+      paymentMethod: 'paymongo',
+      paymentReference: updatedJobOrder.invoiceRecord.paymentReference ?? payment.referenceNumber ?? null,
+      serviceTypeCode: serviceAccrualMetadata.serviceTypeCode,
+      serviceCategoryCode: serviceAccrualMetadata.serviceCategoryCode,
+    });
+
+    return updatedJobOrder;
+  }
+
+  private formatPaymentMethodLabel(
+    paymentMethod?: string | null,
+    paymentChannel?: string | null,
+    onlinePaymentProvider?: string | null,
+  ) {
     switch (paymentMethod) {
       case 'bank_transfer':
         return 'Bank Transfer';
@@ -1035,6 +1290,10 @@ export class JobOrdersService {
       case 'cash':
         return 'Cash';
       default:
+        if (paymentChannel === 'online_provider' && onlinePaymentProvider === 'paymongo') {
+          return 'PayMongo';
+        }
+
         return 'Pending payment';
     }
   }
@@ -1074,7 +1333,11 @@ export class JobOrdersService {
         name: item.name,
         description: item.description ?? null,
       })),
-      paymentMethodLabel: this.formatPaymentMethodLabel(invoiceRecord.paymentMethod),
+        paymentMethodLabel: this.formatPaymentMethodLabel(
+          invoiceRecord.paymentMethod,
+          invoiceRecord.paymentChannel,
+          invoiceRecord.onlinePaymentProvider,
+        ),
       paymentReference: invoiceRecord.paymentReference ?? null,
       reservationFeeDeductionLabel: this.formatCurrency(invoiceRecord.reservationFeeDeductionCents),
       subtotalLabel: this.formatCurrency(invoiceRecord.subtotalAmountCents),
@@ -1091,7 +1354,7 @@ export class JobOrdersService {
     if (options.attemptEmail) {
       if (customer?.email) {
         try {
-          await this.smtpMailService.sendMail({
+          await this.mailDeliveryService.sendMail({
             to: customer.email,
             subject: `AUTOCARE invoice ${invoiceRecord.invoiceReference}`,
             text: `Attached is your service invoice ${invoiceRecord.invoiceReference}.`,

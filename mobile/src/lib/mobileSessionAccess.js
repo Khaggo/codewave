@@ -7,7 +7,7 @@ export const customerMobileGuardMessages = {
     'This customer account is deactivated. Contact support if access should be restored.',
 };
 
-export const isCustomerMobileRole = (role) => !role || role === 'customer';
+export const isCustomerMobileRole = (role) => role === 'customer';
 
 export const isTechnicianMobileRole = (role) => role === 'technician';
 

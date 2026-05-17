@@ -15,6 +15,9 @@ export const getIntakeWorkspacePrimaryActionLabel = (visitType) =>
 
 export const getArrivalPhotoTemporaryRef = (slot) => `upload://vehicle/${slot}`
 
+export const isArrivalPhotoTemporaryRef = (value) =>
+  /^upload:\/\/vehicle\/[^/]+$/.test(String(value ?? '').trim())
+
 export const getArrivalPhotoButtonLabel = (fileName) =>
   String(fileName ?? '').trim() ? 'Replace photo' : 'Add photo'
 

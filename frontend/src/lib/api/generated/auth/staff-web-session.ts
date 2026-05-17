@@ -84,9 +84,9 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     key: 'qa-audit',
     href: '/admin/qa-audit',
     label: 'QA Audit',
-    visibleTo: ['service_adviser', 'super_admin'],
+    visibleTo: ['head_technician', 'service_adviser', 'super_admin'],
     group: 'Front Desk Flow',
-    notes: 'Quality-gate review belongs to advisers and super admins, while override authority remains super-admin controlled.',
+    notes: 'Quality-gate review belongs to head technicians, advisers, and super admins, while override authority remains super-admin controlled.',
   },
   {
     key: 'invoice-order-management',
@@ -170,21 +170,13 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     notes: 'Super admins provision staff, mechanic, technician, and admin identities from this protected page.',
   },
   {
-    key: 'appointments-admin',
-    href: '/admin/appointments',
-    label: 'Appointments Admin',
-    visibleTo: ['service_adviser', 'super_admin'],
-    group: 'Admin',
-    notes: 'Appointment oversight is adviser/admin visible.',
-  },
-  {
     key: 'summary-review',
     href: '/admin/summaries',
     label: 'Analytics & Summaries',
     visibleTo: ['service_adviser', 'super_admin'],
     group: 'Admin',
     notes:
-      'Admin analytics plus lifecycle summary review remain adviser/admin visible from the shared summaries hub.',
+      'Admin analytics and rebuildable operational summaries remain adviser/admin visible from the shared summaries hub.',
   },
   {
     key: 'settings',
@@ -225,6 +217,7 @@ export const staffPortalRoleCapabilities: Record<StaffPortalRole, string[]> = {
   ],
   super_admin: [
     'all service adviser capabilities',
+    'record QA pass or block verdicts when acting as the final reviewer',
     'access staff provisioning and backoffice administration routes',
     'approve sensitive override and audit-visible administrative actions',
   ],

@@ -27,7 +27,7 @@ const modules = [
   {
     key: 'lifecycle',
     title: 'Vehicle Lifecycle',
-    detail: 'View your vehicle’s complete service and insurance timeline.',
+    detail: "View your vehicle's complete service and insurance timeline.",
     icon: 'activity',
     route: 'VehicleLifecycleScreen',
   },
@@ -115,7 +115,7 @@ export default function LandingPage({ navigation }) {
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Featured modules</Text>
         <Text style={styles.sectionSubtitle}>
-          Capstone objectives gathered into one professional mobile workflow.
+          Core AutoCare tools gathered into one professional mobile workflow.
         </Text>
       </View>
 
@@ -543,3 +543,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+

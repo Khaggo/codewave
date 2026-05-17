@@ -71,6 +71,13 @@ const purposeOptions = [
   { value: 'quotation', label: 'Quotation' },
 ];
 
+const getRememberedInquiryStorageKey = (userId) => {
+  const normalizedUserId = String(userId ?? '').trim();
+  return normalizedUserId
+    ? `${REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY}:${normalizedUserId}`
+    : REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY;
+};
+
 const getPurposeLabel = (value) =>
   purposeOptions.find((option) => option.value === value)?.label ?? 'Request';
 
@@ -79,30 +86,27 @@ const getRequestGuidance = ({ purpose = 'claim' } = {}) => {
     case 'new_application':
       return {
         sectionHelper: 'Start a fresh application for this vehicle.',
-        processLine: 'Estimate and approval happen after staff review the first details.',
-        subjectPlaceholder: 'New insurance application',
+        processLine: 'Staff review the intake first, then prepare the estimate and insurer follow-up.',
         descriptionPlaceholder: 'Share the vehicle use, coverage need, or concern.',
-        notesPlaceholder: 'Optional application note',
+        notesPlaceholder: 'Optional application detail',
         providerPlaceholder: 'Preferred insurer or broker',
         policyPlaceholder: 'Leave blank if no old policy',
       };
     case 'renewal':
       return {
         sectionHelper: 'Prepare the next renewal quote and confirm the current policy details.',
-        processLine: 'Renewal quote, confirmation, and follow-up updates will show in Status.',
-        subjectPlaceholder: 'Renewal request',
+        processLine: 'Staff review the intake first, then prepare the renewal quote and follow-up updates.',
         descriptionPlaceholder: 'Share the renewal request, timing, or concern.',
-        notesPlaceholder: 'Optional renewal note',
+        notesPlaceholder: 'Optional renewal detail',
         providerPlaceholder: 'Current insurer or broker',
-        policyPlaceholder: 'Current policy number',
+        policyPlaceholder: 'Current or replacement policy number',
       };
     case 'quotation':
       return {
         sectionHelper: 'Ask for coverage pricing or a policy estimate.',
-        processLine: 'Staff review the request first, then prepare the quotation or estimate.',
-        subjectPlaceholder: 'Insurance quotation request',
+        processLine: 'Staff review the intake first, then prepare the quotation or estimate.',
         descriptionPlaceholder: 'Tell staff what coverage or pricing you need.',
-        notesPlaceholder: 'Optional quotation note',
+        notesPlaceholder: 'Optional quotation detail',
         providerPlaceholder: 'Preferred insurer or broker',
         policyPlaceholder: 'Policy reference if available',
       };
@@ -110,15 +114,29 @@ const getRequestGuidance = ({ purpose = 'claim' } = {}) => {
     default:
       return {
         sectionHelper: 'Start the claim intake and capture the incident clearly.',
-        processLine: 'Estimate and approval move next once the first documents are on file.',
-        subjectPlaceholder: 'Accident repair inquiry',
+        processLine: 'Staff review the intake first, then prepare the estimate and insurer approval steps.',
         descriptionPlaceholder: 'Describe the incident, damage, or claim concern.',
-        notesPlaceholder: 'Optional claim note',
+        notesPlaceholder: 'Optional claim detail',
         providerPlaceholder: 'Insurer or broker',
         policyPlaceholder: 'Policy number',
       };
   }
 };
+
+const buildInsuranceInquirySubject = ({ purpose = 'claim', vehicleLabel = '' } = {}) => {
+  const purposeLabel = getPurposeLabel(purpose);
+  const trimmedVehicleLabel = String(vehicleLabel ?? '').trim();
+
+  return trimmedVehicleLabel
+    ? `${purposeLabel} - ${trimmedVehicleLabel}`
+    : `${purposeLabel} insurance request`;
+};
+
+const formatMissingRequiredDocumentSummary = (missingRequiredDocuments = []) =>
+  (Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments : [])
+    .map((item) => String(item?.label ?? '').trim())
+    .filter(Boolean)
+    .join(', ');
 
 const buildProcessStepState = ({ active, done }) => ({
   active: Boolean(active || done),
@@ -129,20 +147,21 @@ const getInsuranceProcessSteps = ({
   latestInquiry = null,
   missingRequiredDocuments = [],
 } = {}) => {
+  const purpose = latestInquiry?.purpose ?? 'claim';
   const status = latestInquiry?.status ?? 'submitted';
   const paymentStatus = latestInquiry?.paymentStatus ?? 'not_required';
   const renewalStatus = latestInquiry?.renewalStatus ?? 'not_applicable';
   const missingCount = Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments.length : 0;
   const reviewReached = ['under_review', 'for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status);
   const approvalReached = ['for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status);
-  const paymentReached =
+  const paymentRelevant =
     status === 'payment_pending' ||
     ['proof_submitted', 'verifying', 'paid', 'overdue', 'unpaid', 'awaiting_payment'].includes(paymentStatus);
-  const renewalReached =
+  const renewalRelevant =
+    purpose === 'renewal' ||
     status === 'for_renewal' ||
     ['upcoming', 'quoted', 'awaiting_customer', 'renewed', 'expired'].includes(renewalStatus);
-
-  return [
+  const steps = [
     {
       key: 'intake',
       label: 'Inquiry received',
@@ -172,23 +191,69 @@ const getInsuranceProcessSteps = ({
         done: ['approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status),
       }),
     },
-    {
+  ];
+
+  if (paymentRelevant) {
+    steps.push({
       key: 'payment',
       label: 'Payment follow-up',
       ...buildProcessStepState({
-        active: paymentReached,
+        active: paymentRelevant,
         done: paymentStatus === 'paid',
       }),
-    },
-    {
+    });
+  }
+
+  if (renewalRelevant) {
+    steps.push({
       key: 'renewal',
       label: 'Renewal',
       ...buildProcessStepState({
-        active: renewalReached,
+        active: renewalRelevant,
         done: renewalStatus === 'renewed',
       }),
-    },
-  ];
+    });
+  }
+
+  if (status === 'active') {
+    steps.push({
+      key: 'active',
+      label: 'Active',
+      ...buildProcessStepState({
+        active: true,
+        done: true,
+      }),
+    });
+  } else if (status === 'closed') {
+    steps.push({
+      key: 'closed',
+      label: 'Completed',
+      ...buildProcessStepState({
+        active: true,
+        done: true,
+      }),
+    });
+  } else if (status === 'cancelled') {
+    steps.push({
+      key: 'cancelled',
+      label: 'Cancelled',
+      ...buildProcessStepState({
+        active: true,
+        done: false,
+      }),
+    });
+  } else if (status === 'rejected') {
+    steps.push({
+      key: 'rejected',
+      label: 'Stopped',
+      ...buildProcessStepState({
+        active: true,
+        done: false,
+      }),
+    });
+  }
+
+  return steps;
 };
 
 const formatTimestampLabel = (value) => {
@@ -408,6 +473,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const [activeInsuranceTab, setActiveInsuranceTab] = useState('home');
   const [isVehiclePickerOpen, setIsVehiclePickerOpen] = useState(false);
   const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
+  const [stagedDocuments, setStagedDocuments] = useState([]);
   const [documentDraft, setDocumentDraft] = useState(buildInitialDocumentUploadDraft());
   const [intakeState, setIntakeState] = useState(initialSnapshot.intakeState);
   const [intakeMessage, setIntakeMessage] = useState('');
@@ -449,10 +515,49 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     ? buildOwnedVehicleInsuranceLabel(selectedVehicle)
     : '';
   const latestInquiryCanAcceptDocuments = canAttachCustomerInsuranceDocument(latestInquiry);
+  const canSubmitNewInquiry =
+    !latestInquiry || isTerminalCustomerInquiryStatus(latestInquiry.status);
+  const canReuseOnFileDocuments =
+    Boolean(latestInquiry?.id) && !isTerminalCustomerInquiryStatus(latestInquiry.status);
   const activePurpose = latestInquiry?.purpose ?? draft.purpose;
+  const requestPurpose = draft.purpose;
+  const requestOnFileDocuments = useMemo(
+    () => (canReuseOnFileDocuments ? latestInquiry?.documents ?? [] : []),
+    [canReuseOnFileDocuments, latestInquiry?.documents],
+  );
+  const requestOnFileDocumentsByType = useMemo(
+    () => new Map(requestOnFileDocuments.map((document) => [document.documentType, document])),
+    [requestOnFileDocuments],
+  );
+  const hasOnFileRenewalPolicy = Boolean(requestOnFileDocumentsByType.get('policy'));
+  const requestChecklistUploadedTypes = useMemo(() => {
+    const mergedTypes = new Set(stagedDocuments.map((document) => document.documentType));
+
+    requestOnFileDocuments.forEach((document) => {
+      if (
+        requestPurpose === 'renewal' &&
+        document.documentType === 'policy' &&
+        draft.renewalPolicyMode === 'replace'
+      ) {
+        return;
+      }
+
+      mergedTypes.add(document.documentType);
+    });
+
+    return [...mergedTypes];
+  }, [draft.renewalPolicyMode, requestOnFileDocuments, requestPurpose, stagedDocuments]);
   const requestGuidance = useMemo(
     () => getRequestGuidance({ purpose: activePurpose }),
     [activePurpose],
+  );
+  const requestRequirementsChecklist = useMemo(
+    () =>
+      buildRequirementsChecklist({
+        purpose: requestPurpose,
+        uploadedTypes: requestChecklistUploadedTypes,
+      }),
+    [requestChecklistUploadedTypes, requestPurpose],
   );
   const requirementsChecklist = useMemo(
     () =>
@@ -499,14 +604,16 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
     return formatTimestampLabel(latestRecord?.updatedAt ?? latestRecord?.createdAt);
   }, [claimStatusUpdates, latestInquiry?.statusHint]);
+  const isTrackingStale = trackingState === 'tracking_load_failed' && Boolean(latestInquiry?.id || claimStatusUpdates.length);
   const statusState = useMemo(
     () =>
       buildCustomerInsuranceStatusState({
         latestInquiry,
         missingRequiredDocuments,
         latestUpdateLabel: latestStatusUpdateLabel,
+        isStale: isTrackingStale,
       }),
-    [latestInquiry, latestStatusUpdateLabel, missingRequiredDocuments],
+    [isTrackingStale, latestInquiry, latestStatusUpdateLabel, missingRequiredDocuments],
   );
   const processSteps = useMemo(
     () =>
@@ -537,6 +644,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   }, [activePurpose, draft.inquiryType, latestInquiry, requestGuidance.sectionHelper]);
   const shellSummaryChips = useMemo(() => {
     const missingCount = missingRequiredDocuments.length;
+    const missingLabelSummary = formatMissingRequiredDocumentSummary(missingRequiredDocuments);
     return [
       {
         label: 'Purpose',
@@ -548,12 +656,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       },
       {
         label: 'Docs',
-        value: missingCount > 0 ? `${missingCount} missing` : 'Ready',
+        value: missingCount > 0 ? missingLabelSummary || `${missingCount} missing` : 'Ready',
         icon: missingCount > 0 ? 'alert-circle-outline' : 'check-circle-outline',
         emphasis: missingCount > 0,
       },
     ];
-  }, [currentRequestSummary.purposeLabel, currentRequestSummary.stageLabel, missingRequiredDocuments.length]);
+  }, [currentRequestSummary.purposeLabel, currentRequestSummary.stageLabel, missingRequiredDocuments]);
   const sortedHistoryRecords = useMemo(() => {
     return [...claimStatusUpdates].sort((left, right) => {
       const leftTimestamp = new Date(left?.updatedAt ?? left?.createdAt ?? 0).getTime();
@@ -657,7 +765,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     return () => {
       isMounted = false;
     };
-  }, [fallbackVehicleId, routeInquiryId, routeVehicleId]);
+  }, [fallbackVehicleId, rememberedInquiryStorageKey, routeInquiryId, routeVehicleId]);
 
   useEffect(() => {
     if (!routeVehicleId) {
@@ -816,17 +924,18 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
   const resetDraftState = () => {
     setDraft(createInitialCustomerInsuranceDraft());
+    setStagedDocuments([]);
   };
 
   const resetDocumentDraftState = () => {
     setDocumentDraft(buildInitialDocumentUploadDraft());
   };
 
+  const rememberedInquiryStorageKey = getRememberedInquiryStorageKey(account?.userId);
+
   const loadPersistedRememberedInquiryMappings = async () => {
     try {
-      const serializedMappings = await AsyncStorage.getItem(
-        REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
-      );
+      const serializedMappings = await AsyncStorage.getItem(rememberedInquiryStorageKey);
       hydrateRememberedInquiryMappings(serializedMappings);
     } catch {
       // Ignore resume-cache failures and keep the screen functional.
@@ -835,10 +944,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
   const persistRememberedInquiryMappings = async () => {
     try {
-      await AsyncStorage.setItem(
-        REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
-        serializeRememberedInquiryMappings(),
-      );
+      await AsyncStorage.setItem(rememberedInquiryStorageKey, serializeRememberedInquiryMappings());
     } catch {
       // Ignore persistence failures so resume storage never blocks the customer flow.
     }
@@ -1041,8 +1147,55 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setDocumentUploadState('document_idle');
     setDocumentUploadMessage('');
     resetDocumentDraftState();
+    setStagedDocuments([]);
     if (hasSession && ownedVehicles.length) {
       setIntakeState('draft_ready');
+    }
+  };
+
+  const handleRemoveStagedDocument = (documentType) => {
+    setStagedDocuments((currentDocuments) =>
+      currentDocuments.filter((document) => document.documentType !== documentType),
+    );
+    handleDraftPatch();
+  };
+
+  const handleStageDocument = async (documentType) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: ['application/pdf', 'image/*'],
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const asset = result.assets?.[0];
+
+      if (!asset) {
+        setIntakeState('validation_error');
+        setIntakeMessage('We could not read the selected document. Try choosing the file again.');
+        return;
+      }
+
+      const stagedDocument = createPickedInsuranceDocumentDraft({
+        documentType,
+        asset,
+      });
+
+      setStagedDocuments((currentDocuments) => {
+        const nextDocuments = currentDocuments.filter((document) => document.documentType !== documentType);
+        return [...nextDocuments, stagedDocument];
+      });
+      setIntakeState('draft_ready');
+      setIntakeMessage(`${asset.name} is staged and ready to submit with this request.`);
+    } catch (error) {
+      setIntakeState('submit_failed');
+      setIntakeMessage(
+        buildCustomerErrorMessage(error, 'We could not open the document picker right now.'),
+      );
     }
   };
 
@@ -1127,9 +1280,24 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return;
     }
 
-    if (!String(draft.subject ?? '').trim() || !String(draft.description ?? '').trim()) {
+    if (!String(draft.description ?? '').trim()) {
       setIntakeState('validation_error');
-      setIntakeMessage('Subject and description are required before the inquiry can be submitted.');
+      setIntakeMessage('Tell staff what happened before the request can be submitted.');
+      return;
+    }
+
+    const missingRequestDocuments = requestRequirementsChecklist.required.filter(
+      (item) => !item.complete,
+    );
+
+    if (missingRequestDocuments.length) {
+      const missingLabelSummary = formatMissingRequiredDocumentSummary(missingRequestDocuments);
+      setIntakeState('validation_error');
+      setIntakeMessage(
+        missingLabelSummary
+          ? `Attach these required documents before submit: ${missingLabelSummary}.`
+          : 'Attach the required documents before submit.',
+      );
       return;
     }
 
@@ -1138,12 +1306,17 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setIntakeMessage('');
 
     try {
+      const requestSubject = buildInsuranceInquirySubject({
+        purpose: draft.purpose,
+        vehicleLabel: selectedVehicleLabel,
+      });
+      const documentsQueuedForSubmit = [...stagedDocuments];
       const createdInquiry = await createInsuranceInquiry({
         userId,
         vehicleId: selectedVehicle.id,
         purpose: draft.purpose,
         inquiryType: draft.inquiryType,
-        subject: draft.subject,
+        subject: requestSubject,
         description: draft.description,
         providerName: draft.providerName,
         policyNumber: draft.policyNumber,
@@ -1151,17 +1324,81 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         accessToken,
       });
 
-      setLatestInquiry(createdInquiry);
-      latestInquiryVehicleIdRef.current = createdInquiry?.vehicleId ?? selectedVehicle.id;
-      setLatestInquiryId(createdInquiry?.id ?? null);
-      await syncRememberedInquiry(selectedVehicle.id, createdInquiry);
+      let latestCreatedInquiry = createdInquiry;
+      const failedUploads = [];
+
+      for (const stagedDocument of documentsQueuedForSubmit) {
+        try {
+          latestCreatedInquiry = await uploadInsuranceInquiryDocumentFile({
+            inquiryId: createdInquiry.id,
+            documentType: stagedDocument.documentType,
+            file: {
+              uri: String(stagedDocument.fileUri ?? '').trim(),
+              name: String(stagedDocument.fileName ?? '').trim(),
+              type: inferMimeType(stagedDocument.fileName, stagedDocument.mimeType),
+            },
+            notes: stagedDocument.notes,
+            accessToken,
+          });
+        } catch (error) {
+          failedUploads.push({
+            document: stagedDocument,
+            error,
+          });
+        }
+      }
+
+      setLatestInquiry(latestCreatedInquiry);
+      latestInquiryVehicleIdRef.current = latestCreatedInquiry?.vehicleId ?? selectedVehicle.id;
+      setLatestInquiryId(latestCreatedInquiry?.id ?? null);
+      await syncRememberedInquiry(selectedVehicle.id, latestCreatedInquiry);
+      setDraft(createInitialCustomerInsuranceDraft());
+
+      if (failedUploads.length) {
+        const firstFailedDocument = failedUploads[0]?.document ?? null;
+        const remainingDocuments = failedUploads.map((entry) => entry.document);
+        setStagedDocuments(remainingDocuments);
+        if (firstFailedDocument) {
+          setDocumentDraft({
+            documentType: firstFailedDocument.documentType,
+            fileName: firstFailedDocument.fileName,
+            fileUri: firstFailedDocument.fileUri,
+            mimeType: firstFailedDocument.mimeType,
+            notes: firstFailedDocument.notes,
+            fileSizeLabel: firstFailedDocument.fileSizeLabel,
+          });
+        } else {
+          resetDocumentDraftState();
+        }
+        setActiveInsuranceTab('documents');
+        setActivePanel('documents');
+        setDocumentUploadState('document_ready');
+        setDocumentUploadMessage(
+          `${failedUploads.length} staged document${
+            failedUploads.length === 1 ? '' : 's'
+          } still need upload. Review the pending files below and continue from Documents.`,
+        );
+        setIntakeState('submitted_inquiry');
+        setIntakeMessage(
+          `Request submitted, but ${failedUploads.length} document${
+            failedUploads.length === 1 ? '' : 's'
+          } still need upload before staff have the full intake package.`,
+        );
+        await refreshTracking({
+          inquiryIdOverride: latestCreatedInquiry?.id ?? null,
+        });
+        return;
+      }
+
+      setStagedDocuments([]);
+      setDocumentUploadState('document_idle');
+      setDocumentUploadMessage('');
       setIntakeState('submitted_inquiry');
       setIntakeMessage(
-        `Inquiry submitted successfully with backend status ${createdInquiry?.status ?? 'submitted'}.`,
+        `Request submitted successfully with backend status ${latestCreatedInquiry?.status ?? 'submitted'}.`,
       );
-      resetDraftState();
       await refreshTracking({
-        inquiryIdOverride: createdInquiry?.id ?? null,
+        inquiryIdOverride: latestCreatedInquiry?.id ?? null,
       });
     } catch (error) {
       if (error instanceof ApiError && error.status === 400) {
@@ -1180,6 +1417,46 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleUsePendingUpload = (documentType) => {
+    const stagedDocument =
+      stagedDocuments.find((document) => document.documentType === documentType) ?? null;
+
+    if (!stagedDocument) {
+      return;
+    }
+
+    setDocumentDraft({
+      documentType: stagedDocument.documentType,
+      fileName: stagedDocument.fileName,
+      fileUri: stagedDocument.fileUri,
+      mimeType: stagedDocument.mimeType,
+      notes: stagedDocument.notes,
+      fileSizeLabel: stagedDocument.fileSizeLabel,
+    });
+    setStagedDocuments((currentDocuments) =>
+      currentDocuments.filter((document) => document.documentType !== documentType),
+    );
+    setDocumentUploadState('document_ready');
+    setDocumentUploadMessage(
+      `${stagedDocument.fileName} is ready to upload to this request.`,
+    );
+  };
+
+  const handleDiscardPendingUpload = (documentType) => {
+    const stagedDocument =
+      stagedDocuments.find((document) => document.documentType === documentType) ?? null;
+
+    setStagedDocuments((currentDocuments) =>
+      currentDocuments.filter((document) => document.documentType !== documentType),
+    );
+    setDocumentUploadState('document_ready');
+    setDocumentUploadMessage(
+      stagedDocument?.fileName
+        ? `${stagedDocument.fileName} was removed from the staged upload list.`
+        : 'Pending staged document removed.',
+    );
   };
 
   const handleUploadPickedDocument = async () => {
@@ -1487,6 +1764,13 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             isSubmitting={isSubmitting}
             intakeState={intakeState}
             intakeMessage={intakeMessage}
+            checklist={requestRequirementsChecklist}
+            stagedDocuments={stagedDocuments}
+            onFileDocuments={requestOnFileDocuments}
+            hasOnFileRenewalPolicy={hasOnFileRenewalPolicy}
+            canSubmitRequest={canSubmitNewInquiry}
+            onStageDocument={handleStageDocument}
+            onRemoveStagedDocument={handleRemoveStagedDocument}
           />
         ) : null}
 
@@ -1511,6 +1795,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             uploadMessage={documentUploadMessage}
             uploadState={documentUploadState}
             canAcceptDocuments={Boolean(latestInquiry?.id && latestInquiryCanAcceptDocuments)}
+            pendingUploads={stagedDocuments}
+            onUsePendingUpload={handleUsePendingUpload}
+            onDiscardPendingUpload={handleDiscardPendingUpload}
           />
         ) : null}
 

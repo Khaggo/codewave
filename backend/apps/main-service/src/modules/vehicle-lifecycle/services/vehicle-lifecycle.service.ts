@@ -52,8 +52,8 @@ export class VehicleLifecycleService {
     private readonly aiWorkerQueue: Queue,
   ) {}
 
-  async findByVehicleId(vehicleId: string) {
-    await this.vehiclesService.findById(vehicleId);
+  async findByVehicleId(vehicleId: string, actor?: LifecycleActor) {
+    await this.vehiclesService.findById(vehicleId, actor);
     await this.refreshVehicleTimeline(vehicleId);
 
     return this.vehicleLifecycleRepository.findByVehicleId(vehicleId);

@@ -1,16 +1,14 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac, timingSafeEqual } from 'crypto';
+import {
+  buildPaymongoAuthToken,
+  normalizePaymongoCheckoutSession,
+  parsePaymongoJsonPayload,
+  parsePaymongoWebhookEvent,
+  PaymongoCheckoutSessionResult,
+} from '@shared/payments/paymongo.util';
 
-type ReservationPaymentGatewayResult = {
-  provider: 'paymongo';
-  status: 'pending' | 'paid' | 'failed' | 'expired' | 'unavailable';
-  providerPaymentId: string | null;
-  checkoutUrl: string | null;
-  referenceNumber: string | null;
-  paidAt: Date | null;
-  failureReason: string | null;
-};
+type ReservationPaymentGatewayResult = PaymongoCheckoutSessionResult;
 
 @Injectable()
 export class BookingReservationPaymentGatewayService {
@@ -19,85 +17,6 @@ export class BookingReservationPaymentGatewayService {
   private getSecretKey() {
     return this.configService.get<string>('payments.paymongoSecretKey');
   }
-
-  private buildAuthToken(secretKey: string) {
-    return Buffer.from(`${secretKey}:`).toString('base64');
-  }
-
-  private parseJsonPayload(rawText: string) {
-    if (!rawText) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(rawText);
-    } catch {
-      return null;
-    }
-  }
-
-  private toDateOrNull(value: unknown) {
-    if (!value) {
-      return null;
-    }
-
-    if (typeof value === 'number') {
-      return new Date(value * 1000);
-    }
-
-    const parsed = new Date(String(value));
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  private normalizeCheckoutSession(attributes: Record<string, any> | null | undefined): ReservationPaymentGatewayResult {
-    const paymentIntent = attributes?.payment_intent?.attributes ?? null;
-    const payments: Array<{ attributes?: Record<string, any> }> = Array.isArray(paymentIntent?.payments)
-      ? paymentIntent.payments
-      : [];
-    const paidPayment =
-      payments.find((entry: { attributes?: Record<string, any> }) => entry?.attributes?.status === 'paid')
-        ?.attributes ?? null;
-    const failedPayment =
-      payments.find((entry: { attributes?: Record<string, any> }) => entry?.attributes?.status === 'failed')
-        ?.attributes ?? null;
-    const paymentStatuses = payments
-      .map((entry: { attributes?: Record<string, any> }) => entry?.attributes?.status)
-      .filter((value: unknown): value is string => typeof value === 'string');
-
-    let status: ReservationPaymentGatewayResult['status'] = 'pending';
-    let failureReason: string | null = null;
-
-    if (paidPayment || ['succeeded', 'paid'].includes(String(paymentIntent?.status ?? '').toLowerCase())) {
-      status = 'paid';
-    } else if (
-      String(attributes?.status ?? '').toLowerCase() === 'expired' ||
-      ['cancelled', 'canceled', 'expired'].includes(String(paymentIntent?.status ?? '').toLowerCase())
-    ) {
-      status = 'expired';
-      failureReason = 'The PayMongo checkout session expired before payment was completed.';
-    } else if (paymentStatuses.includes('failed')) {
-      status = 'failed';
-      failureReason =
-        failedPayment?.last_payment_error?.message ??
-        failedPayment?.last_payment_error?.detail ??
-        'PayMongo reported that the reservation-fee payment failed.';
-    }
-
-    return {
-      provider: 'paymongo',
-      status,
-      providerPaymentId: attributes?.id ?? null,
-      checkoutUrl: attributes?.checkout_url ?? null,
-      referenceNumber:
-        attributes?.reference_number ??
-        paidPayment?.metadata?.pm_reference_number ??
-        failedPayment?.metadata?.pm_reference_number ??
-        null,
-      paidAt: this.toDateOrNull(paidPayment?.paid_at),
-      failureReason,
-    };
-  }
-
   async createReservationPayment(payload: {
     bookingId: string;
     amountCents: number;
@@ -119,7 +38,7 @@ export class BookingReservationPaymentGatewayService {
       };
     }
 
-    const authToken = this.buildAuthToken(secretKey);
+    const authToken = buildPaymongoAuthToken(secretKey);
     const successUrl = this.configService.get<string>('payments.paymongoCheckoutSuccessUrl');
     const cancelUrl = this.configService.get<string>('payments.paymongoCheckoutCancelUrl');
     const response = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
@@ -158,7 +77,7 @@ export class BookingReservationPaymentGatewayService {
     });
 
     const rawText = await response.text();
-    const data = this.parseJsonPayload(rawText);
+    const data = parsePaymongoJsonPayload(rawText);
 
     if (!response.ok) {
       return {
@@ -176,7 +95,7 @@ export class BookingReservationPaymentGatewayService {
     }
 
     return {
-      ...this.normalizeCheckoutSession({
+      ...normalizePaymongoCheckoutSession({
         ...(data?.data?.attributes ?? {}),
         id: data?.data?.id ?? null,
       }),
@@ -194,6 +113,7 @@ export class BookingReservationPaymentGatewayService {
         referenceNumber: null,
         paidAt: null,
         failureReason: 'PayMongo secret key is not configured.',
+        metadata: {},
       };
     }
 
@@ -201,12 +121,12 @@ export class BookingReservationPaymentGatewayService {
       method: 'GET',
       headers: {
         Accept: 'application/json',
-        Authorization: `Basic ${this.buildAuthToken(secretKey)}`,
+        Authorization: `Basic ${buildPaymongoAuthToken(secretKey)}`,
       },
     });
 
     const rawText = await response.text();
-    const data = this.parseJsonPayload(rawText);
+    const data = parsePaymongoJsonPayload(rawText);
 
     if (!response.ok) {
       return {
@@ -220,10 +140,11 @@ export class BookingReservationPaymentGatewayService {
           data?.errors?.[0]?.detail ||
           data?.message ||
           'Unable to retrieve the PayMongo checkout session.',
+        metadata: {},
       };
     }
 
-    return this.normalizeCheckoutSession({
+    return normalizePaymongoCheckoutSession({
       ...(data?.data?.attributes ?? {}),
       id: data?.data?.id ?? providerPaymentId,
     });
@@ -233,77 +154,20 @@ export class BookingReservationPaymentGatewayService {
     rawPayload: Buffer | string,
     signatureHeader?: string | null,
   ) {
-    const payloadText = Buffer.isBuffer(rawPayload) ? rawPayload.toString('utf8') : String(rawPayload ?? '');
-    const payload = this.parseJsonPayload(payloadText);
-    const eventAttributes = payload?.data?.attributes;
-
-    if (!eventAttributes?.type) {
-      throw new BadRequestException('Invalid PayMongo webhook payload.');
-    }
-
-    this.assertValidWebhookSignature(payloadText, signatureHeader, Boolean(eventAttributes.livemode));
-
-    const checkoutSession = eventAttributes?.data;
-    const checkoutAttributes = checkoutSession?.attributes ?? {};
-    const normalized = this.normalizeCheckoutSession({
-      ...checkoutAttributes,
-      id: checkoutSession?.id ?? null,
-    });
+    const webhookSecret =
+      this.configService.get<string>('payments.paymongoBookingWebhookSecret') ??
+      this.configService.get<string>('payments.paymongoWebhookSecret');
+    const event = parsePaymongoWebhookEvent(rawPayload, signatureHeader, webhookSecret);
 
     return {
-      eventType: String(eventAttributes.type),
-      livemode: Boolean(eventAttributes.livemode),
-      providerPaymentId: checkoutSession?.id ?? null,
-      bookingId: checkoutAttributes?.metadata?.bookingId ?? null,
-      referenceNumber: normalized.referenceNumber,
-      paidAt: normalized.paidAt,
-      status: normalized.status,
-      failureReason: normalized.failureReason,
+      eventType: event.eventType,
+      livemode: event.livemode,
+      providerPaymentId: event.providerPaymentId,
+      bookingId: typeof event.metadata.bookingId === 'string' ? event.metadata.bookingId : null,
+      referenceNumber: event.referenceNumber,
+      paidAt: event.paidAt,
+      status: event.status,
+      failureReason: event.failureReason,
     };
-  }
-
-  private assertValidWebhookSignature(
-    rawPayload: string,
-    signatureHeader: string | null | undefined,
-    livemode: boolean,
-  ) {
-    const webhookSecret = this.configService.get<string>('payments.paymongoWebhookSecret');
-    if (!webhookSecret) {
-      throw new ServiceUnavailableException(
-        'PAYMONGO_WEBHOOK_SECRET is not configured for webhook verification.',
-      );
-    }
-
-    if (!signatureHeader) {
-      throw new BadRequestException('Missing PayMongo webhook signature header.');
-    }
-
-    const parts = Object.fromEntries(
-      signatureHeader.split(',').map((segment) => {
-        const [key, ...rest] = segment.split('=');
-        return [key?.trim(), rest.join('=').trim()];
-      }),
-    );
-
-    const timestamp = parts.t;
-    const providedSignature = livemode ? parts.li : parts.te;
-
-    if (!timestamp || !providedSignature) {
-      throw new BadRequestException('Malformed PayMongo webhook signature header.');
-    }
-
-    const expectedSignature = createHmac('sha256', webhookSecret)
-      .update(`${timestamp}.${rawPayload}`)
-      .digest('hex');
-
-    const providedBuffer = Buffer.from(providedSignature, 'utf8');
-    const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
-
-    if (
-      providedBuffer.length !== expectedBuffer.length ||
-      !timingSafeEqual(providedBuffer, expectedBuffer)
-    ) {
-      throw new BadRequestException('Invalid PayMongo webhook signature.');
-    }
   }
 }

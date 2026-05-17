@@ -147,7 +147,10 @@ describe('VehicleLifecycleService', () => {
 
     const service = moduleRef.get(VehicleLifecycleService);
 
-    const result = await service.findByVehicleId('vehicle-1');
+    const result = await service.findByVehicleId('vehicle-1', {
+      userId: 'customer-1',
+      role: 'customer',
+    });
 
     expect(bookingsRepository.findByVehicleId).toHaveBeenCalledWith('vehicle-1');
     expect(inspectionsRepository.findByVehicleId).toHaveBeenCalledWith('vehicle-1');
@@ -385,7 +388,77 @@ describe('VehicleLifecycleService', () => {
 
     const service = moduleRef.get(VehicleLifecycleService);
 
-    await expect(service.findByVehicleId('missing-vehicle-id')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.findByVehicleId('missing-vehicle-id', {
+        userId: 'customer-1',
+        role: 'customer',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects lifecycle timeline access when a customer targets another vehicle owner record', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        VehicleLifecycleService,
+        {
+          provide: VehicleLifecycleRepository,
+          useValue: {
+            replaceForVehicle: jest.fn(),
+            findByVehicleId: jest.fn(),
+            listSummariesByVehicleId: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn().mockRejectedValue(
+              new ForbiddenException('Customers can only access their own vehicle records'),
+            ),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        {
+          provide: BookingsRepository,
+          useValue: {
+            findByVehicleId: jest.fn(),
+          },
+        },
+        {
+          provide: InspectionsRepository,
+          useValue: {
+            findByVehicleId: jest.fn(),
+          },
+        },
+        {
+          provide: JobOrdersRepository,
+          useValue: {
+            findByVehicleId: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: QualityGatesRepository,
+          useValue: {
+            findByJobOrderIds: jest.fn().mockResolvedValue([]),
+          },
+        },
+        { provide: VehicleLifecycleSummaryProviderService, useValue: { generate: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(VehicleLifecycleService);
+
+    await expect(
+      service.findByVehicleId('vehicle-2', {
+        userId: 'customer-1',
+        role: 'customer',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('queues lifecycle summary generation with reviewer-gated visibility', async () => {

@@ -32,11 +32,16 @@ export const summarizeManagedAccounts = (accounts) =>
       activeCount: summary.activeCount + (account.isActive ? 1 : 0),
       inactiveCount: summary.inactiveCount + (account.isActive ? 0 : 1),
       adminCount: summary.adminCount + (account.role === 'super_admin' ? 1 : 0),
+      headTechnicianCount: summary.headTechnicianCount + (account.role === 'head_technician' ? 1 : 0),
+      activeHeadTechnicianCount:
+        summary.activeHeadTechnicianCount + (account.role === 'head_technician' && account.isActive ? 1 : 0),
     }),
     {
       total: 0,
       activeCount: 0,
       inactiveCount: 0,
       adminCount: 0,
+      headTechnicianCount: 0,
+      activeHeadTechnicianCount: 0,
     },
   )

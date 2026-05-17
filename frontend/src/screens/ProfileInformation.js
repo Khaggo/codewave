@@ -13,7 +13,7 @@ export default function ProfileInformation() {
   const [phone, setPhone] = useState(user?.phone || '')
   const [loading, setLoading] = useState(false)
 
-  function handleSave() {
+  async function handleSave() {
     if (!name.trim()) {
       toast({ type: 'error', title: 'Validation Error', message: 'Name cannot be empty.' })
       return
@@ -28,8 +28,7 @@ export default function ProfileInformation() {
     }
 
     setLoading(true)
-
-    setTimeout(() => {
+    try {
       const trimmedName = name.trim()
       const initials = trimmedName
         .split(/\s+/)
@@ -38,18 +37,26 @@ export default function ProfileInformation() {
         .join('')
         .toUpperCase()
 
-      updateUser({
-        name: trimmedName,
+      await updateUser({
+        firstName: trimmedName.split(/\s+/).slice(0, -1).join(' ') || trimmedName,
+        lastName: trimmedName.split(/\s+/).slice(-1).join(' '),
         phone: normalizePhoneNumber(phone),
         initials,
       })
-      setLoading(false)
       toast({
         type: 'success',
         title: 'Profile Updated',
-        message: 'Your admin profile has been refreshed.',
+        message: 'Your staff profile has been saved.',
       })
-    }, 500)
+    } catch (error) {
+      toast({
+        type: 'error',
+        title: 'Profile Save Failed',
+        message: error?.message || 'We could not save your profile right now.',
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

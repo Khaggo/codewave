@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { InvoicePaymentsRepository } from '@ecommerce-modules/invoice-payments/repositories/invoice-payments.repository';
+import { InvoicePaymentsPaymongoService } from '@ecommerce-modules/invoice-payments/services/invoice-payments-paymongo.service';
 import { InvoicePaymentsService } from '@ecommerce-modules/invoice-payments/services/invoice-payments.service';
 
 describe('InvoicePaymentsService', () => {
@@ -16,6 +17,7 @@ describe('InvoicePaymentsService', () => {
       providers: [
         InvoicePaymentsService,
         InvoicePaymentsRepository,
+        { provide: InvoicePaymentsPaymongoService, useValue: { createCheckoutSession: jest.fn(), retrieveCheckoutSession: jest.fn(), parseWebhook: jest.fn() } },
         { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
@@ -92,6 +94,7 @@ describe('InvoicePaymentsService', () => {
       providers: [
         InvoicePaymentsService,
         InvoicePaymentsRepository,
+        { provide: InvoicePaymentsPaymongoService, useValue: { createCheckoutSession: jest.fn(), retrieveCheckoutSession: jest.fn(), parseWebhook: jest.fn() } },
         { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
@@ -122,6 +125,7 @@ describe('InvoicePaymentsService', () => {
       providers: [
         InvoicePaymentsService,
         InvoicePaymentsRepository,
+        { provide: InvoicePaymentsPaymongoService, useValue: { createCheckoutSession: jest.fn(), retrieveCheckoutSession: jest.fn(), parseWebhook: jest.fn() } },
         { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
       ],
     }).compile();

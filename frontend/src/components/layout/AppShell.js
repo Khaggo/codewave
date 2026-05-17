@@ -13,8 +13,10 @@ import {
   fetchAuthenticatedUser,
   hydrateStoredSessionFromAuthenticatedUser,
   loadStoredSession,
+  STAFF_SESSION_UNAUTHORIZED_EVENT,
   refreshAuthSession,
   saveStoredSession,
+  updateStaffPortalProfile,
 } from '@/lib/authClient'
 import {
   getStaffPortalAccessState,
@@ -152,6 +154,21 @@ export default function AppShell({ children }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+
+    const handleUnauthorizedSession = () => {
+      clearStoredSession()
+      setSession(null)
+      setAuthError(staffPortalStateMessages.session_restore_failed)
+    }
+
+    window.addEventListener(STAFF_SESSION_UNAUTHORIZED_EVENT, handleUnauthorizedSession)
+    return () => window.removeEventListener(STAFF_SESSION_UNAUTHORIZED_EVENT, handleUnauthorizedSession)
+  }, [])
+
   function handleAuthenticated(nextSession) {
     const accessState = getStaffPortalAccessState(nextSession?.user)
     if (!isActiveStaffPortalState(accessState)) {
@@ -178,12 +195,38 @@ export default function AppShell({ children }) {
     setAuthError('')
   }
 
+  async function handleUserProfileUpdate(profileUpdates) {
+    if (!session?.user?.id || !session?.accessToken) {
+      throw new Error('Sign in again before saving profile changes.')
+    }
+
+    const updatedUser = await updateStaffPortalProfile({
+      userId: session.user.id,
+      accessToken: session.accessToken,
+      firstName: profileUpdates?.firstName,
+      lastName: profileUpdates?.lastName,
+      phoneNumber: profileUpdates?.phone,
+    })
+
+    const nextSession = {
+      ...session,
+      user: {
+        ...session.user,
+        ...updatedUser,
+      },
+    }
+
+    setSession(nextSession)
+    saveStoredSession(nextSession)
+    return nextSession.user
+  }
+
   if (!authReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface-bg px-4">
         <div className="empty-panel max-w-lg">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-ink-muted">Restoring Session</p>
-          <p className="mt-3 text-lg font-semibold text-ink-primary">Loading the staff workspace…</p>
+          <p className="mt-3 text-lg font-semibold text-ink-primary">Loading the staff workspace...</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">
             Reconnecting your portal session and checking available workspaces.
           </p>
@@ -216,7 +259,7 @@ export default function AppShell({ children }) {
   }
 
   return (
-    <UserProvider user={providerUser}>
+    <UserProvider user={providerUser} updateUser={handleUserProfileUpdate}>
       <div className="flex h-screen flex-col overflow-hidden bg-surface-bg md:flex-row">
         {mobileOpen ? (
           <div className="fixed inset-0 z-20 bg-black/60 backdrop-blur-sm md:hidden" onClick={() => setMobileOpen(false)} />

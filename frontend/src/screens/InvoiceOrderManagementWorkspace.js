@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Clock3,
-  ExternalLink,
   LoaderCircle,
   ReceiptText,
   RefreshCcw,
@@ -15,7 +14,6 @@ import {
 } from 'lucide-react'
 
 import PageHeader from '@/components/ui/PageHeader'
-import PortalLink from '@/components/PortalLink'
 import { ApiError, listAdminCustomers } from '@/lib/authClient'
 import { getInvoiceAgingAnalytics } from '@/lib/analyticsAdminClient'
 import { getJobOrderById, listJobOrderWorkbenchSummaries } from '@/lib/jobOrderWorkbenchClient'
@@ -33,7 +31,6 @@ import {
 import {
   getInvoicePdfStateLabel,
   getLoadMessageTone,
-  shortId,
 } from './invoiceOrderManagementView.mjs'
 
 const LOAD_STATE_LABELS = {
@@ -396,45 +393,9 @@ export default function InvoiceOrderManagementWorkspace() {
   const ecommerceOrder = ecommerceState.order ?? null
   const ecommerceInvoice = ecommerceState.invoice ?? null
   const paymentEntries = ecommerceInvoice?.paymentEntries ?? []
-  const hasFinanceDetail = Boolean(jobOrderState.jobOrder || ecommerceOrder || serviceInvoice || ecommerceInvoice)
   const ecommerceLoadLabel = LOAD_STATE_LABELS[ecommerceState.status] ?? 'Order Lookup'
   const jobOrderLoadLabel = LOAD_STATE_LABELS[jobOrderState.status] ?? 'Service Invoice Lookup'
   const agingLoadLabel = LOAD_STATE_LABELS[agingState.status] ?? 'Invoice Aging'
-
-  const selectedRecord = useMemo(() => {
-    if (jobOrderState.jobOrder) {
-      return {
-        title: `JO-${shortId(jobOrderState.jobOrder.id)}`,
-        status: formatLabel(jobOrderState.jobOrder.status),
-      }
-    }
-
-    if (ecommerceOrder) {
-      return {
-        title: ecommerceOrder.orderNumber,
-        status: formatLabel(ecommerceOrder.status),
-      }
-    }
-
-    if (serviceInvoice) {
-      return {
-        title: serviceInvoice.invoiceReference,
-        status: formatLabel(serviceInvoice.paymentStatus, 'Invoice ready'),
-      }
-    }
-
-    if (ecommerceInvoice) {
-      return {
-        title: ecommerceInvoice.invoiceNumber,
-        status: formatLabel(ecommerceInvoice.status, 'Invoice ready'),
-      }
-    }
-
-    return {
-      title: 'No record selected',
-      status: 'Awaiting lookup',
-    }
-  }, [ecommerceInvoice, ecommerceOrder, jobOrderState.jobOrder, serviceInvoice])
 
   const queueCards = useMemo(
     () => [
@@ -636,35 +597,6 @@ export default function InvoiceOrderManagementWorkspace() {
         <div className="ops-panel">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="card-title">Selected Record</p>
-              <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Keep the active billing record in view before updating payment or completion follow-through.
-              </p>
-            </div>
-            <StatusBadge value={selectedRecord.status} />
-          </div>
-
-          {hasFinanceDetail ? (
-            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <DetailTile label="Active record" value={selectedRecord.title} />
-              <DetailTile label="Service record" value={serviceInvoice?.invoiceReference ?? 'Not loaded'} />
-              <DetailTile label="Order record" value={ecommerceOrder?.orderNumber ?? 'Not loaded'} />
-              <DetailTile label="Latest invoice" value={ecommerceInvoice?.invoiceNumber ?? 'Not loaded'} />
-            </div>
-          ) : (
-            <div className="mt-4">
-              <InfoPanel
-                icon={ReceiptText}
-                title="Load a finalized job order or known ecommerce order"
-                body="Use the lookup controls first, then review the selected billing record here."
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="ops-panel">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
               <p className="card-title">Invoice</p>
               <p className="mt-1 text-sm leading-6 text-ink-muted">
                 Review the current invoice snapshot without leaving the completion queue.
@@ -754,56 +686,6 @@ export default function InvoiceOrderManagementWorkspace() {
 
             <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
               <PaymentEntries entries={paymentEntries} />
-            </div>
-          </div>
-        </div>
-
-        <div className="ops-panel">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="card-title">Linked Orders</p>
-              <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Keep the related service and order records close by.
-              </p>
-            </div>
-            <span className="badge badge-gray">{jobOrderState.jobOrder || ecommerceOrder ? 'Records linked' : 'No linked record loaded'}</span>
-          </div>
-
-          <div className="mt-4 grid gap-4 xl:grid-cols-2">
-            <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">Service record</p>
-              {jobOrderState.jobOrder ? (
-                <div className="mt-3 space-y-3">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <DetailTile label="Job order" value={`JO-${shortId(jobOrderState.jobOrder.id)}`} />
-                    <DetailTile label="Status" value={formatLabel(jobOrderState.jobOrder.status)} />
-                    <DetailTile label="Source" value={formatLabel(jobOrderState.jobOrder.sourceType)} />
-                  </div>
-                  <PortalLink href="/admin/job-orders" className="btn-ghost w-fit">
-                    <ExternalLink size={14} />
-                    Open Job Order Workbench
-                  </PortalLink>
-                </div>
-              ) : (
-                <p className="mt-3 text-sm leading-6 text-ink-muted">
-                  Load a finalized job order to connect service billing context here.
-                </p>
-              )}
-            </div>
-
-            <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">Order record</p>
-              {ecommerceOrder ? (
-                <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  <DetailTile label="Order" value={ecommerceOrder.orderNumber} />
-                  <DetailTile label="Items" value={ecommerceOrder.items?.length ?? 0} />
-                  <DetailTile label="Created" value={formatDateTime(ecommerceOrder.createdAt)} />
-                </div>
-              ) : (
-                <p className="mt-3 text-sm leading-6 text-ink-muted">
-                  Load a customer order to connect ecommerce completion records here.
-                </p>
-              )}
             </div>
           </div>
         </div>

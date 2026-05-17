@@ -9,7 +9,9 @@ import { AppModule } from './app.module';
 import { setupSwagger } from './swagger';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+  });
   const configService = app.get(ConfigService);
   const allowedOrigins = configService.get<string[]>('cors.origins', [
     'http://localhost:3002',

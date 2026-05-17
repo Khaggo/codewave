@@ -40,7 +40,9 @@ import {
   listJobOrderWorkbenchCalendar,
   listJobOrderWorkbenchSummaries,
   recordJobOrderInvoicePayment,
+  reconcileJobOrderInvoicePaymongoCheckout,
   replaceJobOrderAssignments,
+  startJobOrderInvoicePaymongoCheckout,
   updateJobOrderStatus,
 } from '@/lib/jobOrderWorkbenchClient'
 import { listStaffAccounts } from '@/lib/authClient'
@@ -576,23 +578,24 @@ export default function JobOrderWorkbench() {
 
     setHandoffState({
       status: 'handoff_loaded',
-      message: 'Loading confirmed booking handoffs...',
+      message: 'Loading confirmed and workshop-handoff bookings...',
     })
 
     try {
       const schedule = await getDailySchedule(
         {
           scheduledDate: selectedDate,
-          status: 'confirmed',
         },
         user.accessToken,
       )
 
-      const confirmedBookings = (schedule?.slots ?? []).flatMap((slot) =>
-        (slot?.bookings ?? []).filter((booking) => booking?.status === 'confirmed'),
+      const handoffEligibleBookings = (schedule?.slots ?? []).flatMap((slot) =>
+        (slot?.bookings ?? []).filter((booking) =>
+          ['confirmed', 'in_service'].includes(booking?.status),
+        ),
       )
 
-      const nextCandidates = confirmedBookings.map((booking) =>
+      const nextCandidates = handoffEligibleBookings.map((booking) =>
         buildBookingJobOrderHandoffCandidate(booking),
       )
 
@@ -608,8 +611,8 @@ export default function JobOrderWorkbench() {
         status: getJobOrderWorkbenchHandoffState(nextCandidates),
         message:
           nextCandidates.length > 0
-            ? 'Confirmed bookings are ready for job-order handoff.'
-            : 'No confirmed bookings are available for job-order handoff on this date.',
+            ? 'Confirmed and workshop-handoff bookings are ready for job-order handoff.'
+            : 'No confirmed or workshop-handoff bookings are available for job-order handoff on this date.',
       })
     } catch (error) {
       setHandoffCandidates([])
@@ -804,7 +807,7 @@ export default function JobOrderWorkbench() {
 
       clearBookingCreateContext({
         status: 'create_saved',
-        message: `Job order ${jobOrder.id.slice(0, 8).toUpperCase()} created from confirmed booking handoff.`,
+        message: `Job order ${jobOrder.id.slice(0, 8).toUpperCase()} created from the selected booking handoff.`,
       })
       setActiveJobOrder(jobOrder)
       setManualJobOrderId(jobOrder.id)
@@ -1261,6 +1264,104 @@ export default function JobOrderWorkbench() {
     }
   }
 
+  const handleStartInvoicePaymongoCheckout = async () => {
+    if (!activeJobOrder?.id || !activeJobOrder.invoiceRecord) {
+      setPaymentState({
+        status: 'payment_not_finalized',
+        message: 'Finalize the job order before starting PayMongo checkout.',
+      })
+      return
+    }
+
+    if (!user?.accessToken) {
+      setPaymentState({
+        status: 'payment_failed',
+        message: 'A valid staff session is required before starting PayMongo checkout.',
+      })
+      return
+    }
+
+    setPaymentState({
+      status: 'payment_submitting',
+      message: '',
+    })
+
+    try {
+      const updatedJobOrder = await startJobOrderInvoicePaymongoCheckout({
+        jobOrderId: activeJobOrder.id,
+        accessToken: user.accessToken,
+      })
+
+      setActiveJobOrder(updatedJobOrder)
+      void loadJobOrderSummaries()
+
+      const checkoutUrl = updatedJobOrder?.invoiceRecord?.onlinePaymentCheckoutUrl
+      if (checkoutUrl && typeof window !== 'undefined') {
+        window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
+      }
+
+      setPaymentState({
+        status: 'payment_saved',
+        message:
+          updatedJobOrder?.invoiceRecord?.onlinePaymentStatus === 'paid'
+            ? 'PayMongo reported this invoice as paid and the workbench refreshed.'
+            : checkoutUrl
+              ? 'PayMongo checkout created. A new tab was opened for online settlement.'
+              : 'PayMongo checkout state refreshed.',
+      })
+    } catch (error) {
+      setPaymentState({
+        status: 'payment_failed',
+        message: error?.message || 'PayMongo checkout could not be started.',
+      })
+    }
+  }
+
+  const handleRefreshInvoicePaymongoCheckout = async () => {
+    if (!activeJobOrder?.id || !activeJobOrder.invoiceRecord) {
+      setPaymentState({
+        status: 'payment_not_finalized',
+        message: 'Finalize the job order before refreshing PayMongo checkout.',
+      })
+      return
+    }
+
+    if (!user?.accessToken) {
+      setPaymentState({
+        status: 'payment_failed',
+        message: 'A valid staff session is required before refreshing PayMongo checkout.',
+      })
+      return
+    }
+
+    setPaymentState({
+      status: 'payment_submitting',
+      message: '',
+    })
+
+    try {
+      const updatedJobOrder = await reconcileJobOrderInvoicePaymongoCheckout({
+        jobOrderId: activeJobOrder.id,
+        accessToken: user.accessToken,
+      })
+
+      setActiveJobOrder(updatedJobOrder)
+      void loadJobOrderSummaries()
+      setPaymentState({
+        status: 'payment_saved',
+        message:
+          updatedJobOrder?.invoiceRecord?.paymentStatus === 'paid'
+            ? 'PayMongo settlement was confirmed and the invoice is now marked paid.'
+            : 'PayMongo checkout state refreshed from the live provider.',
+      })
+    } catch (error) {
+      setPaymentState({
+        status: 'payment_failed',
+        message: error?.message || 'PayMongo checkout state could not be refreshed.',
+      })
+    }
+  }
+
   const handleExportInvoice = async () => {
     if (!activeJobOrder?.id || !activeJobOrder.invoiceRecord) {
       setFinalizeState({
@@ -1472,7 +1573,7 @@ export default function JobOrderWorkbench() {
                 ? activeJobOrder.assignedTechnicianIds.join(', ') || 'No technician assigned'
                 : selectedCandidate
                   ? selectedCandidate.serviceSummary
-                  : 'Select a confirmed booking handoff first'
+                  : 'Select a confirmed or workshop-handoff booking first'
           }
         />
         <SummaryTile
@@ -1667,7 +1768,7 @@ export default function JobOrderWorkbench() {
                   : 'No assigned job orders are queued for the selected date yet.'
                 : handoffCandidates.length > 0
                   ? 'Confirmed bookings on this date are ready for job-order creation and execution follow-through.'
-                  : 'No confirmed booking handoffs are queued for the selected date yet.'}
+                  : 'No confirmed or workshop-handoff bookings are queued for the selected date yet.'}
             </p>
           </div>
         </div>
@@ -1898,7 +1999,7 @@ export default function JobOrderWorkbench() {
             <p className="mt-2 text-sm leading-6 text-ink-secondary">
               {isTechnician
                 ? 'Choose one of your assigned job orders to start technician execution updates.'
-                : 'Create a job order from confirmed booking handoff or choose an existing job order from the selector.'}
+                : 'Create a job order from a confirmed or workshop-handoff booking, or choose an existing job order from the selector.'}
             </p>
           </div>
         )}
@@ -2411,9 +2512,9 @@ export default function JobOrderWorkbench() {
                 {!selectedCandidate ? (
                   <div className="empty-panel mt-4">
                     <AlertTriangle size={28} className="mx-auto text-ink-dim mb-3" />
-                    <p className="text-sm font-semibold text-ink-primary">Select a confirmed booking handoff first</p>
+                    <p className="text-sm font-semibold text-ink-primary">Select a confirmed or workshop-handoff booking first</p>
                     <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                      The workbench only creates job orders from confirmed booking intake in this slice.
+                      The workbench creates job orders from confirmed bookings and bookings already moved into workshop handoff.
                     </p>
                   </div>
                 ) : (
@@ -2908,7 +3009,7 @@ export default function JobOrderWorkbench() {
                     ) : (
                       <CheckCircle2 size={14} />
                     )}
-                    {activeJobOrder?.invoiceRecord ? 'Invoice Already Generated' : 'Finalize & Record Payment'}
+                    {activeJobOrder?.invoiceRecord ? 'Invoice Already Generated' : 'Finalize Invoice-Ready Work'}
                   </button>
                   <button
                     type="button"
@@ -2925,7 +3026,28 @@ export default function JobOrderWorkbench() {
                     ) : (
                       <ShieldCheck size={14} />
                     )}
-                    Retry Payment Recording
+                    Record Manual Payment
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStartInvoicePaymongoCheckout}
+                    disabled={!activeJobOrder?.invoiceRecord || paymentState.status === 'payment_submitting'}
+                    className="ops-action-secondary"
+                  >
+                    <FileStack size={14} />
+                    Start PayMongo Checkout
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRefreshInvoicePaymongoCheckout}
+                    disabled={
+                      !activeJobOrder?.invoiceRecord?.onlinePaymentSessionId ||
+                      paymentState.status === 'payment_submitting'
+                    }
+                    className="ops-action-secondary"
+                  >
+                    <RefreshCw size={14} />
+                    Refresh PayMongo Status
                   </button>
                 </div>
               </div>
@@ -2960,17 +3082,35 @@ export default function JobOrderWorkbench() {
                       {formatPesoAmount(activeJobOrder?.invoiceRecord?.totalAmountCents ?? 0)}
                     </p>
                   </div>
-                  <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Payment status</p>
-                    <p className="mt-2 text-sm text-ink-primary">
-                      {activeJobOrder?.invoiceRecord ? formatStatusLabel(activeJobOrder.invoiceRecord.paymentStatus) : 'Awaiting finalization'}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Email delivery</p>
-                    <p className="mt-2 text-sm text-ink-primary">
-                      {activeJobOrder?.invoiceRecord?.pdfEmailSentAt
-                        ? `Sent ${formatDateTime(activeJobOrder.invoiceRecord.pdfEmailSentAt)}`
+                    <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Payment status</p>
+                      <p className="mt-2 text-sm text-ink-primary">
+                        {activeJobOrder?.invoiceRecord ? formatStatusLabel(activeJobOrder.invoiceRecord.paymentStatus) : 'Awaiting finalization'}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Settlement channel</p>
+                      <p className="mt-2 text-sm text-ink-primary">
+                        {activeJobOrder?.invoiceRecord?.paymentChannel === 'online_provider'
+                          ? 'PayMongo hosted checkout'
+                          : activeJobOrder?.invoiceRecord?.paymentChannel === 'manual'
+                            ? 'Manual settlement'
+                            : 'Not selected yet'}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Online payment state</p>
+                      <p className="mt-2 text-sm text-ink-primary">
+                        {activeJobOrder?.invoiceRecord?.onlinePaymentStatus
+                          ? formatStatusLabel(activeJobOrder.invoiceRecord.onlinePaymentStatus)
+                          : 'No online checkout yet'}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-surface-border bg-surface-raised px-3 py-3">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Email delivery</p>
+                      <p className="mt-2 text-sm text-ink-primary">
+                        {activeJobOrder?.invoiceRecord?.pdfEmailSentAt
+                          ? `Sent ${formatDateTime(activeJobOrder.invoiceRecord.pdfEmailSentAt)}`
                         : activeJobOrder?.invoiceRecord?.pdfEmailError
                           ? 'Delivery retry needed'
                           : 'Will send after PDF generation'}
@@ -2978,6 +3118,11 @@ export default function JobOrderWorkbench() {
                   </div>
                 </div>
                 {paymentState.message ? <div className={`mt-3 ${paymentStateClassName}`}>{paymentState.message}</div> : null}
+                {activeJobOrder?.invoiceRecord?.onlinePaymentFailureReason ? (
+                  <div className="status-message status-message-danger mt-3">
+                    {activeJobOrder.invoiceRecord.onlinePaymentFailureReason}
+                  </div>
+                ) : null}
                 <div className="mt-3 flex flex-wrap gap-3">
                   <button
                     type="button"

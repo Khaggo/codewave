@@ -326,6 +326,118 @@ describe('AuthService', () => {
     expect(authRepository.revokeActiveRefreshTokens).toHaveBeenCalledWith('staff-1');
   });
 
+  it('rejects provisioning a third active head technician', async () => {
+    const usersService = {
+      countActiveUsersByRole: jest.fn().mockResolvedValue(2),
+      createManagedUser: jest.fn(),
+      setActivationStatus: jest.fn(),
+      findById: jest.fn(),
+    };
+
+    const authRepository = {
+      createAccount: jest.fn(),
+      updateAccountStatus: jest.fn(),
+      createStaffAdminAuditLog: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UsersService, useValue: usersService },
+        { provide: AuthRepository, useValue: authRepository },
+        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() } },
+        { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: JwtService, useValue: {} },
+        {
+          provide: ConfigService,
+          useValue: {
+            getOrThrow: jest.fn((key: string) => key),
+            get: jest.fn((_key: string, fallback: string) => fallback),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(AuthService);
+
+    await expect(
+      service.provisionStaffAccount(
+        {
+          password: 'password123',
+          firstName: 'Helena',
+          lastName: 'Cruz',
+          role: 'head_technician',
+          accountType: 'head_technician',
+        },
+        {
+          userId: 'admin-1',
+          role: 'super_admin',
+        },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(usersService.createManagedUser).not.toHaveBeenCalled();
+    expect(authRepository.createAccount).not.toHaveBeenCalled();
+  });
+
+  it('rejects reactivating a third active head technician', async () => {
+    const usersService = {
+      countActiveUsersByRole: jest.fn().mockResolvedValue(2),
+      findById: jest.fn().mockResolvedValue({
+        id: 'headtech-1',
+        email: 'headtech@example.com',
+        role: 'head_technician',
+        staffCode: 'HTC-0001',
+        isActive: false,
+      }),
+      setActivationStatus: jest.fn(),
+    };
+
+    const authRepository = {
+      updateAccountStatus: jest.fn(),
+      revokeActiveRefreshTokens: jest.fn(),
+      createStaffAdminAuditLog: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UsersService, useValue: usersService },
+        { provide: AuthRepository, useValue: authRepository },
+        { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() } },
+        { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: JwtService, useValue: {} },
+        {
+          provide: ConfigService,
+          useValue: {
+            getOrThrow: jest.fn((key: string) => key),
+            get: jest.fn((_key: string, fallback: string) => fallback),
+          },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(AuthService);
+
+    await expect(
+      service.updateStaffAccountStatus(
+        'headtech-1',
+        {
+          isActive: true,
+        },
+        {
+          userId: 'admin-1',
+          role: 'super_admin',
+        },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(usersService.setActivationStatus).not.toHaveBeenCalled();
+    expect(authRepository.updateAccountStatus).not.toHaveBeenCalled();
+  });
+
   it('starts Google signup and verifies email OTP before issuing tokens', async () => {
     const usersService = {
       findByEmail: jest.fn().mockResolvedValue(null),

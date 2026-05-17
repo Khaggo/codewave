@@ -28,6 +28,7 @@ export default function RegisterPage({ navigation, onRegister }) {
     licensePlate: '',
     vehicleMake: '',
     vehicleModel: '',
+    vehicleColor: '',
     vehicleYear: '',
     password: '',
     confirmPassword: '',
@@ -83,6 +84,7 @@ export default function RegisterPage({ navigation, onRegister }) {
       licensePlate: form.licensePlate.trim().toUpperCase(),
       vehicleMake: form.vehicleMake.trim(),
       vehicleModel: form.vehicleModel.trim(),
+      vehicleColor: form.vehicleColor.trim(),
       vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
       vehicleDisplayName: formatVehicleDisplayName({
         vehicleMake: form.vehicleMake,
@@ -269,6 +271,18 @@ export default function RegisterPage({ navigation, onRegister }) {
         icon="car-side"
       />
 
+      <FormField
+        label="Vehicle Color"
+        value={form.vehicleColor}
+        onChangeText={(value) => handleFieldChange('vehicleColor', value)}
+        placeholder="White"
+        autoCapitalize="words"
+        textContentType="none"
+        autoComplete="off"
+        importantForAutofill="no"
+        icon="palette-outline"
+      />
+
       <Text style={styles.infoText}>
         Your account will be verified first, then the app will save your birthday and first vehicle automatically.
       </Text>
@@ -300,11 +314,27 @@ export default function RegisterPage({ navigation, onRegister }) {
 
       <Text style={styles.footerText}>
         By registering, you agree to our{' '}
-        <Text style={styles.footerLink} onPress={() => Alert.alert('Terms of Service', 'Prototype link opened.')}>
+        <Text
+          style={styles.footerLink}
+          onPress={() =>
+            Alert.alert(
+              'Terms of Service',
+              'The Terms of Service viewer is not connected in this local build yet.',
+            )
+          }
+        >
           Terms of Service
         </Text>{' '}
         and{' '}
-        <Text style={styles.footerLink} onPress={() => Alert.alert('Privacy Policy', 'Prototype link opened.')}>
+        <Text
+          style={styles.footerLink}
+          onPress={() =>
+            Alert.alert(
+              'Privacy Policy',
+              'The Privacy Policy viewer is not connected in this local build yet.',
+            )
+          }
+        >
           Privacy Policy
         </Text>
         .

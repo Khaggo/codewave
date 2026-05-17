@@ -33,6 +33,11 @@ const truncationMarker = '...'
 const defaultArrivalType = 'walk_in'
 const defaultVisitType = 'regular_service'
 const defaultNextRoute = 'service'
+const formatLabel = (value) =>
+  String(value ?? '')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase())
 
 const allowedArrivalTypes = new Set(['walk_in', 'with_booking'])
 const allowedVisitTypes = new Set([
@@ -47,6 +52,37 @@ const nextRouteByVisitType = Object.freeze({
   insurance_related: 'insurance',
   back_job_complaint: 'complaint',
   inspection_only: 'inspection',
+})
+const reasonForVisitOptionCatalog = Object.freeze({
+  regular_service: [
+    'Preventive maintenance',
+    'Oil change / PMS',
+    'Brake concern',
+    'Engine or drivetrain concern',
+    'Aircon or electrical concern',
+    'Tire or wheel concern',
+    'Noise or vibration check',
+  ],
+  insurance_related: [
+    'Accident damage inspection',
+    'Insurance estimate or claim support',
+    'Policy renewal support',
+    'Document completion',
+    'Claim follow-up',
+  ],
+  back_job_complaint: [
+    'Return visit for unresolved issue',
+    'Follow-up on prior repair',
+    'Recheck after recent service',
+    'Warranty or back-job evaluation',
+  ],
+  inspection_only: [
+    'General inspection',
+    'Pre-purchase inspection',
+    'Roadworthy or safety inspection',
+    'Insurance documentation inspection',
+    'Diagnostic inspection',
+  ],
 })
 const requirementOptionCatalog = Object.freeze({
   bookingFound: {
@@ -155,6 +191,22 @@ export const getIntakeRequirementOptions = ({ arrivalType, visitType }) => {
   )
 }
 
+export const getReasonForVisitOptions = ({ visitType, currentValue } = {}) => {
+  const normalizedVisitType = normalizeControlValue(
+    visitType,
+    allowedVisitTypes,
+    defaultVisitType,
+  )
+  const options = [...(reasonForVisitOptionCatalog[normalizedVisitType] ?? reasonForVisitOptionCatalog[defaultVisitType])]
+  const normalizedCurrentValue = String(currentValue ?? '').trim()
+
+  if (normalizedCurrentValue && !options.includes(normalizedCurrentValue)) {
+    options.unshift(normalizedCurrentValue)
+  }
+
+  return options
+}
+
 const buildNormalizedRequirementsChecklist = (requirementsChecklist) => ({
   bookingFound: Boolean(requirementsChecklist?.bookingFound),
   orCrPresent: Boolean(requirementsChecklist?.orCrPresent),
@@ -204,18 +256,20 @@ const buildCappedIntakeDraft = (draft) => {
 }
 
 const appendWithinNoteBudget = (baseNotes, extraNotes) => {
+  const normalizedBaseNotes = truncateText(baseNotes, maxNotesLength)
+
   if (!extraNotes) {
-    return baseNotes
+    return normalizedBaseNotes
   }
 
   const separator = '\n\n'
-  const remaining = maxNotesLength - baseNotes.length - separator.length
+  const remaining = maxNotesLength - normalizedBaseNotes.length - separator.length
 
   if (remaining <= 0) {
-    return baseNotes
+    return normalizedBaseNotes
   }
 
-  return `${baseNotes}${separator}${truncateText(extraNotes, remaining)}`
+  return `${normalizedBaseNotes}${separator}${truncateText(extraNotes, remaining)}`
 }
 
 export const fuelLevelOptions = ['Empty', '1/4', '1/2', '3/4', 'Full']
@@ -287,6 +341,15 @@ export const createInitialIntakeDraft = () => ({
 
 export const buildIntakeInspectionNotes = (draft) => {
   const cappedDraft = buildCappedIntakeDraft(draft)
+  const requirementSummary = getIntakeRequirementOptions({
+    arrivalType: cappedDraft.arrivalType,
+    visitType: cappedDraft.visitType,
+  })
+    .map((option) => {
+      const checked = cappedDraft.requirementsChecklist?.[option.value]
+      return `${option.label}: ${checked ? 'Present' : option.required ? 'Missing' : 'Not confirmed'}`
+    })
+    .join('\n')
 
   const damageAreas = cappedDraft.damageAreas
     .map((area) => damageAreaLabels[area] || area)
@@ -301,6 +364,18 @@ export const buildIntakeInspectionNotes = (draft) => {
     cappedDraft.serviceConcern || 'Not provided',
     '',
     'INTAKE DETAILS',
+    `Arrival mode: ${formatLabel(cappedDraft.arrivalType) || 'Not provided'}`,
+    `Visit type: ${formatLabel(cappedDraft.visitType) || 'Not provided'}`,
+    `Reason for visit: ${cappedDraft.reasonForVisit || 'Not provided'}`,
+    `Requested service summary: ${cappedDraft.requestedServiceSummary || 'Not provided'}`,
+    `Repeat visit: ${cappedDraft.isRepeatVisit ? 'Yes' : 'No'}`,
+    `Urgent visit: ${cappedDraft.urgencyFlag ? 'Yes' : 'No'}`,
+    `Next route: ${formatLabel(cappedDraft.nextRoute) || 'Not provided'}`,
+    `Missing requirements note: ${cappedDraft.missingRequirementsNote || 'None'}`,
+    '',
+    'REQUIREMENTS CHECKLIST',
+    requirementSummary || 'No intake requirements recorded',
+    '',
     `Current odometer (km): ${cappedDraft.currentOdometerKm || 'Not provided'}`,
     `Fuel level on arrival: ${cappedDraft.fuelLevel || 'Not provided'}`,
     `Damage areas: ${damageAreas || 'None marked'}`,
@@ -346,15 +421,6 @@ export const buildIntakeInspectionPayload = ({ draft, userId }) => {
     status: cappedDraft.status || 'completed',
     bookingId: cappedDraft.bookingId.trim() || undefined,
     inspectorUserId: userId,
-    arrivalType: cappedDraft.arrivalType,
-    visitType: cappedDraft.visitType,
-    reasonForVisit: cappedDraft.reasonForVisit,
-    requestedServiceSummary: cappedDraft.requestedServiceSummary,
-    isRepeatVisit: Boolean(cappedDraft.isRepeatVisit),
-    urgencyFlag: Boolean(cappedDraft.urgencyFlag),
-    requirementsChecklist: buildNormalizedRequirementsChecklist(cappedDraft.requirementsChecklist),
-    missingRequirementsNote: cappedDraft.missingRequirementsNote,
-    nextRoute: cappedDraft.nextRoute,
     notes,
     attachmentRefs,
     findings,

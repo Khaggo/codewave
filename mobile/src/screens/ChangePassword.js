@@ -3,10 +3,11 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PasswordChecklist from '../components/PasswordChecklist';
 import PasswordField from '../components/PasswordField';
 import ScreenShell from '../components/ScreenShell';
+import { requestChangePasswordOtp } from '../lib/authClient';
 import { colors, radius } from '../theme';
 import { validateChangePasswordForm } from '../utils/validation';
 
-export default function ChangePassword({ navigation, account, onChangePassword }) {
+export default function ChangePassword({ navigation, account }) {
   const [form, setForm] = useState({
     currentPassword: '',
     newPassword: '',
@@ -14,6 +15,7 @@ export default function ChangePassword({ navigation, account, onChangePassword }
   });
   const [focusedField, setFocusedField] = useState('');
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
   const shouldShowPasswordChecklist =
     focusedField === 'newPassword' || form.newPassword.length > 0 || Boolean(errors.newPassword);
 
@@ -42,20 +44,42 @@ export default function ChangePassword({ navigation, account, onChangePassword }
     }));
   };
 
-  const handleSubmit = () => {
-    const nextErrors = validateChangePasswordForm({
-      ...form,
-      savedPassword: account?.password || '',
-    });
+  const handleSubmit = async () => {
+    const nextErrors = validateChangePasswordForm(form);
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
       return;
     }
 
-    onChangePassword(form.newPassword);
-    Alert.alert('Password Updated', 'Your password has been changed successfully.');
-    navigation.goBack();
+    setSubmitting(true);
+
+    try {
+      const enrollment = await requestChangePasswordOtp({
+        currentPassword: form.currentPassword,
+        accessToken: account?.accessToken,
+      });
+
+      navigation.navigate('OTP', {
+        otpPurpose: 'passwordChange',
+        email: account?.email ?? null,
+        maskedEmail: enrollment?.maskedEmail ?? account?.email ?? null,
+        enrollmentId: enrollment?.enrollmentId ?? null,
+        otpExpiresAt: enrollment?.otpExpiresAt ?? null,
+        currentPassword: form.currentPassword,
+        pendingPassword: form.newPassword,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'We could not start password change verification right now.';
+      setErrors((currentErrors) => ({
+        ...currentErrors,
+        currentPassword: message,
+      }));
+      Alert.alert('Password Change Failed', message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -107,8 +131,16 @@ export default function ChangePassword({ navigation, account, onChangePassword }
         textContentType="password"
       />
 
-      <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit}>
-        <Text style={styles.primaryButtonText}>Save Password</Text>
+      <TouchableOpacity
+        style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]}
+        onPress={() => {
+          void handleSubmit();
+        }}
+        disabled={submitting}
+      >
+        <Text style={styles.primaryButtonText}>
+          {submitting ? 'Sending verification code...' : 'Continue'}
+        </Text>
       </TouchableOpacity>
     </ScreenShell>
   );
@@ -146,6 +178,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: 14,
     alignItems: 'center',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.72,
   },
   primaryButtonText: {
     color: colors.onPrimary,

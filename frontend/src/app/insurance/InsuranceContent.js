@@ -8,11 +8,14 @@ import * as TabsPrimitives from '@radix-ui/react-tabs'
 import {
   Activity,
   AlertTriangle,
+  BadgeCheck,
+  Camera,
   CalendarClock,
   Check,
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  FileText,
   FileClock,
   RefreshCw,
   Search,
@@ -21,6 +24,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
+import PortalSelect from '@/components/ui/PortalSelect'
 import { useUser } from '@/lib/userContext'
 import { ApiError } from '@/lib/authClient'
 import {
@@ -37,6 +41,7 @@ import {
 import {
   buildInsurancePrimaryFocus,
   buildInsuranceBroadcastRequest,
+  buildInsuranceDocumentReviewState,
   buildInsuranceReminderRequest,
   buildInsuranceTableRow,
   formatStatusLabel,
@@ -44,12 +49,14 @@ import {
   getInsuranceDetailTabs,
   getNextInsuranceWorkspaceViewState,
   getInsuranceQueueFilterSummary,
+  getInsuranceReviewStepNote,
   getInsuranceReminderComposerState,
   getInsuranceSummaryCards,
   buildInsuranceWorkspaceSections,
   shouldApplyInsuranceAsyncResult,
   summarizeInsuranceBroadcastResult,
   summarizeInsuranceReminderResult,
+  shouldIncludeInsuranceInquiryInLiveQueue,
 } from './insuranceView.mjs'
 
 const INQUIRY_STATUS_OPTIONS = [
@@ -61,9 +68,6 @@ const INQUIRY_STATUS_OPTIONS = [
   'payment_pending',
   'active',
   'for_renewal',
-  'closed',
-  'rejected',
-  'cancelled',
 ]
 
 const PAYMENT_STATUS_OPTIONS = ['not_required', 'unpaid', 'proof_submitted', 'verifying', 'paid', 'overdue']
@@ -185,7 +189,7 @@ const getTimelineItems = (inquiry) => [
     complete: ['under_review', 'for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(
       inquiry?.status,
     ),
-    note: formatStatusLabel(inquiry?.documentStatus || 'incomplete'),
+    note: getInsuranceReviewStepNote(inquiry),
   },
   {
     key: 'payment',
@@ -245,6 +249,86 @@ function DetailField({ label, value }) {
   )
 }
 
+const getInsuranceDocumentIcon = (documentType) => {
+  switch (documentType) {
+    case 'or_cr':
+    case 'policy':
+      return FileText
+    case 'photo':
+      return Camera
+    case 'police_report':
+      return ShieldAlert
+    case 'estimate':
+      return ClipboardList
+    case 'proof_of_payment':
+      return BadgeCheck
+    default:
+      return FileText
+  }
+}
+
+const getInsurancePaymentGuidance = (inquiry) => {
+  const paymentStatus = inquiry?.paymentStatus ?? 'not_required'
+  const status = inquiry?.status ?? 'submitted'
+  const purpose = inquiry?.purpose ?? 'claim'
+
+  switch (paymentStatus) {
+    case 'proof_submitted':
+      return 'Customer proof of payment is already on file. Staff still need to verify it before the case can move forward.'
+    case 'verifying':
+      return 'Payment proof is under verification right now.'
+    case 'paid':
+      return 'Payment is settled for this insurance case.'
+    case 'unpaid':
+      return 'Payment is required before the case can move forward.'
+    case 'overdue':
+      return 'Payment is overdue. Staff should follow up or agree on the next payment step.'
+    case 'not_required':
+    default:
+      if (status === 'active') {
+        return purpose === 'renewal'
+          ? 'This renewal is already active. No separate payment follow-up is blocking the customer right now.'
+          : 'This case is already active. No extra customer payment follow-up is blocking the request right now.'
+      }
+
+      return status === 'payment_pending'
+        ? 'This case is in a payment follow-up lane, but no concrete customer payment status has been recorded yet.'
+        : purpose === 'renewal'
+          ? 'Renewal cases only need customer payment here when staff move them into a payment-follow-up step for proof collection or billing.'
+          : 'Claims and standard inquiries do not use this tab unless staff move the case into payment follow-up for proof collection or billing.'
+  }
+}
+
+const getInsuranceRenewalGuidance = (inquiry) => {
+  const renewalStatus = inquiry?.renewalStatus ?? 'not_applicable'
+  const status = inquiry?.status ?? 'submitted'
+  const purpose = inquiry?.purpose ?? 'claim'
+
+  switch (renewalStatus) {
+    case 'upcoming':
+      return 'Renewal follow-up is scheduled. The customer should watch for the next quote or staff instruction.'
+    case 'quoted':
+      return 'A renewal quote is already being prepared or has been shared. Customer review happens from the renewal follow-up step.'
+    case 'awaiting_customer':
+      return 'Renewal is waiting on the customer for a decision, supporting file, or payment confirmation.'
+    case 'renewed':
+      return 'Renewal is complete and the policy is already marked as renewed.'
+    case 'expired':
+      return 'The renewal window is overdue. Staff should contact the customer before coverage lapses further.'
+    case 'not_applicable':
+    default:
+      if (purpose === 'renewal' || status === 'for_renewal') {
+        return 'This request is in the renewal lane, but the next renewal detail has not been fully recorded yet.'
+      }
+
+      if (status === 'active') {
+        return 'This case is already active. Renewal only becomes relevant again when staff mark the policy for future renewal follow-up.'
+      }
+
+      return 'Renewal is not active for this case yet. Staff switch a case into For Renewal when the policy is nearing expiry or the customer asks for renewal help.'
+  }
+}
+
 function EmptyPanel({ title, copy }) {
   return (
     <div className="empty-panel px-4 py-10 text-center">
@@ -256,17 +340,22 @@ function EmptyPanel({ title, copy }) {
 }
 
 function FilterSelect({ label, value, onChange, options, includeAll = true, disabled = false }) {
+  const items = options.map((option) => ({
+    value: option,
+    label: formatStatusLabel(option),
+  }))
+
   return (
     <label className="label">
       {label}
-      <select value={value} onChange={onChange} className="select" disabled={disabled}>
-        {includeAll ? <option value="all">All</option> : null}
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {formatStatusLabel(option)}
-          </option>
-        ))}
-      </select>
+      <PortalSelect
+        value={value}
+        onValueChange={onChange}
+        placeholder={label}
+        items={items}
+        emptyOptionLabel={includeAll ? 'All' : undefined}
+        disabled={disabled}
+      />
     </label>
   )
 }
@@ -388,35 +477,156 @@ function InsuranceDetailTabContent({ inquiry, tabKey }) {
   }
 
   if (tabKey === 'documents') {
+    const documentReviewState = buildInsuranceDocumentReviewState(inquiry)
+
     return (
-      <div className="space-y-3">
-        <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold text-ink-primary">Document review status</p>
-            <WorkflowBadge value={inquiry.documentStatus} />
-            <span className="badge badge-gray">{inquiry.documentCount} file(s)</span>
+      <div className="min-w-0 space-y-4">
+        <div className="overflow-hidden rounded-2xl border border-surface-border bg-surface-raised p-4 md:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-ink-primary">Document review status</p>
+                <WorkflowBadge value={inquiry.documentStatus} />
+                <span className="badge badge-gray">{inquiry.documentCount} file(s)</span>
+              </div>
+              <p className="text-xs leading-5 text-ink-muted">
+                {documentReviewState.allRequiredReady
+                  ? 'All required files for this case are already on file.'
+                  : `Still needed before review is clean: ${documentReviewState.missingRequiredItems.map((item) => item.label).join(', ')}.`}
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[280px]">
+              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Required Coverage</p>
+                <p className="mt-2 text-lg font-black tracking-tight text-ink-primary">
+                  {documentReviewState.requiredReadyCount}/{documentReviewState.requiredTotalCount}
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {documentReviewState.allRequiredReady ? 'Ready for review' : 'Missing at least one core file'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Helpful On File</p>
+                <p className="mt-2 text-lg font-black tracking-tight text-ink-primary">
+                  {documentReviewState.supportingItems.filter((item) => item.complete).length}
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  Extra claim, quote, or renewal attachments already uploaded
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="grid min-w-0 gap-3 xl:grid-cols-2">
+          <div className="min-w-0 rounded-2xl border border-surface-border bg-surface-raised p-4">
+            <p className="text-sm font-semibold text-ink-primary">Required now</p>
+            <div className="mt-3 space-y-2">
+              {documentReviewState.requiredItems.map((item) => (
+                <div
+                  key={item.type}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-card px-3 py-2"
+                >
+                  <span className="text-sm text-ink-primary">{item.label}</span>
+                  <span className={`badge ${item.complete ? 'badge-green' : 'badge-gray'}`}>
+                    {item.complete ? 'On file' : 'Missing'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="min-w-0 rounded-2xl border border-surface-border bg-surface-raised p-4">
+            <p className="text-sm font-semibold text-ink-primary">Helpful next</p>
+            <div className="mt-3 space-y-2">
+              {documentReviewState.supportingItems.length ? (
+                documentReviewState.supportingItems.map((item) => (
+                  <div
+                    key={item.type}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-card px-3 py-2"
+                  >
+                    <span className="text-sm text-ink-primary">{item.label}</span>
+                    <span className={`badge ${item.complete ? 'badge-blue' : 'badge-gray'}`}>
+                      {item.complete ? 'Attached' : 'Optional'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-ink-muted">
+                  No extra supporting files are suggested for this purpose beyond the uploaded set.
+                </p>
+              )}
+            </div>
           </div>
         </div>
         {inquiry.documents?.length ? (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {inquiry.documents.map((document) => (
-              <div
-                key={document.id ?? `${document.fileName}-${document.fileUrl}`}
-                className="rounded-xl border border-surface-border bg-surface-card px-4 py-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-bold text-ink-primary">{document.fileName}</p>
-                    <p className="mt-1 break-all text-xs text-ink-muted">{document.fileUrl}</p>
-                  </div>
-                  <WorkflowBadge value={document.documentTypeLabel || document.documentType}>
-                    {document.documentTypeLabel || formatStatusLabel(document.documentType)}
-                  </WorkflowBadge>
-                </div>
-                {document.notes ? <p className="mt-3 text-xs leading-5 text-ink-secondary">{document.notes}</p> : null}
-                <p className="mt-3 text-[11px] text-ink-muted">Uploaded {formatDateTime(document.createdAt)}</p>
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-surface-border bg-surface-raised/60 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Uploaded files</p>
+              <p className="mt-1 text-sm text-ink-secondary">
+                Review the exact evidence attached to this case. Required files should stay on top, while supporting files help staff verify the concern faster.
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-[28px] border border-surface-border bg-surface-raised p-3 md:p-4">
+              <div className="space-y-3">
+                {inquiry.documents.map((document) => {
+                  const DocumentIcon = getInsuranceDocumentIcon(document.documentType)
+
+                  return (
+                    <article
+                      key={document.id ?? `${document.fileName}-${document.fileUrl}`}
+                      className="min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-surface-card p-4 shadow-card-sm"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#f07c00]/15"
+                          style={{ background: 'rgba(240, 124, 0, 0.14)', color: '#f07c00' }}
+                        >
+                          <DocumentIcon size={18} />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-3">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="break-words text-sm font-bold leading-6 text-ink-primary">
+                                {document.fileName}
+                              </p>
+                              <p className="mt-1 text-[11px] text-ink-muted">
+                                Uploaded {formatDateTime(document.createdAt)}
+                              </p>
+                            </div>
+                            <WorkflowBadge value={document.documentTypeLabel || document.documentType}>
+                              {document.documentTypeLabel || formatStatusLabel(document.documentType)}
+                            </WorkflowBadge>
+                          </div>
+
+                          {document.notes ? (
+                            <div className="rounded-xl border border-surface-border bg-surface-raised px-3 py-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-dim">
+                                Staff note
+                              </p>
+                              <p className="mt-2 text-sm leading-6 text-ink-secondary">{document.notes}</p>
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-dashed border-surface-border bg-surface-raised/70 px-3 py-3">
+                              <p className="text-xs text-ink-muted">No staff note attached.</p>
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-dim">
+                            <span className="rounded-full border border-surface-border bg-surface-raised px-2.5 py-1">
+                              Ready for review
+                            </span>
+                            {document.fileUrl ? (
+                              <span className="rounded-full border border-surface-border bg-surface-raised px-2.5 py-1">
+                                Stored in insurance uploads
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
               </div>
-            ))}
+            </div>
           </div>
         ) : (
           <EmptyPanel
@@ -452,7 +662,13 @@ function InsuranceDetailTabContent({ inquiry, tabKey }) {
         <DetailField label="Payment Status" value={formatStatusLabel(inquiry.paymentStatus)} />
         <DetailField label="Payment Due" value={formatDateOnly(inquiry.paymentDueAt)} />
         <div className="md:col-span-2">
-          <DetailField label="Payment Notes" value={inquiry.reviewNotes || inquiry.notes} />
+          <DetailField label="Payment Guidance" value={getInsurancePaymentGuidance(inquiry)} />
+        </div>
+        <div className="md:col-span-2">
+          <DetailField
+            label="When This Tab Matters"
+            value="Use Payment only when staff intentionally move the case into payment follow-up. For most claim intake and standard review work, the customer never needs to do anything here."
+          />
         </div>
       </div>
     )
@@ -465,6 +681,9 @@ function InsuranceDetailTabContent({ inquiry, tabKey }) {
         <DetailField label="Policy Expiry" value={formatDateOnly(inquiry.policyExpiryAt)} />
         <DetailField label="Renewal Due" value={formatDateOnly(inquiry.renewalDueAt)} />
         <DetailField label="Assigned Staff" value={inquiry.assignedStaffId} />
+        <div className="md:col-span-2">
+          <DetailField label="Renewal Guidance" value={getInsuranceRenewalGuidance(inquiry)} />
+        </div>
       </div>
     )
   }
@@ -594,12 +813,18 @@ export default function InsuranceContent() {
 
   const filteredInquiries = useMemo(() => {
     const searchNeedle = filters.search.trim().toLowerCase()
+    const liveQueueInquiries = inquiries.filter((inquiry) =>
+      shouldIncludeInsuranceInquiryInLiveQueue({
+        inquiry,
+        statusFilter: normalizeFilterValue(filters.status),
+      }),
+    )
 
     if (!searchNeedle) {
-      return inquiries
+      return liveQueueInquiries
     }
 
-    return inquiries.filter((inquiry) =>
+    return liveQueueInquiries.filter((inquiry) =>
       [
         inquiry.id,
         inquiry.customerDisplayName,
@@ -610,7 +835,7 @@ export default function InsuranceContent() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(searchNeedle)),
     )
-  }, [filters.search, inquiries])
+  }, [filters.search, filters.status, inquiries])
 
   const queueFilterSummary = useMemo(
     () =>
@@ -630,19 +855,19 @@ export default function InsuranceContent() {
   )
 
   useEffect(() => {
-    if (!inquiries.length) {
+    if (!filteredInquiries.length) {
       setSelectedInquiryId('')
       return
     }
 
-    if (!inquiries.some((inquiry) => inquiry.id === selectedInquiryId)) {
-      setSelectedInquiryId(inquiries[0].id)
+    if (!filteredInquiries.some((inquiry) => inquiry.id === selectedInquiryId)) {
+      setSelectedInquiryId(filteredInquiries[0].id)
     }
-  }, [inquiries, selectedInquiryId])
+  }, [filteredInquiries, selectedInquiryId])
 
   const selectedInquiry = useMemo(
-    () => inquiries.find((inquiry) => inquiry.id === selectedInquiryId) ?? null,
-    [inquiries, selectedInquiryId],
+    () => filteredInquiries.find((inquiry) => inquiry.id === selectedInquiryId) ?? null,
+    [filteredInquiries, selectedInquiryId],
   )
 
   const nextStatuses = useMemo(
@@ -751,8 +976,11 @@ export default function InsuranceContent() {
     [activeFilterCount, filteredInquiries.length, selectedInquiry, selectedInquiryIds.length],
   )
 
-  const handleFilterChange = (field) => (event) => {
-    const nextValue = event.target.value
+  const handleFilterChange = (field) => (nextValueOrEvent) => {
+    const nextValue =
+      typeof nextValueOrEvent === 'string'
+        ? nextValueOrEvent
+        : nextValueOrEvent?.target?.value ?? 'all'
 
     setFilters((current) => ({
       ...current,
@@ -762,9 +990,9 @@ export default function InsuranceContent() {
 
   useEffect(() => {
     setSelectedInquiryIds((currentIds) =>
-      currentIds.filter((inquiryId) => inquiries.some((inquiry) => inquiry.id === inquiryId)),
+      currentIds.filter((inquiryId) => filteredInquiries.some((inquiry) => inquiry.id === inquiryId)),
     )
-  }, [inquiries])
+  }, [filteredInquiries])
 
   const toggleInquirySelection = (inquiryId) => {
     setSelectedInquiryIds((currentIds) =>
@@ -865,6 +1093,11 @@ export default function InsuranceContent() {
         reviewNotes: updateDraft.reviewNotes,
         accessToken: user.accessToken,
       })
+      const refreshedNextStatuses = getAllowedInsuranceStatusTargets(updatedInquiry.status)
+      const refreshedUpdateDraft = {
+        status: refreshedNextStatuses[0] ?? updatedInquiry.status,
+        reviewNotes: updatedInquiry.reviewNotes ?? '',
+      }
 
       setInquiries((currentInquiries) =>
         currentInquiries.map((inquiry) => (inquiry.id === updatedInquiry.id ? updatedInquiry : inquiry)),
@@ -875,6 +1108,7 @@ export default function InsuranceContent() {
           selectedInquiryId: selectedInquiryIdRef.current,
         })
       ) {
+        setUpdateDraft(refreshedUpdateDraft)
         setUpdateState('status_update_saved')
         setUpdateMessage(`Insurance workflow updated to ${formatStatusLabel(updatedInquiry.status)}.`)
       }
@@ -1098,28 +1332,28 @@ export default function InsuranceContent() {
             <div className="grid gap-3 md:grid-cols-2">
               <label className="label">
                 Reminder Type
-                <select value={reminderType} onChange={(event) => setReminderType(event.target.value)} className="select">
-                  {REMINDER_TYPE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {formatStatusLabel(option)}
-                    </option>
-                  ))}
-                </select>
+                <PortalSelect
+                  value={reminderType}
+                  onValueChange={setReminderType}
+                  placeholder="Reminder type"
+                  items={REMINDER_TYPE_OPTIONS.map((option) => ({
+                    value: option,
+                    label: formatStatusLabel(option),
+                  }))}
+                />
               </label>
 
               <label className="label">
                 Target Mode
-                <select
+                <PortalSelect
                   value={reminderTargetMode}
-                  onChange={(event) => setReminderTargetMode(event.target.value)}
-                  className="select"
-                >
-                  {REMINDER_TARGET_MODE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {formatReminderTargetModeLabel(option)}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setReminderTargetMode}
+                  placeholder="Target mode"
+                  items={REMINDER_TARGET_MODE_OPTIONS.map((option) => ({
+                    value: option,
+                    label: formatReminderTargetModeLabel(option),
+                  }))}
+                />
               </label>
             </div>
 
@@ -1175,17 +1409,15 @@ export default function InsuranceContent() {
             <div className="grid gap-3 md:grid-cols-2">
               <label className="label">
                 Target Mode
-                <select
+                <PortalSelect
                   value={broadcastTargetMode}
-                  onChange={(event) => setBroadcastTargetMode(event.target.value)}
-                  className="select"
-                >
-                  {BROADCAST_TARGET_MODE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {formatReminderTargetModeLabel(option)}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setBroadcastTargetMode}
+                  placeholder="Target mode"
+                  items={BROADCAST_TARGET_MODE_OPTIONS.map((option) => ({
+                    value: option,
+                    label: formatReminderTargetModeLabel(option),
+                  }))}
+                />
               </label>
             </div>
 
@@ -1348,14 +1580,16 @@ export default function InsuranceContent() {
               copy={
                 queueFilterSummary.hasActiveFilters
                   ? 'Broaden the filters or refresh the queue.'
-                  : 'No live insurance cases yet. Refresh when new intake arrives.'
+                  : inquiries.length
+                    ? 'Only cancelled, rejected, or closed cases remain, so the live queue is clear.'
+                    : 'No live insurance cases yet. Refresh when new intake arrives.'
               }
             />
           )}
         </section>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-          <div className="card p-4 md:p-5">
+          <div className="card overflow-hidden p-4 md:p-5">
             <WorkspaceSectionHeader
               title={workspaceSections.detail.title}
               description={workspaceSections.detail.description}
@@ -1399,9 +1633,9 @@ export default function InsuranceContent() {
               </TabsPrimitives.List>
 
               {detailTabs.map((tab) => (
-                <TabsPrimitives.Content key={tab.key} value={tab.key} className="mt-4">
-                  <ScrollAreaPrimitives.Root className="max-h-[640px]">
-                    <ScrollAreaPrimitives.Viewport className="pr-2">
+                <TabsPrimitives.Content key={tab.key} value={tab.key} className="mt-4 min-w-0">
+                  <ScrollAreaPrimitives.Root className="max-h-[640px] overflow-hidden rounded-2xl">
+                    <ScrollAreaPrimitives.Viewport className="h-[640px] min-w-0 pr-2">
                       <InsuranceDetailTabContent inquiry={selectedInquiry} tabKey={tab.key} />
                     </ScrollAreaPrimitives.Viewport>
                     <ScrollAreaPrimitives.Scrollbar orientation="vertical" className="primitive-scrollbar">
@@ -1419,7 +1653,7 @@ export default function InsuranceContent() {
               description={workspaceSections.actions.description}
               action={
                 <span className={`badge ${nextStatuses.length ? 'badge-green' : 'badge-gray'}`}>
-                  {nextStatuses.length ? `${nextStatuses.length} valid next state${nextStatuses.length === 1 ? '' : 's'}` : 'No valid transition'}
+                  {nextStatuses.length ? `${nextStatuses.length} valid next state${nextStatuses.length === 1 ? '' : 's'}` : selectedInquiry ? 'View-only case' : 'Pick a live case'}
                 </span>
               }
             />
@@ -1427,26 +1661,29 @@ export default function InsuranceContent() {
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="label">
                 Next Status
-                <select
+                <PortalSelect
                   value={updateDraft.status}
-                  onChange={(event) =>
-                    setUpdateDraft((current) => ({ ...current, status: event.target.value }))
+                  onValueChange={(nextStatus) => {
+                    setUpdateDraft((current) => ({ ...current, status: nextStatus }))
+                    setUpdateState('status_update_ready')
+                    setUpdateMessage('')
+                  }}
+                  placeholder="Next status"
+                  items={
+                    nextStatuses.length
+                      ? nextStatuses.map((status) => ({
+                          value: status,
+                          label: formatStatusLabel(status),
+                        }))
+                      : [
+                          {
+                            value: selectedInquiry?.status ?? 'closed',
+                            label: selectedInquiry ? 'This case is view-only' : 'Select a live case first',
+                          },
+                        ]
                   }
-                  className="select"
                   disabled={!selectedInquiry || !nextStatuses.length}
-                >
-                  {nextStatuses.length ? (
-                    nextStatuses.map((status) => (
-                      <option key={status} value={status}>
-                        {formatStatusLabel(status)}
-                      </option>
-                    ))
-                  ) : (
-                    <option value={selectedInquiry?.status ?? 'closed'}>
-                      {selectedInquiry ? 'No valid transition available' : 'Select a case first'}
-                    </option>
-                  )}
-                </select>
+                />
               </label>
 
               <label className="label md:col-span-2">
@@ -1454,7 +1691,11 @@ export default function InsuranceContent() {
                 <textarea
                   value={updateDraft.reviewNotes}
                   onChange={(event) =>
-                    setUpdateDraft((current) => ({ ...current, reviewNotes: event.target.value }))
+                    {
+                      setUpdateDraft((current) => ({ ...current, reviewNotes: event.target.value }))
+                      setUpdateState('status_update_ready')
+                      setUpdateMessage('')
+                    }
                   }
                   rows={4}
                   className="input min-h-[120px] resize-y"
@@ -1492,10 +1733,10 @@ export default function InsuranceContent() {
               </button>
               <span className="badge badge-gray">
                 {!selectedInquiry
-                  ? 'Pick a case to edit'
+                  ? 'Pick a live case from the queue'
                   : nextStatuses.length
                     ? 'Status and review notes only'
-                    : 'No transition available'}
+                    : 'View-only terminal case'}
               </span>
             </div>
           </div>

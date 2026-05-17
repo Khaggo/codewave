@@ -79,7 +79,7 @@ export interface StaffJobOrderHandoffCandidate {
   scheduledDate: string;
   timeSlotId: string | null;
   timeSlotLabel: string;
-  bookingStatus: Extract<BookingStatus, 'confirmed'>;
+  bookingStatus: Extract<BookingStatus, 'confirmed' | 'in_service'>;
   customerLabel: string;
   vehicleLabel: string;
   serviceSummary: string;
@@ -121,7 +121,7 @@ export const staffJobOrderHandoffRules: StaffJobOrderWorkbenchHandoffRule[] = [
     truth: 'derived-booking-read-model',
     routeKey: 'getDailySchedule',
     allowedRoles: staffJobOrderWorkbenchRoles,
-    description: 'Confirmed bookings are available to hand off into job-order creation without mutating booking truth.',
+    description: 'Confirmed and workshop-handoff bookings are available to hand off into job-order creation without mutating booking truth.',
   },
   {
     state: 'handoff_empty',
@@ -129,7 +129,7 @@ export const staffJobOrderHandoffRules: StaffJobOrderWorkbenchHandoffRule[] = [
     truth: 'derived-booking-read-model',
     routeKey: 'getDailySchedule',
     allowedRoles: staffJobOrderWorkbenchRoles,
-    description: 'No confirmed bookings are available for job-order handoff in the selected schedule view.',
+    description: 'No confirmed or workshop-handoff bookings are available for job-order handoff in the selected schedule view.',
   },
   {
     state: 'handoff_forbidden_role',
@@ -156,7 +156,7 @@ export const staffJobOrderCreateRules: StaffJobOrderCreateRule[] = [
     truth: 'client-guard',
     routeKey: 'createJobOrder',
     allowedRoles: staffJobOrderWorkbenchRoles,
-    description: 'A confirmed booking handoff is selected and the draft is ready for job-order creation.',
+    description: 'A confirmed or workshop-handoff booking is selected and the draft is ready for job-order creation.',
   },
   {
     state: 'create_submitting',
@@ -345,7 +345,7 @@ export const buildBookingJobOrderHandoffCandidate = (
   scheduledDate: booking.scheduledDate,
   timeSlotId: booking.timeSlotId ?? null,
   timeSlotLabel: booking.timeSlot?.label ?? 'Unscheduled slot',
-  bookingStatus: 'confirmed',
+  bookingStatus: booking.status === 'in_service' ? 'in_service' : 'confirmed',
   customerLabel:
     booking.customerLabel ??
     booking.userId ??

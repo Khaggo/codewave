@@ -3,6 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import OtpInputGroup from '../components/OtpInputGroup';
 import ScreenShell from '../components/ScreenShell';
+import { requestForgotPasswordOtp } from '../lib/authClient';
 import { colors, radius } from '../theme';
 
 const RESEND_SECONDS = 17;
@@ -82,13 +83,6 @@ export default function ForgotPasswordOTP({ navigation, route }) {
       return;
     }
 
-    if (otp !== '123456') {
-      setError('Incorrect OTP. Use 123456 for this prototype.');
-      showInlineToast('Invalid code. Please try again.');
-      Alert.alert('Invalid Code', 'The OTP you entered is invalid. Please try again.');
-      return;
-    }
-
     showInlineToast('OTP verified. Proceed to password reset.', 'success');
     Alert.alert(
       'OTP Verified',
@@ -99,21 +93,44 @@ export default function ForgotPasswordOTP({ navigation, route }) {
           onPress: () =>
             navigation.navigate('ResetPassword', {
               email: route.params?.email,
+              enrollmentId: route.params?.enrollmentId ?? null,
+              otp,
             }),
         },
       ],
     );
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
     if (resendCountdown > 0) {
       return;
     }
 
-    setOtp('');
-    setError('');
-    setResendCountdown(RESEND_SECONDS);
-    showInlineToast('A fresh verification code was sent.', 'success');
+    try {
+      const normalizedEmail = route.params?.email;
+      const enrollment = await requestForgotPasswordOtp({
+        email: normalizedEmail,
+      });
+
+      navigation.setParams({
+        email: normalizedEmail,
+        maskedEmail: enrollment?.maskedEmail ?? normalizedEmail,
+        enrollmentId: enrollment?.enrollmentId ?? route.params?.enrollmentId ?? null,
+        otpExpiresAt: enrollment?.otpExpiresAt ?? null,
+      });
+      setOtp('');
+      setError('');
+      setResendCountdown(RESEND_SECONDS);
+      showInlineToast('A fresh verification code was sent.', 'success');
+    } catch (resendError) {
+      const message =
+        resendError instanceof Error
+          ? resendError.message
+          : 'We could not resend the password reset code right now.';
+      setError(message);
+      showInlineToast(message);
+      Alert.alert('Resend Failed', message);
+    }
   };
 
   return (
@@ -154,7 +171,9 @@ export default function ForgotPasswordOTP({ navigation, route }) {
           <Text style={styles.messageTitle}>
             We sent a <Text style={styles.messageStrong}>6-digit verification code</Text> to
           </Text>
-          <Text style={styles.emailText}>{route.params?.email || 'your email address'}</Text>
+          <Text style={styles.emailText}>
+            {route.params?.maskedEmail || route.params?.email || 'your email address'}
+          </Text>
           <Text style={styles.messageSubtitle}>Check your inbox and spam folder</Text>
         </View>
 
@@ -186,16 +205,15 @@ export default function ForgotPasswordOTP({ navigation, route }) {
           {resendCountdown > 0 ? (
             <Text style={styles.resendCountdown}>Resend in {resendCountdown}s</Text>
           ) : (
-            <Text style={styles.resendAction} onPress={handleResend}>
+            <Text
+              style={styles.resendAction}
+              onPress={() => {
+                void handleResend();
+              }}
+            >
               Resend now
             </Text>
           )}
-        </View>
-
-        <View style={styles.demoCard}>
-          <Text style={styles.demoText}>
-            Demo code: <Text style={styles.demoCode}>1 2 3 4 5 6</Text>
-          </Text>
         </View>
       </View>
     </ScreenShell>
@@ -371,24 +389,5 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 15,
     fontWeight: '800',
-  },
-  demoCard: {
-    marginHorizontal: 24,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  demoText: {
-    color: colors.mutedText,
-    fontSize: 13,
-  },
-  demoCode: {
-    color: colors.text,
-    fontWeight: '800',
-    letterSpacing: 2,
   },
 });

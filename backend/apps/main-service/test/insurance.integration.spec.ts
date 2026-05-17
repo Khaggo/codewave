@@ -415,6 +415,97 @@ describe('InsuranceController integration', () => {
     }
   });
 
+  it('recomputes insurance document status from uploaded required files by purpose', async () => {
+    const { app, seedAuthUser } = await createMainServiceTestApp();
+
+    try {
+      const customer = await seedAuthUser({
+        email: 'customer.insurance.docs-complete@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
+      });
+
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+        userId: customer.id,
+        plateNumber: 'INS110C',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2024,
+      });
+      expect(vehicleResponse.status).toBe(201);
+
+      const claimInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          purpose: 'claim',
+          subject: 'Claim completeness',
+          description: 'Customer submitted a claim and will upload OR/CR first.',
+        });
+      expect(claimInquiryResponse.status).toBe(201);
+      expect(claimInquiryResponse.body.documentStatus).toBe('incomplete');
+
+      const claimDocumentResponse = await request(app.getHttpServer())
+        .post(`/api/insurance/inquiries/${claimInquiryResponse.body.id}/documents`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          fileName: 'or-cr-claim.pdf',
+          fileUrl: 'https://files.autocare.local/insurance/or-cr-claim.pdf',
+          documentType: 'or_cr',
+          notes: 'Readable OR/CR copy for the claim intake.',
+        });
+      expect(claimDocumentResponse.status).toBe(200);
+      expect(claimDocumentResponse.body.documentStatus).toBe('complete');
+
+      const renewalInquiryResponse = await request(app.getHttpServer())
+        .post('/api/insurance/inquiries')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          inquiryType: 'comprehensive',
+          purpose: 'renewal',
+          subject: 'Renewal completeness',
+          description: 'Customer is uploading renewal requirements.',
+        });
+      expect(renewalInquiryResponse.status).toBe(201);
+      expect(renewalInquiryResponse.body.documentStatus).toBe('incomplete');
+
+      const renewalOrCrResponse = await request(app.getHttpServer())
+        .post(`/api/insurance/inquiries/${renewalInquiryResponse.body.id}/documents`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          fileName: 'or-cr-renewal.pdf',
+          fileUrl: 'https://files.autocare.local/insurance/or-cr-renewal.pdf',
+          documentType: 'or_cr',
+        });
+      expect(renewalOrCrResponse.status).toBe(200);
+      expect(renewalOrCrResponse.body.documentStatus).toBe('incomplete');
+
+      const renewalPolicyResponse = await request(app.getHttpServer())
+        .post(`/api/insurance/inquiries/${renewalInquiryResponse.body.id}/documents`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          fileName: 'old-policy.pdf',
+          fileUrl: 'https://files.autocare.local/insurance/old-policy.pdf',
+          documentType: 'policy',
+        });
+      expect(renewalPolicyResponse.status).toBe(200);
+      expect(renewalPolicyResponse.body.documentStatus).toBe('complete');
+    } finally {
+      await app.close();
+    }
+  });
+
   it('lists insurance cases for staff with workflow filters', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 

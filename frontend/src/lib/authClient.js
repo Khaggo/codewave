@@ -6,6 +6,7 @@ const API_BASE_URL = deriveApiBaseUrl({
 });
 
 export const SESSION_STORAGE_KEY = 'cc_auth_session';
+export const STAFF_SESSION_UNAUTHORIZED_EVENT = 'cc-staff-session-unauthorized';
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -15,6 +16,18 @@ export class ApiError extends Error {
     this.details = details;
   }
 }
+
+export const notifyStaffSessionUnauthorized = (details = null) => {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(STAFF_SESSION_UNAUTHORIZED_EVENT, {
+      detail: details ?? null,
+    }),
+  );
+};
 
 const formatRoleLabel = (role) =>
   String(role ?? '')
@@ -42,6 +55,11 @@ const buildInitials = (name) =>
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('') || 'AC';
+
+const normalizePhoneNumber = (value) =>
+  String(value ?? '')
+    .replace(/\D/g, '')
+    .slice(0, 11);
 
 const normalizeSessionUser = (userResponse = {}, fallbackUser = {}) => {
   const mergedUser = {
@@ -84,6 +102,7 @@ const inferAccountType = (account) => {
   const staffCode = String(account?.staffCode ?? '').toUpperCase();
   if (staffCode.startsWith('MEC-')) return 'mechanic';
   if (staffCode.startsWith('TEC-')) return 'technician';
+  if (staffCode.startsWith('HTC-')) return 'head_technician';
   if (staffCode.startsWith('ADM-')) return 'admin';
   return 'staff';
 };
@@ -92,6 +111,7 @@ const accountTypeLabel = {
   staff: 'Staff',
   mechanic: 'Mechanic',
   technician: 'Technician',
+  head_technician: 'Head Technician',
   admin: 'Admin',
 };
 
@@ -123,21 +143,46 @@ const normalizeCustomerRecord = (customer) => {
   };
 };
 
+const AUTH_REQUEST_TIMEOUT_MS = 12000;
+
 const request = async (path, options = {}) => {
-  const { body, headers, ...rest } = options;
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...rest,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(headers ?? {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const { body, headers, timeoutMs = AUTH_REQUEST_TIMEOUT_MS, ...rest } = options;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...rest,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(headers ?? {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new ApiError('Authentication request timed out. Please try again.', 408, null);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const rawText = await response.text();
   const data = rawText ? JSON.parse(rawText) : null;
 
   if (!response.ok) {
+    if (response.status === 401 && headers?.Authorization) {
+      notifyStaffSessionUnauthorized({
+        path,
+        source: 'authClient',
+      });
+    }
+
     const message =
       data?.message && typeof data.message === 'string'
         ? data.message
@@ -217,6 +262,27 @@ export const updateAdminCustomerStatus = async (userId, payload, accessToken) =>
     },
     body: payload,
   }).then(normalizeCustomerRecord);
+
+export const updateStaffPortalProfile = async ({
+  userId,
+  accessToken,
+  firstName,
+  lastName,
+  phoneNumber,
+}) =>
+  normalizeSessionUser(
+    await request(`/api/users/${userId}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: {
+        firstName: String(firstName ?? '').trim() || undefined,
+        lastName: String(lastName ?? '').trim() || undefined,
+        phone: normalizePhoneNumber(phoneNumber) || undefined,
+      },
+    }),
+  );
 
 export const refreshAuthSession = async (refreshToken) =>
   normalizeSession(

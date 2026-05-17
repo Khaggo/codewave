@@ -8,7 +8,9 @@ const customerInsuranceStatusHints = {
   under_review: 'A service adviser is currently reviewing the insurance request.',
   needs_documents: 'More documents are needed before staff can continue the request.',
   for_approval: 'The inquiry is waiting for final approval.',
+  approved: 'The inquiry is approved and may move into payment, activation, or renewal follow-up next.',
   payment_pending: 'A payment step is still in progress for this inquiry.',
+  active: 'The insurance request is active and no longer waiting on intake review.',
   for_renewal: 'The inquiry is now waiting on renewal follow-up.',
   rejected: 'The inquiry cannot continue in its current state.',
   closed: 'The inquiry is closed and no longer accepting changes.',
@@ -55,7 +57,7 @@ const getInsuranceClientRuntime = async () => {
 };
 
 const request = async (path, options = {}) => {
-  const { ApiError, getApiBaseUrl } = await getInsuranceClientRuntime();
+  const { ApiError, getApiBaseUrl, notifyCustomerSessionExpired } = await getInsuranceClientRuntime();
   const API_BASE_URL = getApiBaseUrl();
   const {
     body,
@@ -98,6 +100,13 @@ const request = async (path, options = {}) => {
       }
 
       if (!response.ok) {
+        if (response.status === 401) {
+          notifyCustomerSessionExpired({
+            path,
+            source: 'insuranceClient',
+          });
+        }
+
         const message =
           data?.message && typeof data.message === 'string'
             ? data.message
@@ -199,11 +208,11 @@ export const buildOwnedVehicleInsuranceLabel = (vehicle) => {
 export const createInitialCustomerInsuranceDraft = () => ({
   purpose: 'claim',
   inquiryType: 'comprehensive',
-  subject: '',
   description: '',
   providerName: '',
   policyNumber: '',
   notes: '',
+  renewalPolicyMode: 'reuse',
 });
 
 export const createInitialCustomerInsuranceDocumentDraft = () => ({

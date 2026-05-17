@@ -17,12 +17,12 @@ export const validateEnv = (config: EnvRecord): EnvRecord => {
     throw new Error('Missing required environment variable: RABBITMQ_URL');
   }
 
-  const smtpKeys = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'] as const;
-  const hasAnySmtpValue = smtpKeys.some((key) => Boolean(config[key]));
-  const missingSmtpKeys = smtpKeys.filter((key) => !config[key]);
-  if (hasAnySmtpValue && missingSmtpKeys.length > 0) {
+  const resendKeys = ['RESEND_API_KEY', 'RESEND_FROM_EMAIL'] as const;
+  const hasAnyResendValue = resendKeys.some((key) => Boolean(config[key]));
+  const missingResendKeys = resendKeys.filter((key) => !config[key]);
+  if (hasAnyResendValue && missingResendKeys.length > 0) {
     throw new Error(
-      `Missing required SMTP environment variables: ${missingSmtpKeys.join(', ')}`,
+      `Missing required Resend environment variables: ${missingResendKeys.join(', ')}`,
     );
   }
 
@@ -30,16 +30,41 @@ export const validateEnv = (config: EnvRecord): EnvRecord => {
     'PAYMONGO_PUBLIC_KEY',
     'PAYMONGO_SECRET_KEY',
     'PAYMONGO_WEBHOOK_SECRET',
+    'PAYMONGO_BOOKING_WEBHOOK_SECRET',
+    'PAYMONGO_SERVICE_INVOICE_WEBHOOK_SECRET',
+    'PAYMONGO_ECOMMERCE_WEBHOOK_SECRET',
     'PAYMONGO_CHECKOUT_SUCCESS_URL',
     'PAYMONGO_CHECKOUT_CANCEL_URL',
   ] as const;
   const hasAnyPaymongoValue = paymongoKeys.some((key) => Boolean(config[key]));
-  if (hasAnyPaymongoValue && !config.PAYMONGO_SECRET_KEY) {
-    throw new Error('Missing required PayMongo environment variable: PAYMONGO_SECRET_KEY');
+  if (hasAnyPaymongoValue) {
+    if (!config.PAYMONGO_SECRET_KEY) {
+      throw new Error('Missing required PayMongo environment variable: PAYMONGO_SECRET_KEY');
+    }
+
+    if (!config.PAYMONGO_CHECKOUT_SUCCESS_URL || !config.PAYMONGO_CHECKOUT_CANCEL_URL) {
+      throw new Error(
+        'Missing required PayMongo environment variables: PAYMONGO_CHECKOUT_SUCCESS_URL, PAYMONGO_CHECKOUT_CANCEL_URL',
+      );
+    }
   }
 
   if (config.PAYMONGO_WEBHOOK_SECRET && !config.PAYMONGO_SECRET_KEY) {
     throw new Error('PAYMONGO_WEBHOOK_SECRET requires PAYMONGO_SECRET_KEY to be configured');
+  }
+
+  const paymongoWebhookKeys = [
+    'PAYMONGO_WEBHOOK_SECRET',
+    'PAYMONGO_BOOKING_WEBHOOK_SECRET',
+    'PAYMONGO_SERVICE_INVOICE_WEBHOOK_SECRET',
+    'PAYMONGO_ECOMMERCE_WEBHOOK_SECRET',
+  ] as const;
+
+  const hasAnyPaymongoWebhookSecret = paymongoWebhookKeys.some((key) => Boolean(config[key]));
+  if (hasAnyPaymongoValue && !hasAnyPaymongoWebhookSecret) {
+    throw new Error(
+      'Missing required PayMongo webhook secret. Configure PAYMONGO_WEBHOOK_SECRET or the domain-specific PAYMONGO_*_WEBHOOK_SECRET values.',
+    );
   }
 
   return config;

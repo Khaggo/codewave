@@ -509,7 +509,7 @@ export default function AdminAnalyticsWorkspace() {
         <AlertTriangle size={24} className="text-brand-orange" />
         <h1 className="mt-3 text-2xl font-black text-ink-primary">Admin analytics is adviser and admin only</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-secondary">
-          Sign in as a service adviser or super admin to view the analytics dashboard and summary-review hub.
+          Sign in as a service adviser or super admin to view the protected analytics dashboard.
         </p>
       </section>
     )

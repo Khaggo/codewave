@@ -1,4 +1,4 @@
-import { ApiError } from './authClient.js';
+import { ApiError, notifyStaffSessionUnauthorized } from './authClient.js';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 const INSURANCE_REMINDER_FILTER_FIELDS = ['purpose', 'status', 'paymentStatus', 'renewalStatus'];
@@ -249,6 +249,13 @@ const request = async (path, options = {}) => {
   const data = rawText ? JSON.parse(rawText) : null;
 
   if (!response.ok) {
+    if (response.status === 401) {
+      notifyStaffSessionUnauthorized({
+        path,
+        source: 'insuranceStaffClient',
+      });
+    }
+
     const message =
       data?.message && typeof data.message === 'string'
         ? data.message

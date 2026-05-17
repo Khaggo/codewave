@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   buildInsuranceBroadcastRequest,
+  buildInsuranceDocumentReviewState,
   buildInsurancePrimaryFocus,
   buildInsuranceWorkspaceSections,
   buildInsuranceTableRow,
@@ -12,10 +13,12 @@ import {
   getInsuranceReminderComposerState,
   getNextInsuranceWorkspaceViewState,
   shouldApplyInsuranceAsyncResult,
+  shouldIncludeInsuranceInquiryInLiveQueue,
   summarizeInsuranceBroadcastResult,
   summarizeInsuranceReminderResult,
   formatStatusLabel,
   getInsuranceDetailTabs,
+  getInsuranceReviewStepNote,
   getInsuranceSummaryCards,
 } from './insuranceView.mjs'
 import * as insuranceStaffClient from '../../lib/insuranceStaffClient.js'
@@ -131,7 +134,59 @@ test('getInsuranceDetailTabs exposes overview, documents, timeline, payment, and
   )
 })
 
-test('getNextInsuranceWorkspaceViewState preserves tab, feedback, and dirty draft when the same inquiry refreshes', () => {
+test('getInsuranceReviewStepNote distinguishes review workflow progress from document completeness', () => {
+  assert.equal(
+    getInsuranceReviewStepNote({
+      status: 'under_review',
+      documentStatus: 'incomplete',
+    }),
+    'Documents Incomplete',
+  )
+
+  assert.equal(
+    getInsuranceReviewStepNote({
+      status: 'for_approval',
+      documentStatus: 'incomplete',
+    }),
+    'Ready for approval',
+  )
+
+  assert.equal(
+    getInsuranceReviewStepNote({
+      status: 'approved',
+      documentStatus: 'incomplete',
+    }),
+    'Completed',
+  )
+})
+
+test('buildInsuranceDocumentReviewState tracks required and supporting claim files', () => {
+  const reviewState = buildInsuranceDocumentReviewState({
+    purpose: 'claim',
+    documents: [
+      { documentType: 'or_cr' },
+      { documentType: 'photo' },
+      { documentType: 'estimate' },
+    ],
+  })
+
+  assert.equal(reviewState.allRequiredReady, true)
+  assert.equal(reviewState.requiredReadyCount, 1)
+  assert.equal(reviewState.requiredTotalCount, 1)
+  assert.deepEqual(
+    reviewState.missingRequiredItems,
+    [],
+  )
+  assert.deepEqual(
+    reviewState.supportingItems
+      .filter((item) => item.complete)
+      .map((item) => item.type)
+      .sort(),
+    ['estimate', 'photo'],
+  )
+})
+
+test('getNextInsuranceWorkspaceViewState rehydrates draft from saved inquiry state when the same inquiry refreshes after save', () => {
   const draftInProgress = {
     status: 'payment_pending',
     reviewNotes: 'Call customer before approval.',
@@ -154,9 +209,42 @@ test('getNextInsuranceWorkspaceViewState preserves tab, feedback, and dirty draf
       activeDetailTab: 'payment',
       detailMessage: 'Live insurance detail refreshed from the backend.',
       detailState: 'detail_loaded',
-      updateDraft: draftInProgress,
+      updateDraft: {
+        status: 'active',
+        reviewNotes: 'Waiting for proof review.',
+      },
       updateMessage: 'Insurance workflow updated to Payment Pending.',
       updateState: 'status_update_saved',
+    },
+  )
+})
+
+test('getNextInsuranceWorkspaceViewState still preserves a dirty draft while the same inquiry is being edited', () => {
+  const draftInProgress = {
+    status: 'payment_pending',
+    reviewNotes: 'Call customer before approval.',
+  }
+
+  assert.deepEqual(
+    getNextInsuranceWorkspaceViewState({
+      currentActiveDetailTab: 'payment',
+      currentDetailMessage: 'Live insurance detail refreshed from the backend.',
+      currentDetailState: 'detail_loaded',
+      currentUpdateDraft: draftInProgress,
+      currentUpdateMessage: '',
+      currentUpdateState: 'status_update_ready',
+      detailTabs: getInsuranceDetailTabs(),
+      nextInquiry: buildInquiryFixture(),
+      nextStatuses: ['active', 'for_renewal', 'closed'],
+      previousInquiryId: 'inq-1',
+    }),
+    {
+      activeDetailTab: 'payment',
+      detailMessage: 'Live insurance detail refreshed from the backend.',
+      detailState: 'detail_loaded',
+      updateDraft: draftInProgress,
+      updateMessage: '',
+      updateState: 'status_update_ready',
     },
   )
 })
@@ -509,6 +597,20 @@ test('buildInsurancePrimaryFocus prioritizes selecting a case before sending act
       tone: 'ready',
     },
   )
+
+  assert.deepEqual(
+    buildInsurancePrimaryFocus({
+      selectedInquiry: { id: 'inq-terminal', status: 'cancelled' },
+      selectedCount: 1,
+      filteredCount: 1,
+      activeFilterCount: 0,
+    }),
+    {
+      title: 'Case is already terminal',
+      description: 'Cancelled, rejected, and closed cases are view-only and do not stay in the live queue.',
+      tone: 'neutral',
+    },
+  )
 })
 
 test('buildInsuranceWorkspaceSections keeps the insurance page grouped into queue, detail, and actions', () => {
@@ -672,6 +774,52 @@ test('getInsuranceQueueFilterSummary explains visible queue counts and active fi
       detail: 'Server filters: Needs Documents, Upcoming. Search: “toyota”.',
       hasActiveFilters: true,
     },
+  )
+})
+
+test('getInsuranceQueueFilterSummary defaults to open-case wording for the live queue', () => {
+  assert.deepEqual(
+    getInsuranceQueueFilterSummary({
+      totalCount: 2,
+      visibleCount: 2,
+      filters: {
+        status: 'all',
+        paymentStatus: 'all',
+        renewalStatus: 'all',
+        search: '',
+      },
+    }),
+    {
+      headline: 'Showing 2 of 2 live cases',
+      detail: 'All open insurance cases are currently in view.',
+      hasActiveFilters: false,
+    },
+  )
+})
+
+test('shouldIncludeInsuranceInquiryInLiveQueue hides terminal cases unless they are explicitly filtered', () => {
+  assert.equal(
+    shouldIncludeInsuranceInquiryInLiveQueue({
+      inquiry: { id: 'inq-active', status: 'under_review' },
+      statusFilter: 'all',
+    }),
+    true,
+  )
+
+  assert.equal(
+    shouldIncludeInsuranceInquiryInLiveQueue({
+      inquiry: { id: 'inq-cancelled', status: 'cancelled' },
+      statusFilter: 'all',
+    }),
+    false,
+  )
+
+  assert.equal(
+    shouldIncludeInsuranceInquiryInLiveQueue({
+      inquiry: { id: 'inq-cancelled', status: 'cancelled' },
+      statusFilter: 'cancelled',
+    }),
+    true,
   )
 })
 

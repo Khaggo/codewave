@@ -460,3 +460,33 @@ export const recordJobOrderInvoicePayment = async ({
     }),
   );
 };
+
+export const startJobOrderInvoicePaymongoCheckout = async ({ jobOrderId, accessToken }) => {
+  if (!jobOrderId) {
+    throw new ApiError('Load a finalized job order before starting PayMongo checkout.', 400, {
+      path: '/api/job-orders/:id/invoice/paymongo/checkout',
+    });
+  }
+
+  return normalizeJobOrderForWorkbench(
+    await request(`/api/job-orders/${jobOrderId}/invoice/paymongo/checkout`, {
+      method: 'POST',
+      headers: buildAuthorizedHeaders(accessToken),
+    }),
+  );
+};
+
+export const reconcileJobOrderInvoicePaymongoCheckout = async ({ jobOrderId, accessToken }) => {
+  if (!jobOrderId) {
+    throw new ApiError('Load a finalized job order before refreshing PayMongo checkout.', 400, {
+      path: '/api/job-orders/:id/invoice/paymongo/reconcile',
+    });
+  }
+
+  return normalizeJobOrderForWorkbench(
+    await request(`/api/job-orders/${jobOrderId}/invoice/paymongo/reconcile`, {
+      method: 'POST',
+      headers: buildAuthorizedHeaders(accessToken),
+    }),
+  );
+};

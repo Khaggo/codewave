@@ -34,6 +34,68 @@ const pluralize = (count, singular, plural = `${singular}s`) => `${count} ${coun
 
 const isTerminalInquiry = (inquiry) => TERMINAL_INQUIRY_STATUSES.includes(inquiry?.status)
 
+const INSURANCE_DOCUMENT_LABELS = Object.freeze({
+  or_cr: 'OR/CR',
+  policy: 'Policy copy',
+  valid_id: 'Valid ID',
+  police_report: 'Police report',
+  photo: 'Damage photo',
+  estimate: 'Repair estimate',
+  proof_of_payment: 'Proof of payment',
+  other: 'Other document',
+})
+
+const PURPOSE_REQUIRED_DOCUMENTS = Object.freeze({
+  renewal: [
+    { type: 'or_cr', label: 'OR/CR' },
+    { type: 'policy', label: 'Old policy' },
+  ],
+  new_application: [{ type: 'or_cr', label: 'OR/CR' }],
+  claim: [{ type: 'or_cr', label: 'OR/CR' }],
+  quotation: [{ type: 'or_cr', label: 'OR/CR' }],
+})
+
+const PURPOSE_SUPPORTING_DOCUMENTS = Object.freeze({
+  renewal: [
+    { type: 'estimate', label: 'Renewal quote notes' },
+    { type: 'other', label: 'Other document' },
+  ],
+  new_application: [
+    { type: 'policy', label: 'Old policy (if available)' },
+    { type: 'estimate', label: 'Quotation or estimate' },
+    { type: 'other', label: 'Other document' },
+  ],
+  claim: [
+    { type: 'policy', label: 'Policy copy' },
+    { type: 'photo', label: 'Damage photo' },
+    { type: 'estimate', label: 'Repair estimate' },
+    { type: 'police_report', label: 'Police report (if requested)' },
+    { type: 'other', label: 'Other claim document' },
+  ],
+  quotation: [
+    { type: 'policy', label: 'Policy copy (if available)' },
+    { type: 'estimate', label: 'Existing estimate' },
+    { type: 'other', label: 'Other document' },
+  ],
+})
+
+export const shouldIncludeInsuranceInquiryInLiveQueue = ({
+  inquiry = null,
+  statusFilter = 'all',
+} = {}) => {
+  if (!inquiry?.id) {
+    return false
+  }
+
+  const normalizedStatusFilter = String(statusFilter ?? '').trim() || 'all'
+
+  if (normalizedStatusFilter !== 'all') {
+    return inquiry.status === normalizedStatusFilter
+  }
+
+  return !isTerminalInquiry(inquiry)
+}
+
 const countMatchingInquiries = (inquiries, predicate) =>
   inquiries.reduce((total, inquiry) => (predicate(inquiry) ? total + 1 : total), 0)
 
@@ -79,6 +141,65 @@ const buildLifecycleSummaryCards = (inquiries) => [
     sub: 'Cases waiting on document completion',
   },
 ]
+
+export function getInsuranceReviewStepNote(inquiry) {
+  const status = inquiry?.status ?? 'submitted'
+  const documentStatus = inquiry?.documentStatus ?? 'incomplete'
+
+  switch (status) {
+    case 'submitted':
+      return 'Waiting for staff review'
+    case 'needs_documents':
+      return 'Needs documents'
+    case 'under_review':
+      return documentStatus === 'complete'
+        ? 'Documents complete'
+        : `Documents ${formatStatusLabel(documentStatus)}`
+    case 'for_approval':
+      return 'Ready for approval'
+    case 'approved':
+    case 'payment_pending':
+    case 'active':
+    case 'for_renewal':
+    case 'closed':
+      return 'Completed'
+    case 'cancelled':
+    case 'rejected':
+      return formatStatusLabel(status)
+    default:
+      return formatStatusLabel(documentStatus)
+  }
+}
+
+export function buildInsuranceDocumentReviewState(inquiry = null) {
+  const purpose = inquiry?.purpose ?? 'quotation'
+  const documents = Array.isArray(inquiry?.documents) ? inquiry.documents : []
+  const uploadedTypes = new Set(documents.map((document) => document?.documentType).filter(Boolean))
+  const requiredItems = (PURPOSE_REQUIRED_DOCUMENTS[purpose] ?? PURPOSE_REQUIRED_DOCUMENTS.quotation).map((item) => ({
+    ...item,
+    complete: uploadedTypes.has(item.type),
+  }))
+  const supportingItems = (PURPOSE_SUPPORTING_DOCUMENTS[purpose] ?? []).map((item) => ({
+    ...item,
+    complete: uploadedTypes.has(item.type),
+  }))
+  const missingRequiredItems = requiredItems.filter((item) => !item.complete)
+  const uncategorizedDocuments = documents.filter((document) => {
+    const type = document?.documentType
+    return !Object.prototype.hasOwnProperty.call(INSURANCE_DOCUMENT_LABELS, type ?? '')
+  })
+
+  return {
+    requiredItems,
+    supportingItems,
+    missingRequiredItems,
+    requiredReadyCount: requiredItems.filter((item) => item.complete).length,
+    requiredTotalCount: requiredItems.length,
+    allRequiredReady: requiredItems.every((item) => item.complete),
+    uploadedCount: documents.length,
+    uncategorizedDocuments,
+  }
+}
 
 export function buildInsuranceTableRow(inquiry) {
   return {
@@ -133,6 +254,14 @@ export function buildInsurancePrimaryFocus({
   filteredCount = 0,
   activeFilterCount = 0,
 } = {}) {
+  if (selectedInquiry && isTerminalInquiry(selectedInquiry)) {
+    return {
+      title: 'Case is already terminal',
+      description: 'Cancelled, rejected, and closed cases are view-only and do not stay in the live queue.',
+      tone: 'neutral',
+    }
+  }
+
   if (selectedInquiry) {
     return {
       title: 'Case ready',
@@ -225,7 +354,10 @@ export function getNextInsuranceWorkspaceViewState({
   const defaultTabKey = detailTabs[0]?.key ?? 'overview'
   const nextDraft = buildInsuranceUpdateDraft(nextInquiry, nextStatuses)
   const sameInquiry = Boolean(nextInquiry?.id) && nextInquiry.id === previousInquiryId
-  const shouldPreserveDraft = sameInquiry && areInsuranceUpdateDraftsEqual(currentUpdateDraft, nextDraft) === false
+  const shouldPreserveDraft =
+    sameInquiry &&
+    currentUpdateState !== 'status_update_saved' &&
+    areInsuranceUpdateDraftsEqual(currentUpdateDraft, nextDraft) === false
 
   if (sameInquiry) {
     return {
@@ -409,7 +541,7 @@ export function getInsuranceQueueFilterSummary({
 
   return {
     headline: `Showing ${visibleCount} of ${totalCount} live ${totalCount === 1 ? 'case' : 'cases'}`,
-    detail: detailParts.length ? detailParts.join(' ') : 'All live cases are currently in view.',
+    detail: detailParts.length ? detailParts.join(' ') : 'All open insurance cases are currently in view.',
     hasActiveFilters: Boolean(filterLabels.length || trimmedSearch),
   }
 }

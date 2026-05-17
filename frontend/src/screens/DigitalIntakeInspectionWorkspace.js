@@ -11,9 +11,14 @@ import {
 } from 'lucide-react'
 
 import PageHeader from '@/components/ui/PageHeader'
-import { ApiError, listAdminCustomers } from '@/lib/authClient'
+import PortalSelect from '@/components/ui/PortalSelect'
+import { ApiError, listAdminCustomers, listStaffAccounts } from '@/lib/authClient'
 import { listVehicleBookings } from '@/lib/bookingStaffClient'
-import { createVehicleInspection, listVehicleInspections } from '@/lib/inspectionStaffClient'
+import {
+  createVehicleInspection,
+  listVehicleInspections,
+  uploadVehicleInspectionPhoto,
+} from '@/lib/inspectionStaffClient'
 import { useUser } from '@/lib/userContext'
 import {
   getSelectedInspection,
@@ -30,6 +35,7 @@ import {
   createInitialIntakeDraft,
   damageAreaOptions,
   fuelLevelOptions,
+  getReasonForVisitOptions,
   getIntakeRequirementOptions,
   intakeFieldMaxLengths,
   resolveIntakeNextRoute,
@@ -38,6 +44,7 @@ import {
   getArrivalPhotoButtonLabel,
   getArrivalPhotoDisplayLabel,
   getArrivalPhotoTemporaryRef,
+  isArrivalPhotoTemporaryRef,
   getIntakeRequirementsBadge,
   getIntakeWorkspaceHeroCopy,
   getIntakeWorkspacePrimaryActionLabel,
@@ -217,6 +224,7 @@ export default function DigitalIntakeInspectionWorkspace() {
   const [draft, setDraft] = useState(() => createInitialIntakeDraft())
   const [inspections, setInspections] = useState([])
   const [customers, setCustomers] = useState([])
+  const [staffAccounts, setStaffAccounts] = useState([])
   const [vehicleBookings, setVehicleBookings] = useState([])
   const [selectedInspectionId, setSelectedInspectionId] = useState('')
   const [historyState, setHistoryState] = useState({
@@ -261,6 +269,17 @@ export default function DigitalIntakeInspectionWorkspace() {
   }, [isTechnician, user?.accessToken])
 
   useEffect(() => {
+    if (!user?.accessToken) {
+      setStaffAccounts([])
+      return
+    }
+
+    void listStaffAccounts(user.accessToken)
+      .then((items) => setStaffAccounts(items.filter((account) => account?.isActive !== false)))
+      .catch(() => setStaffAccounts([]))
+  }, [user?.accessToken])
+
+  useEffect(() => {
     if (!draft.vehicleId || !user?.accessToken || isTechnician) {
       setVehicleBookings([])
       return
@@ -288,6 +307,31 @@ export default function DigitalIntakeInspectionWorkspace() {
     () => getSelectedInspection(inspections, selectedInspectionId),
     [inspections, selectedInspectionId],
   )
+  const customerSelectItems = useMemo(
+    () =>
+      customers.map((customer) => ({
+        value: customer.id,
+        label: customer.displayName || customer.email || customer.id,
+        helper: customer.email || customer.id,
+      })),
+    [customers],
+  )
+  const vehicleSelectItems = useMemo(
+    () =>
+      customerVehicleOptions.map((vehicle) => ({
+        value: vehicle.id,
+        label: formatVehicleOptionLabel(vehicle),
+      })),
+    [customerVehicleOptions],
+  )
+  const bookingSelectItems = useMemo(
+    () =>
+      vehicleBookings.map((booking) => ({
+        value: booking.id,
+        label: formatBookingOptionLabel(booking),
+      })),
+    [vehicleBookings],
+  )
   const inspectionSummaryCount = selectedInspection?.findings?.length ?? 0
   const heroCopy = getIntakeWorkspaceHeroCopy(isTechnician)
   const draftStatus = getDraftStatusMeta(draft.status)
@@ -307,6 +351,39 @@ export default function DigitalIntakeInspectionWorkspace() {
         visitType: draft.visitType,
       }),
     [draft.arrivalType, draft.visitType],
+  )
+  const reasonForVisitOptions = useMemo(
+    () => getReasonForVisitOptions({ visitType: draft.visitType, currentValue: draft.reasonForVisit }),
+    [draft.reasonForVisit, draft.visitType],
+  )
+  const reasonForVisitSelectItems = useMemo(
+    () => reasonForVisitOptions.map((option) => ({ value: option, label: option })),
+    [reasonForVisitOptions],
+  )
+  const receivedByStaffOptions = useMemo(() => {
+    const options = new Set()
+    const currentValue = String(draft.receivedByStaff ?? '').trim()
+    const currentUserLabel = String(defaultReceivedByStaff ?? '').trim()
+
+    if (currentValue) {
+      options.add(currentValue)
+    }
+    if (currentUserLabel) {
+      options.add(currentUserLabel)
+    }
+
+    for (const account of staffAccounts) {
+      const label = String(account?.displayName ?? account?.email ?? '').trim()
+      if (label) {
+        options.add(label)
+      }
+    }
+
+    return [...options]
+  }, [defaultReceivedByStaff, draft.receivedByStaff, staffAccounts])
+  const receivedByStaffSelectItems = useMemo(
+    () => receivedByStaffOptions.map((option) => ({ value: option, label: option })),
+    [receivedByStaffOptions],
   )
   const activeRequirementsChecklist = useMemo(
     () =>
@@ -414,6 +491,7 @@ export default function DigitalIntakeInspectionWorkspace() {
       setArrivalPhotoUploads((current) => ({
         ...current,
         [slot]: {
+          file,
           fileName: file.name,
           previewUrl: typeof reader.result === 'string' ? reader.result : '',
         },
@@ -459,6 +537,96 @@ export default function DigitalIntakeInspectionWorkspace() {
       draft: nextDraft,
       userId: user?.id,
     })
+
+  const resolvePendingArrivalPhotoFile = async (slot) => {
+    const uploadState = arrivalPhotoUploads[slot]
+    const directFile = uploadState?.file
+
+    if (
+      directFile &&
+      typeof directFile === 'object' &&
+      typeof directFile.arrayBuffer === 'function' &&
+      typeof directFile.size === 'number'
+    ) {
+      return {
+        file: directFile,
+        fileName: directFile.name || `${slot}.jpg`,
+      }
+    }
+
+    const previewUrl = String(uploadState?.previewUrl ?? '').trim()
+    if (previewUrl.startsWith('data:')) {
+      const previewResponse = await fetch(previewUrl)
+      const previewBlob = await previewResponse.blob()
+      return {
+        file: previewBlob,
+        fileName: String(uploadState?.fileName ?? `${slot}.jpg`).trim() || `${slot}.jpg`,
+      }
+    }
+
+    return null
+  }
+
+  const persistPendingArrivalPhotos = async (nextDraft) => {
+    const vehicleId = String(nextDraft.vehicleId ?? '').trim()
+    const pendingSlots = Object.entries(nextDraft.arrivalPhotos ?? {}).filter(([, value]) =>
+      isArrivalPhotoTemporaryRef(value),
+    )
+
+    if (!pendingSlots.length) {
+      return nextDraft
+    }
+
+    if (!vehicleId) {
+      throw new ApiError('Select a vehicle before uploading arrival photos.', 400, {
+        path: '/api/vehicles/:id/inspections/photos/upload',
+      })
+    }
+
+    const uploadedRefs = await Promise.all(
+      pendingSlots.map(async ([slot]) => {
+        const resolvedUpload = await resolvePendingArrivalPhotoFile(slot)
+
+        if (!resolvedUpload) {
+          return [slot, '']
+        }
+
+        const uploadedPhoto = await uploadVehicleInspectionPhoto({
+          vehicleId,
+          slot,
+          file: resolvedUpload.file,
+          fileName: resolvedUpload.fileName,
+          accessToken: user.accessToken,
+        })
+
+        return [slot, uploadedPhoto.attachmentRef]
+      }),
+    )
+
+    setArrivalPhotoUploads((current) => {
+      const nextUploads = { ...current }
+      for (const [slot, uploadedRef] of uploadedRefs) {
+        if (!uploadedRef) {
+          delete nextUploads[slot]
+        } else if (nextUploads[slot]) {
+          nextUploads[slot] = {
+            ...nextUploads[slot],
+            attachmentRef: uploadedRef,
+          }
+          delete nextUploads[slot].file
+        }
+      }
+      return nextUploads
+    })
+
+    return {
+      ...nextDraft,
+      arrivalPhotos: {
+        ...nextDraft.arrivalPhotos,
+        ...Object.fromEntries(uploadedRefs),
+      },
+    }
+  }
 
   const loadHistory = async () => {
     if (!canUseInspection) {
@@ -558,13 +726,14 @@ export default function DigitalIntakeInspectionWorkspace() {
     setSubmitIntent(nextStatus)
     setCaptureState({
       status: 'capture_submitting',
-      message: '',
+      message: 'Saving intake and syncing arrival evidence...',
     })
 
     try {
+      const normalizedDraftWithUploads = await persistPendingArrivalPhotos(normalizedDraft)
       const savedInspection = await createVehicleInspection({
-        vehicleId: normalizedDraft.vehicleId.trim(),
-        inspection: buildPayload(normalizedDraft),
+        vehicleId: normalizedDraftWithUploads.vehicleId.trim(),
+        inspection: buildPayload(normalizedDraftWithUploads),
         accessToken: user.accessToken,
       })
       const nextCaptureState = getStaffInspectionCaptureSuccessState(savedInspection)
@@ -573,6 +742,7 @@ export default function DigitalIntakeInspectionWorkspace() {
       setSelectedInspectionId(savedInspection.id)
       setDraft((current) => ({
         ...current,
+        arrivalPhotos: normalizedDraftWithUploads.arrivalPhotos,
         status: savedInspection.status || nextStatus,
         receivedByStaff: current.receivedByStaff || defaultReceivedByStaff,
       }))
@@ -669,24 +839,19 @@ export default function DigitalIntakeInspectionWorkspace() {
                 {!isTechnician ? (
                   <label className="label">
                     Customer
-                    <select
+                    <PortalSelect
                       value={draft.customerUserId}
-                      onChange={(event) =>
+                      onValueChange={(nextValue) =>
                         updateDraft({
-                          customerUserId: event.target.value,
+                          customerUserId: nextValue,
                           vehicleId: '',
                           bookingId: '',
                         })
                       }
-                      className="select"
-                    >
-                      <option value="">Choose a customer</option>
-                      {customers.map((customer) => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.displayName} / {customer.email}
-                        </option>
-                      ))}
-                    </select>
+                      items={customerSelectItems}
+                      placeholder="Choose a customer"
+                      emptyOptionLabel="Choose a customer"
+                    />
                   </label>
                 ) : null}
                 <label className="label">
@@ -699,18 +864,13 @@ export default function DigitalIntakeInspectionWorkspace() {
                       placeholder="Paste vehicle UUID"
                     />
                   ) : (
-                    <select
+                    <PortalSelect
                       value={draft.vehicleId}
-                      onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
-                      className="select"
-                    >
-                      <option value="">Choose a customer vehicle</option>
-                      {customerVehicleOptions.map((vehicle) => (
-                        <option key={vehicle.id} value={vehicle.id}>
-                          {formatVehicleOptionLabel(vehicle)}
-                        </option>
-                      ))}
-                    </select>
+                      onValueChange={(nextValue) => updateDraft({ vehicleId: nextValue, bookingId: '' })}
+                      items={vehicleSelectItems}
+                      placeholder="Choose a customer vehicle"
+                      emptyOptionLabel="Choose a customer vehicle"
+                    />
                   )}
                 </label>
                 <label className="label md:col-span-2">
@@ -727,20 +887,13 @@ export default function DigitalIntakeInspectionWorkspace() {
                       }
                     />
                   ) : (
-                    <select
+                    <PortalSelect
                       value={draft.bookingId}
-                      onChange={(event) => updateDraft({ bookingId: event.target.value })}
-                      className="select"
-                    >
-                      <option value="">
-                        {draft.arrivalType === 'with_booking' ? 'Choose a booking' : 'No booking link'}
-                      </option>
-                      {vehicleBookings.map((booking) => (
-                        <option key={booking.id} value={booking.id}>
-                          {formatBookingOptionLabel(booking)}
-                        </option>
-                      ))}
-                    </select>
+                      onValueChange={(nextValue) => updateDraft({ bookingId: nextValue })}
+                      items={bookingSelectItems}
+                      placeholder={draft.arrivalType === 'with_booking' ? 'Choose a booking' : 'No booking link'}
+                      emptyOptionLabel={draft.arrivalType === 'with_booking' ? 'Choose a booking' : 'No booking link'}
+                    />
                   )}
                 </label>
                 <div className="rounded-xl border border-surface-border bg-surface-raised p-4 md:col-span-2">
@@ -824,12 +977,12 @@ export default function DigitalIntakeInspectionWorkspace() {
               <div className="grid gap-3">
                 <label className="label">
                   Reason for visit
-                  <input
+                  <PortalSelect
                     value={draft.reasonForVisit}
-                    onChange={(event) => updateDraft({ reasonForVisit: event.target.value })}
-                    className="input"
-                    maxLength={intakeFieldMaxLengths.reasonForVisit}
-                    placeholder="Reason for today&apos;s visit"
+                    onValueChange={(nextValue) => updateDraft({ reasonForVisit: nextValue })}
+                    items={reasonForVisitSelectItems}
+                    placeholder="Select the main reason for this visit"
+                    emptyOptionLabel="Select the main reason for this visit"
                   />
                 </label>
                 <label className="label">
@@ -1099,12 +1252,12 @@ export default function DigitalIntakeInspectionWorkspace() {
                   </label>
                   <label className="label">
                     Received by staff
-                    <input
+                    <PortalSelect
                       value={draft.receivedByStaff}
-                      onChange={(event) => updateDraft({ receivedByStaff: event.target.value })}
-                      className="input"
-                      maxLength={intakeFieldMaxLengths.receivedByStaff}
-                      placeholder={defaultReceivedByStaff || 'Staff member name'}
+                      onValueChange={(nextValue) => updateDraft({ receivedByStaff: nextValue })}
+                      items={receivedByStaffSelectItems}
+                      placeholder={defaultReceivedByStaff || 'Choose receiving staff'}
+                      emptyOptionLabel={defaultReceivedByStaff || 'Choose receiving staff'}
                     />
                   </label>
                 </div>

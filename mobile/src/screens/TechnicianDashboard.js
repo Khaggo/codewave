@@ -398,7 +398,12 @@ function MoreTab({ account, onSignOut }) {
 
       <TouchableOpacity
         style={styles.menuRow}
-        onPress={() => Alert.alert('Coming soon', 'Notifications will land in a future update.')}
+        onPress={() =>
+          Alert.alert(
+            'Notifications',
+            'Technician notifications are not connected on this screen yet. Use the active work queues for current job updates.',
+          )
+        }
         activeOpacity={0.85}
       >
         <MaterialCommunityIcons name="bell-outline" size={20} color={colors.text} />

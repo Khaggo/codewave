@@ -24,6 +24,7 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
     licensePlate: profile?.licensePlate || '',
     vehicleMake: profile?.vehicleMake || '',
     vehicleModel: profile?.vehicleModel || '',
+    vehicleColor: profile?.vehicleColor || '',
     vehicleYear:
       profile?.vehicleYear !== null && profile?.vehicleYear !== undefined
         ? String(profile.vehicleYear)
@@ -66,7 +67,7 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const nextErrors = validateProfileForm(form);
 
     if (Object.keys(nextErrors).length > 0) {
@@ -74,22 +75,39 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
       return;
     }
 
-    onSaveProfile({
-      phoneNumber: normalizePhoneNumber(form.phoneNumber),
-      address: form.address.trim(),
-      licensePlate: form.licensePlate.trim().toUpperCase(),
-      vehicleMake: form.vehicleMake.trim(),
-      vehicleModel: form.vehicleModel.trim(),
-      vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
-      vehicleDisplayName: formatVehicleDisplayName({
-        vehicleMake: form.vehicleMake,
-        vehicleModel: form.vehicleModel,
-        vehicleYear: form.vehicleYear,
-      }),
-    });
+    const normalizedCurrentAddress = String(account?.address ?? '').trim();
+    const normalizedRequestedAddress = form.address.trim();
 
-    setIsEditing(false);
-    Alert.alert('Profile Updated', 'Your profile details were saved successfully.');
+    if (normalizedRequestedAddress !== normalizedCurrentAddress) {
+      Alert.alert(
+        'Address Locked',
+        'Address editing is not connected to a live customer profile field yet. Leave it unchanged for now and save your phone or vehicle updates separately.',
+      );
+      return;
+    }
+
+    try {
+      await onSaveProfile?.({
+        phoneNumber: normalizePhoneNumber(form.phoneNumber),
+        licensePlate: form.licensePlate.trim().toUpperCase(),
+        vehicleMake: form.vehicleMake.trim(),
+        vehicleModel: form.vehicleModel.trim(),
+        vehicleColor: form.vehicleColor.trim(),
+        vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
+        vehicleDisplayName: formatVehicleDisplayName({
+          vehicleMake: form.vehicleMake,
+          vehicleModel: form.vehicleModel,
+          vehicleYear: form.vehicleYear,
+        }),
+      });
+
+      setIsEditing(false);
+      Alert.alert('Profile Updated', 'Your profile details were saved successfully.');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'We could not save your profile changes right now.';
+      Alert.alert('Profile Update Failed', message);
+    }
   };
 
   return (
@@ -153,7 +171,7 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
         onChangeText={() => null}
         placeholder=""
         editable={false}
-        helperText="Username is fixed in this prototype."
+        helperText="Username is fixed for your account."
       />
 
       <FormField
@@ -233,6 +251,18 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
         error={errors.vehicleModel}
         isFocused={focusedField === 'vehicleModel'}
         onFocus={() => setFocusedField('vehicleModel')}
+        onBlur={() => setFocusedField('')}
+        editable={isEditing}
+      />
+
+      <FormField
+        label="Vehicle Color"
+        value={form.vehicleColor}
+        onChangeText={(value) => handleFieldChange('vehicleColor', value)}
+        placeholder="White"
+        autoCapitalize="words"
+        isFocused={focusedField === 'vehicleColor'}
+        onFocus={() => setFocusedField('vehicleColor')}
         onBlur={() => setFocusedField('')}
         editable={isEditing}
       />

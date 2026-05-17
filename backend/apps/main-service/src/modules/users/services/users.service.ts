@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateAddressDto } from '../dto/update-address.dto';
@@ -44,7 +44,10 @@ export class UsersService {
     return this.usersRepository.create(payload);
   }
 
-  async findById(id: string) {
+  async findById(id: string, actor?: { userId: string; role: string }) {
+    if (actor) {
+      this.assertUserActorCanAccessUser(id, actor);
+    }
     return this.usersRepository.findById(id);
   }
 
@@ -60,11 +63,18 @@ export class UsersService {
     return this.usersRepository.listStaffAccounts(excludeUserId);
   }
 
+  async countActiveUsersByRole(role: 'technician' | 'head_technician' | 'service_adviser' | 'super_admin') {
+    return this.usersRepository.countActiveByRole(role);
+  }
+
   async listCustomersWithVehicles() {
     return this.usersRepository.listCustomersWithVehicles();
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto) {
+  async update(id: string, updateUserDto: UpdateUserDto, actor?: { userId: string; role: string }) {
+    if (actor) {
+      this.assertUserActorCanAccessUser(id, actor);
+    }
     return this.usersRepository.update(id, updateUserDto);
   }
 
@@ -77,11 +87,32 @@ export class UsersService {
     return this.usersRepository.updateActivationStatus(id, isActive);
   }
 
-  async addAddress(userId: string, payload: UpsertAddressDto) {
+  async addAddress(userId: string, payload: UpsertAddressDto, actor?: { userId: string; role: string }) {
+    if (actor) {
+      this.assertUserActorCanAccessUser(userId, actor);
+    }
     return this.usersRepository.addAddress(userId, payload);
   }
 
-  async updateAddress(userId: string, addressId: string, payload: UpdateAddressDto) {
+  async updateAddress(
+    userId: string,
+    addressId: string,
+    payload: UpdateAddressDto,
+    actor?: { userId: string; role: string },
+  ) {
+    if (actor) {
+      this.assertUserActorCanAccessUser(userId, actor);
+    }
     return this.usersRepository.updateAddress(userId, addressId, payload);
+  }
+
+  private assertUserActorCanAccessUser(userId: string, actor: { userId: string; role: string }) {
+    if (!['customer', 'technician', 'head_technician', 'service_adviser', 'super_admin'].includes(actor.role)) {
+      throw new ForbiddenException('Only authenticated customer or staff accounts can access user profile records');
+    }
+
+    if (actor.role === 'customer' && actor.userId !== userId) {
+      throw new ForbiddenException('Customers can only access their own user profile records');
+    }
   }
 }

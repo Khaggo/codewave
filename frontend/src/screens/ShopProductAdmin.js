@@ -1,42 +1,64 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Archive, FolderPlus, ImagePlus, PackagePlus, PencilLine, Tag, X } from 'lucide-react'
-import {
-  addCatalogCategory,
-  addInventoryProduct,
-  archiveInventoryProduct,
-  updateInventoryProduct,
-} from '@autocare/shared'
+import { Archive, FolderPlus, PencilLine, Plus, RefreshCcw, Tag, X } from 'lucide-react'
 
 import { useToast } from '@/components/Toast.jsx'
 import PageHeader from '@/components/ui/PageHeader'
-import { useCatalogCategories, usePublishedCatalogProducts } from '@/hooks/useOperationsStore.js'
-import { buildModalForm, getCatalogImageCount, parseImageUrls } from './shopProductAdminView.mjs'
+import { ApiError } from '@/lib/authClient'
+import {
+  createStaffInventoryCategory,
+  createStaffInventoryProduct,
+  loadStaffInventorySnapshot,
+  updateStaffInventoryProduct,
+} from '@/lib/inventoryAdminClient'
+import { useUser } from '@/lib/userContext'
 
 const EMPTY_PRODUCT_FORM = {
   name: '',
-  category: '',
+  categoryId: '',
   price: '',
   sku: '',
   description: '',
-  images: '',
 }
 
 const EMPTY_MODAL_FORM = {
   id: '',
   name: '',
-  category: '',
+  categoryId: '',
   price: '',
   sku: '',
   description: '',
-  imageInput: '',
-  images: [],
+  isActive: true,
 }
 
-function formatCurrency(value) {
-  return `PHP ${Number(value ?? 0).toLocaleString()}`
+const createInitialState = () => ({
+  status: 'idle',
+  products: [],
+  categories: [],
+  errors: { products: '', categories: '' },
+})
+
+function formatCurrencyFromCents(value) {
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: value % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value ?? 0) / 100)
+}
+
+function buildModalForm(product) {
+  return {
+    id: product.id,
+    name: product.name ?? '',
+    categoryId: product.categoryId ?? '',
+    price: String((product.priceCents ?? 0) / 100),
+    sku: product.sku ?? '',
+    description: product.description ?? '',
+    isActive: product.visibilityLabel === 'Published',
+  }
 }
 
 function SectionShell({ title, description, children, action }) {
@@ -60,8 +82,6 @@ function ProductEditModal({
   saving,
   archiving,
   onChange,
-  onAddImage,
-  onRemoveImage,
   onClose,
   onSave,
   onArchive,
@@ -81,12 +101,12 @@ function ProductEditModal({
     <>
       <div className="fixed inset-0 z-40 bg-black/70" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="card max-h-[90vh] w-full max-w-4xl overflow-hidden shadow-card-md">
+        <div className="card max-h-[90vh] w-full max-w-3xl overflow-hidden shadow-card-md">
           <div className="flex items-start justify-between gap-4 border-b border-surface-border bg-surface-raised/70 px-5 py-4">
             <div>
               <p className="card-title">Edit Product</p>
               <p className="mt-1 text-sm text-ink-muted">
-                Update product details, maintain image URLs, and archive outdated catalog entries from one editor.
+                Update live catalog metadata backed by the ecommerce service.
               </p>
             </div>
             <button
@@ -100,137 +120,78 @@ function ProductEditModal({
           </div>
 
           <div className="max-h-[calc(90vh-76px)] overflow-y-auto p-5">
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-              <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="label" htmlFor="edit-product-name">Product Name</label>
-                    <input
-                      id="edit-product-name"
-                      className="input"
-                      value={form.name}
-                      onChange={(event) => onChange('name', event.target.value)}
-                    />
-                  </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label>
+                <span className="label">Product Name</span>
+                <input className="input" value={form.name} onChange={(event) => onChange('name', event.target.value)} />
+              </label>
 
-                  <div>
-                    <label className="label" htmlFor="edit-product-category">Category</label>
-                    <select
-                      id="edit-product-category"
-                      className="select"
-                      value={form.category}
-                      onChange={(event) => onChange('category', event.target.value)}
-                    >
-                      <option value="">Select a category</option>
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.name}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              <label>
+                <span className="label">Category</span>
+                <select className="select" value={form.categoryId} onChange={(event) => onChange('categoryId', event.target.value)}>
+                  <option value="">Select a category</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-                  <div>
-                    <label className="label" htmlFor="edit-product-price">Price</label>
-                    <input
-                      id="edit-product-price"
-                      type="number"
-                      min="0"
-                      className="input"
-                      value={form.price}
-                      onChange={(event) => onChange('price', event.target.value)}
-                    />
-                  </div>
+              <label>
+                <span className="label">Price</span>
+                <input
+                  type="number"
+                  min="0"
+                  className="input"
+                  value={form.price}
+                  onChange={(event) => onChange('price', event.target.value)}
+                />
+              </label>
 
-                  <div className="md:col-span-2">
-                    <label className="label" htmlFor="edit-product-sku">SKU</label>
-                    <div className="relative">
-                      <Tag size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim" />
-                      <input
-                        id="edit-product-sku"
-                        className="input pl-10"
-                        value={form.sku}
-                        onChange={(event) => onChange('sku', event.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="label" htmlFor="edit-product-description">Description</label>
-                    <textarea
-                      id="edit-product-description"
-                      className="input min-h-32 resize-y"
-                      value={form.description}
-                      onChange={(event) => onChange('description', event.target.value)}
-                    />
-                  </div>
+              <label className="md:col-span-2">
+                <span className="label">SKU</span>
+                <div className="relative">
+                  <Tag size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim" />
+                  <input
+                    className="input pl-10"
+                    value={form.sku}
+                    onChange={(event) => onChange('sku', event.target.value)}
+                  />
                 </div>
-              </div>
+              </label>
 
-              <div className="space-y-4">
-                <div className="card-raised p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Product Images</p>
-                  <p className="mt-2 text-sm text-ink-muted">
-                    Add one image URL at a time and remove outdated product images directly from this editor.
-                  </p>
+              <label className="md:col-span-2">
+                <span className="label">Description</span>
+                <textarea
+                  className="input min-h-32 resize-y"
+                  value={form.description}
+                  onChange={(event) => onChange('description', event.target.value)}
+                />
+              </label>
 
-                  <div className="mt-4 flex gap-2">
-                    <input
-                      className="input"
-                      value={form.imageInput}
-                      onChange={(event) => onChange('imageInput', event.target.value)}
-                      placeholder="https://example.test/product-side.jpg"
-                    />
-                    <button type="button" className="ops-action-secondary min-w-[112px]" onClick={onAddImage}>
-                      <ImagePlus size={14} />
-                      Add
-                    </button>
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    {form.images.length ? (
-                      form.images.map((image, index) => (
-                        <div key={`${image}-${index}`} className="rounded-xl border border-surface-border bg-surface-card p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-                                Image {index + 1}
-                              </p>
-                              <p className="mt-1 break-all text-sm text-ink-primary">{image}</p>
-                            </div>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-red-300 transition-colors hover:bg-red-500/15"
-                              onClick={() => onRemoveImage(index)}
-                              aria-label={`Remove image ${index + 1}`}
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="empty-panel px-4 py-6 text-sm text-ink-muted">
-                        No product images added yet.
-                      </div>
-                    )}
-                  </div>
+              <label className="md:col-span-2 flex items-center gap-3 rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.isActive)}
+                  onChange={(event) => onChange('isActive', event.target.checked)}
+                />
+                <div>
+                  <p className="text-sm font-semibold text-ink-primary">Published in customer catalog</p>
+                  <p className="text-sm text-ink-secondary">Turn this off to hide the product without deleting it.</p>
                 </div>
+              </label>
+            </div>
 
-                <div className="card-raised p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Actions</p>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <button type="button" disabled={saving} className="ops-action-primary min-w-[144px]" onClick={onSave}>
-                      <PencilLine size={14} />
-                      {saving ? 'Saving...' : 'Save Changes'}
-                    </button>
-                    <button type="button" disabled={archiving} className="ops-action-danger min-w-[144px]" onClick={onArchive}>
-                      <Archive size={14} />
-                      {archiving ? 'Archiving...' : 'Archive Product'}
-                    </button>
-                  </div>
-                </div>
-              </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button type="button" disabled={saving} className="ops-action-primary min-w-[144px]" onClick={onSave}>
+                <PencilLine size={14} />
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button type="button" disabled={archiving} className="ops-action-danger min-w-[144px]" onClick={onArchive}>
+                <Archive size={14} />
+                {archiving ? 'Archiving...' : 'Archive Product'}
+              </button>
             </div>
           </div>
         </div>
@@ -241,9 +202,9 @@ function ProductEditModal({
 
 export default function ShopProductAdmin() {
   const searchParams = useSearchParams()
+  const user = useUser()
   const { toast } = useToast()
-  const categories = useCatalogCategories()
-  const publishedProducts = usePublishedCatalogProducts()
+  const [state, setState] = useState(createInitialState)
   const [catalogQuery, setCatalogQuery] = useState('')
   const [categoryName, setCategoryName] = useState('')
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM)
@@ -253,50 +214,85 @@ export default function ShopProductAdmin() {
   const [submittingProduct, setSubmittingProduct] = useState(false)
   const [savingProduct, setSavingProduct] = useState(false)
   const [archivingProductId, setArchivingProductId] = useState(null)
-  const editorProduct = useMemo(
-    () => publishedProducts.find((product) => product.id === editorProductId) ?? null,
-    [editorProductId, publishedProducts],
-  )
-  const visibleProducts = useMemo(() => {
-    const normalizedQuery = catalogQuery.trim().toLowerCase()
-    if (!normalizedQuery) {
-      return publishedProducts
-    }
 
-    return publishedProducts.filter((product) => {
-      const searchFields = [product.name, product.category, product.sku, product.description]
-      return searchFields.some((field) => field?.toLowerCase().includes(normalizedQuery))
-    })
-  }, [catalogQuery, publishedProducts])
-
-  useEffect(() => {
-    const requestedEditorProductId = searchParams?.get('product')
-
-    if (!requestedEditorProductId) {
+  const loadSnapshot = useCallback(async () => {
+    if (!user?.accessToken) {
+      setState({
+        status: 'error',
+        products: [],
+        categories: [],
+        errors: { products: 'Sign in as staff before loading catalog admin.', categories: '' },
+      })
       return
     }
 
-    if (publishedProducts.some((product) => product.id === requestedEditorProductId)) {
-      setEditorProductId(requestedEditorProductId)
+    setState((current) => ({ ...current, status: 'loading' }))
+
+    try {
+      const snapshot = await loadStaffInventorySnapshot({ accessToken: user.accessToken })
+      setState({
+        status: 'ready',
+        products: snapshot.products,
+        categories: snapshot.categories,
+        errors: snapshot.errors,
+      })
+    } catch (error) {
+      setState({
+        status: 'error',
+        products: [],
+        categories: [],
+        errors: {
+          products: error instanceof Error ? error.message : 'Unable to load the live catalog admin surface.',
+          categories: '',
+        },
+      })
     }
-  }, [publishedProducts, searchParams])
+  }, [user?.accessToken])
+
+  useEffect(() => {
+    void loadSnapshot()
+  }, [loadSnapshot])
+
+  const categories = state.categories
+  const products = state.products
+  const editorProduct = useMemo(
+    () => products.find((product) => product.id === editorProductId) ?? null,
+    [editorProductId, products],
+  )
+
+  const visibleProducts = useMemo(() => {
+    const normalizedQuery = catalogQuery.trim().toLowerCase()
+    if (!normalizedQuery) {
+      return products
+    }
+
+    return products.filter((product) => {
+      const searchFields = [product.name, product.categoryLabel, product.sku, product.description]
+      return searchFields.some((field) => String(field ?? '').toLowerCase().includes(normalizedQuery))
+    })
+  }, [catalogQuery, products])
+
+  useEffect(() => {
+    const requestedEditorProductId = searchParams?.get('product')
+    if (!requestedEditorProductId) {
+      return
+    }
+    if (products.some((product) => product.id === requestedEditorProductId)) {
+      const product = products.find((entry) => entry.id === requestedEditorProductId)
+      setEditorProductId(requestedEditorProductId)
+      setEditForm(buildModalForm(product))
+    }
+  }, [products, searchParams])
 
   function updateProductForm(field, value) {
-    setProductForm((current) => ({
-      ...current,
-      [field]: value,
-    }))
+    setProductForm((current) => ({ ...current, [field]: value }))
   }
 
   function updateEditForm(field, value) {
-    setEditForm((current) => ({
-      ...current,
-      [field]: value,
-    }))
+    setEditForm((current) => ({ ...current, [field]: value }))
   }
 
   function openProductEditor(product) {
-    setSelectedProductId(product.id)
     setEditorProductId(product.id)
     setEditForm(buildModalForm(product))
   }
@@ -306,104 +302,87 @@ export default function ShopProductAdmin() {
     setEditForm(EMPTY_MODAL_FORM)
   }
 
-  function handleAddCategory(event) {
+  async function handleAddCategory(event) {
     event.preventDefault()
     setSubmittingCategory(true)
 
     try {
-      const category = addCatalogCategory(categoryName)
+      const category = await createStaffInventoryCategory({
+        accessToken: user?.accessToken,
+        name: categoryName,
+      })
       setCategoryName('')
-      setProductForm((current) => ({
-        ...current,
-        category: current.category || category.name,
-      }))
+      setProductForm((current) => ({ ...current, categoryId: current.categoryId || category.id }))
+      await loadSnapshot()
       toast({
         type: 'success',
         title: 'Category added',
-        message: `${category.name} is now available for catalog publishing.`,
+        message: `${category.label} is now available for live catalog publishing.`,
       })
     } catch (error) {
       toast({
         type: 'error',
         title: 'Unable to add category',
-        message: error.message,
+        message: error instanceof Error ? error.message : 'Unable to add category right now.',
       })
     } finally {
       setSubmittingCategory(false)
     }
   }
 
-  function handlePublishProduct(event) {
+  async function handlePublishProduct(event) {
     event.preventDefault()
     setSubmittingProduct(true)
 
     try {
-      const createdProduct = addInventoryProduct({
+      const createdProduct = await createStaffInventoryProduct({
+        accessToken: user?.accessToken,
+        categoryId: productForm.categoryId,
         name: productForm.name,
-        category: productForm.category,
-        price: productForm.price,
-        stock: 0,
         sku: productForm.sku,
         description: productForm.description,
-        images: parseImageUrls(productForm.images),
-        status: 'published',
+        pricePhp: productForm.price,
       })
 
-      setProductForm({
+      setProductForm((current) => ({
         ...EMPTY_PRODUCT_FORM,
-        category: productForm.category,
-      })
-
+        categoryId: current.categoryId,
+      }))
+      await loadSnapshot()
       toast({
         type: 'success',
         title: 'Product published',
-        message: `${createdProduct.name} is now live in the catalog. Manage stock from Inventory.`,
+        message: `${createdProduct.name} is now live in the ecommerce catalog.`,
       })
     } catch (error) {
       toast({
         type: 'error',
         title: 'Unable to publish product',
-        message: error.message,
+        message: error instanceof Error ? error.message : 'Unable to publish the product right now.',
       })
     } finally {
       setSubmittingProduct(false)
     }
   }
 
-  function handleAddImageToEditForm() {
-    const nextImage = editForm.imageInput.trim()
-    if (!nextImage) return
-
-    setEditForm((current) => ({
-      ...current,
-      imageInput: '',
-      images: [...current.images, nextImage],
-    }))
-  }
-
-  function handleRemoveImageFromEditForm(index) {
-    setEditForm((current) => ({
-      ...current,
-      images: current.images.filter((_, imageIndex) => imageIndex !== index),
-    }))
-  }
-
-  function handleSaveProductEdits() {
+  async function handleSaveProductEdits() {
     if (!editorProduct) return
 
     setSavingProduct(true)
-
     try {
-      const updatedProduct = updateInventoryProduct(editorProduct.id, {
+      const updatedProduct = await updateStaffInventoryProduct({
+        accessToken: user?.accessToken,
+        productId: editorProduct.id,
+        categoryId: editForm.categoryId,
         name: editForm.name,
-        category: editForm.category,
-        price: editForm.price,
         sku: editForm.sku,
         description: editForm.description,
-        images: editForm.images,
+        pricePhp: editForm.price,
+        isActive: editForm.isActive,
       })
 
       setEditForm(buildModalForm(updatedProduct))
+      await loadSnapshot()
       toast({
         type: 'success',
         title: 'Product updated',
@@ -413,22 +392,27 @@ export default function ShopProductAdmin() {
       toast({
         type: 'error',
         title: 'Unable to update product',
-        message: error.message,
+        message: error instanceof Error ? error.message : 'Unable to update the product right now.',
       })
     } finally {
       setSavingProduct(false)
     }
   }
 
-  function handleArchiveProduct(productId, productName) {
+  async function handleArchiveProduct(productId, productName) {
     setArchivingProductId(productId)
 
     try {
-      archiveInventoryProduct(productId)
+      await updateStaffInventoryProduct({
+        accessToken: user?.accessToken,
+        productId,
+        isActive: false,
+      })
+      await loadSnapshot()
       toast({
         type: 'info',
         title: 'Product archived',
-        message: `${productName} has been removed from the published catalog.`,
+        message: `${productName} has been hidden from the live customer catalog.`,
       })
       if (editorProductId === productId) {
         closeProductEditor()
@@ -437,35 +421,50 @@ export default function ShopProductAdmin() {
       toast({
         type: 'error',
         title: 'Unable to archive product',
-        message: error.message,
+        message: error instanceof Error ? error.message : 'Unable to archive the product right now.',
       })
     } finally {
       setArchivingProductId(null)
     }
   }
 
+  const loadingAction = (
+    <button type="button" className="btn-ghost" onClick={() => void loadSnapshot()} disabled={state.status === 'loading'}>
+      <RefreshCcw size={14} className={state.status === 'loading' ? 'animate-spin' : ''} />
+      Refresh
+    </button>
+  )
+
   return (
     <div className="ops-page-shell">
       <PageHeader
         eyebrow="Marketplace publishing"
         title="Catalog Admin"
-        description="Publish and manage customer-visible marketplace products."
+        description="Manage live ecommerce categories and product listings from the actual ecommerce runtime."
+        actions={loadingAction}
         meta={
           <>
             <span className="badge badge-gray">{categories.length} categories</span>
-            <span className="badge badge-gray">{publishedProducts.length} live products</span>
+            <span className="badge badge-gray">{products.length} live products</span>
           </>
         }
       />
 
+      {state.errors.products ? (
+        <div className="status-message status-message-warning">
+          <p className="font-bold text-ink-primary">Catalog runtime warning</p>
+          <p className="mt-1 text-sm text-ink-secondary">{state.errors.products}</p>
+        </div>
+      ) : null}
+
       <SectionShell
         title="Published Products"
-        description="Search published products, review status, and choose the next listing to manage."
+        description="Search live catalog products, review visibility, and open a listing for editing."
         action={<span className="badge badge-orange">{visibleProducts.length} shown</span>}
       >
-        <div className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <div className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
           <div>
-            <label className="label" htmlFor="catalog-product-search">Search published products</label>
+            <label className="label" htmlFor="catalog-product-search">Search live products</label>
             <input
               id="catalog-product-search"
               className="input"
@@ -475,12 +474,8 @@ export default function ShopProductAdmin() {
             />
           </div>
           <div className="rounded-2xl border border-surface-border bg-surface-raised/70 px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Categories</p>
-            <p className="mt-2 text-xl font-black tracking-tight text-ink-primary">{categories.length}</p>
-          </div>
-          <div className="rounded-2xl border border-surface-border bg-surface-raised/70 px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Images</p>
-            <p className="mt-2 text-xl font-black tracking-tight text-ink-primary">{getCatalogImageCount(publishedProducts)}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Visible rows</p>
+            <p className="mt-2 text-xl font-black tracking-tight text-ink-primary">{visibleProducts.length}</p>
           </div>
         </div>
 
@@ -492,23 +487,22 @@ export default function ShopProductAdmin() {
                   <th>Product</th>
                   <th>Category</th>
                   <th>Price</th>
-                  <th>Stock</th>
-                  <th>Status</th>
-                  <th>Images</th>
+                  <th>Visibility</th>
+                  <th>Updated</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {publishedProducts.length === 0 ? (
+                {products.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-sm text-ink-muted">
-                      No published products yet.
+                    <td colSpan={6} className="text-center text-sm text-ink-muted">
+                      No live products are available yet.
                     </td>
                   </tr>
                 ) : visibleProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-sm text-ink-muted">
-                      No published products match the current search.
+                    <td colSpan={6} className="text-center text-sm text-ink-muted">
+                      No live products match the current search.
                     </td>
                   </tr>
                 ) : (
@@ -520,20 +514,21 @@ export default function ShopProductAdmin() {
                           <p className="mt-1 text-xs text-ink-muted">{product.sku || 'No SKU assigned'}</p>
                         </div>
                       </td>
-                      <td>{product.category}</td>
-                      <td className="font-semibold text-ink-primary">{formatCurrency(product.price)}</td>
-                      <td className="font-semibold text-ink-primary">{product.stock}</td>
+                      <td>{product.categoryLabel}</td>
+                      <td className="font-semibold text-ink-primary">{formatCurrencyFromCents(product.priceCents)}</td>
                       <td>
-                        <span className="badge badge-green">{product.status}</span>
+                        <span className={`badge ${product.visibilityLabel === 'Published' ? 'badge-green' : 'badge-gray'}`}>
+                          {product.visibilityLabel}
+                        </span>
                       </td>
-                      <td>{product.images.length}</td>
+                      <td className="text-sm text-ink-secondary">{new Date(product.updatedAt).toLocaleString('en-PH')}</td>
                       <td>
                         <div className="flex flex-wrap gap-2">
                           <a
                             href={`/admin/inventory?product=${product.id}`}
                             className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
                           >
-                            Manage Stock
+                            View Inventory
                           </a>
                           <button
                             type="button"
@@ -548,7 +543,6 @@ export default function ShopProductAdmin() {
                             className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300 transition-colors hover:bg-red-500/15"
                             onClick={() => handleArchiveProduct(product.id, product.name)}
                             disabled={archivingProductId === product.id}
-                            aria-label={`Archive ${product.name}`}
                           >
                             <Archive size={14} />
                             {archivingProductId === product.id ? 'Archiving...' : 'Archive'}
@@ -566,31 +560,23 @@ export default function ShopProductAdmin() {
 
       <SectionShell
         title="Publishing Controls"
-        description="Create categories and publish new marketplace listings after reviewing the current catalog."
+        description="Create categories and publish new live marketplace listings."
       >
         <div className="grid gap-5 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.38fr)]">
           <div className="space-y-5">
             <div className="rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Add Category</p>
-              <p className="mt-2 text-sm text-ink-muted">Create a category for product publishing.</p>
-
               <form className="mt-4 space-y-4" onSubmit={handleAddCategory}>
-                <div>
-                  <label className="label" htmlFor="catalog-category-name">New Category Name</label>
+                <label>
+                  <span className="label">New Category Name</span>
                   <input
-                    id="catalog-category-name"
                     className="input"
                     value={categoryName}
                     onChange={(event) => setCategoryName(event.target.value)}
                     placeholder="e.g. Accessories"
                   />
-                </div>
-
-                <button
-                  type="submit"
-                  className="ops-action-primary w-full"
-                  disabled={submittingCategory}
-                >
+                </label>
+                <button type="submit" className="ops-action-primary w-full" disabled={submittingCategory}>
                   <FolderPlus size={15} />
                   {submittingCategory ? 'Adding Category...' : 'Add Category'}
                 </button>
@@ -603,12 +589,12 @@ export default function ShopProductAdmin() {
                 {categories.length ? (
                   categories.map((category) => (
                     <span key={category.id} className="badge badge-gray">
-                      {category.name}
+                      {category.label}
                     </span>
                   ))
                 ) : (
                   <div className="empty-panel w-full px-4 py-6 text-sm text-ink-muted">
-                    No catalog categories yet.
+                    No live catalog categories yet.
                   </div>
                 )}
               </div>
@@ -618,43 +604,40 @@ export default function ShopProductAdmin() {
           <div className="rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Create And Publish Product</p>
             <p className="mt-2 text-sm text-ink-muted">
-              Publish products with customer-facing fields only. Set stock later from Inventory.
+              Publish supported product fields directly through the live ecommerce service.
             </p>
 
             <form className="mt-4 space-y-4" onSubmit={handlePublishProduct}>
               <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="label" htmlFor="catalog-product-name">Product Name</label>
+                <label>
+                  <span className="label">Product Name</span>
                   <input
-                    id="catalog-product-name"
                     className="input"
                     value={productForm.name}
                     onChange={(event) => updateProductForm('name', event.target.value)}
                     placeholder="e.g. Seat Cover Deluxe"
                   />
-                </div>
+                </label>
 
-                <div>
-                  <label className="label" htmlFor="catalog-product-category">Category</label>
+                <label>
+                  <span className="label">Category</span>
                   <select
-                    id="catalog-product-category"
                     className="select"
-                    value={productForm.category}
-                    onChange={(event) => updateProductForm('category', event.target.value)}
+                    value={productForm.categoryId}
+                    onChange={(event) => updateProductForm('categoryId', event.target.value)}
                   >
                     <option value="">Select a category</option>
                     {categories.map((category) => (
-                      <option key={category.id} value={category.name}>
-                        {category.name}
+                      <option key={category.id} value={category.id}>
+                        {category.label}
                       </option>
                     ))}
                   </select>
-                </div>
+                </label>
 
-                <div>
-                  <label className="label" htmlFor="catalog-product-price">Price</label>
+                <label>
+                  <span className="label">Price</span>
                   <input
-                    id="catalog-product-price"
                     type="number"
                     min="0"
                     className="input"
@@ -662,54 +645,38 @@ export default function ShopProductAdmin() {
                     onChange={(event) => updateProductForm('price', event.target.value)}
                     placeholder="0"
                   />
-                </div>
+                </label>
 
-                <div className="md:col-span-2">
-                  <label className="label" htmlFor="catalog-product-sku">SKU</label>
+                <label className="md:col-span-2">
+                  <span className="label">SKU</span>
                   <div className="relative">
                     <Tag size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim" />
                     <input
-                      id="catalog-product-sku"
                       className="input pl-10"
                       value={productForm.sku}
                       onChange={(event) => updateProductForm('sku', event.target.value)}
                       placeholder="Optional internal SKU"
                     />
                   </div>
-                </div>
+                </label>
 
-                <div className="md:col-span-2">
-                  <label className="label" htmlFor="catalog-product-description">Description</label>
+                <label className="md:col-span-2">
+                  <span className="label">Description</span>
                   <textarea
-                    id="catalog-product-description"
                     className="input min-h-28 resize-y"
                     value={productForm.description}
                     onChange={(event) => updateProductForm('description', event.target.value)}
                     placeholder="Explain fitment, material, or usage details."
                   />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="label" htmlFor="catalog-product-images">Image URLs</label>
-                  <div className="relative">
-                    <ImagePlus size={15} className="pointer-events-none absolute left-3 top-4 text-ink-dim" />
-                    <textarea
-                      id="catalog-product-images"
-                      className="input min-h-28 resize-y pl-10"
-                      value={productForm.images}
-                      onChange={(event) => updateProductForm('images', event.target.value)}
-                      placeholder={'One image URL per line\nhttps://example.test/product-front.jpg'}
-                    />
-                  </div>
-                </div>
+                </label>
               </div>
 
-              <button
-                type="submit"
-                className="ops-action-primary w-full"
-                disabled={submittingProduct}
-              >
-                <PackagePlus size={15} />
+              <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-4 text-sm text-ink-secondary">
+                Product images are not part of the live ecommerce product contract yet, so this admin screen only edits fields the backend currently stores.
+              </div>
+
+              <button type="submit" className="ops-action-primary w-full" disabled={submittingProduct}>
+                <Plus size={15} />
                 {submittingProduct ? 'Publishing Product...' : 'Publish Product'}
               </button>
             </form>
@@ -717,18 +684,16 @@ export default function ShopProductAdmin() {
         </div>
       </SectionShell>
 
-      {editorProduct ? (
+      {editorProductId ? (
         <ProductEditModal
           categories={categories}
           form={editForm}
           saving={savingProduct}
-          archiving={archivingProductId === editorProduct.id}
+          archiving={archivingProductId === editorProductId}
           onChange={updateEditForm}
-          onAddImage={handleAddImageToEditForm}
-          onRemoveImage={handleRemoveImageFromEditForm}
           onClose={closeProductEditor}
           onSave={handleSaveProductEdits}
-          onArchive={() => handleArchiveProduct(editorProduct.id, editorProduct.name)}
+          onArchive={() => handleArchiveProduct(editorProductId, editorProduct?.name ?? 'This product')}
         />
       ) : null}
     </div>

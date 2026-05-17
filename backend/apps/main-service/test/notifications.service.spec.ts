@@ -6,7 +6,7 @@ import { NOTIFICATIONS_QUEUE_NAME } from '@main-modules/notifications/notificati
 import { NotificationsRepository } from '@main-modules/notifications/repositories/notifications.repository';
 import { NotificationTriggerPlannerService } from '@main-modules/notifications/services/notification-trigger-planner.service';
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
-import { SmtpMailService } from '@main-modules/notifications/services/smtp-mail.service';
+import { MailDeliveryService } from '@main-modules/notifications/services/mail-delivery.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { createNotificationTrigger } from '@shared/events/contracts/notification-triggers';
 import { createCommerceEvent } from '@shared/events/contracts/commerce-events';
@@ -60,7 +60,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
       ],
     }).compile();
@@ -166,7 +166,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
       ],
     }).compile();
@@ -259,7 +259,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
       ],
     }).compile();
@@ -311,7 +311,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: { findById: jest.fn() } },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         {
           provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME),
           useValue: { add: jest.fn() },
@@ -361,7 +361,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: { getOrCreatePreferences: jest.fn() } },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         {
           provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME),
           useValue: { add: jest.fn() },
@@ -427,7 +427,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
       ],
     }).compile();
@@ -480,7 +480,7 @@ describe('NotificationsService', () => {
       }),
     };
 
-    const smtpMailService = {
+    const mailDeliveryService = {
       sendMail: jest.fn().mockResolvedValue({ messageId: 'mail-1' }),
     };
 
@@ -490,7 +490,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: smtpMailService },
+        { provide: MailDeliveryService, useValue: mailDeliveryService },
         {
           provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME),
           useValue: { add: jest.fn() },
@@ -502,7 +502,7 @@ describe('NotificationsService', () => {
 
     const result = await service.deliverNotification('notification-otp-1');
 
-    expect(smtpMailService.sendMail).toHaveBeenCalledWith(
+    expect(mailDeliveryService.sendMail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'customer@example.com',
         subject: 'Account verification code',
@@ -560,7 +560,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: { add: jest.fn() } },
       ],
     }).compile();
@@ -600,7 +600,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: { findById: jest.fn() } },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         {
           provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME),
           useValue: { add: jest.fn() },

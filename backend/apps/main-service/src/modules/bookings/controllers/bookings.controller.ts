@@ -222,8 +222,14 @@ export class BookingsController {
   @ApiBadRequestResponse({ description: 'The submitted booking payload is invalid.' })
   @ApiNotFoundResponse({ description: 'The user, owned vehicle, time slot, or service was not found.' })
   @ApiConflictResponse({ description: 'The selected slot is unavailable or another booking conflict exists.' })
-  create(@Body() createBookingDto: CreateBookingDto) {
-    return this.bookingsService.create(createBookingDto);
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  create(@Body() createBookingDto: CreateBookingDto, @Req() request: Request) {
+    return this.bookingsService.create(
+      createBookingDto,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @Get('bookings/:id/reservation-payment')
@@ -232,8 +238,14 @@ export class BookingsController {
     description: 'Current reservation payment state for the target booking.',
     type: BookingReservationPaymentResponseDto,
   })
-  getReservationPayment(@Param('id') id: string) {
-    return this.bookingsService.getReservationPayment(id);
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  getReservationPayment(@Param('id') id: string, @Req() request: Request) {
+    return this.bookingsService.getReservationPayment(
+      id,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @Post('bookings/:id/reservation-payment/retry')
@@ -242,8 +254,14 @@ export class BookingsController {
     description: 'The booking with refreshed reservation-payment state.',
     type: BookingResponseDto,
   })
-  retryReservationPayment(@Param('id') id: string) {
-    return this.bookingsService.retryReservationPayment(id);
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  retryReservationPayment(@Param('id') id: string, @Req() request: Request) {
+    return this.bookingsService.retryReservationPayment(
+      id,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @Patch('bookings/:id/reservation-payment/confirm')
@@ -357,8 +375,14 @@ export class BookingsController {
     type: BookingResponseDto,
   })
   @ApiNotFoundResponse({ description: 'Booking not found.' })
-  findById(@Param('id') id: string) {
-    return this.bookingsService.findById(id);
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  findById(@Param('id') id: string, @Req() request: Request) {
+    return this.bookingsService.findById(
+      id,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @Patch('bookings/:id/status')

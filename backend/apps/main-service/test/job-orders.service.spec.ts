@@ -814,6 +814,58 @@ describe('JobOrdersService', () => {
     expect(result).toBe(finalizedResult);
   });
 
+  it('marks workbench calendar dates from confirmed and workshop-handoff bookings', async () => {
+    const jobOrdersRepository = {
+      findAllSummaries: jest.fn().mockResolvedValue([]),
+      findAssignedSummaries: jest.fn().mockResolvedValue([]),
+    };
+    const bookingsRepository = {
+      findByScheduledDateRange: jest.fn().mockResolvedValue([
+        { scheduledDate: '2026-05-18', status: 'in_service' },
+        { scheduledDate: '2026-05-18', status: 'confirmed' },
+        { scheduledDate: '2026-05-20', status: 'confirmed' },
+      ]),
+      findScheduledDatesByIds: jest.fn().mockResolvedValue([]),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        JobOrdersService,
+        { provide: JobOrdersRepository, useValue: jobOrdersRepository },
+        { provide: BookingsRepository, useValue: bookingsRepository },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn(), linkReworkJobOrder: jest.fn() } },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'adviser-1',
+              role: 'service_adviser',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(JobOrdersService);
+
+    const result = await service.listWorkbenchCalendar(
+      { userId: 'adviser-1', role: 'service_adviser' },
+      { month: '2026-05', scope: 'active' },
+    );
+
+    expect(bookingsRepository.findByScheduledDateRange).toHaveBeenCalledWith('2026-05-01', '2026-05-31', {
+      statuses: ['confirmed', 'in_service'],
+    });
+    expect(result.bookingQueueDates).toEqual([
+      { date: '2026-05-18', count: 2 },
+      { date: '2026-05-20', count: 1 },
+    ]);
+  });
+
   it('syncs linked back-jobs to resolved when a rework job order is finalized', async () => {
     const eventBus = {
       publish: jest.fn(),
@@ -1268,6 +1320,13 @@ describe('JobOrdersService', () => {
         vehicleId: 'vehicle-1',
         originalJobOrderId: 'job-order-original-1',
         reworkJobOrderId: null,
+        returnInspectionId: 'inspection-1',
+        returnInspection: {
+          id: 'inspection-1',
+          vehicleId: 'vehicle-1',
+          inspectionType: 'return',
+          status: 'completed',
+        },
       }),
       linkReworkJobOrder: jest.fn().mockResolvedValue({
         id: 'back-job-1',
@@ -1377,5 +1436,105 @@ describe('JobOrdersService', () => {
         parentJobOrderId: 'job-order-original-1',
       }),
     );
+  });
+
+  it('blocks rework job-order creation when the linked return inspection is not completed', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        JobOrdersService,
+        {
+          provide: JobOrdersRepository,
+          useValue: {
+            hasBackJobSource: jest.fn().mockResolvedValue(false),
+          },
+        },
+        { provide: BookingsRepository, useValue: { findOptionalById: jest.fn() } },
+        {
+          provide: BackJobsRepository,
+          useValue: {
+            findOptionalById: jest.fn().mockResolvedValue({
+              id: 'back-job-1',
+              status: 'approved_for_rework',
+              customerUserId: 'customer-1',
+              vehicleId: 'vehicle-1',
+              originalJobOrderId: 'job-order-original-1',
+              reworkJobOrderId: null,
+              returnInspectionId: 'inspection-1',
+              returnInspection: {
+                id: 'inspection-1',
+                vehicleId: 'vehicle-1',
+                inspectionType: 'return',
+                status: 'needs_followup',
+              },
+            }),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockImplementation((id: string) => {
+              if (id === 'adviser-1') {
+                return Promise.resolve({
+                  id,
+                  role: 'service_adviser',
+                  isActive: true,
+                  staffCode: 'SA-1001',
+                });
+              }
+
+              if (id === 'customer-1') {
+                return Promise.resolve({
+                  id,
+                  role: 'customer',
+                  isActive: true,
+                });
+              }
+
+              if (id === 'tech-1') {
+                return Promise.resolve({
+                  id,
+                  role: 'technician',
+                  isActive: true,
+                });
+              }
+
+              return Promise.resolve(null);
+            }),
+          },
+        },
+        {
+          provide: VehiclesRepository,
+          useValue: {
+            findOwnedByUser: jest.fn().mockResolvedValue({
+              id: 'vehicle-1',
+              userId: 'customer-1',
+            }),
+          },
+        },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(JobOrdersService);
+
+    await expect(
+      service.create(
+        {
+          sourceType: 'back_job',
+          sourceId: 'back-job-1',
+          customerUserId: 'customer-1',
+          vehicleId: 'vehicle-1',
+          serviceAdviserUserId: 'adviser-1',
+          serviceAdviserCode: 'SA-1001',
+          items: [{ name: 'Warranty rework' }],
+          assignedTechnicianIds: ['tech-1'],
+        },
+        {
+          userId: 'adviser-1',
+          role: 'service_adviser',
+        },
+      ),
+    ).rejects.toThrow('Only back jobs with a completed return inspection can create rework job orders');
   });
 });

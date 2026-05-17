@@ -19,6 +19,7 @@ Run the MCP setup path first, then hand the real work to the right workflow inst
    - If yes, run `swagger-serena-first`.
    - If no, keep Serena or the relevant optional MCPs only.
 4. Continue into the actual work skill or repo workflow.
+   - If the user explicitly asks to set or restate the current objective, use the global `/goal` prompt first.
    - For queue work, use `autocare-queued-task-runner` when available.
    - For backend or client integration, keep the repo-specific skills in play after the MCP setup is done.
 

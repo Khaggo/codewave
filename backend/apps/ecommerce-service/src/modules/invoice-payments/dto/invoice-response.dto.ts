@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 import { InvoicePaymentEntryResponseDto } from './invoice-payment-entry-response.dto';
 
@@ -48,6 +48,56 @@ export class InvoiceResponseDto {
     example: 189900,
   })
   amountDueCents!: number;
+
+  @ApiPropertyOptional({
+    example: 'online_provider',
+    enum: ['manual', 'online_provider'],
+    nullable: true,
+  })
+  paymentChannel!: 'manual' | 'online_provider' | null;
+
+  @ApiPropertyOptional({
+    example: 'paymongo',
+    nullable: true,
+  })
+  onlinePaymentProvider!: string | null;
+
+  @ApiPropertyOptional({
+    example: 'pending',
+    enum: ['pending', 'paid', 'failed', 'expired', 'cancelled', 'unavailable'],
+    nullable: true,
+  })
+  onlinePaymentStatus!: 'pending' | 'paid' | 'failed' | 'expired' | 'cancelled' | 'unavailable' | null;
+
+  @ApiPropertyOptional({
+    example: 'cs_test_checkout_123',
+    nullable: true,
+  })
+  onlinePaymentSessionId!: string | null;
+
+  @ApiPropertyOptional({
+    example: 'https://checkout.paymongo.com/...',
+    nullable: true,
+  })
+  onlinePaymentCheckoutUrl!: string | null;
+
+  @ApiPropertyOptional({
+    example: 'PM-REF-1234',
+    nullable: true,
+  })
+  onlinePaymentReference!: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-05-15T09:30:00.000Z',
+    format: 'date-time',
+    nullable: true,
+  })
+  onlinePaymentPaidAt!: string | null;
+
+  @ApiPropertyOptional({
+    example: null,
+  })
+  onlinePaymentFailureReason!: string | null;
 
   @ApiProperty({
     example: 'current',

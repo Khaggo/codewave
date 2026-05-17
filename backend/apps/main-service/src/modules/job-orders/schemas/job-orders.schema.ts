@@ -47,6 +47,18 @@ export const jobOrderInvoicePaymentMethodEnum = pgEnum('job_order_invoice_paymen
   'check',
   'other',
 ]);
+export const jobOrderInvoiceSettlementChannelEnum = pgEnum('job_order_invoice_settlement_channel', [
+  'manual',
+  'online_provider',
+]);
+export const jobOrderInvoiceOnlinePaymentStatusEnum = pgEnum('job_order_invoice_online_payment_status', [
+  'pending',
+  'paid',
+  'failed',
+  'expired',
+  'cancelled',
+  'unavailable',
+]);
 
 export const jobOrderPhotoLinkTypeEnum = pgEnum('job_order_photo_link_type', [
   'job_order',
@@ -191,8 +203,16 @@ export const jobOrderInvoiceRecords = pgTable(
     totalAmountCents: integer('total_amount_cents').notNull().default(0),
     amountPaidCents: integer('amount_paid_cents'),
     paymentMethod: jobOrderInvoicePaymentMethodEnum('payment_method'),
+    paymentChannel: jobOrderInvoiceSettlementChannelEnum('payment_channel'),
     paymentReference: varchar('payment_reference', { length: 120 }),
     officialReceiptReference: varchar('official_receipt_reference', { length: 40 }).notNull(),
+    onlinePaymentProvider: varchar('online_payment_provider', { length: 40 }),
+    onlinePaymentStatus: jobOrderInvoiceOnlinePaymentStatusEnum('online_payment_status'),
+    onlinePaymentSessionId: varchar('online_payment_session_id', { length: 120 }),
+    onlinePaymentCheckoutUrl: text('online_payment_checkout_url'),
+    onlinePaymentReference: varchar('online_payment_reference', { length: 120 }),
+    onlinePaymentPaidAt: timestamp('online_payment_paid_at', { withTimezone: true }),
+    onlinePaymentFailureReason: text('online_payment_failure_reason'),
     paidAt: timestamp('paid_at', { withTimezone: true }),
     recordedByUserId: uuid('recorded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     summary: text('summary'),

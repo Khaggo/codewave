@@ -27,7 +27,6 @@ test('staff portal navigation rules follow the real service flow order', () => {
     'inventory',
     'service-management',
     'user-admin',
-    'appointments-admin',
     'summary-review',
     'settings',
   ]

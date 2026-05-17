@@ -73,6 +73,38 @@ const releaseSummaryByState = {
   },
 }
 
+function getPendingReviewGuidance({
+  qualityGate,
+  blockingFindings,
+  reviewNeededFindings,
+  canRecordLiveVerdict,
+}) {
+  if (!qualityGate || qualityGate.status !== 'pending_review') {
+    return null
+  }
+
+  if (blockingFindings.length > 0) {
+    return {
+      toneClass: 'rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100',
+      message: qualityGate.blockingReason || 'Resolve the blocking QA findings before release can continue.',
+    }
+  }
+
+  if (reviewNeededFindings.length > 0) {
+    return {
+      toneClass: 'rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100',
+      message: 'QA is awaiting reviewer attention. Clear the warning findings, then record the head-technician verdict.',
+    }
+  }
+
+  return {
+    toneClass: 'rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-100',
+    message: canRecordLiveVerdict
+      ? 'No blocking findings remain. Record a Pass verdict to clear this release.'
+      : 'No blocking findings remain. A head technician or super admin still needs to record Pass before release can continue.',
+  }
+}
+
 function formatLabel(value) {
   return String(value ?? '')
     .split('_')
@@ -247,6 +279,12 @@ export default function QAAuditWorkspace() {
   const blockingGroup = groupedFindings.find((group) => group.key === 'critical') ?? null
   const reviewGroups = groupedFindings.filter((group) => group.key !== 'critical')
   const latestOverride = qualityGate ? getLatestQualityGateOverride(qualityGate) : null
+  const pendingReviewGuidance = getPendingReviewGuidance({
+    qualityGate,
+    blockingFindings,
+    reviewNeededFindings,
+    canRecordLiveVerdict,
+  })
 
   async function loadQualityGate() {
     if (qaLoadInFlightRef.current) {
@@ -413,7 +451,7 @@ export default function QAAuditWorkspace() {
     if (!canRecordLiveVerdict) {
       setVerdictState({
         status: 'verdict_forbidden_role',
-        message: 'Only the head technician can record the release verdict.',
+        message: 'Only the head technician or super admin can record the release verdict.',
       })
       return
     }
@@ -421,7 +459,7 @@ export default function QAAuditWorkspace() {
     if (!user?.accessToken) {
       setVerdictState({
         status: 'verdict_failed',
-        message: 'A valid head-technician session is required before recording the verdict.',
+        message: 'A valid head-technician or super-admin session is required before recording the verdict.',
       })
       return
     }
@@ -448,7 +486,7 @@ export default function QAAuditWorkspace() {
       })
       toast({
         type: 'success',
-        title: 'Head-Technician Verdict Recorded',
+        title: 'QA Verdict Recorded',
         message:
           updatedQualityGate.reviewerVerdict === 'blocked'
             ? `${qualityGate.jobOrderId} was returned for technician remediation.`
@@ -465,7 +503,7 @@ export default function QAAuditWorkspace() {
 
       setVerdictState({
         status: nextStatus,
-        message: error?.message || 'Head-technician verdict could not be recorded.',
+        message: error?.message || 'QA verdict could not be recorded.',
       })
     }
   }
@@ -586,7 +624,11 @@ export default function QAAuditWorkspace() {
                 <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Blocking</p>
                 <p className="mt-2 text-sm font-semibold text-ink-primary">{blockingFindings.length}</p>
               </div>
-              {qualityGate.blockingReason ? (
+              {pendingReviewGuidance ? (
+                <div className={`${pendingReviewGuidance.toneClass} md:col-span-2 xl:col-span-4`}>
+                  {pendingReviewGuidance.message}
+                </div>
+              ) : qualityGate.blockingReason ? (
                 <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100 md:col-span-2 xl:col-span-4">
                   {qualityGate.blockingReason}
                 </div>
@@ -704,7 +746,7 @@ export default function QAAuditWorkspace() {
           <div className="grid gap-5 xl:grid-cols-2">
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-ink-primary">Head technician verdict</p>
+                <p className="text-sm font-semibold text-ink-primary">QA verdict</p>
                 <span className={`badge ${canRecordLiveVerdict ? 'badge-green' : 'badge-gray'}`}>
                   {canRecordLiveVerdict ? 'Editable' : 'Read only'}
                 </span>

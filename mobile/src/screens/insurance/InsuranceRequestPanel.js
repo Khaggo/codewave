@@ -48,6 +48,53 @@ const REQUEST_TITLES = {
   quotation: 'Quotation request',
 }
 
+function StagedDocumentRow({ item, onAttach, onRemove, disabled = false }) {
+  const hasFile = Boolean(item.fileName)
+  const hasOnFileDocument = Boolean(item.onFileName)
+
+  return (
+    <View style={styles.documentRow}>
+      <View style={styles.documentCopy}>
+        <Text style={styles.documentLabel}>{item.label}</Text>
+        {hasOnFileDocument && !hasFile ? (
+          <Text style={styles.documentMeta}>
+            {[item.onFileName, 'Already on file'].filter(Boolean).join(' - ')}
+          </Text>
+        ) : null}
+        <Text style={styles.documentMeta}>
+          {hasFile
+            ? [item.fileName, item.fileSizeLabel].filter(Boolean).join(' • ')
+            : hasOnFileDocument
+              ? ''
+              : 'Not attached yet'}
+        </Text>
+      </View>
+      <View style={styles.documentActions}>
+        <TouchableOpacity
+          style={[styles.secondaryButton, disabled && styles.buttonDisabled]}
+          onPress={() => onAttach(item.type)}
+          disabled={disabled}
+          activeOpacity={0.88}
+        >
+          <Text style={styles.secondaryButtonText}>
+            {hasFile || hasOnFileDocument ? 'Replace' : 'Attach'}
+          </Text>
+        </TouchableOpacity>
+        {hasFile ? (
+          <TouchableOpacity
+            style={[styles.secondaryButton, disabled && styles.buttonDisabled]}
+            onPress={() => onRemove(item.type)}
+            disabled={disabled}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.secondaryButtonText}>Clear</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    </View>
+  )
+}
+
 export default function InsuranceRequestPanel({
   bottomInset = 0,
   selectedVehicleLabel,
@@ -62,14 +109,46 @@ export default function InsuranceRequestPanel({
   isSubmitting,
   intakeState,
   intakeMessage,
+  checklist,
+  stagedDocuments = [],
+  onFileDocuments = [],
+  hasOnFileRenewalPolicy = false,
+  canSubmitRequest = true,
+  onStageDocument,
+  onRemoveStagedDocument,
 }) {
   const requestTitle = REQUEST_TITLES[draft.purpose] ?? 'Claim request'
+  const stagedDocumentsByType = new Map(stagedDocuments.map((item) => [item.documentType, item]))
+  const onFileDocumentsByType = new Map((onFileDocuments ?? []).map((item) => [item.documentType, item]))
+  const footerPaddingBottom = Math.max(bottomInset, 14)
+  const contentPaddingBottom = footerPaddingBottom + 180
+  const useOnFileRenewalPolicy =
+    draft.purpose === 'renewal' &&
+    hasOnFileRenewalPolicy &&
+    draft.renewalPolicyMode !== 'replace'
+
+  const buildDocumentItem = (item) => {
+    const stagedDocument = stagedDocumentsByType.get(item.type)
+    const onFileDocument = onFileDocumentsByType.get(item.type)
+    const allowOnFile =
+      item.type === 'policy' && draft.purpose === 'renewal'
+        ? useOnFileRenewalPolicy
+        : Boolean(onFileDocument)
+
+    return {
+      ...item,
+      fileName: stagedDocument?.fileName ?? '',
+      fileSizeLabel: stagedDocument?.fileSizeLabel ?? null,
+      onFileName: !stagedDocument && allowOnFile ? onFileDocument?.fileName ?? item.label : '',
+      onFileCreatedAt: !stagedDocument && allowOnFile ? onFileDocument?.createdAt ?? null : null,
+    }
+  }
 
   return (
     <View style={styles.root}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: contentPaddingBottom }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -149,18 +228,7 @@ export default function InsuranceRequestPanel({
 
           <InsuranceSectionDivider title="Request details">
             <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>Subject</Text>
-              <TextInput
-                value={draft.subject}
-                onChangeText={(value) => onChangeDraft({ subject: value })}
-                placeholder={requestGuidance?.subjectPlaceholder ?? 'Accident repair inquiry'}
-                placeholderTextColor={insurancePalette.textDim}
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>Description</Text>
+              <Text style={styles.fieldLabel}>What happened?</Text>
               <TextInput
                 value={draft.description}
                 onChangeText={(value) => onChangeDraft({ description: value })}
@@ -174,7 +242,7 @@ export default function InsuranceRequestPanel({
             </View>
 
             <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>Notes</Text>
+              <Text style={styles.fieldLabel}>Additional details</Text>
               <TextInput
                 value={draft.notes}
                 onChangeText={(value) => onChangeDraft({ notes: value })}
@@ -190,7 +258,7 @@ export default function InsuranceRequestPanel({
 
           <InsuranceSectionDivider title="Insurance details">
             <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>Provider name</Text>
+              <Text style={styles.fieldLabel}>Insurance provider</Text>
               <TextInput
                 value={draft.providerName}
                 onChangeText={(value) => onChangeDraft({ providerName: value })}
@@ -213,20 +281,115 @@ export default function InsuranceRequestPanel({
             </View>
           </InsuranceSectionDivider>
 
+          {draft.purpose === 'renewal' && hasOnFileRenewalPolicy ? (
+            <InsuranceSectionDivider title="Policy copy for renewal">
+              <View style={styles.notesCard}>
+                <Text style={styles.helperText}>
+                  We found a policy copy already attached to this vehicle request. You can keep using
+                  the old policy on file or replace it with a newer copy.
+                </Text>
+                <View style={styles.segmentRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.segmentButton,
+                      useOnFileRenewalPolicy && styles.segmentButtonSelected,
+                    ]}
+                    onPress={() => onChangeDraft({ renewalPolicyMode: 'reuse' })}
+                    activeOpacity={0.88}
+                    disabled={isSubmitting}
+                  >
+                    <Text
+                      style={[
+                        styles.segmentButtonText,
+                        useOnFileRenewalPolicy && styles.segmentButtonTextSelected,
+                      ]}
+                    >
+                      Use on-file policy
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.segmentButton,
+                      !useOnFileRenewalPolicy && styles.segmentButtonSelected,
+                    ]}
+                    onPress={() => onChangeDraft({ renewalPolicyMode: 'replace' })}
+                    activeOpacity={0.88}
+                    disabled={isSubmitting}
+                  >
+                    <Text
+                      style={[
+                        styles.segmentButtonText,
+                        !useOnFileRenewalPolicy && styles.segmentButtonTextSelected,
+                      ]}
+                    >
+                      Replace with new copy
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </InsuranceSectionDivider>
+          ) : null}
+
+          <InsuranceSectionDivider title="Required now">
+            <View style={styles.notesCard}>
+              {(checklist?.required ?? []).map((item) => (
+                <StagedDocumentRow
+                  key={item.type}
+                  item={buildDocumentItem(item)}
+                  onAttach={onStageDocument}
+                  onRemove={onRemoveStagedDocument}
+                  disabled={isSubmitting}
+                />
+              ))}
+            </View>
+          </InsuranceSectionDivider>
+
+          {(checklist?.supporting ?? []).length ? (
+            <InsuranceSectionDivider title="Helpful next">
+              <View style={styles.notesCard}>
+                {(checklist?.supporting ?? []).map((item) => (
+                  <StagedDocumentRow
+                    key={item.type}
+                    item={buildDocumentItem(item)}
+                    onAttach={onStageDocument}
+                    onRemove={onRemoveStagedDocument}
+                    disabled={isSubmitting}
+                  />
+                ))}
+              </View>
+            </InsuranceSectionDivider>
+          ) : null}
+
           <InlineNotice state={intakeState} message={intakeMessage} />
         </InsurancePanelShell>
       </ScrollView>
 
       <View style={[styles.stickyFooter, { paddingBottom: Math.max(bottomInset, 14) }]}>
+        {!canSubmitRequest ? (
+          <View style={styles.footerNoticeCard}>
+            <Text style={styles.footerNoticeTitle}>This insurance case is already active.</Text>
+            <Text style={styles.footerNoticeText}>
+              Use Documents to replace the policy copy or attach more files, and use Status to
+              follow the next staff update.
+            </Text>
+          </View>
+        ) : null}
         <TouchableOpacity
-          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+          style={[
+            styles.submitButton,
+            (isSubmitting || !canSubmitRequest) && styles.submitButtonDisabled,
+          ]}
           onPress={onSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canSubmitRequest}
           activeOpacity={0.88}
         >
           {isSubmitting ? <ActivityIndicator color={insurancePalette.onAmber} size="small" /> : null}
           <Text style={styles.submitButtonText}>
-            {isSubmitting ? 'Submitting...' : 'Submit request'}
+            {isSubmitting
+              ? 'Submitting...'
+              : canSubmitRequest
+                ? 'Submit request'
+                : 'Request already active'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -328,11 +491,42 @@ const styles = StyleSheet.create({
   fieldBlock: {
     gap: 8,
   },
+  notesCard: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.card,
+    padding: 16,
+    gap: 14,
+  },
   helperText: {
     color: insurancePalette.textMuted,
     fontFamily: insuranceFonts.body,
     fontSize: 13,
     lineHeight: 20,
+  },
+  documentRow: {
+    gap: 12,
+  },
+  documentCopy: {
+    gap: 4,
+  },
+  documentLabel: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.body,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  documentMeta: {
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  documentActions: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
   },
   fieldLabel: {
     color: insurancePalette.textDim,
@@ -360,6 +554,23 @@ const styles = StyleSheet.create({
   notesInput: {
     minHeight: 88,
   },
+  secondaryButton: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.cardSoft,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  secondaryButtonText: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.body,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  buttonDisabled: {
+    opacity: 0.55,
+  },
   noticeRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -384,7 +595,29 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: insurancePalette.divider,
     paddingTop: 14,
+    gap: 12,
     backgroundColor: insurancePalette.base,
+  },
+  footerNoticeCard: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.card,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 6,
+  },
+  footerNoticeTitle: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  footerNoticeText: {
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 13,
+    lineHeight: 20,
   },
   submitButton: {
     minHeight: 54,

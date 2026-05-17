@@ -5,6 +5,7 @@ import {
   getArrivalPhotoButtonLabel,
   getArrivalPhotoDisplayLabel,
   getArrivalPhotoTemporaryRef,
+  isArrivalPhotoTemporaryRef,
   getIntakeWorkspaceHeroCopy,
   getIntakeRequirementsBadge,
   getIntakeWorkspacePrimaryActionLabel,
@@ -93,6 +94,11 @@ test('requirements badge reflects checklist progress and missing notes', () => {
 test('arrival photo helpers provide temporary refs and upload tile copy', () => {
   assert.equal(getArrivalPhotoTemporaryRef('front'), 'upload://vehicle/front')
   assert.equal(getArrivalPhotoTemporaryRef('dashboardOdometer'), 'upload://vehicle/dashboardOdometer')
+  assert.equal(isArrivalPhotoTemporaryRef('upload://vehicle/front'), true)
+  assert.equal(
+    isArrivalPhotoTemporaryRef('upload://vehicle/7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d/front/photo.jpg'),
+    false,
+  )
   assert.equal(getArrivalPhotoButtonLabel('front-view.jpg'), 'Replace photo')
   assert.equal(getArrivalPhotoButtonLabel(''), 'Add photo')
   assert.equal(getArrivalPhotoDisplayLabel('front-view.jpg'), 'front-view.jpg')

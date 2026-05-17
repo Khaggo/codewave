@@ -69,7 +69,7 @@ const getScreenCopy = (otpPurpose) => {
   };
 };
 
-export default function OTPScreen({ navigation, route, onVerified, onVerifyRegistrationOtp }) {
+export default function OTPScreen({ navigation, route, onVerified, onVerifyRegistrationOtp, onResend }) {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
@@ -222,15 +222,6 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
       return;
     }
 
-    const usesLiveOtpFlow = otpPurpose === 'deleteAccount';
-
-    if (!usesLiveOtpFlow && otp !== '123456') {
-      setError('Incorrect OTP. Use 123456 for this prototype.');
-      showInlineToast('Invalid code. Please try again.');
-      Alert.alert('Invalid Code', 'The OTP you entered is invalid. Please try again.');
-      return;
-    }
-
     const submitVerification = async () => {
       setSubmitting(true);
       try {
@@ -287,20 +278,40 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
       return;
     }
 
-    if (otpPurpose === 'register') {
-      showInlineToast('Resend is not available yet. Start registration again to request a new code.');
-      return;
-    }
+    const requestResend = async () => {
+      try {
+        if (!onResend) {
+          throw new Error('This verification code cannot be resent from this screen. Go back and request a new code.');
+        }
 
-    if (otpPurpose === 'deleteAccount') {
-      showInlineToast('Resend is not available yet. Go back and restart account deletion to request a new code.');
-      return;
-    }
+        const resendResult = await onResend({
+          ...route.params,
+          otpPurpose,
+        });
 
-    setOtp('');
-    setError('');
-    setResendCountdown(RESEND_SECONDS);
-    showInlineToast('A fresh verification code was sent.', 'success');
+        if (resendResult) {
+          navigation.setParams({
+            ...route.params,
+            ...resendResult,
+          });
+        }
+
+        setOtp('');
+        setError('');
+        setResendCountdown(RESEND_SECONDS);
+        showInlineToast('A fresh verification code was sent.', 'success');
+      } catch (resendError) {
+        const message =
+          resendError instanceof Error
+            ? resendError.message
+            : 'We could not resend the verification code right now.';
+        setError(message);
+        showInlineToast(message);
+        Alert.alert('Resend Failed', message);
+      }
+    };
+
+    void requestResend();
   };
 
   return (
@@ -393,19 +404,6 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
           )}
         </View>
 
-        {otpPurpose === 'register' || otpPurpose === 'deleteAccount' ? (
-          <View style={styles.demoCard}>
-            <Text style={styles.demoText}>
-              Use the verification code sent to your email. This screen is now backed by the real backend verification flow.
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.demoCard}>
-            <Text style={styles.demoText}>
-              Demo code: <Text style={styles.demoCode}>1 2 3 4 5 6</Text>
-            </Text>
-          </View>
-        )}
       </View>
     </ScreenShell>
   );
@@ -580,24 +578,5 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 15,
     fontWeight: '800',
-  },
-  demoCard: {
-    marginHorizontal: 24,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  demoText: {
-    color: colors.mutedText,
-    fontSize: 13,
-  },
-  demoCode: {
-    color: colors.text,
-    fontWeight: '800',
-    letterSpacing: 2,
   },
 });

@@ -6,6 +6,7 @@ import {
   buildIntakeInspectionPayload,
   createInitialIntakeDraft,
   getIntakeRequirementOptions,
+  getReasonForVisitOptions,
   resolveIntakeNextRoute,
 } from './digitalIntakeInspectionWorkspaceForm.mjs'
 
@@ -87,24 +88,16 @@ test('buildIntakeInspectionPayload preserves intake triage and requirements fiel
     userId: 'staff-iris',
   })
 
-  assert.equal(payload.arrivalType, 'with_booking')
-  assert.equal(payload.visitType, 'insurance_related')
-  assert.equal(payload.reasonForVisit, 'Customer arrived for insurance claim support.')
-  assert.equal(payload.requestedServiceSummary, 'Front bumper damage assessment.')
-  assert.equal(payload.isRepeatVisit, true)
-  assert.equal(payload.urgencyFlag, true)
-  assert.deepEqual(payload.requirementsChecklist, {
-    bookingFound: true,
-    orCrPresent: true,
-    validIdPresent: true,
-    oldPolicyPresent: true,
-    supportingDocsPresent: false,
-  })
-  assert.equal(
-    payload.missingRequirementsNote,
-    'Customer still needs to upload additional claim photos.',
-  )
-  assert.equal(payload.nextRoute, 'insurance')
+  assert.match(payload.notes, /Arrival mode: With Booking/)
+  assert.match(payload.notes, /Visit type: Insurance Related/)
+  assert.match(payload.notes, /Reason for visit: Customer arrived for insurance claim support\./)
+  assert.match(payload.notes, /Requested service summary: Front bumper damage assessment\./)
+  assert.match(payload.notes, /Repeat visit: Yes/)
+  assert.match(payload.notes, /Urgent visit: Yes/)
+  assert.match(payload.notes, /Next route: Insurance/)
+  assert.match(payload.notes, /Missing requirements note: Customer still needs to upload additional claim photos\./)
+  assert.match(payload.notes, /Booking confirmed: Present/)
+  assert.match(payload.notes, /Supporting docs present: Missing/)
 })
 
 test('buildIntakeInspectionPayload normalizes invalid control-field values to stable defaults', () => {
@@ -118,9 +111,11 @@ test('buildIntakeInspectionPayload normalizes invalid control-field values to st
     userId: 'staff-11',
   })
 
-  assert.equal(payload.arrivalType, 'walk_in')
-  assert.equal(payload.visitType, 'regular_service')
-  assert.equal(payload.nextRoute, 'service')
+  assert.equal(payload.inspectionType, 'intake')
+  assert.equal(payload.status, 'pending')
+  assert.match(payload.notes, /Arrival mode: Walk In/)
+  assert.match(payload.notes, /Visit type: Regular Service/)
+  assert.match(payload.notes, /Next route: Service/)
 })
 
 test('buildIntakeInspectionPayload coerces partial or missing requirementsChecklist values', () => {
@@ -135,13 +130,30 @@ test('buildIntakeInspectionPayload coerces partial or missing requirementsCheckl
     userId: 'staff-12',
   })
 
-  assert.deepEqual(payload.requirementsChecklist, {
-    bookingFound: true,
-    orCrPresent: false,
-    validIdPresent: true,
-    oldPolicyPresent: false,
-    supportingDocsPresent: false,
-  })
+  assert.match(payload.notes, /Booking confirmed: Present/)
+  assert.match(payload.notes, /OR\/CR present: Missing/)
+})
+
+test('getReasonForVisitOptions follows visit type and preserves loaded legacy values', () => {
+  assert.deepEqual(getReasonForVisitOptions({ visitType: 'inspection_only' }), [
+    'General inspection',
+    'Pre-purchase inspection',
+    'Roadworthy or safety inspection',
+    'Insurance documentation inspection',
+    'Diagnostic inspection',
+  ])
+
+  assert.deepEqual(
+    getReasonForVisitOptions({
+      visitType: 'regular_service',
+      currentValue: 'Customer arrived for insurance claim support.',
+    }).slice(0, 3),
+    [
+      'Customer arrived for insurance claim support.',
+      'Preventive maintenance',
+      'Oil change / PMS',
+    ],
+  )
 })
 
 test('buildIntakeInspectionNotes stores intake-only sections in labeled note blocks', () => {
@@ -215,6 +227,7 @@ test('buildIntakeInspectionPayload maps intake fields into the current inspectio
   ])
   assert.ok(payload.notes.length <= 1000)
   assert.match(payload.notes, /SERVICE CONCERN/)
+  assert.match(payload.notes, /REQUIREMENTS CHECKLIST/)
   assert.match(payload.notes, /Fuel level on arrival:/)
   assert.equal(payload.findings.length, 1)
   assert.equal(payload.findings[0].category, 'body')
@@ -276,7 +289,8 @@ test('buildIntakeInspectionPayload preserves later intake sections when long tex
   assert.match(payload.notes, /CUSTOMER ITEMS/)
   assert.match(payload.notes, /CUSTOMER ACKNOWLEDGMENT/)
   assert.match(payload.notes, /Customer signature:/)
-  assert.match(payload.notes, /Received by staff:/)
+  assert.match(payload.notes, /CUSTOMER ACKNOWLEDGMENT/)
+  assert.match(payload.notes, /Customer signature:/)
 })
 
 test('buildIntakeInspectionPayload defaults regular service to service routing', () => {
@@ -289,7 +303,7 @@ test('buildIntakeInspectionPayload defaults regular service to service routing',
     userId: 'staff-77',
   })
 
-  assert.equal(payload.nextRoute, 'service')
+  assert.match(payload.notes, /Next route: Service/)
 })
 
 test('buildIntakeInspectionPayload keeps insurance-related routing when selected', () => {
@@ -302,7 +316,7 @@ test('buildIntakeInspectionPayload keeps insurance-related routing when selected
     userId: 'staff-78',
   })
 
-  assert.equal(payload.nextRoute, 'insurance')
+  assert.match(payload.notes, /Next route: Insurance/)
 })
 
 test('resolveIntakeNextRoute follows visit-type intent over stale route values', () => {

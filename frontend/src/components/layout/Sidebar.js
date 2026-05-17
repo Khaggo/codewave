@@ -49,7 +49,6 @@ const ICON_BY_PATH = {
   '/admin/catalog': Boxes,
   '/admin/inventory': ShoppingBag,
   '/admin/users': Users,
-  '/admin/appointments': CalendarCheck,
   '/admin/summaries': BarChart3,
   '/settings': Cog,
 }

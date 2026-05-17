@@ -76,10 +76,10 @@ test('insurance hero prioritizes document follow-up when files are still missing
     {
       eyebrow: 'Current request',
       title: 'Upload required documents',
-      message: '2 required documents still need attention for this request.',
+      message: 'Still needed before review: Policy copy, Valid ID.',
       ctaLabel: 'Open documents',
       routeKey: 'documents',
-      statusLabel: '2 missing',
+      statusLabel: 'Missing: Policy copy, Valid ID',
       tone: 'warning',
     },
   )
@@ -194,7 +194,7 @@ test('overview state routes users to the best next action inside insurance mode'
     }),
     {
       title: 'Upload required documents',
-      message: 'One required file is blocking review for this request.',
+      message: 'Still needed before review: Valid ID.',
       ctaLabel: 'Open docs',
       routeKey: 'documents',
       routeRows: [
@@ -221,7 +221,7 @@ test('overview state pluralizes missing-document guidance for multiple files', (
         { type: 'valid_id', label: 'Valid ID' },
       ],
     }).message,
-    '2 required files are blocking review for this request.',
+    'Still needed before review: Policy copy, Valid ID.',
   )
 })
 
@@ -246,7 +246,6 @@ test('status state folds payment and renewal into one tracking model', () => {
         { key: 'request', label: 'Request submitted', active: true },
         { key: 'documents', label: 'Documents complete', active: true },
         { key: 'payment', label: 'Payment follow-up', active: true },
-        { key: 'renewal', label: 'Renewal', active: false },
       ],
     },
   )
@@ -300,9 +299,27 @@ test('status state surfaces overdue payment even when the shared timeline curren
         { key: 'request', label: 'Request submitted', active: true },
         { key: 'documents', label: 'Documents complete', active: true },
         { key: 'payment', label: 'Payment follow-up', active: true },
-        { key: 'renewal', label: 'Renewal', active: false },
       ],
     },
+  )
+})
+
+test('status state keeps a claim-only request focused on review and approval when no payment or renewal follow-up exists', () => {
+  assert.deepEqual(
+    buildCustomerInsuranceStatusState({
+      latestInquiry: {
+        purpose: 'claim',
+        status: 'approved',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+      },
+      missingRequiredDocuments: [],
+      latestUpdateLabel: 'Approved by staff.',
+    }).timeline,
+    [
+      { key: 'request', label: 'Request submitted', active: true },
+      { key: 'documents', label: 'Documents complete', active: true },
+    ],
   )
 })
 
@@ -399,8 +416,8 @@ test('status state keeps completed renewal out of the active blocker model', () 
       latestUpdateLabel: 'Renewal completed.',
     }),
     {
-      title: 'Current request status',
-      summary: 'Review the latest customer-safe update and next step.',
+      title: 'Request completed',
+      summary: 'This insurance request is already completed and now lives in history for future reference.',
       ctaLabel: 'Review status',
       ctaRouteKey: 'status',
       latestUpdateLabel: 'Renewal completed.',
@@ -430,8 +447,6 @@ test('status state keeps the empty default case on the current request fallback'
       timeline: [
         { key: 'request', label: 'Request submitted', active: true },
         { key: 'documents', label: 'Documents complete', active: true },
-        { key: 'payment', label: 'Payment follow-up', active: false },
-        { key: 'renewal', label: 'Renewal', active: false },
       ],
     },
   )
@@ -449,8 +464,8 @@ test('status state keeps terminal closed, cancelled, and rejected cases on the f
       latestUpdateLabel: 'Closed request.',
     }),
     {
-      title: 'Current request status',
-      summary: 'Review the latest customer-safe update and next step.',
+      title: 'Request completed',
+      summary: 'This insurance request is already completed and now lives in history for future reference.',
       ctaLabel: 'Review status',
       ctaRouteKey: 'status',
       latestUpdateLabel: 'Closed request.',
@@ -476,8 +491,6 @@ test('status state keeps terminal closed, cancelled, and rejected cases on the f
     [
       { key: 'request', label: 'Request submitted', active: true },
       { key: 'documents', label: 'Documents complete', active: true },
-      { key: 'payment', label: 'Payment follow-up', active: false },
-      { key: 'renewal', label: 'Renewal', active: false },
     ],
   )
 
@@ -494,8 +507,6 @@ test('status state keeps terminal closed, cancelled, and rejected cases on the f
     [
       { key: 'request', label: 'Request submitted', active: true },
       { key: 'documents', label: 'Documents complete', active: true },
-      { key: 'payment', label: 'Payment follow-up', active: false },
-      { key: 'renewal', label: 'Renewal', active: false },
     ],
   )
 })
@@ -513,7 +524,6 @@ test('insurance action cards expose focused destinations for the hybrid home', (
         required: [
           { type: 'or_cr', complete: true },
           { type: 'policy', complete: false },
-          { type: 'valid_id', complete: false },
         ],
         optional: [],
       },
@@ -530,7 +540,7 @@ test('insurance action cards expose focused destinations for the hybrid home', (
       },
     }).map(({ key, title, routeKey, value }) => ({ key, title, routeKey, value })),
     [
-      { key: 'documents', title: 'Documents', routeKey: 'documents', value: '1/3' },
+      { key: 'documents', title: 'Documents', routeKey: 'documents', value: '1/2' },
       { key: 'payment', title: 'Payment', routeKey: 'payment', value: 'Proof Submitted' },
       { key: 'renewal', title: 'Renewal', routeKey: 'renewal', value: 'Upcoming' },
       { key: 'history', title: 'History', routeKey: 'history', value: '3' },
@@ -595,15 +605,14 @@ test('insurance home focus prioritizes missing-document follow-up when requireme
       },
       missingRequiredDocuments: [
         { type: 'policy', label: 'Policy copy' },
-        { type: 'valid_id', label: 'Valid ID' },
+        { type: 'or_cr', label: 'OR/CR' },
       ],
       claimStatusUpdateCount: 0,
     }),
     {
       icon: 'file-document-alert-outline',
       title: 'Upload required documents',
-      message:
-        '2 required documents still need attention before the review can continue.',
+      message: 'Still needed before review: Policy copy, OR/CR.',
       actionLabel: 'Upload now',
       tone: 'warning',
       highlightedCardKey: 'documents',
@@ -682,11 +691,11 @@ test('requirements checklist makes old policy required for renewals but optional
 
   assert.deepEqual(
     renewalChecklist.required.map((item) => item.type),
-    ['or_cr', 'policy', 'valid_id'],
+    ['or_cr', 'policy'],
   )
   assert.deepEqual(
     newApplicationChecklist.required.map((item) => item.type),
-    ['or_cr', 'valid_id'],
+    ['or_cr'],
   )
   assert.equal(
     newApplicationChecklist.supporting.find((item) => item.type === 'policy')?.label,
@@ -778,6 +787,18 @@ test('customer timeline includes payment pending and renewal prompts', () => {
       renewalStatus: 'upcoming',
     }).map((step) => step.key),
     ['submitted', 'review', 'payment', 'renewal'],
+  )
+})
+
+test('customer timeline keeps a claim-only approval flow free of payment and renewal placeholders', () => {
+  assert.deepEqual(
+    getCustomerInsuranceTimeline({
+      purpose: 'claim',
+      status: 'approved',
+      paymentStatus: 'not_required',
+      renewalStatus: 'not_applicable',
+    }).map((step) => step.key),
+    ['submitted', 'review', 'approved'],
   )
 })
 

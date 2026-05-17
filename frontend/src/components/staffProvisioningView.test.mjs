@@ -47,13 +47,16 @@ test('summarizeManagedAccounts returns the directory counters', () => {
     summarizeManagedAccounts([
       { isActive: true, role: 'service_adviser' },
       { isActive: false, role: 'technician' },
+      { isActive: true, role: 'head_technician' },
       { isActive: true, role: 'super_admin' },
     ]),
     {
-      total: 3,
-      activeCount: 2,
+      total: 4,
+      activeCount: 3,
       inactiveCount: 1,
       adminCount: 1,
+      headTechnicianCount: 1,
+      activeHeadTechnicianCount: 1,
     },
   )
 })

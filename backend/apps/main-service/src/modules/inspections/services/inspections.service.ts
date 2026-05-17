@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 
 import { BookingsService } from '@main-modules/bookings/services/bookings.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
@@ -14,6 +14,11 @@ export type InspectionUploadFile = {
   buffer: Buffer;
 };
 
+type InspectionActor = {
+  userId: string;
+  role: string;
+};
+
 @Injectable()
 export class InspectionsService {
   constructor(
@@ -23,7 +28,10 @@ export class InspectionsService {
     private readonly inspectionEvidenceStorageService: InspectionEvidenceStorageService,
   ) {}
 
-  async create(vehicleId: string, payload: CreateInspectionDto) {
+  async create(vehicleId: string, payload: CreateInspectionDto, actor?: InspectionActor) {
+    if (actor) {
+      this.assertInspectionActor(actor);
+    }
     await this.vehiclesService.findById(vehicleId);
 
     if (payload.bookingId) {
@@ -44,7 +52,10 @@ export class InspectionsService {
     return this.inspectionsRepository.create(vehicleId, payload);
   }
 
-  async findByVehicleId(vehicleId: string) {
+  async findByVehicleId(vehicleId: string, actor?: InspectionActor) {
+    if (actor) {
+      this.assertInspectionActor(actor);
+    }
     await this.vehiclesService.findById(vehicleId);
     return this.inspectionsRepository.findByVehicleId(vehicleId);
   }
@@ -53,7 +64,11 @@ export class InspectionsService {
     vehicleId: string,
     payload: UploadInspectionPhotoDto,
     file: InspectionUploadFile,
+    actor?: InspectionActor,
   ) {
+    if (actor) {
+      this.assertInspectionActor(actor);
+    }
     await this.vehiclesService.findById(vehicleId);
 
     if (!file?.buffer?.length) {
@@ -77,5 +92,13 @@ export class InspectionsService {
       attachmentRef: persistedFile.attachmentRef,
       storageKey: persistedFile.storageKey,
     };
+  }
+
+  private assertInspectionActor(actor: InspectionActor) {
+    if (!['technician', 'service_adviser', 'super_admin'].includes(actor.role)) {
+      throw new ForbiddenException(
+        'Only technicians, service advisers, or super admins can access inspection records',
+      );
+    }
   }
 }

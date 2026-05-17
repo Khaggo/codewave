@@ -1,4 +1,5 @@
-import { Body, Controller, Get, NotFoundException, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -10,6 +11,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
+import { Roles } from '@main-modules/auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
+import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 import { AddressResponseDto } from '../dto/address-response.dto';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateAddressDto } from '../dto/update-address.dto';
@@ -35,6 +39,8 @@ export class UsersController {
     return this.usersService.create(createUserDto);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'technician', 'head_technician', 'service_adviser', 'super_admin')
   @Get(':id')
   @ApiOperation({ summary: 'Get a user by id.' })
   @ApiParam({
@@ -47,8 +53,11 @@ export class UsersController {
     type: UserResponseDto,
   })
   @ApiNotFoundResponse({ description: 'User not found.' })
-  async findById(@Param('id') id: string) {
-    const user = await this.usersService.findById(id);
+  async findById(@Param('id') id: string, @Req() request: Request) {
+    const user = await this.usersService.findById(
+      id,
+      request.user as { userId: string; role: string },
+    );
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -56,6 +65,8 @@ export class UsersController {
     return user;
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'technician', 'head_technician', 'service_adviser', 'super_admin')
   @Patch(':id')
   @ApiOperation({ summary: 'Update user profile fields.' })
   @ApiParam({
@@ -69,10 +80,16 @@ export class UsersController {
   })
   @ApiBadRequestResponse({ description: 'The submitted update payload is invalid.' })
   @ApiNotFoundResponse({ description: 'User not found.' })
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(id, updateUserDto);
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto, @Req() request: Request) {
+    return this.usersService.update(
+      id,
+      updateUserDto,
+      request.user as { userId: string; role: string },
+    );
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'technician', 'head_technician', 'service_adviser', 'super_admin')
   @Get(':id/addresses')
   @ApiOperation({ summary: 'List addresses attached to a user.' })
   @ApiParam({
@@ -86,8 +103,11 @@ export class UsersController {
     isArray: true,
   })
   @ApiNotFoundResponse({ description: 'User not found.' })
-  async listAddresses(@Param('id') id: string) {
-    const user = await this.usersService.findById(id);
+  async listAddresses(@Param('id') id: string, @Req() request: Request) {
+    const user = await this.usersService.findById(
+      id,
+      request.user as { userId: string; role: string },
+    );
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -95,6 +115,8 @@ export class UsersController {
     return user.addresses ?? [];
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'technician', 'head_technician', 'service_adviser', 'super_admin')
   @Post(':id/addresses')
   @ApiOperation({ summary: 'Add an address to a user.' })
   @ApiParam({
@@ -108,10 +130,16 @@ export class UsersController {
   })
   @ApiBadRequestResponse({ description: 'The submitted address payload is invalid.' })
   @ApiNotFoundResponse({ description: 'User not found.' })
-  addAddress(@Param('id') id: string, @Body() payload: UpsertAddressDto) {
-    return this.usersService.addAddress(id, payload);
+  addAddress(@Param('id') id: string, @Body() payload: UpsertAddressDto, @Req() request: Request) {
+    return this.usersService.addAddress(
+      id,
+      payload,
+      request.user as { userId: string; role: string },
+    );
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'technician', 'head_technician', 'service_adviser', 'super_admin')
   @Patch(':id/addresses/:addressId')
   @ApiOperation({ summary: 'Update a user address.' })
   @ApiParam({
@@ -134,7 +162,13 @@ export class UsersController {
     @Param('id') id: string,
     @Param('addressId') addressId: string,
     @Body() payload: UpdateAddressDto,
+    @Req() request: Request,
   ) {
-    return this.usersService.updateAddress(id, addressId, payload);
+    return this.usersService.updateAddress(
+      id,
+      addressId,
+      payload,
+      request.user as { userId: string; role: string },
+    );
   }
 }

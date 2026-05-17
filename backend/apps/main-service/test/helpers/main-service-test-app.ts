@@ -117,7 +117,7 @@ import {
 } from '../../src/modules/notifications/schemas/notifications.schema';
 import { NotificationTriggerPlannerService } from '../../src/modules/notifications/services/notification-trigger-planner.service';
 import { NotificationsService } from '../../src/modules/notifications/services/notifications.service';
-import { SmtpMailService } from '../../src/modules/notifications/services/smtp-mail.service';
+import { MailDeliveryService } from '../../src/modules/notifications/services/mail-delivery.service';
 import { AiWorkerProcessor } from '../../src/modules/ai-worker/ai-worker.processor';
 import { QualityGatesController } from '../../src/modules/quality-gates/controllers/quality-gates.controller';
 import { QualityGatesRepository } from '../../src/modules/quality-gates/repositories/quality-gates.repository';
@@ -4537,7 +4537,7 @@ class FakeGoogleIdentityService {
   }
 }
 
-class FakeSmtpMailService {
+class FakeMailDeliveryService {
   readonly sentMessages: Array<{
     to: string;
     subject: string;
@@ -4590,7 +4590,7 @@ export async function createMainServiceTestApp(): Promise<{
   const qualityGatesRepository = new InMemoryQualityGatesRepository();
   const aiWorkerQueue = new InMemoryAiWorkerQueue();
   const googleIdentityService = new FakeGoogleIdentityService();
-  const smtpMailService = new FakeSmtpMailService();
+  const smtpMailService = new FakeMailDeliveryService();
   const inspectionsRepository = new InMemoryInspectionsRepository();
   const vehicleLifecycleRepository = new InMemoryVehicleLifecycleRepository();
 
@@ -4639,7 +4639,7 @@ export async function createMainServiceTestApp(): Promise<{
       AutocareEventBusService,
       LoyaltyAccrualPlannerService,
       { provide: GoogleIdentityService, useValue: googleIdentityService },
-      { provide: SmtpMailService, useValue: smtpMailService },
+      { provide: MailDeliveryService, useValue: smtpMailService },
       {
         provide: ConfigService,
         useValue: {

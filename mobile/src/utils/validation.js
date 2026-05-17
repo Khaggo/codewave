@@ -329,14 +329,11 @@ export const validateChangePasswordForm = ({
   currentPassword,
   newPassword,
   confirmPassword,
-  savedPassword,
 }) => {
   const errors = {};
 
   if (!currentPassword) {
     errors.currentPassword = 'Enter your current password.';
-  } else if (currentPassword !== savedPassword) {
-    errors.currentPassword = 'Current password is incorrect.';
   }
 
   const passwordError = validatePassword(newPassword);

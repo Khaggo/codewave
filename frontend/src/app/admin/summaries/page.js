@@ -1,9 +1,9 @@
 import AdminAnalyticsWorkspace from '@/screens/AdminAnalyticsWorkspace.js'
 
 export const metadata = {
-  title: 'Admin Analytics & Summary Review',
+  title: 'Admin Analytics',
 }
 
-export default function SummaryVerificationPage() {
+export default function AdminAnalyticsPage() {
   return <AdminAnalyticsWorkspace />
 }

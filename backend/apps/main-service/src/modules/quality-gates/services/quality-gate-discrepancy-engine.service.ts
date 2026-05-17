@@ -64,6 +64,14 @@ export type QualityGateInspectionInput = {
   findings: QualityGateInspectionFindingInput[];
 };
 
+export type QualityGatePhotoEvidenceInput = {
+  id: string;
+  linkedEntityType: 'job_order' | 'progress_entry' | 'work_item' | 'qa_review';
+  linkedEntityId: string | null;
+  caption: string | null;
+  createdAt: Date;
+};
+
 export type QualityGateDiscrepancyFinding = {
   gate: 'gate_2';
   severity: 'warning' | 'critical';
@@ -77,6 +85,9 @@ type GateTwoInput = {
   sourceId: string;
   completedWorkText: string;
   inspections: QualityGateInspectionInput[];
+  uploadedPhotoEvidence: QualityGatePhotoEvidenceInput[];
+  jobOrderCreatedAt?: Date | null;
+  backJobReturnInspectionId?: string | null;
 };
 
 @Injectable()
@@ -84,10 +95,15 @@ export class QualityGateDiscrepancyEngineService {
   evaluate(input: GateTwoInput): QualityGateDiscrepancyFinding[] {
     const relevantInspections = this.findRelevantInspections(input);
     const latestRelevantInspection = relevantInspections[0];
+    const relevantUploadedEvidence = this.findRelevantUploadedEvidence(input);
     const completedWorkTokens = tokenize(input.completedWorkText);
     const findings: QualityGateDiscrepancyFinding[] = [];
 
     if (!latestRelevantInspection) {
+      if (relevantUploadedEvidence.length > 0) {
+        return findings;
+      }
+
       findings.push(
         this.createFinding({
           sourceType: input.sourceType,
@@ -179,15 +195,40 @@ export class QualityGateDiscrepancyEngineService {
   }
 
   private findRelevantInspections(input: GateTwoInput) {
-    return input.inspections
-      .filter((inspection) => inspection.status !== 'void')
-      .filter((inspection) => {
-        if (input.sourceType === 'booking') {
-          return inspection.inspectionType === 'completion' && inspection.bookingId === input.sourceId;
-        }
+    const nonVoidInspections = input.inspections.filter((inspection) => inspection.status !== 'void');
 
-        return ['return', 'completion'].includes(inspection.inspectionType);
-      })
+    if (input.sourceType === 'booking') {
+      return nonVoidInspections
+        .filter((inspection) => inspection.inspectionType === 'completion' && inspection.bookingId === input.sourceId)
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+    }
+
+    const createdAtThreshold = input.jobOrderCreatedAt?.getTime() ?? null;
+    const completionCandidates = nonVoidInspections
+      .filter((inspection) => inspection.inspectionType === 'completion')
+      .filter((inspection) =>
+        createdAtThreshold == null ? true : inspection.createdAt.getTime() >= createdAtThreshold,
+      )
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+
+    if (completionCandidates.length > 0) {
+      return completionCandidates;
+    }
+
+    if (!input.backJobReturnInspectionId) {
+      return [];
+    }
+
+    const linkedReturnInspection = nonVoidInspections.find(
+      (inspection) => inspection.id === input.backJobReturnInspectionId && inspection.inspectionType === 'return',
+    );
+
+    return linkedReturnInspection ? [linkedReturnInspection] : [];
+  }
+
+  private findRelevantUploadedEvidence(input: GateTwoInput) {
+    return input.uploadedPhotoEvidence
+      .filter((photo) => ['job_order', 'progress_entry', 'work_item'].includes(photo.linkedEntityType))
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
   }
 

@@ -57,6 +57,14 @@ const accountTypeOptions = [
     staffCodeExample: 'TEC-####',
   },
   {
+    value: 'head_technician',
+    label: 'Head Technician',
+    role: 'head_technician',
+    roleLabel: 'Head Technician',
+    helper: 'Final QA verdict authority for release review. Limited to 2 active accounts at the same time.',
+    staffCodeExample: 'HTC-####',
+  },
+  {
     value: 'admin',
     label: 'Admin',
     role: 'super_admin',
@@ -70,6 +78,7 @@ const groupedAccountTypes = [
   { value: 'staff', label: 'Staff' },
   { value: 'mechanic', label: 'Mechanics' },
   { value: 'technician', label: 'Technicians' },
+  { value: 'head_technician', label: 'Head Technicians' },
   { value: 'admin', label: 'Admins' },
 ]
 
@@ -150,6 +159,14 @@ export default function StaffProvisioningPanel() {
   )
   const selectedStatusAccount = managedAccounts.find((account) => account.id === statusForm.userId)
   const summary = useMemo(() => summarizeManagedAccounts(managedAccounts), [managedAccounts])
+  const isHeadTechnicianProvisioningSelected = selectedAccountType.value === 'head_technician'
+  const hasReachedActiveHeadTechnicianLimit = summary.activeHeadTechnicianCount >= 2
+  const shouldBlockHeadTechnicianProvisioning = isHeadTechnicianProvisioningSelected && hasReachedActiveHeadTechnicianLimit
+  const shouldBlockHeadTechnicianReactivation =
+    statusForm.targetStatus === 'active' &&
+    selectedStatusAccount?.role === 'head_technician' &&
+    !selectedStatusAccount?.isActive &&
+    hasReachedActiveHeadTechnicianLimit
 
   const loadManagedAccounts = async () => {
     if (!user?.accessToken || !canProvision) return
@@ -338,13 +355,14 @@ export default function StaffProvisioningPanel() {
         <MetricCard label="Managed accounts" value={summary.total} hint="All staff-capable accounts in the directory" />
         <MetricCard label="Active accounts" value={summary.activeCount} hint="Accounts that can sign in right now" />
         <MetricCard label="Inactive accounts" value={summary.inactiveCount} hint="Accounts currently blocked from sign-in" />
+        <MetricCard label="Active head technicians" value={`${summary.activeHeadTechnicianCount}/2`} hint="Only 2 head technicians can stay active at the same time" />
         <MetricCard label="Admin accounts" value={summary.adminCount} hint="Protected admin identities in the directory" />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
         <SectionShell
           title="Provision Operations Accounts"
-          description="Create staff, mechanic, technician, and admin identities from one protected workspace. Emails and staff IDs are generated automatically, and new accounts can sign in immediately with the password you set."
+          description="Create staff, mechanic, technician, head-technician, and admin identities from one protected workspace. Emails and staff IDs are generated automatically, and new accounts can sign in immediately with the password you set."
           action={
             <div className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary">
               <ShieldPlus size={14} />
@@ -439,6 +457,14 @@ export default function StaffProvisioningPanel() {
                   className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 text-ink-muted"
                 />
               </div>
+              {isHeadTechnicianProvisioningSelected ? (
+                <p className={`mt-2 text-xs ${hasReachedActiveHeadTechnicianLimit ? 'text-amber-300' : 'text-ink-muted'}`}>
+                  Active head technicians: {summary.activeHeadTechnicianCount}/2.
+                  {hasReachedActiveHeadTechnicianLimit
+                    ? ' Deactivate one head technician before creating another active one.'
+                    : ' One more active head technician slot is currently available.'}
+                </p>
+              ) : null}
             </Field>
 
             <Field label="Phone Number" error={errors.phone}>
@@ -473,17 +499,22 @@ export default function StaffProvisioningPanel() {
               <p className="max-w-xl text-xs leading-5 text-ink-muted">
                 Staff sign-in uses the same staff/admin login page. No customer web registration is created here.
               </p>
-              <button type="submit" disabled={loading} className="ops-action-primary min-w-[156px]">
+              <button type="submit" disabled={loading || shouldBlockHeadTechnicianProvisioning} className="ops-action-primary min-w-[156px]">
                 {loading ? <RefreshCw size={14} className="animate-spin" /> : <ShieldPlus size={14} />}
                 {loading ? 'Creating...' : 'Create Account'}
               </button>
             </div>
+            {shouldBlockHeadTechnicianProvisioning ? (
+              <div className="xl:col-span-2 status-message status-message-warning">
+                Only 2 head technicians can be active at the same time. Deactivate one first, then create another head-technician account.
+              </div>
+            ) : null}
           </form>
         </SectionShell>
 
         <SectionShell
           title="Account Status Control"
-          description="Choose a staff-capable account from the directory and activate or deactivate access without deleting its history. Admin accounts appear as Admin, not Super Admin."
+          description="Choose a staff-capable account from the directory and activate or deactivate access without deleting its history. Admin accounts appear as Admin, not Super Admin, and only 2 head technicians may stay active at once."
           action={
             <button
               type="button"
@@ -552,6 +583,14 @@ export default function StaffProvisioningPanel() {
                 </select>
                 <Power size={16} className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 text-ink-muted" />
               </div>
+              {selectedStatusAccount?.role === 'head_technician' && !selectedStatusAccount.isActive ? (
+                <p className={`mt-2 text-xs ${shouldBlockHeadTechnicianReactivation ? 'text-amber-300' : 'text-ink-muted'}`}>
+                  Active head technicians: {summary.activeHeadTechnicianCount}/2.
+                  {shouldBlockHeadTechnicianReactivation
+                    ? ' Deactivate another head technician before reactivating this account.'
+                    : ' Reactivating this account is still within the 2-active limit.'}
+                </p>
+              ) : null}
             </Field>
 
             <div className="xl:col-span-2">
@@ -569,7 +608,7 @@ export default function StaffProvisioningPanel() {
               <p className="max-w-xl text-xs leading-5 text-ink-muted">
                 Status updates revoke active refresh tokens when an account is deactivated.
               </p>
-              <button type="submit" disabled={statusLoading || !managedAccounts.length} className="ops-action-primary min-w-[156px]">
+              <button type="submit" disabled={statusLoading || !managedAccounts.length || shouldBlockHeadTechnicianReactivation} className="ops-action-primary min-w-[156px]">
                 {statusLoading ? <RefreshCw size={14} className="animate-spin" /> : <Power size={14} />}
                 {statusLoading ? 'Updating...' : 'Update Status'}
               </button>
@@ -626,7 +665,7 @@ export default function StaffProvisioningPanel() {
                                   <button
                                     type="button"
                                     onClick={() => handleQuickStatusToggle(account)}
-                                    disabled={statusLoading}
+                                    disabled={statusLoading || (!account.isActive && account.role === 'head_technician' && hasReachedActiveHeadTechnicianLimit)}
                                     className={account.isActive ? 'ops-action-primary' : 'ops-action-secondary'}
                                   >
                                     {isBusy ? <RefreshCw size={14} className="animate-spin" /> : <Power size={14} />}
@@ -645,7 +684,7 @@ export default function StaffProvisioningPanel() {
                 <div className="empty-panel">
                   <p className="text-sm font-semibold text-ink-primary">No managed staff accounts yet</p>
                   <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                    New staff, technician, mechanic, and admin accounts will appear here after they are provisioned.
+                    New staff, technician, head-technician, mechanic, and admin accounts will appear here after they are provisioned.
                   </p>
                 </div>
               )}

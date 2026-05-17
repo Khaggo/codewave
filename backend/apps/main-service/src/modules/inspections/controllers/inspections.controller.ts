@@ -6,9 +6,12 @@ import {
   HttpStatus,
   Param,
   Post,
+  Req,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBody,
@@ -23,6 +26,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
+import { Roles } from '@main-modules/auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
+import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 import { CreateInspectionDto } from '../dto/create-inspection.dto';
 import { InspectionResponseDto } from '../dto/inspection-response.dto';
 import { UploadInspectionPhotoDto } from '../dto/upload-inspection-photo.dto';
@@ -36,6 +42,8 @@ const INSPECTION_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 export class InspectionsController {
   constructor(private readonly inspectionsService: InspectionsService) {}
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('technician', 'service_adviser', 'super_admin')
   @Post('vehicles/:id/inspections')
   @ApiOperation({ summary: 'Create an inspection record for a vehicle.' })
   @ApiParam({
@@ -50,10 +58,16 @@ export class InspectionsController {
   @ApiBadRequestResponse({ description: 'The inspection payload is invalid.' })
   @ApiNotFoundResponse({ description: 'Vehicle or booking not found.' })
   @ApiConflictResponse({ description: 'The submitted booking reference is not valid for the vehicle.' })
-  create(@Param('id') id: string, @Body() payload: CreateInspectionDto) {
-    return this.inspectionsService.create(id, payload);
+  create(@Param('id') id: string, @Body() payload: CreateInspectionDto, @Req() request: Request) {
+    return this.inspectionsService.create(
+      id,
+      payload,
+      request.user as { userId: string; role: string },
+    );
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('technician', 'service_adviser', 'super_admin')
   @Post('vehicles/:id/inspections/photos/upload')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
@@ -90,10 +104,18 @@ export class InspectionsController {
     @Param('id') id: string,
     @Body() payload: UploadInspectionPhotoDto,
     @UploadedFile() file: InspectionUploadFile,
+    @Req() request: Request,
   ) {
-    return this.inspectionsService.uploadPhoto(id, payload, file);
+    return this.inspectionsService.uploadPhoto(
+      id,
+      payload,
+      file,
+      request.user as { userId: string; role: string },
+    );
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('technician', 'service_adviser', 'super_admin')
   @Get('vehicles/:id/inspections')
   @ApiOperation({ summary: 'List inspections recorded for a vehicle.' })
   @ApiParam({
@@ -107,7 +129,10 @@ export class InspectionsController {
     isArray: true,
   })
   @ApiNotFoundResponse({ description: 'Vehicle not found.' })
-  findByVehicleId(@Param('id') id: string) {
-    return this.inspectionsService.findByVehicleId(id);
+  findByVehicleId(@Param('id') id: string, @Req() request: Request) {
+    return this.inspectionsService.findByVehicleId(
+      id,
+      request.user as { userId: string; role: string },
+    );
   }
 }

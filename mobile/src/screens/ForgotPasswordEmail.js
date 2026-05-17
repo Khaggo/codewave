@@ -3,15 +3,17 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import AuthFrame from '../components/AuthFrame';
 import FormField from '../components/FormField';
+import { ApiError, requestForgotPasswordOtp } from '../lib/authClient';
 import { colors, radius } from '../theme';
 import { normalizeEmail, validateEmail } from '../utils/validation';
 
-export default function ForgotPasswordEmail({ navigation, registeredAccount }) {
+export default function ForgotPasswordEmail({ navigation }) {
   const [email, setEmail] = useState('');
   const [focusedField, setFocusedField] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSendOtp = () => {
+  const handleSendOtp = async () => {
     const emailError = validateEmail(email);
 
     if (emailError) {
@@ -19,14 +21,29 @@ export default function ForgotPasswordEmail({ navigation, registeredAccount }) {
       return;
     }
 
-    if (!registeredAccount || registeredAccount.email !== normalizeEmail(email)) {
-      setError('We could not find an account with that email address.');
-      return;
-    }
+    setSubmitting(true);
 
-    navigation.replace('ForgotPasswordOTP', {
-      email: normalizeEmail(email),
-    });
+    try {
+      const normalizedEmail = normalizeEmail(email);
+      const enrollment = await requestForgotPasswordOtp({
+        email: normalizedEmail,
+      });
+
+      navigation.replace('ForgotPasswordOTP', {
+        email: normalizedEmail,
+        maskedEmail: enrollment?.maskedEmail ?? normalizedEmail,
+        enrollmentId: enrollment?.enrollmentId ?? null,
+        otpExpiresAt: enrollment?.otpExpiresAt ?? null,
+      });
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiError || requestError instanceof Error
+          ? requestError.message
+          : 'We could not send a password reset code right now.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -55,9 +72,16 @@ export default function ForgotPasswordEmail({ navigation, registeredAccount }) {
         icon="email-outline"
       />
 
-      <TouchableOpacity style={styles.primaryButton} onPress={handleSendOtp} activeOpacity={0.9}>
+      <TouchableOpacity
+        style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]}
+        onPress={() => {
+          void handleSendOtp();
+        }}
+        activeOpacity={0.9}
+        disabled={submitting}
+      >
         <View style={styles.primaryButtonContent}>
-          <Text style={styles.primaryButtonText}>Send OTP</Text>
+          <Text style={styles.primaryButtonText}>{submitting ? 'Sending...' : 'Send OTP'}</Text>
           <Feather name="arrow-right" size={16} color={colors.onPrimary} />
         </View>
       </TouchableOpacity>
@@ -76,6 +100,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.72,
   },
   primaryButtonContent: {
     flexDirection: 'row',

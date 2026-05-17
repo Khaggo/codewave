@@ -1081,9 +1081,8 @@ export default function LoyaltyManager() {
       {tab === 'customers' ? (
         <div className="space-y-4">
           <InfoPanel
-            tone="warning"
-            title="Customer account list planned"
-            body="This view currently shows analytics totals only. A searchable loyalty-account directory can be added later without showing placeholder rows."
+            title="Live account totals"
+            body="This tab reflects the live loyalty analytics snapshot. It stays focused on account totals until a dedicated searchable account directory is added."
           />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <StatCard label="Known Accounts" value={(state.analytics?.totals.accountCount ?? 0).toLocaleString()} />
@@ -1096,9 +1095,8 @@ export default function LoyaltyManager() {
       {tab === 'log' ? (
         <div className="space-y-4">
           <InfoPanel
-            tone="warning"
-            title="Detailed redemption log planned"
-            body="Redemptions are summarized through analytics today. A full staff review log can be added later without inventing fake transaction rows."
+            title="Analytics-backed redemption summary"
+            body="This tab shows live redemption analytics without inventing transaction rows that the current backend does not expose yet."
           />
           <div className="table-surface">
             <div className="px-5 py-4 border-b border-surface-border">

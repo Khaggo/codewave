@@ -98,7 +98,9 @@ export class BackJobsService {
         throw new ConflictException('Return inspection evidence is required before review approval');
       }
 
-      const inspection = await this.assertReturnInspection(backJob.vehicleId, resolvedInspectionId);
+      const inspection = await this.assertReturnInspection(backJob.vehicleId, resolvedInspectionId, {
+        requireCompleted: payload.status === 'approved_for_rework',
+      });
       const hasEvidence = backJob.findings.length > 0 || inspection.findings.length > 0;
 
       if (!hasEvidence) {
@@ -170,7 +172,11 @@ export class BackJobsService {
     }
   }
 
-  private async assertReturnInspection(vehicleId: string, inspectionId: string) {
+  private async assertReturnInspection(
+    vehicleId: string,
+    inspectionId: string,
+    options?: { requireCompleted?: boolean },
+  ) {
     const inspection = await this.inspectionsRepository.findById(inspectionId);
 
     if (inspection.vehicleId !== vehicleId) {
@@ -179,6 +185,10 @@ export class BackJobsService {
 
     if (inspection.inspectionType !== 'return') {
       throw new ConflictException('Back-job review requires a return inspection reference');
+    }
+
+    if (options?.requireCompleted && inspection.status !== 'completed') {
+      throw new ConflictException('Approved rework requires a completed return inspection');
     }
 
     return inspection;

@@ -81,6 +81,13 @@ const allowedStatusTransitions: Record<InsuranceInquiryStatus, InsuranceInquiryS
   closed: [],
 };
 
+const requiredDocumentTypesByPurpose: Record<string, string[]> = {
+  renewal: ['or_cr', 'policy'],
+  new_application: ['or_cr'],
+  claim: ['or_cr'],
+  quotation: ['or_cr'],
+};
+
 type InsuranceReminderSourceState = {
   id: string;
   userId: string;
@@ -230,7 +237,7 @@ export class InsuranceService {
   async findById(id: string, actor: InsuranceActor) {
     const inquiry = await this.insuranceRepository.findById(id);
     await this.assertCanAccessInquiry(inquiry.userId, actor);
-    return this.presentInquiryForActor(inquiry, actor);
+    return this.presentInquiryForActor(this.normalizeInquiryDocumentStatus(inquiry), actor);
   }
 
   async findByUserId(userId: string, actor: InsuranceActor) {
@@ -240,14 +247,16 @@ export class InsuranceService {
       throw new NotFoundException('Customer not found');
     }
 
-    return this.insuranceRepository.findByUserId(userId);
+    const inquiries = await this.insuranceRepository.findByUserId(userId);
+    return inquiries.map((inquiry) => this.normalizeInquiryDocumentStatus(inquiry));
   }
 
   async listForStaff(query: ListInsuranceInquiriesQueryDto, actor: InsuranceActor) {
     await this.assertStaffReviewer(actor.userId);
 
     if (typeof this.insuranceRepository.listForStaff === 'function') {
-      return this.insuranceRepository.listForStaff(query);
+      const inquiries = await this.insuranceRepository.listForStaff(query);
+      return inquiries.map((inquiry) => this.normalizeInquiryDocumentStatus(inquiry));
     }
 
     const inquiries = await this.insuranceRepository.listForAnalytics();
@@ -274,11 +283,11 @@ export class InsuranceService {
           this.vehiclesService.findById(inquiry.vehicleId),
         ]);
 
-        return {
+        return this.normalizeInquiryDocumentStatus({
           ...inquiry,
           customerDisplayName: this.buildCustomerDisplayName(user?.profile),
           vehicleLabel: this.buildVehicleLabel(vehicle),
-        };
+        });
       }),
     );
   }
@@ -349,7 +358,7 @@ export class InsuranceService {
     }
 
     return this.presentInquiryForActor(
-      await this.insuranceRepository.addDocument(id, payload, actor.userId),
+      this.normalizeInquiryDocumentStatus(await this.insuranceRepository.addDocument(id, payload, actor.userId)),
       actor,
     );
   }
@@ -380,7 +389,7 @@ export class InsuranceService {
 
     try {
       return this.presentInquiryForActor(
-        await this.insuranceRepository.addUploadedDocument(id, {
+        this.normalizeInquiryDocumentStatus(await this.insuranceRepository.addUploadedDocument(id, {
           document: {
             fileName: file.originalname,
             fileUrl: savedDocument.fileUrl,
@@ -394,7 +403,7 @@ export class InsuranceService {
             notes: payload.notes ?? null,
           },
           uploadedByUserId: actor.userId,
-        }),
+        })),
         actor,
       );
     } catch (error) {
@@ -934,6 +943,35 @@ export class InsuranceService {
       inquiry;
 
     return customerInquiry;
+  }
+
+  private normalizeInquiryDocumentStatus<
+    T extends {
+      purpose?: string | null;
+      documentStatus?: string | null;
+      documents?: Array<{ documentType?: string | null }> | null;
+    },
+  >(inquiry: T): T {
+    if (inquiry?.documentStatus !== 'incomplete') {
+      return inquiry;
+    }
+
+    const requiredDocumentTypes =
+      requiredDocumentTypesByPurpose[String(inquiry?.purpose ?? 'quotation')] ?? requiredDocumentTypesByPurpose.quotation;
+    const uploadedDocumentTypes = new Set(
+      (Array.isArray(inquiry?.documents) ? inquiry.documents : [])
+        .map((document) => document?.documentType)
+        .filter(Boolean),
+    );
+
+    if (!requiredDocumentTypes.every((documentType) => uploadedDocumentTypes.has(documentType))) {
+      return inquiry;
+    }
+
+    return {
+      ...inquiry,
+      documentStatus: 'complete',
+    };
   }
 
   private buildWorkflowActivities(

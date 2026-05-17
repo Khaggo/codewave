@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { radius } from '../../theme'
 import {
   insuranceFonts,
@@ -18,9 +18,21 @@ import {
   InsuranceSectionDivider,
 } from './InsurancePanelPrimitives'
 
-function ChecklistItemRow({ item, onToggle }) {
+function ChecklistSummaryCard({ label, value, helper, emphasis = false }) {
   return (
-    <TouchableOpacity style={styles.checklistRow} onPress={() => onToggle(item.type)} activeOpacity={0.86}>
+    <View style={[styles.summaryCard, emphasis && styles.summaryCardEmphasis]}>
+      <Text style={styles.summaryCardLabel}>{label}</Text>
+      <Text style={[styles.summaryCardValue, emphasis && styles.summaryCardValueEmphasis]}>
+        {value}
+      </Text>
+      <Text style={styles.summaryCardHelper}>{helper}</Text>
+    </View>
+  )
+}
+
+function ChecklistItemRow({ item }) {
+  return (
+    <View style={styles.checklistRow}>
       <MaterialCommunityIcons
         name={item.complete ? 'check-circle' : 'minus-circle-outline'}
         size={18}
@@ -29,19 +41,28 @@ function ChecklistItemRow({ item, onToggle }) {
       <Text style={[styles.checklistLabel, item.complete && styles.checklistLabelComplete]}>
         {item.label}
       </Text>
-    </TouchableOpacity>
+      <View style={[styles.checklistBadge, item.complete && styles.checklistBadgeComplete]}>
+        <Text style={[styles.checklistBadgeText, item.complete && styles.checklistBadgeTextComplete]}>
+          {item.complete ? 'On file' : 'Needed'}
+        </Text>
+      </View>
+    </View>
   )
 }
 
-function ChecklistGroup({ title, items, onToggle }) {
+function ChecklistGroup({ title, items }) {
   return (
     <View style={styles.checklistGroup}>
       <Text style={styles.groupTitle}>{title}</Text>
       {items.map((item) => (
-        <ChecklistItemRow key={item.type} item={item} onToggle={onToggle} />
+        <ChecklistItemRow key={item.type} item={item} />
       ))}
     </View>
   )
+}
+
+function toggleChecklistItem() {
+  return null
 }
 
 function UploadNotice({ uploadState, uploadMessage, isUploadingDocument }) {
@@ -67,11 +88,79 @@ function UploadNotice({ uploadState, uploadMessage, isUploadingDocument }) {
   )
 }
 
-const mergeChecklistItems = (items, toggledState) =>
-  items.map((item) => ({
-    ...item,
-    complete: typeof toggledState[item.type] === 'boolean' ? toggledState[item.type] : item.complete,
-  }))
+function PendingUploadRow({ item, onUse, onDiscard, disabled = false }) {
+  return (
+    <View style={styles.pendingRow}>
+      <View style={styles.fileCopy}>
+        <Text style={styles.fileTitle}>{item.fileName}</Text>
+        <Text style={styles.fileMeta}>
+          {[item.documentTypeLabel, item.fileSizeLabel].filter(Boolean).join(' | ')}
+        </Text>
+      </View>
+      <View style={styles.fileActionRow}>
+        <TouchableOpacity
+          style={[styles.secondaryButton, disabled && styles.buttonDisabled]}
+          onPress={() => onUse(item.documentType)}
+          disabled={disabled}
+          activeOpacity={0.88}
+        >
+          <Text style={styles.secondaryButtonText}>Prepare upload</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.secondaryButton, disabled && styles.buttonDisabled]}
+          onPress={() => onDiscard(item.documentType)}
+          disabled={disabled}
+          activeOpacity={0.88}
+        >
+          <Text style={styles.secondaryButtonText}>Discard</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  )
+}
+
+function DocumentFileCard({ document }) {
+  return (
+    <View style={styles.documentCard}>
+      <View style={styles.documentCardHeader}>
+        <View style={styles.documentIconWrap}>
+          <MaterialCommunityIcons
+            name={
+              document.mimeType?.startsWith('image/')
+                ? 'file-image-outline'
+                : 'file-document-outline'
+            }
+            size={18}
+            color={insurancePalette.amber}
+          />
+        </View>
+        <View style={styles.fileCopy}>
+          <Text style={styles.fileTitle} numberOfLines={2}>
+            {document.fileName}
+          </Text>
+          <Text style={styles.fileMeta}>
+            {[document.documentTypeLabel, document.createdAt].filter(Boolean).join(' | ')}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.documentCardFooter}>
+        {document.documentTypeLabel ? (
+          <View style={styles.documentTypeBadge}>
+            <Text style={styles.documentTypeBadgeText}>{document.documentTypeLabel}</Text>
+          </View>
+        ) : null}
+        {document.notes ? (
+          <Text style={styles.documentNoteText} numberOfLines={2}>
+            {document.notes}
+          </Text>
+        ) : (
+          <Text style={styles.documentNotePlaceholder}>No staff note attached.</Text>
+        )}
+      </View>
+    </View>
+  )
+}
 
 export default function InsuranceDocumentsPanel({
   bottomInset = 0,
@@ -90,34 +179,45 @@ export default function InsuranceDocumentsPanel({
   uploadMessage,
   uploadState,
   canAcceptDocuments = false,
+  pendingUploads = [],
+  onUsePendingUpload,
+  onDiscardPendingUpload,
 }) {
-  const [toggledChecklist, setToggledChecklist] = useState({})
-
-  useEffect(() => {
-    setToggledChecklist({})
-  }, [latestInquiry?.id, purposeLabel])
-
-  const toggleChecklistItem = (itemType) => {
-    setToggledChecklist((current) => ({
-      ...current,
-      [itemType]: !(current[itemType] ?? getItemCompletion(itemType, checklist)),
-    }))
-  }
+  useState(null)
+  const documentTypeLabelLookup = useMemo(
+    () => new Map(documentTypeOptions.map((option) => [option.value, option.label])),
+    [documentTypeOptions],
+  )
+  const pendingUploadRows = useMemo(
+    () =>
+      pendingUploads.map((item) => ({
+        ...item,
+        documentTypeLabel:
+          documentTypeLabelLookup.get(item.documentType) ?? item.documentType,
+      })),
+    [documentTypeLabelLookup, pendingUploads],
+  )
 
   const checklistGroups = useMemo(
     () => ({
-      required: mergeChecklistItems(checklist.required, toggledChecklist),
-      supporting: mergeChecklistItems(checklist.supporting ?? [], toggledChecklist),
-      optional: mergeChecklistItems(checklist.optional ?? [], toggledChecklist),
+      required: checklist.required ?? [],
+      supporting: checklist.supporting ?? [],
+      optional: checklist.optional ?? [],
     }),
-    [checklist, toggledChecklist],
+    [checklist],
   )
+
+  const footerPaddingBottom = Math.max(bottomInset, 14)
+  const contentPaddingBottom = footerPaddingBottom + 200
+  const requiredCompleteCount = checklistGroups.required.filter((item) => item.complete).length
+  const requiredTotalCount = checklistGroups.required.length
+  const onFileCount = latestInquiry?.documents?.length ?? 0
 
   return (
     <View style={styles.root}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: contentPaddingBottom }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -129,30 +229,57 @@ export default function InsuranceDocumentsPanel({
       >
         <InsurancePanelShell eyebrow="Documents" title="Documents">
           <InsuranceSectionDivider
-            title="Checklist"
+            title="Document status"
             helper={`${purposeLabel || 'Insurance'} files stay tied to this vehicle request.`}
             leading
           >
-            <ChecklistGroup
-              title="Required now"
-              items={checklistGroups.required}
-              onToggle={toggleChecklistItem}
-            />
-            {checklistGroups.supporting.length ? (
-              <ChecklistGroup
-                title="Helpful next"
-                items={checklistGroups.supporting}
-                onToggle={toggleChecklistItem}
+            <View style={styles.summaryGrid}>
+              <ChecklistSummaryCard
+                label="Required"
+                value={`${requiredCompleteCount}/${requiredTotalCount || 0}`}
+                helper={
+                  requiredTotalCount
+                    ? requiredCompleteCount === requiredTotalCount
+                      ? 'Ready for review'
+                      : 'Still missing required files'
+                    : 'No required upload blockers'
+                }
+                emphasis={Boolean(requiredTotalCount) && requiredCompleteCount === requiredTotalCount}
               />
-            ) : null}
-            {checklistGroups.optional.length ? (
-              <ChecklistGroup
-                title="Optional later"
-                items={checklistGroups.optional}
-                onToggle={toggleChecklistItem}
+              <ChecklistSummaryCard
+                label="On file"
+                value={String(onFileCount)}
+                helper="Already attached to this case"
               />
-            ) : null}
+              <ChecklistSummaryCard
+                label="Pending"
+                value={String(pendingUploadRows.length)}
+                helper="Still staged on this device"
+              />
+            </View>
           </InsuranceSectionDivider>
+
+          <InsuranceSectionDivider title="Required now">
+            <View style={styles.notesCard}>
+              <ChecklistGroup title="Required now" items={checklistGroups.required} />
+            </View>
+          </InsuranceSectionDivider>
+
+          {checklistGroups.supporting.length ? (
+            <InsuranceSectionDivider title="Helpful next">
+              <View style={styles.notesCard}>
+                <ChecklistGroup title="Helpful next" items={checklistGroups.supporting} />
+              </View>
+            </InsuranceSectionDivider>
+          ) : null}
+
+          {checklistGroups.optional.length ? (
+            <InsuranceSectionDivider title="Optional later">
+              <View style={styles.notesCard}>
+                <ChecklistGroup title="Optional later" items={checklistGroups.optional} />
+              </View>
+            </InsuranceSectionDivider>
+          ) : null}
 
           <InsuranceSectionDivider title="Upload notes">
             <View style={styles.notesCard}>
@@ -165,24 +292,14 @@ export default function InsuranceDocumentsPanel({
           </InsuranceSectionDivider>
 
           <InsuranceSectionDivider title="Already on file">
-            <View style={styles.fileCard}>
+            <View style={styles.documentCollection}>
               {latestInquiry?.documents?.length ? (
                 latestInquiry.documents.map((document, index) => (
                   <View
                     key={document.id ?? `${document.fileName}-${document.fileUrl}`}
-                    style={[styles.fileRow, index > 0 && styles.fileRowBordered]}
+                    style={index > 0 ? styles.documentCollectionItem : null}
                   >
-                    <View style={styles.fileCopy}>
-                      <Text style={styles.fileTitle}>{document.fileName}</Text>
-                      <Text style={styles.fileMeta}>
-                        {[document.documentTypeLabel, document.createdAt].filter(Boolean).join(' • ')}
-                      </Text>
-                    </View>
-                    <MaterialCommunityIcons
-                      name="file-document-outline"
-                      size={18}
-                      color={insurancePalette.amber}
-                    />
+                    <DocumentFileCard document={document} />
                   </View>
                 ))
               ) : (
@@ -191,55 +308,72 @@ export default function InsuranceDocumentsPanel({
             </View>
           </InsuranceSectionDivider>
 
-          <InsuranceSectionDivider title="Upload target">
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.targetScrollContent}
-            >
-              {documentTypeOptions.map((option) => {
-                const isSelected = documentDraft.documentType === option.value
-
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[styles.targetChip, isSelected && styles.targetChipSelected]}
-                    onPress={() => onChangeDocumentDraft?.({ documentType: option.value })}
-                    activeOpacity={0.88}
-                    disabled={!canAcceptDocuments || isUploadingDocument}
-                  >
-                    <Text style={[styles.targetChipText, isSelected && styles.targetChipTextSelected]}>
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </ScrollView>
-          </InsuranceSectionDivider>
-
-          <InsuranceSectionDivider title="Selected file">
+          <InsuranceSectionDivider
+            title="Upload target"
+            helper="Add or replace a file for this insurance request."
+          >
             <View style={styles.selectedFileCard}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.targetScrollContent}
+              >
+                {documentTypeOptions.map((option) => {
+                  const isSelected = documentDraft.documentType === option.value
+
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[styles.targetChip, isSelected && styles.targetChipSelected]}
+                      onPress={() => onChangeDocumentDraft?.({ documentType: option.value })}
+                      activeOpacity={0.88}
+                      disabled={!canAcceptDocuments || isUploadingDocument}
+                    >
+                      <Text
+                        style={[styles.targetChipText, isSelected && styles.targetChipTextSelected]}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
+
               {documentDraft.fileName ? (
-                <View style={styles.selectedFileRow}>
-                  <MaterialCommunityIcons
-                    name={documentDraft.mimeType?.startsWith('image/') ? 'file-image-outline' : 'file-pdf-box'}
-                    size={20}
-                    color={insurancePalette.amber}
-                  />
-                  <View style={styles.fileCopy}>
-                    <Text style={styles.fileTitle}>{documentDraft.fileName}</Text>
-                    <Text style={styles.fileMeta}>
-                      {[documentDraft.mimeType, documentDraft.fileSizeLabel].filter(Boolean).join(' • ')}
-                    </Text>
+                <View style={styles.selectedFileCardInner}>
+                  <Text style={styles.groupTitle}>Selected file</Text>
+                  <View style={styles.selectedFileRow}>
+                    <MaterialCommunityIcons
+                      name={
+                        documentDraft.mimeType?.startsWith('image/')
+                          ? 'file-image-outline'
+                          : 'file-pdf-box'
+                      }
+                      size={20}
+                      color={insurancePalette.amber}
+                    />
+                    <View style={styles.fileCopy}>
+                      <Text style={styles.fileTitle} numberOfLines={2}>
+                        {documentDraft.fileName}
+                      </Text>
+                      <Text style={styles.fileMeta}>
+                        {[documentDraft.mimeType, documentDraft.fileSizeLabel].filter(Boolean).join(' | ')}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              ) : (
-                <Text style={styles.emptyText}>No file selected.</Text>
-              )}
+                  ) : (
+                    <Text style={styles.emptyText}>
+                      No file selected. Choose a file first, then upload it to this insurance request.
+                    </Text>
+                  )}
 
               <View style={styles.fileActionRow}>
                 <TouchableOpacity
-                  style={[styles.secondaryButton, (!canAcceptDocuments || isUploadingDocument) && styles.buttonDisabled]}
+                  style={[
+                    styles.secondaryButton,
+                    (!canAcceptDocuments || isUploadingDocument) && styles.buttonDisabled,
+                  ]}
                   onPress={onPickDocument}
                   disabled={!canAcceptDocuments || isUploadingDocument}
                   activeOpacity={0.88}
@@ -248,7 +382,10 @@ export default function InsuranceDocumentsPanel({
                 </TouchableOpacity>
                 {documentDraft.fileName ? (
                   <TouchableOpacity
-                    style={[styles.secondaryButton, (!canAcceptDocuments || isUploadingDocument) && styles.buttonDisabled]}
+                    style={[
+                      styles.secondaryButton,
+                      (!canAcceptDocuments || isUploadingDocument) && styles.buttonDisabled,
+                    ]}
                     onPress={onClearPickedDocument}
                     disabled={!canAcceptDocuments || isUploadingDocument}
                     activeOpacity={0.88}
@@ -257,22 +394,40 @@ export default function InsuranceDocumentsPanel({
                   </TouchableOpacity>
                 ) : null}
               </View>
+
+              <TextInput
+                value={documentDraft.notes}
+                onChangeText={(value) => onChangeDocumentDraft?.({ notes: value })}
+                placeholder="Optional note for staff review"
+                placeholderTextColor={insurancePalette.textDim}
+                style={[styles.input, styles.multilineInput]}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                editable={canAcceptDocuments && !isUploadingDocument}
+              />
             </View>
           </InsuranceSectionDivider>
 
-          <InsuranceSectionDivider title="Note">
-            <TextInput
-              value={documentDraft.notes}
-              onChangeText={(value) => onChangeDocumentDraft?.({ notes: value })}
-              placeholder="Optional note for staff review"
-              placeholderTextColor={insurancePalette.textDim}
-              style={[styles.input, styles.multilineInput]}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-              editable={canAcceptDocuments && !isUploadingDocument}
-            />
-          </InsuranceSectionDivider>
+          {pendingUploadRows.length ? (
+            <InsuranceSectionDivider title="Pending staged uploads">
+              <View style={styles.fileCard}>
+                {pendingUploadRows.map((item, index) => (
+                  <View
+                    key={`${item.documentType}-${item.fileName}-${index}`}
+                    style={[styles.fileRow, index > 0 && styles.fileRowBordered]}
+                  >
+                    <PendingUploadRow
+                      item={item}
+                      onUse={onUsePendingUpload}
+                      onDiscard={onDiscardPendingUpload}
+                      disabled={!canAcceptDocuments || isUploadingDocument}
+                    />
+                  </View>
+                ))}
+              </View>
+            </InsuranceSectionDivider>
+          ) : null}
 
           <UploadNotice
             uploadState={uploadState}
@@ -284,7 +439,10 @@ export default function InsuranceDocumentsPanel({
 
       <View style={[styles.footer, { paddingBottom: Math.max(bottomInset, 14) }]}>
         <TouchableOpacity
-          style={[styles.uploadButton, (!canAcceptDocuments || isUploadingDocument) && styles.buttonDisabled]}
+          style={[
+            styles.uploadButton,
+            (!canAcceptDocuments || isUploadingDocument) && styles.buttonDisabled,
+          ]}
           onPress={onUploadDocument}
           disabled={!canAcceptDocuments || isUploadingDocument}
           activeOpacity={0.88}
@@ -295,15 +453,6 @@ export default function InsuranceDocumentsPanel({
       </View>
     </View>
   )
-}
-
-function getItemCompletion(itemType, checklist) {
-  const allItems = [
-    ...(checklist.required ?? []),
-    ...(checklist.supporting ?? []),
-    ...(checklist.optional ?? []),
-  ]
-  return allItems.find((item) => item.type === itemType)?.complete ?? false
 }
 
 const styles = StyleSheet.create({
@@ -318,6 +467,48 @@ const styles = StyleSheet.create({
   content: {
     gap: 18,
     paddingBottom: 128,
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  summaryCard: {
+    minWidth: '30%',
+    flexGrow: 1,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.card,
+    padding: 14,
+    gap: 6,
+  },
+  summaryCardEmphasis: {
+    borderColor: insurancePalette.amberBorder,
+    backgroundColor: insurancePalette.amberSoft,
+  },
+  summaryCardLabel: {
+    color: insurancePalette.textDim,
+    fontFamily: insuranceFonts.body,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  summaryCardValue: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  summaryCardValueEmphasis: {
+    color: insurancePalette.amber,
+  },
+  summaryCardHelper: {
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 12,
+    lineHeight: 18,
   },
   checklistGroup: {
     gap: 10,
@@ -334,6 +525,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.cardSoft,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   checklistLabel: {
     color: insurancePalette.text,
@@ -346,13 +543,34 @@ const styles = StyleSheet.create({
     color: insurancePalette.amber,
     fontWeight: '700',
   },
+  checklistBadge: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.card,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  checklistBadgeComplete: {
+    borderColor: insurancePalette.amberBorder,
+    backgroundColor: insurancePalette.amberSoft,
+  },
+  checklistBadgeText: {
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  checklistBadgeTextComplete: {
+    color: insurancePalette.amber,
+  },
   notesCard: {
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: insurancePalette.border,
     backgroundColor: insurancePalette.card,
     padding: 16,
-    gap: 8,
+    gap: 10,
   },
   guidanceText: {
     color: insurancePalette.textMuted,
@@ -367,6 +585,7 @@ const styles = StyleSheet.create({
     backgroundColor: insurancePalette.card,
     paddingHorizontal: 16,
     paddingVertical: 8,
+    gap: 2,
   },
   fileRow: {
     flexDirection: 'row',
@@ -378,8 +597,70 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: insurancePalette.divider,
   },
+  documentCollection: {
+    gap: 12,
+  },
+  documentCollectionItem: {
+    marginTop: 0,
+  },
+  documentCard: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: insurancePalette.border,
+    backgroundColor: insurancePalette.card,
+    padding: 14,
+    gap: 12,
+  },
+  documentCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  documentIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: insurancePalette.amberSoft,
+  },
+  documentCardFooter: {
+    gap: 10,
+  },
+  documentTypeBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: insurancePalette.amberBorder,
+    backgroundColor: insurancePalette.amberSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  documentTypeBadgeText: {
+    color: insurancePalette.amber,
+    fontFamily: insuranceFonts.body,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  documentNoteText: {
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  documentNotePlaceholder: {
+    color: insurancePalette.textDim,
+    fontFamily: insuranceFonts.body,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  pendingRow: {
+    flex: 1,
+    gap: 12,
+  },
   fileCopy: {
     flex: 1,
+    minWidth: 0,
     gap: 4,
   },
   fileTitle: {
@@ -439,6 +720,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  selectedFileCardInner: {
+    gap: 10,
   },
   fileActionRow: {
     flexDirection: 'row',
@@ -518,3 +802,4 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
 })
+

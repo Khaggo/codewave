@@ -8,6 +8,7 @@ import {
   Easing,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -20,7 +21,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ApiError } from '../lib/authClient';
+import { ApiError, requestChangePasswordOtp } from '../lib/authClient';
 import {
   buildOwnedVehicleLabel,
   createEmptyBookingAvailability,
@@ -29,8 +30,11 @@ import {
   formatBookingTimeSlotWindow,
   getBookingAvailability,
   getBookingById,
+  getBookingReservationPayment,
   listCustomerBookings,
+  listCustomerServiceHistory,
   loadBookingDiscoverySnapshot,
+  retryBookingReservationPayment,
   toBookingDateString,
 } from '../lib/bookingDiscoveryClient';
 import {
@@ -40,7 +44,6 @@ import {
 import {
   buildDigitalGarageSnapshot,
   createEmptyCustomerDigitalGarageSnapshot,
-  digitalGarageUnsupportedActions,
   loadCustomerDigitalGarageSnapshot,
 } from '../lib/digitalGarageClient';
 import {
@@ -67,6 +70,8 @@ import {
   listCustomerOrders,
   loadCustomerCheckoutPreview,
   removeCustomerCartItem,
+  reconcileCustomerOrderInvoicePaymongoCheckout,
+  startCustomerOrderInvoicePaymongoCheckout,
   updateCustomerCartItem,
 } from '../lib/ecommerceCheckoutClient';
 import {
@@ -198,9 +203,20 @@ const createInitialBookingHistoryState = () => ({
   errorMessage: '',
 });
 
+const createInitialServiceHistoryState = () => ({
+  status: 'idle',
+  items: [],
+  errorMessage: '',
+});
+
 const createInitialBookingDetailState = () => ({
   status: 'idle',
   booking: null,
+  errorMessage: '',
+});
+
+const createInitialBookingReservationPaymentState = () => ({
+  status: 'idle',
   errorMessage: '',
 });
 
@@ -219,6 +235,7 @@ const createInitialDigitalGarageState = () => ({
 const createInitialLoyaltyState = () => ({
   status: 'idle',
   errorMessage: '',
+  hasLoadedSnapshot: false,
   redeemingRewardId: null,
   ...createEmptyCustomerLoyaltySnapshot(),
 });
@@ -604,14 +621,53 @@ const buildBookingDateCardItem = (availabilityDay, selectedTimeSlot) => {
 
 const bookingStatusLabels = {
   pending: 'Pending staff review',
+  pending_payment: 'Awaiting reservation payment',
   confirmed: 'Confirmed by staff',
+  in_service: 'Vehicle in service',
   declined: 'Declined',
-  rescheduled: 'Rescheduled',
+  rescheduled: 'Rescheduled by staff',
   completed: 'Completed',
   cancelled: 'Cancelled',
 };
 
-const getBookingStatusLabel = (status) => bookingStatusLabels[status] || 'Unknown status';
+const getBookingStatusLabel = (status) => {
+  const normalizedStatus = String(status ?? '')
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedStatus) {
+    return 'Booking update pending';
+  }
+
+  return (
+    bookingStatusLabels[normalizedStatus] ||
+    normalizedStatus
+      .split('_')
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .join(' ')
+  );
+};
+
+const getReservationPaymentStatusLabel = (payment) => {
+  const status = String(payment?.status ?? '').trim().toLowerCase();
+
+  switch (status) {
+    case 'pending':
+      return 'Awaiting payment';
+    case 'paid':
+      return 'Paid';
+    case 'failed':
+      return 'Payment failed';
+    case 'expired':
+      return 'Payment expired';
+    case 'cancelled':
+      return 'Payment cancelled';
+    case 'refunded':
+      return 'Refunded';
+    default:
+      return 'Payment status unavailable';
+  }
+};
 
 const getBookingReference = (booking) =>
   booking?.id ? booking.id.slice(0, 8).toUpperCase() : '--------';
@@ -718,6 +774,58 @@ const buildBookingTrackingSteps = (booking) => {
     ];
   }
 
+  if (status === 'in_service') {
+    return [
+      {
+        label: 'Booking Request',
+        status: 'Submitted',
+        state: 'done',
+      },
+      {
+        label: 'Staff Review',
+        status: 'Confirmed',
+        state: 'done',
+      },
+      {
+        label: 'Workshop Service',
+        status: 'In Progress',
+        state: 'current',
+        note: 'Your vehicle is already in the workshop and service updates will continue through the job-order flow.',
+      },
+      {
+        label: 'Appointment Outcome',
+        status: 'Pending completion',
+        state: 'upcoming',
+      },
+    ];
+  }
+
+  if (status === 'pending_payment') {
+    return [
+      {
+        label: 'Booking Request',
+        status: 'Submitted',
+        state: 'done',
+      },
+      {
+        label: 'Reservation Payment',
+        status: 'Awaiting payment',
+        state: 'current',
+        note: 'Finish the reservation fee payment so staff can confirm this booking and generate the check-in QR code.',
+      },
+      {
+        label: 'Staff Review',
+        status: 'Pending payment confirmation',
+        state: 'upcoming',
+      },
+      {
+        label: 'Appointment Outcome',
+        status: 'Upcoming',
+        state: 'upcoming',
+      },
+    ];
+  }
+
   return [
     {
       label: 'Booking Request',
@@ -728,7 +836,7 @@ const buildBookingTrackingSteps = (booking) => {
       label: 'Staff Review',
       status: 'Pending',
       state: 'current',
-      note: 'Your request is recorded as pending until staff confirm, decline, or reschedule it.',
+      note: 'Your request is recorded and awaiting staff confirmation. You will see updates here if the slot is confirmed, rescheduled, or declined.',
     },
     {
       label: 'Appointment Outcome',
@@ -737,57 +845,6 @@ const buildBookingTrackingSteps = (booking) => {
     },
   ];
 };
-
-const recentServiceHistory = [
-  {
-    key: 'svc-pms',
-    icon: 'wrench-outline',
-    title: 'PMS Service',
-    dateLabel: 'Apr 8, 2026',
-    status: 'Completed',
-    summary: 'Periodic maintenance and filter replacement completed.',
-    type: 'Service',
-    priceLabel: '\u20B13,850',
-    mechanic: 'Mech. Juan Ramos',
-    statusTone: 'success',
-  },
-  {
-    key: 'svc-oil',
-    icon: 'flash-outline',
-    title: 'Oil Change',
-    dateLabel: 'Mar 15, 2026',
-    status: 'Completed',
-    summary: 'Synthetic oil, oil filter, and fluid top-up completed.',
-    type: 'Service',
-    priceLabel: '\u20B11,200',
-    mechanic: 'Mech. Marco Lim',
-    statusTone: 'success',
-  },
-  {
-    key: 'svc-tire',
-    icon: 'swap-horizontal',
-    title: 'Tire Rotation',
-    dateLabel: 'Feb 28, 2026',
-    status: 'Completed',
-    summary: 'Cross rotation and tire pressure balancing completed.',
-    type: 'Service',
-    priceLabel: '\u20B1650',
-    mechanic: 'Mech. Rico Santos',
-    statusTone: 'success',
-  },
-  {
-    key: 'svc-brake',
-    icon: 'shield-outline',
-    title: 'Brake Inspection',
-    dateLabel: 'Jan 21, 2026',
-    status: 'Completed',
-    summary: 'Brake pads inspected and fluid level checked.',
-    type: 'Booking',
-    priceLabel: '\u20B1800',
-    mechanic: 'Mech. Rico Santos',
-    statusTone: 'info',
-  },
-];
 
 const shopProducts = [
   {
@@ -1084,16 +1141,6 @@ function PasswordFieldRow({
         </TouchableOpacity>
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
-    </View>
-  );
-}
-
-function ComingSoonView({ label }) {
-  return (
-    <View style={styles.comingSoonWrap}>
-      <MaterialCommunityIcons name="clock-outline" size={38} color={colors.primary} />
-      <Text style={styles.comingSoonTitle}>{label}</Text>
-      <Text style={styles.comingSoonSubtitle}>Coming Soon</Text>
     </View>
   );
 }
@@ -2065,8 +2112,12 @@ export default function Dashboard({
   const [bookingNotes, setBookingNotes] = useState('');
   const [bookingCreateState, setBookingCreateState] = useState(createInitialBookingCreateState);
   const [bookingHistory, setBookingHistory] = useState(createInitialBookingHistoryState);
+  const [serviceHistoryState, setServiceHistoryState] = useState(createInitialServiceHistoryState);
   const [selectedHistoryBookingId, setSelectedHistoryBookingId] = useState(null);
   const [bookingDetailState, setBookingDetailState] = useState(createInitialBookingDetailState);
+  const [bookingReservationPaymentState, setBookingReservationPaymentState] = useState(
+    createInitialBookingReservationPaymentState,
+  );
   const [notificationsFeed, setNotificationsFeed] = useState([]);
   const [notificationModuleState, setNotificationModuleState] = useState(
     createInitialNotificationModuleState,
@@ -2105,18 +2156,38 @@ export default function Dashboard({
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [isProfileEditing, setIsProfileEditing] = useState(false);
   const [profileForm, setProfileForm] = useState(createProfileForm(account));
+  const garageVehicleSummaries = digitalGarageState.vehicleSummaries ?? [];
+  const selectedGarageVehicle =
+    digitalGarageState.vehicles.find((vehicle) => vehicle.id === selectedGarageVehicleId) ??
+    digitalGarageState.vehicles[0] ??
+    null;
+  const selectedGarageVehicleSummary =
+    garageVehicleSummaries.find((vehicle) => vehicle.id === selectedGarageVehicle?.id) ?? null;
+  const accountPrimaryVehicle =
+    account?.primaryVehicle ??
+    account?.ownedVehicles?.find((vehicle) => vehicle.id === account?.primaryVehicleId) ??
+    account?.ownedVehicles?.[0] ??
+    null;
   const primaryVehicleLabel =
-    account?.primaryVehicle?.displayName ||
+    selectedGarageVehicleSummary?.title ||
+    buildOwnedVehicleLabel(accountPrimaryVehicle) ||
     account?.vehicleDisplayName ||
     account?.vehicleModel ||
     'No vehicle selected';
-  const primaryVehicleMetaLabel = [
-    account?.licensePlate,
-    account?.vehicleYear ? `${account.vehicleYear} Model` : null,
-  ]
-    .map((part) => String(part ?? '').trim())
-    .filter(Boolean)
-    .join(' - ') || 'Add vehicle details to personalize this card.';
+  const primaryVehicleMetaLabel =
+    selectedGarageVehicleSummary?.subtitle ||
+    [
+      accountPrimaryVehicle?.plateNumber ?? account?.licensePlate,
+      accountPrimaryVehicle?.color,
+      accountPrimaryVehicle?.vin ? `VIN ${accountPrimaryVehicle.vin}` : null,
+      accountPrimaryVehicle?.year ?? account?.vehicleYear
+        ? `${accountPrimaryVehicle?.year ?? account?.vehicleYear} Model`
+        : null,
+    ]
+      .map((part) => String(part ?? '').trim())
+      .filter(Boolean)
+      .join(' - ') ||
+    'Add vehicle details to personalize this card.';
   const loyaltyPointsBalance = loyaltyState.account?.pointsBalance ?? 0;
   const loyaltyTier = loyaltyState.tier ?? {
     key: customerLoyaltyTiers[0].key,
@@ -2128,20 +2199,18 @@ export default function Dashboard({
   const loyaltyRewards = loyaltyState.rewards ?? [];
   const loyaltyTransactions = loyaltyState.transactions ?? [];
   const featuredReward = loyaltyState.featuredReward ?? null;
-  const recentHomeServices = bookingHistory.bookings.length
-    ? bookingHistory.bookings.slice(0, 3).map((booking) => ({
-        key: booking.id ?? getBookingReference(booking),
-        icon:
-          booking.status === 'completed'
-            ? 'check-decagram-outline'
-            : booking.status === 'declined' || booking.status === 'cancelled'
-              ? 'close-circle-outline'
-              : 'calendar-check-outline',
-        title: getBookingServiceNames(booking),
-        dateLabel: `${formatBookingDateLabel(booking.scheduledDate)} - ${getBookingTimeLabel(booking)}`,
-        status: getBookingStatusLabel(booking.status),
-      }))
-    : recentServiceHistory.slice(0, 3);
+  const normalizedRecentServiceHistory = (serviceHistoryState.items ?? []).slice(0, 3).map((item) => ({
+    key: item.id ?? item.jobOrderId ?? item.jobOrderReference,
+    icon: 'check-decagram-outline',
+    title:
+      item.completedServiceNames?.filter(Boolean).join(', ') ||
+      item.vehicleLabel ||
+      item.jobOrderReference ||
+      'Completed service',
+    dateLabel: formatBookingDateLabel(item.bookingDate ?? String(item.finalizedAt ?? '').slice(0, 10)),
+    status: 'Completed',
+  }));
+  const recentHomeServices = normalizedRecentServiceHistory;
   const featuredRewardEyebrow = featuredReward
     ? featuredReward.available
       ? 'READY TO REDEEM'
@@ -2152,7 +2221,7 @@ export default function Dashboard({
     ? featuredReward.available
       ? `${featuredReward.description} Redeem now for ${featuredReward.pointsLabel}.`
       : `${featuredReward.description} ${featuredReward.remainingPoints.toLocaleString()} more points needed to unlock it.`
-    : 'Your points wallet is connected. Active rewards will appear here once staff publish the customer catalog.';
+    : 'Your points wallet is connected. New rewards will appear here as soon as eligible offers are made active for customers.';
   const featuredRewardButtonLabel =
     featuredReward && featuredReward.available ? 'Claim Reward' : 'Open Rewards';
   const lastHandledSupportJumpRef = useRef(null);
@@ -2164,6 +2233,7 @@ export default function Dashboard({
     confirmPassword: '',
   });
   const [securityErrors, setSecurityErrors] = useState({});
+  const [securitySubmitting, setSecuritySubmitting] = useState(false);
   const [passwordVisibility, setPasswordVisibility] = useState({
     currentPassword: false,
     newPassword: false,
@@ -2189,8 +2259,10 @@ export default function Dashboard({
     setBookingNotes('');
     setBookingCreateState(createInitialBookingCreateState());
     setBookingHistory(createInitialBookingHistoryState());
+    setServiceHistoryState(createInitialServiceHistoryState());
     setSelectedHistoryBookingId(null);
     setBookingDetailState(createInitialBookingDetailState());
+    setBookingReservationPaymentState(createInitialBookingReservationPaymentState());
     setNotificationsFeed([]);
     setNotificationModuleState(createInitialNotificationModuleState());
     setTimelineFilter('All');
@@ -2302,6 +2374,7 @@ export default function Dashboard({
 
       setLoyaltyState({
         status: 'ready',
+        hasLoadedSnapshot: true,
         ...loyaltySnapshot,
         errorMessage: '',
         redeemingRewardId: null,
@@ -2314,7 +2387,7 @@ export default function Dashboard({
 
       setLoyaltyState((currentState) => ({
         ...currentState,
-        status: currentState.account ? 'ready' : 'error',
+        status: currentState.hasLoadedSnapshot ? 'ready' : 'error',
         errorMessage: nextMessage,
         redeemingRewardId: null,
       }));
@@ -2391,7 +2464,7 @@ export default function Dashboard({
   };
 
   const loadCartModuleState = async () => {
-    if (!account?.userId) {
+    if (!account?.userId || !account?.accessToken) {
       setCartState({
         ...createInitialCartState(),
         status: 'error',
@@ -2429,7 +2502,7 @@ export default function Dashboard({
   };
 
   const loadStoreOrderHistoryState = async (options = {}) => {
-    if (!account?.userId) {
+    if (!account?.userId || !account?.accessToken) {
       setStoreOrderHistoryState({
         ...createInitialStoreOrderHistoryState(),
         status: 'error',
@@ -2988,6 +3061,65 @@ export default function Dashboard({
   ]);
 
   useEffect(() => {
+    if (activeTab !== 'explore') {
+      return;
+    }
+
+    if (serviceHistoryState.status !== 'idle') {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadServiceHistory = async () => {
+      setServiceHistoryState((currentState) => ({
+        ...currentState,
+        status: 'loading',
+        errorMessage: '',
+      }));
+
+      try {
+        const items = await listCustomerServiceHistory({
+          userId: account?.userId,
+          accessToken: account?.accessToken,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setServiceHistoryState({
+          status: 'ready',
+          items,
+          errorMessage: '',
+        });
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Unable to load completed service history right now.';
+        const isUnauthorized = error instanceof ApiError && [401, 403].includes(error.status);
+
+        setServiceHistoryState((currentState) => ({
+          ...currentState,
+          status: isUnauthorized ? 'unauthorized' : 'error',
+          errorMessage: message,
+        }));
+      }
+    };
+
+    void loadServiceHistory();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [account?.accessToken, account?.userId, activeTab, serviceHistoryState.status]);
+
+  useEffect(() => {
     const matchingVehicle = bookingDiscovery.vehicles.find(
       (vehicle) => vehicle.id === selectedBookingVehicleId,
     );
@@ -3129,6 +3261,7 @@ export default function Dashboard({
 
     if (!selectedHistoryBookingId) {
       setBookingDetailState(createInitialBookingDetailState());
+      setBookingReservationPaymentState(createInitialBookingReservationPaymentState());
       return;
     }
 
@@ -3374,6 +3507,97 @@ export default function Dashboard({
 
   const handleCloseStoreOrderDetail = () => {
     setIsStoreOrderDetailVisible(false);
+  };
+
+  const handleStartStoreInvoicePaymongoCheckout = async () => {
+    if (!selectedStoreOrderId || !account?.accessToken) {
+      return;
+    }
+
+    const existingCheckoutUrl = storeOrderTrackingState.invoice?.onlinePaymentCheckoutUrl;
+    const existingOnlineStatus = String(
+      storeOrderTrackingState.invoice?.onlinePaymentStatus ?? '',
+    ).trim().toLowerCase();
+
+    if (
+      existingCheckoutUrl &&
+      ['pending', 'awaiting_payment', 'awaiting_payment_method'].includes(existingOnlineStatus)
+    ) {
+      try {
+        await Linking.openURL(existingCheckoutUrl);
+        return;
+      } catch (error) {
+        setStoreOrderTrackingState((currentState) => ({
+          ...currentState,
+          invoiceErrorMessage:
+            error?.message || 'We could not reopen the existing PayMongo checkout right now.',
+        }));
+      }
+    }
+
+    setStoreOrderTrackingState((currentState) => ({
+      ...currentState,
+      invoiceStatus: 'loading',
+      invoiceErrorMessage: '',
+    }));
+
+    try {
+      const invoice = await startCustomerOrderInvoicePaymongoCheckout({
+        orderId: selectedStoreOrderId,
+        accessToken: account.accessToken,
+      });
+
+      setStoreOrderTrackingState((currentState) => ({
+        ...currentState,
+        invoiceStatus: 'ready',
+        invoice,
+        invoiceErrorMessage: '',
+      }));
+
+      if (invoice?.onlinePaymentCheckoutUrl) {
+        await Linking.openURL(invoice.onlinePaymentCheckoutUrl);
+      }
+    } catch (error) {
+      setStoreOrderTrackingState((currentState) => ({
+        ...currentState,
+        invoiceStatus: 'error',
+        invoiceErrorMessage:
+          error?.message || 'We could not start PayMongo checkout for this order right now.',
+      }));
+    }
+  };
+
+  const handleRefreshStoreInvoicePayment = async () => {
+    if (!selectedStoreOrderId || !account?.accessToken) {
+      return;
+    }
+
+    setStoreOrderTrackingState((currentState) => ({
+      ...currentState,
+      invoiceStatus: 'loading',
+      invoiceErrorMessage: '',
+    }));
+
+    try {
+      const invoice = await reconcileCustomerOrderInvoicePaymongoCheckout({
+        orderId: selectedStoreOrderId,
+        accessToken: account.accessToken,
+      });
+
+      setStoreOrderTrackingState((currentState) => ({
+        ...currentState,
+        invoiceStatus: 'ready',
+        invoice,
+        invoiceErrorMessage: '',
+      }));
+    } catch (error) {
+      setStoreOrderTrackingState((currentState) => ({
+        ...currentState,
+        invoiceStatus: 'error',
+        invoiceErrorMessage:
+          error?.message || 'We could not refresh PayMongo payment state for this order right now.',
+      }));
+    }
   };
 
   const handleRefreshStoreOrders = async () => {
@@ -3831,7 +4055,10 @@ export default function Dashboard({
 
       setBookingCreateState({
         status: 'success',
-        message: 'Booking request submitted. It remains pending until staff review it.',
+        message:
+          createdBooking?.status === 'pending_payment'
+            ? 'Booking request submitted. Complete the reservation fee payment to confirm the slot and generate your check-in QR code.'
+            : 'Booking request submitted. Staff will review it next.',
         booking: createdBooking,
       });
       setBookingHistory((currentState) => ({
@@ -3884,6 +4111,121 @@ export default function Dashboard({
           conflictRecovery: true,
         });
       }
+    }
+  };
+
+  const applyReservationPaymentToBookingState = (bookingId, reservationPayment) => {
+    if (!bookingId || !reservationPayment) {
+      return;
+    }
+
+    setBookingDetailState((currentState) => {
+      if (!currentState.booking || currentState.booking.id !== bookingId) {
+        return currentState;
+      }
+
+      return {
+        ...currentState,
+        booking: {
+          ...currentState.booking,
+          reservationPayment,
+        },
+      };
+    });
+
+    setBookingHistory((currentState) => ({
+      ...currentState,
+      bookings: currentState.bookings.map((booking) =>
+        booking.id === bookingId
+          ? {
+              ...booking,
+              reservationPayment,
+            }
+          : booking,
+      ),
+    }));
+  };
+
+  const handleOpenBookingReservationPayment = async () => {
+    const bookingId = bookingDetailState.booking?.id ?? selectedHistoryBookingId;
+
+    if (!bookingId || !account?.accessToken) {
+      return;
+    }
+
+    setBookingReservationPaymentState({
+      status: 'loading',
+      errorMessage: '',
+    });
+
+    try {
+      const reservationPayment = await getBookingReservationPayment({
+        bookingId,
+        accessToken: account.accessToken,
+      });
+
+      applyReservationPaymentToBookingState(bookingId, reservationPayment);
+      setBookingReservationPaymentState({
+        status: 'ready',
+        errorMessage: '',
+      });
+
+      if (reservationPayment?.providerCheckoutUrl) {
+        await Linking.openURL(reservationPayment.providerCheckoutUrl);
+        return;
+      }
+
+      throw new Error(
+        reservationPayment?.status === 'paid'
+          ? 'This reservation fee is already marked as paid.'
+          : 'No live payment checkout URL is available for this booking yet.',
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'We could not open reservation payment right now.';
+      setBookingReservationPaymentState({
+        status: 'error',
+        errorMessage: message,
+      });
+      Alert.alert('Reservation Payment Unavailable', message);
+    }
+  };
+
+  const handleRetryBookingReservationPayment = async () => {
+    const bookingId = bookingDetailState.booking?.id ?? selectedHistoryBookingId;
+
+    if (!bookingId || !account?.accessToken) {
+      return;
+    }
+
+    setBookingReservationPaymentState({
+      status: 'loading',
+      errorMessage: '',
+    });
+
+    try {
+      const reservationPayment = await retryBookingReservationPayment({
+        bookingId,
+        accessToken: account.accessToken,
+      });
+
+      applyReservationPaymentToBookingState(bookingId, reservationPayment);
+      setBookingReservationPaymentState({
+        status: 'ready',
+        errorMessage: '',
+      });
+
+      if (reservationPayment?.providerCheckoutUrl) {
+        await Linking.openURL(reservationPayment.providerCheckoutUrl);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'We could not refresh reservation payment right now.';
+      setBookingReservationPaymentState({
+        status: 'error',
+        errorMessage: message,
+      });
+      Alert.alert('Reservation Payment Refresh Failed', message);
     }
   };
 
@@ -4103,7 +4445,7 @@ export default function Dashboard({
 
   const handleSelectProfileImage = () => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
-      Alert.alert('Profile Photo', 'Gallery upload is available on web for this prototype.');
+      Alert.alert('Profile Photo', 'Profile photo upload is currently available on web only.');
       return;
     }
 
@@ -4121,11 +4463,11 @@ export default function Dashboard({
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === 'string') {
-          onSaveProfile?.({
-            profileImage: reader.result,
-          });
           setIsProfileTooltipVisible(false);
-          Alert.alert('Profile Updated', 'Your profile picture has been updated.');
+          Alert.alert(
+            'Profile Photo',
+            'Profile photo upload is not connected to your live customer profile yet.',
+          );
         }
       };
       reader.readAsDataURL(file);
@@ -4269,9 +4611,8 @@ export default function Dashboard({
     }));
   };
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     const nextErrors = {};
-    const emailError = validateEmail(profileForm.email);
     const phoneError = validatePhoneNumber(profileForm.phoneNumber);
     const birthdayError = validateBirthday(profileForm.birthday);
 
@@ -4279,20 +4620,8 @@ export default function Dashboard({
       nextErrors.fullName = 'Enter your full name.';
     }
 
-    if (emailError) {
-      nextErrors.email = emailError;
-    }
-
     if (phoneError) {
       nextErrors.phoneNumber = phoneError;
-    }
-
-    if (!profileForm.city.trim()) {
-      nextErrors.city = 'Enter your city.';
-    }
-
-    if (!profileForm.gender) {
-      nextErrors.gender = 'Select your gender.';
     }
 
     if (birthdayError) {
@@ -4305,21 +4634,53 @@ export default function Dashboard({
     }
 
     const { firstName, lastName } = splitFullName(profileForm.fullName);
+    const normalizedCurrentEmail = normalizeEmail(account?.email);
+    const normalizedRequestedEmail = normalizeEmail(profileForm.email);
+    const normalizedCurrentCity = String(account?.city ?? '').trim();
+    const normalizedRequestedCity = profileForm.city.trim();
+    const normalizedCurrentGender = String(account?.gender ?? '').trim();
+    const normalizedRequestedGender = String(profileForm.gender ?? '').trim();
 
-    onSaveProfile({
-      firstName,
-      lastName,
-      email: normalizeEmail(profileForm.email),
-      phoneNumber: normalizePhoneNumber(profileForm.phoneNumber),
-      city: profileForm.city.trim(),
-      gender: profileForm.gender,
-      birthday: profileForm.birthday,
-      address: `${profileForm.city.trim()}, Metro Manila`,
-    });
+    const unsupportedChanges = [];
+    if (
+      normalizedRequestedEmail &&
+      normalizedRequestedEmail !== normalizedCurrentEmail
+    ) {
+      unsupportedChanges.push('email');
+    }
+    if (normalizedRequestedCity !== normalizedCurrentCity) {
+      unsupportedChanges.push('city');
+    }
+    if (normalizedRequestedGender !== normalizedCurrentGender) {
+      unsupportedChanges.push('gender');
+    }
 
-    Alert.alert('Profile Saved', 'Your personal information has been updated.');
-    setIsProfileEditing(false);
-    setMenuScreen('settings');
+    if (unsupportedChanges.length) {
+      Alert.alert(
+        'Profile Fields Locked',
+        `The ${unsupportedChanges.join(', ')} field${
+          unsupportedChanges.length > 1 ? 's are' : ' is'
+        } still read-only in this build. Save your supported profile changes without editing those fields.`,
+      );
+      return;
+    }
+
+    try {
+      await onSaveProfile?.({
+        firstName,
+        lastName,
+        phoneNumber: normalizePhoneNumber(profileForm.phoneNumber),
+        birthday: profileForm.birthday,
+      });
+
+      Alert.alert('Profile Saved', 'Your personal information has been updated.');
+      setIsProfileEditing(false);
+      setMenuScreen('settings');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'We could not save your profile changes right now.';
+      Alert.alert('Profile Save Failed', message);
+    }
   };
 
   const handleSecurityFieldChange = (key, value) => {
@@ -4343,22 +4704,42 @@ export default function Dashboard({
     }));
   };
 
-  const handleSavePassword = () => {
-    const nextErrors = validateChangePasswordForm({
-      ...securityForm,
-      savedPassword: account?.password || '',
-    });
+  const handleSavePassword = async () => {
+    const nextErrors = validateChangePasswordForm(securityForm);
 
     if (Object.keys(nextErrors).length > 0) {
       setSecurityErrors(nextErrors);
       return;
     }
 
-    navigation.navigate('OTP', {
-      email: account?.email,
-      otpPurpose: 'passwordChange',
-      pendingPassword: securityForm.newPassword,
-    });
+    setSecuritySubmitting(true);
+
+    try {
+      const enrollment = await requestChangePasswordOtp({
+        currentPassword: securityForm.currentPassword,
+        accessToken: account?.accessToken,
+      });
+
+      navigation.navigate('OTP', {
+        email: account?.email ?? null,
+        maskedEmail: enrollment?.maskedEmail ?? account?.email ?? null,
+        enrollmentId: enrollment?.enrollmentId ?? null,
+        otpExpiresAt: enrollment?.otpExpiresAt ?? null,
+        otpPurpose: 'passwordChange',
+        currentPassword: securityForm.currentPassword,
+        pendingPassword: securityForm.newPassword,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'We could not start password change verification right now.';
+      setSecurityErrors((currentErrors) => ({
+        ...currentErrors,
+        currentPassword: message,
+      }));
+      Alert.alert('Password Change Failed', message);
+    } finally {
+      setSecuritySubmitting(false);
+    }
   };
 
   const renderScrollableContent = (contentStyle, children) => {
@@ -4526,7 +4907,7 @@ export default function Dashboard({
             onClaim={() => handleRedeemReward(item)}
           />
         ))
-      ) : loyaltyState.status !== 'loading' ? (
+      ) : loyaltyState.status !== 'loading' && !loyaltyState.errorMessage ? (
         <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>Reward catalog is empty</Text>
           <Text style={styles.infoPanelText}>
@@ -4795,8 +5176,16 @@ export default function Dashboard({
         }
       />
 
-      <TouchableOpacity style={styles.primaryButton} onPress={handleSavePassword}>
-        <Text style={styles.primaryButtonText}>Save Password</Text>
+      <TouchableOpacity
+        style={[styles.primaryButton, securitySubmitting && styles.primaryButtonDisabled]}
+        onPress={() => {
+          void handleSavePassword();
+        }}
+        disabled={securitySubmitting}
+      >
+        <Text style={styles.primaryButtonText}>
+          {securitySubmitting ? 'Sending verification code...' : 'Save Password'}
+        </Text>
       </TouchableOpacity>
       </>
     ));
@@ -4906,6 +5295,7 @@ export default function Dashboard({
       storeOrderHistoryState.status === 'loading' ||
       storeOrderTrackingState.status === 'loading' ||
       storeOrderTrackingState.invoiceStatus === 'loading';
+    const isStoreInvoiceActionBusy = storeOrderTrackingState.invoiceStatus === 'loading';
 
     const stickyHeader = (
       <View
@@ -5179,6 +5569,7 @@ export default function Dashboard({
       (booking) => booking.id === selectedHistoryBookingId,
     );
     const selectedBookingDetail = bookingDetailState.booking ?? selectedHistoryBooking ?? null;
+    const selectedReservationPayment = selectedBookingDetail?.reservationPayment ?? null;
     const trackingSteps = buildBookingTrackingSteps(selectedBookingDetail);
 
     return renderScrollableContent(styles.bookingScrollContent, (
@@ -5342,7 +5733,7 @@ export default function Dashboard({
 
               <Text style={styles.bookingSectionLabel}>Slot Definitions</Text>
               <Text style={styles.bookingDateHint}>
-                Pick the shop window that works best. Staff can accept, decline, cancel, or complete the request from the admin schedule.
+                Pick the shop window that works best. Reservation payment must be completed before staff can confirm the slot and prepare your check-in QR code.
               </Text>
               {!bookingDiscovery.timeSlots.some(isBookableTimeSlot) ? (
                 <BookingDiscoveryStatePanel
@@ -5538,7 +5929,7 @@ export default function Dashboard({
                       setBookingCreateState(createInitialBookingCreateState());
                     }
                   }}
-                  placeholder="Optional concerns for staff review..."
+                  placeholder="Optional notes for the service team..."
                   placeholderTextColor={colors.mutedText}
                   multiline
                   textAlignVertical="top"
@@ -5791,6 +6182,96 @@ export default function Dashboard({
                 ))}
               </View>
 
+              {selectedReservationPayment || selectedBookingDetail.status === 'pending_payment' ? (
+                <View style={styles.bookingStatusHistoryCard}>
+                  <Text style={styles.bookingSectionLabel}>Reservation Fee</Text>
+                  <View style={styles.trackingMetaGrid}>
+                    <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
+                      <Text style={styles.trackingMetaLabel}>Status</Text>
+                      <Text style={styles.trackingMetaValue}>
+                        {getReservationPaymentStatusLabel(selectedReservationPayment)}
+                      </Text>
+                    </View>
+                    <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
+                      <Text style={styles.trackingMetaLabel}>Amount</Text>
+                      <Text style={styles.trackingMetaValue}>
+                        {selectedReservationPayment?.amountCents !== undefined &&
+                        selectedReservationPayment?.amountCents !== null
+                          ? formatEcommerceCurrency(selectedReservationPayment.amountCents)
+                          : 'Awaiting payment setup'}
+                      </Text>
+                    </View>
+                    <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
+                      <Text style={styles.trackingMetaLabel}>Reference</Text>
+                      <Text style={styles.trackingMetaValue}>
+                        {selectedReservationPayment?.referenceNumber ||
+                          'Generated after payment confirmation'}
+                      </Text>
+                    </View>
+                    <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
+                      <Text style={styles.trackingMetaLabel}>Expires</Text>
+                      <Text style={styles.trackingMetaValue}>
+                        {selectedReservationPayment?.expiresAt
+                          ? formatStoreDateTimeLabel(selectedReservationPayment.expiresAt)
+                          : 'No expiry recorded'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {selectedReservationPayment?.failureReason ? (
+                    <Text style={styles.bookingReservationPaymentWarning}>
+                      {selectedReservationPayment.failureReason}
+                    </Text>
+                  ) : selectedBookingDetail.status === 'pending_payment' ? (
+                    <Text style={styles.bookingReservationPaymentHint}>
+                      Finish the reservation fee payment so staff can confirm this booking and release your QR check-in.
+                    </Text>
+                  ) : selectedReservationPayment?.status === 'paid' ? (
+                    <Text style={styles.bookingReservationPaymentHint}>
+                      Reservation fee is secured and should be deducted from your final service invoice.
+                    </Text>
+                  ) : null}
+
+                  {bookingReservationPaymentState.errorMessage ? (
+                    <Text style={styles.bookingReservationPaymentWarning}>
+                      {bookingReservationPaymentState.errorMessage}
+                    </Text>
+                  ) : null}
+
+                  {selectedBookingDetail.status === 'pending_payment' ? (
+                    <View style={styles.bookingReservationPaymentActions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.primaryButton,
+                          bookingReservationPaymentState.status === 'loading' &&
+                            styles.primaryButtonDisabled,
+                        ]}
+                        onPress={() => {
+                          void handleOpenBookingReservationPayment();
+                        }}
+                        disabled={bookingReservationPaymentState.status === 'loading'}
+                      >
+                        <Text style={styles.primaryButtonText}>
+                          {bookingReservationPaymentState.status === 'loading'
+                            ? 'Opening payment...'
+                            : 'Open Payment Checkout'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.secondaryButton}
+                        onPress={() => {
+                          void handleRetryBookingReservationPayment();
+                        }}
+                        disabled={bookingReservationPaymentState.status === 'loading'}
+                      >
+                        <Text style={styles.secondaryButtonText}>Refresh Payment Link</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
               {selectedBookingDetail.statusHistory?.length ? (
                 <View style={styles.bookingStatusHistoryCard}>
                   <Text style={styles.bookingSectionLabel}>Recorded Status Changes</Text>
@@ -5889,7 +6370,7 @@ export default function Dashboard({
             onClaim={() => handleRedeemReward(item)}
           />
         ))
-      ) : loyaltyState.status !== 'loading' ? (
+      ) : loyaltyState.status !== 'loading' && !loyaltyState.errorMessage ? (
         <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>Reward catalog is empty</Text>
           <Text style={styles.infoPanelText}>
@@ -6032,19 +6513,32 @@ export default function Dashboard({
       latestCustomerBooking?.status === 'declined' ||
       latestCustomerBooking?.status === 'cancelled'
         ? '100%'
+        : latestCustomerBooking?.status === 'in_service'
+          ? '80%'
         : latestCustomerBooking?.status === 'confirmed' ||
             latestCustomerBooking?.status === 'rescheduled'
           ? '55%'
+          : latestCustomerBooking?.status === 'pending_payment'
+            ? '15%'
           : latestCustomerBooking
             ? '25%'
             : '0%';
+    const latestCompletedService = recentHomeServices[0] ?? null;
+    const homeReminderSubtitle = latestCustomerBooking
+      ? `${getBookingServiceNames(latestCustomerBooking)} on ${formatBookingDateLabel(latestCustomerBooking.scheduledDate)} at ${getBookingTimeLabel(latestCustomerBooking)}`
+      : latestCompletedService
+        ? `Last completed service: ${latestCompletedService.title} on ${latestCompletedService.dateLabel}`
+        : 'No live service reminder is available yet.';
     const topStatus = latestCustomerBooking
       ? {
           badge: getBookingStatusLabel(latestCustomerBooking.status).toUpperCase(),
           title: getBookingServiceNames(latestCustomerBooking),
           subtitle: `${getBookingVehicleLabel(latestCustomerBooking, bookingDiscovery.vehicles)} - ${getBookingTimeLabel(latestCustomerBooking)} - ${formatBookingDateLabel(latestCustomerBooking.scheduledDate)}`,
           progressWidth: latestBookingProgress,
-          steps: ['Submitted', 'Staff Review', 'Appointment', 'Outcome'],
+          steps:
+            latestCustomerBooking.status === 'pending_payment'
+              ? ['Submitted', 'Payment', 'Staff Review', 'Outcome']
+              : ['Submitted', 'Staff Review', 'Appointment', 'Outcome'],
         }
       : {
           badge: 'NO ACTIVE SERVICE',
@@ -6157,7 +6651,7 @@ export default function Dashboard({
         <Text style={styles.homeName}>
           {firstName} {lastName}
         </Text>
-        <Text style={styles.homeWave}>👋</Text>
+        <Text style={styles.homeWave}>!</Text>
       </View>
 
       <View style={[styles.homeStatusCard, !latestCustomerBooking && styles.homeStatusCardIdle]}>
@@ -6193,7 +6687,10 @@ export default function Dashboard({
         </View>
       </View>
 
-      <MotionPressable style={styles.homeVehicleCard} onPress={() => navigateToGarage(account?.primaryVehicleId)}>
+      <MotionPressable
+        style={styles.homeVehicleCard}
+        onPress={() => navigateToGarage(selectedGarageVehicle?.id ?? account?.primaryVehicleId)}
+      >
         <Image
           source={{
             uri: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1200&q=80',
@@ -6241,8 +6738,8 @@ export default function Dashboard({
           <MaterialCommunityIcons name="clock-outline" size={20} color={colors.primary} />
         </View>
         <View style={styles.homePmsCopy}>
-          <Text style={styles.homePmsTitle}>Next PMS Due</Text>
-          <Text style={styles.homePmsSubtitle}>In 2,750 km or by May 2026</Text>
+          <Text style={styles.homePmsTitle}>Service Reminder</Text>
+          <Text style={styles.homePmsSubtitle}>{homeReminderSubtitle}</Text>
         </View>
         <TouchableOpacity style={styles.homePmsButton} onPress={() => navigateToBooking('book')} activeOpacity={0.86}>
           <Text style={styles.homePmsButtonText}>Book</Text>
@@ -6257,9 +6754,29 @@ export default function Dashboard({
         </TouchableOpacity>
       </View>
 
-      {recentHomeServices.map((item) => (
-        <HomeServiceRow key={item.key} item={item} isCompact={isCompactPhone} />
-      ))}
+      {serviceHistoryState.status === 'loading' && !recentHomeServices.length ? (
+        <TimelineStateCard
+          icon="history"
+          title="Loading completed services"
+          message="We are syncing your finalized workshop history for the home dashboard."
+        />
+      ) : serviceHistoryState.status === 'error' ? (
+        <TimelineStateCard
+          icon="wifi-strength-alert-outline"
+          title="Completed services unavailable"
+          message={serviceHistoryState.errorMessage || 'We could not load your finalized service history right now.'}
+        />
+      ) : recentHomeServices.length ? (
+        recentHomeServices.map((item) => (
+          <HomeServiceRow key={item.key} item={item} isCompact={isCompactPhone} />
+        ))
+      ) : (
+        <TimelineStateCard
+          icon="history"
+          title="No completed services yet"
+          message="Completed workshop history will appear here once a finalized job order is recorded for your account."
+        />
+      )}
 
       <View style={styles.homeOfferCard}>
         <Text style={styles.homeOfferEyebrow}>{featuredRewardEyebrow}</Text>
@@ -6280,14 +6797,6 @@ export default function Dashboard({
     const visibleTimelineItems = vehicleLifecycleState.events.filter((item) =>
       timelineFilter === 'All' ? true : item.filter === timelineFilter,
     );
-    const garageVehicleSummaries = digitalGarageState.vehicleSummaries ?? [];
-    const selectedGarageVehicle =
-      digitalGarageState.vehicles.find((vehicle) => vehicle.id === selectedGarageVehicleId) ??
-      digitalGarageState.vehicles[0] ??
-      null;
-    const selectedGarageVehicleSummary =
-      garageVehicleSummaries.find((vehicle) => vehicle.id === selectedGarageVehicle?.id) ??
-      null;
 
     const renderGarageVehicleState = () => {
       if (digitalGarageState.status === 'garage_loading' && !garageVehicleSummaries.length) {
@@ -6513,24 +7022,6 @@ export default function Dashboard({
 
         {renderGarageVehicleState()}
 
-        <View style={styles.garagePlannedActionsCard}>
-          <Text style={styles.garagePlannedTitle}>Coming garage tools</Text>
-          <Text style={styles.garagePlannedText}>
-            These controls stay disabled until staff approve the next vehicle-management workflow.
-          </Text>
-          {digitalGarageUnsupportedActions.map((action) => (
-            <View key={action.key} style={styles.garagePlannedRow}>
-              <View style={styles.garagePlannedRowCopy}>
-                <Text style={styles.garagePlannedActionLabel}>{action.label}</Text>
-                <Text style={styles.garagePlannedRoute}>Not available in this demo build</Text>
-              </View>
-              <View style={styles.garagePlannedPill}>
-                <Text style={styles.garagePlannedPillText}>Planned</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
         <View style={styles.garageRouteCard}>
           <Text style={styles.garagePlannedTitle}>Garage workflow</Text>
           <Text style={styles.garagePlannedText}>
@@ -6715,6 +7206,9 @@ export default function Dashboard({
                   <Text style={styles.notificationsPanelHelperText}>
                     {notificationPanelSummary.secondaryTitle}
                   </Text>
+                  <Text style={styles.notificationsPanelHelperText}>
+                    Read and dismiss state is currently stored for this session only.
+                  </Text>
                 </View>
 
                 <View style={styles.notificationsPanelActions}>
@@ -6724,7 +7218,7 @@ export default function Dashboard({
                     activeOpacity={0.82}
                   >
                     <MaterialCommunityIcons name="check-all" size={16} color={colors.labelText} />
-                    <Text style={styles.notificationsHeaderButtonText}>Mark all</Text>
+                    <Text style={styles.notificationsHeaderButtonText}>Mark all this session</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.notificationsPanelClose}
@@ -7076,15 +7570,31 @@ export default function Dashboard({
                         <Text style={styles.checkoutSummaryLabel}>Amount Due</Text>
                         <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.amountDueLabel}</Text>
                       </View>
-                      <View style={styles.checkoutSummaryRow}>
-                        <Text style={styles.checkoutSummaryLabel}>Amount Paid</Text>
-                        <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.amountPaidLabel}</Text>
-                      </View>
-                      <View style={styles.checkoutSummaryRow}>
-                        <Text style={styles.checkoutSummaryLabel}>Issued</Text>
-                        <Text style={styles.checkoutSummaryValue}>
-                          {formatStoreDateLabel(selectedStoreInvoice.issuedAt)}
-                        </Text>
+                        <View style={styles.checkoutSummaryRow}>
+                          <Text style={styles.checkoutSummaryLabel}>Amount Paid</Text>
+                          <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.amountPaidLabel}</Text>
+                        </View>
+                        <View style={styles.checkoutSummaryRow}>
+                          <Text style={styles.checkoutSummaryLabel}>Settlement</Text>
+                          <Text style={styles.checkoutSummaryValue}>
+                            {selectedStoreInvoice.paymentChannel === 'online_provider'
+                              ? 'PayMongo checkout'
+                              : selectedStoreInvoice.paymentChannel === 'manual'
+                                ? 'Manual settlement'
+                                : 'Not selected yet'}
+                          </Text>
+                        </View>
+                        <View style={styles.checkoutSummaryRow}>
+                          <Text style={styles.checkoutSummaryLabel}>Online Status</Text>
+                          <Text style={styles.checkoutSummaryValue}>
+                            {selectedStoreInvoice.onlinePaymentStatus || 'No online checkout yet'}
+                          </Text>
+                        </View>
+                        <View style={styles.checkoutSummaryRow}>
+                          <Text style={styles.checkoutSummaryLabel}>Issued</Text>
+                          <Text style={styles.checkoutSummaryValue}>
+                            {formatStoreDateLabel(selectedStoreInvoice.issuedAt)}
+                          </Text>
                       </View>
                       <View style={styles.checkoutSummaryRow}>
                         <Text style={styles.checkoutSummaryLabel}>Due</Text>
@@ -7093,21 +7603,66 @@ export default function Dashboard({
                         </Text>
                       </View>
 
-                      <Text style={styles.checkoutSummaryNote}>{selectedStoreInvoice.agingSummary}</Text>
-                      <Text style={styles.checkoutSummaryNote}>{selectedStoreInvoice.crossServiceHint}</Text>
+                        <Text style={styles.checkoutSummaryNote}>{selectedStoreInvoice.agingSummary}</Text>
+                        <Text style={styles.checkoutSummaryNote}>{selectedStoreInvoice.crossServiceHint}</Text>
+                        {selectedStoreInvoice.onlinePaymentFailureReason ? (
+                          <Text style={styles.checkoutStateText}>
+                            {selectedStoreInvoice.onlinePaymentFailureReason}
+                          </Text>
+                        ) : null}
 
-                      {selectedStoreInvoice.paymentEntries.length ? (
-                        <View style={styles.storePaymentEntryList}>
-                          {selectedStoreInvoice.paymentEntries.map((paymentEntry) => (
-                            <StorePaymentEntryRow key={paymentEntry.id} item={paymentEntry} />
-                          ))}
-                        </View>
-                      ) : (
-                        <Text style={styles.checkoutStateText}>
-                          No payment entries have been recorded yet. This screen only reflects manual backend
-                          records and never assumes gateway settlement.
-                        </Text>
-                      )}
+                        {selectedStoreInvoice.status !== 'paid' ? (
+                          <View style={styles.storeInvoiceActionRow}>
+                            <TouchableOpacity
+                              style={[
+                                styles.cartCheckoutButton,
+                                isStoreInvoiceActionBusy && styles.primaryButtonDisabled,
+                              ]}
+                              onPress={() => {
+                                void handleStartStoreInvoicePaymongoCheckout();
+                              }}
+                              disabled={isStoreInvoiceActionBusy}
+                            >
+                              <Text style={styles.cartCheckoutText}>
+                                {isStoreInvoiceActionBusy
+                                  ? 'Opening payment...'
+                                  : selectedStoreInvoice.onlinePaymentCheckoutUrl &&
+                                      ['pending', 'awaiting_payment', 'awaiting_payment_method'].includes(
+                                        String(selectedStoreInvoice.onlinePaymentStatus ?? '')
+                                          .trim()
+                                          .toLowerCase(),
+                                      )
+                                    ? 'Open PayMongo Checkout'
+                                    : 'Pay with PayMongo'}
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[
+                                styles.secondaryActionButton,
+                                isStoreInvoiceActionBusy && styles.primaryButtonDisabled,
+                              ]}
+                              onPress={() => {
+                                void handleRefreshStoreInvoicePayment();
+                              }}
+                              disabled={isStoreInvoiceActionBusy}
+                            >
+                              <Text style={styles.secondaryActionButtonText}>Refresh Payment Status</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+
+                        {selectedStoreInvoice.paymentEntries.length ? (
+                          <View style={styles.storePaymentEntryList}>
+                            {selectedStoreInvoice.paymentEntries.map((paymentEntry) => (
+                              <StorePaymentEntryRow key={paymentEntry.id} item={paymentEntry} />
+                            ))}
+                          </View>
+                        ) : (
+                          <Text style={styles.checkoutStateText}>
+                            No payment entries have been recorded yet. Start PayMongo checkout or wait for a
+                            manual/offline settlement record.
+                          </Text>
+                        )}
                     </>
                   ) : (
                     <>
@@ -11191,6 +11746,12 @@ const styles = StyleSheet.create({
   storePaymentEntryList: {
     marginTop: 12,
   },
+  storeInvoiceActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
+  },
   storePaymentEntryRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -11637,6 +12198,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 6,
   },
+  primaryButtonDisabled: {
+    opacity: 0.6,
+  },
   primaryButtonText: {
     color: colors.onPrimary,
     fontSize: 15,
@@ -11659,6 +12223,21 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: '700',
+  },
+  bookingReservationPaymentActions: {
+    marginTop: 8,
+  },
+  bookingReservationPaymentHint: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
+  },
+  bookingReservationPaymentWarning: {
+    color: '#FCA5A5',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
   },
   checkoutBackButton: {
     flexDirection: 'row',
@@ -12325,6 +12904,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginLeft: 8,
   },
+  secondaryActionButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  secondaryActionButtonText: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   bottomNav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -12388,3 +12982,4 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
 });
+
