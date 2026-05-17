@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import {
   ApiBearerAuth,
@@ -73,6 +73,58 @@ export class InvoicePaymentsController {
     );
   }
 
+  @Post('orders/:id/invoice/paymongo/checkout')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Create or refresh a PayMongo checkout session for an ecommerce invoice.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Order identifier.',
+    example: '88888888-8888-4888-8888-888888888888',
+  })
+  @ApiOkResponse({
+    description: 'Updated invoice with online checkout metadata.',
+    type: InvoiceResponseDto,
+  })
+  @ApiConflictResponse({ description: 'The ecommerce invoice cannot start online payment.' })
+  @ApiForbiddenResponse({ description: 'Customers can only start checkout for their own ecommerce invoice.' })
+  @ApiNotFoundResponse({ description: 'Invoice not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  createPaymongoCheckout(@Param('id') orderId: string, @Req() request: Request) {
+    return this.invoicePaymentsService.createPaymongoCheckoutForOrder(
+      orderId,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post('orders/:id/invoice/paymongo/reconcile')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Refresh the latest PayMongo payment state for an ecommerce invoice.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Order identifier.',
+    example: '88888888-8888-4888-8888-888888888888',
+  })
+  @ApiOkResponse({
+    description: 'Updated invoice with refreshed online payment state.',
+    type: InvoiceResponseDto,
+  })
+  @ApiConflictResponse({ description: 'No PayMongo checkout session exists or the invoice cannot be refreshed.' })
+  @ApiForbiddenResponse({ description: 'Customers can only refresh checkout for their own ecommerce invoice.' })
+  @ApiNotFoundResponse({ description: 'Invoice not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  reconcilePaymongoCheckout(@Param('id') orderId: string, @Req() request: Request) {
+    return this.invoicePaymentsService.reconcilePaymongoCheckoutForOrder(
+      orderId,
+      request.user as { userId: string; role: string },
+    );
+  }
+
   @Post('invoices/:id/payments')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('service_adviser', 'super_admin')
@@ -119,5 +171,29 @@ export class InvoicePaymentsController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   updateInvoiceStatus(@Param('id') invoiceId: string, @Body() payload: UpdateInvoiceStatusDto) {
     return this.invoicePaymentsService.updateInvoiceStatus(invoiceId, payload);
+  }
+
+  @Post('ecommerce/payments/paymongo/webhook')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Receive PayMongo webhooks for ecommerce invoice checkout sessions.' })
+  @ApiOkResponse({
+    description: 'Webhook accepted.',
+    schema: {
+      example: {
+        received: true,
+        ignored: false,
+        eventType: 'checkout_session.payment.paid',
+        invoiceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        orderId: '88888888-8888-4888-8888-888888888888',
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid webhook payload or signature.' })
+  handlePaymongoWebhook(
+    @Req() request: Request & { rawBody?: Buffer },
+    @Headers('paymongo-signature') signatureHeader?: string,
+  ) {
+    const rawPayload = request.rawBody ?? request.body;
+    return this.invoicePaymentsService.handlePaymongoWebhook(rawPayload, signatureHeader);
   }
 }

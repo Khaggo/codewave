@@ -1,32 +1,84 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   BadgeCheck,
-  ClipboardCheck,
-  ClipboardList,
-  ExternalLink,
   FileSearch,
-  History,
   Loader2,
-  ShieldCheck,
-  Wrench,
+  Plus,
 } from 'lucide-react'
 
-import PortalLink from '@/components/PortalLink'
-import { ApiError, listAdminCustomers } from '@/lib/authClient'
+import PageHeader from '@/components/ui/PageHeader'
+import PortalSelect from '@/components/ui/PortalSelect'
+import { ApiError, listAdminCustomers, listStaffAccounts } from '@/lib/authClient'
 import { listVehicleBookings } from '@/lib/bookingStaffClient'
-import { createVehicleInspection, listVehicleInspections } from '@/lib/inspectionStaffClient'
+import {
+  createVehicleInspection,
+  listVehicleInspections,
+  uploadVehicleInspectionPhoto,
+} from '@/lib/inspectionStaffClient'
 import { useUser } from '@/lib/userContext'
 import {
   getSelectedInspection,
   getStaffInspectionCaptureSuccessState,
   getStaffInspectionHistoryState,
-  inspectionCaptureSubmissionTemplate,
   inspectionStaffRoles,
   summarizeInspectionFindings,
 } from '@/lib/api/generated/inspections/staff-web-inspections'
+import { getInspectionMessageTone } from './digitalIntakeInspectionView.mjs'
+import {
+  arrivalPhotoSlots,
+  buildIntakeInspectionPayload,
+  checklistItemOptions,
+  createInitialIntakeDraft,
+  damageAreaOptions,
+  fuelLevelOptions,
+  getReasonForVisitOptions,
+  getIntakeRequirementOptions,
+  intakeFieldMaxLengths,
+  resolveIntakeNextRoute,
+} from './digitalIntakeInspectionWorkspaceForm.mjs'
+import {
+  getArrivalPhotoButtonLabel,
+  getArrivalPhotoDisplayLabel,
+  getArrivalPhotoTemporaryRef,
+  isArrivalPhotoTemporaryRef,
+  getIntakeRequirementsBadge,
+  getIntakeWorkspaceHeroCopy,
+  getIntakeWorkspacePrimaryActionLabel,
+} from './digitalIntakeInspectionWorkspaceView.mjs'
+
+const intakeStatusMeta = {
+  pending: {
+    badgeClassName: 'badge badge-orange',
+    label: 'Pending draft',
+  },
+  completed: {
+    badgeClassName: 'badge badge-green',
+    label: 'Completed intake',
+  },
+}
+
+const arrivalTypeOptions = [
+  { value: 'walk_in', label: 'Walk-in', helper: 'No advance booking' },
+  { value: 'with_booking', label: 'Booking', helper: 'Scheduled arrival' },
+]
+
+const visitTypeOptions = [
+  { value: 'regular_service', label: 'Regular Service', nextRoute: 'service' },
+  { value: 'insurance_related', label: 'Insurance', nextRoute: 'insurance' },
+  { value: 'back_job_complaint', label: 'Back Job', nextRoute: 'complaint' },
+  { value: 'inspection_only', label: 'Inspection Only', nextRoute: 'inspection' },
+]
+
+const nextRouteLabels = {
+  service: 'Service bay handoff',
+  insurance: 'Insurance intake handoff',
+  complaint: 'Return visit review',
+  inspection: 'Inspection-only handoff',
+}
 
 const formatLabel = (value) =>
   String(value ?? '')
@@ -51,11 +103,22 @@ const formatDateTime = (value) => {
   })
 }
 
-const splitRefs = (value) =>
-  String(value ?? '')
-    .split(/[\n,]/)
-    .map((item) => item.trim())
+const formatVehicleOptionLabel = (vehicle) =>
+  [
+    vehicle?.plateNumber || vehicle?.id,
+    [vehicle?.year, vehicle?.make, vehicle?.model].filter(Boolean).join(' '),
+  ]
     .filter(Boolean)
+    .join(' / ')
+
+const formatBookingOptionLabel = (booking) =>
+  [
+    booking?.customerLabel,
+    booking?.scheduledDate,
+    formatLabel(booking?.status),
+  ]
+    .filter(Boolean)
+    .join(' / ')
 
 const getVerificationTone = (state) => {
   if (state === 'verified') return 'badge-green'
@@ -64,113 +127,26 @@ const getVerificationTone = (state) => {
 }
 
 const getMessageTone = (state) => {
-  if (
-    state === 'capture_saved_verified' ||
-    state === 'capture_saved_mixed' ||
-    state === 'capture_saved_unverified' ||
-    state === 'history_loaded'
-  ) {
-    return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-  }
-
-  if (state === 'history_empty') {
-    return 'border-brand-orange/25 bg-brand-orange/10 text-orange-100'
-  }
-
-  if (state === 'history_loading') {
-    return 'border-blue-500/25 bg-blue-500/10 text-blue-100'
-  }
-
-  return 'border-red-500/25 bg-red-500/10 text-red-200'
+  const tone = getInspectionMessageTone(state)
+  if (tone === 'success') return 'status-message status-message-success'
+  if (tone === 'warning' || tone === 'info') return 'status-message status-message-warning'
+  return 'status-message status-message-danger'
 }
 
-const initialDraft = {
-  customerUserId: '',
-  vehicleId: '',
-  bookingId: '',
-  inspectionType: inspectionCaptureSubmissionTemplate.request.inspectionType,
-  status: inspectionCaptureSubmissionTemplate.request.status ?? 'completed',
-  notes: inspectionCaptureSubmissionTemplate.request.notes ?? '',
-  attachmentRefsText: '',
-  findingCategory: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.category ?? 'general',
-  findingLabel: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.label ?? '',
-  findingSeverity: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.severity ?? 'medium',
-  findingNotes: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.notes ?? '',
-  findingVerified: inspectionCaptureSubmissionTemplate.request.findings?.[0]?.isVerified ?? true,
-}
+const getDraftStatusMeta = (status) =>
+  intakeStatusMeta[status] ?? {
+    badgeClassName: 'badge badge-gray',
+    label: formatLabel(status) || 'Intake draft',
+  }
 
-const inspectionFindingCategoryOptions = [
-  { value: 'general', label: 'General' },
-  { value: 'engine', label: 'Engine' },
-  { value: 'brakes', label: 'Brakes' },
-  { value: 'suspension', label: 'Suspension' },
-  { value: 'electrical', label: 'Electrical' },
-  { value: 'body', label: 'Body' },
-  { value: 'interior', label: 'Interior' },
-  { value: 'fluids', label: 'Fluids' },
-  { value: 'tires', label: 'Tires' },
-]
-
-const technicianLinks = [
-  {
-    href: '/admin/job-orders',
-    icon: Wrench,
-    title: 'Job Order Workbench',
-    roleNote: 'technician execution',
-    copy: 'Load a known job order, record progress, update status, and attach photo evidence from the workshop.',
-  },
-  {
-    href: '/admin',
-    icon: ClipboardList,
-    title: 'Technician Dashboard',
-    roleNote: 'assigned work queue',
-    copy: 'Return to your technician task board to review active job orders and open the next vehicle in queue.',
-  },
-]
-
-const staffLinks = [
-  {
-    href: '/bookings',
-    icon: ClipboardList,
-    title: 'Booking Intake',
-    roleNote: 'service adviser / super admin',
-    copy: 'Confirm or reschedule customer booking requests before any inspection or job-order handoff.',
-  },
-  {
-    href: '/admin/job-orders',
-    icon: Wrench,
-    title: 'Job Order Workbench',
-    roleNote: 'technician / adviser / super admin',
-    copy: 'Create handoffs, load known job orders, add progress, attach evidence, and finalize invoice-ready work.',
-  },
-  {
-    href: '/admin/qa-audit',
-    icon: ShieldCheck,
-    title: 'QA Release Review',
-    roleNote: 'service adviser / super admin',
-    copy: 'Review quality gates after job-order evidence exists. Super admins keep override authority.',
-  },
-]
-
-function RouteCard({ item }) {
-  const Icon = item.icon
-
-  return (
-    <PortalLink href={item.href} className="card group p-5 transition-colors hover:border-brand-orange/50">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
-          <Icon size={18} />
-        </div>
-        <ExternalLink size={15} className="text-ink-dim transition-colors group-hover:text-brand-orange" />
-      </div>
-      <p className="mt-4 text-sm font-bold text-ink-primary">{item.title}</p>
-      <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-dim">
-        {item.roleNote}
-      </p>
-      <p className="mt-3 text-sm leading-6 text-ink-secondary">{item.copy}</p>
-    </PortalLink>
-  )
-}
+const getUserDisplayLabel = (user) =>
+  user?.displayName ||
+  user?.name ||
+  user?.fullName ||
+  user?.roleLabel ||
+  user?.email ||
+  user?.id ||
+  ''
 
 function InspectionCard({ inspection, isSelected, onSelect }) {
   const summaries = summarizeInspectionFindings(inspection.findings)
@@ -220,14 +196,35 @@ function InspectionCard({ inspection, isSelected, onSelect }) {
   )
 }
 
+function IntakeSection({ step, title, description, badge, children }) {
+  return (
+    <section className="rounded-2xl border border-surface-border bg-surface-card p-4 md:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          {step ? (
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-orange">
+              Step {step}
+            </p>
+          ) : null}
+          <p className="text-sm font-bold text-ink-primary">{title}</p>
+          {description ? <p className="mt-1 text-sm text-ink-muted">{description}</p> : null}
+        </div>
+        {badge ? <span className="badge badge-gray">{badge}</span> : null}
+      </div>
+      <div className="mt-4">{children}</div>
+    </section>
+  )
+}
+
 export default function DigitalIntakeInspectionWorkspace() {
   const user = useUser()
   const role = user?.role ?? null
   const isTechnician = role === 'technician'
   const canUseInspection = inspectionStaffRoles.includes(role)
-  const [draft, setDraft] = useState(initialDraft)
+  const [draft, setDraft] = useState(() => createInitialIntakeDraft())
   const [inspections, setInspections] = useState([])
   const [customers, setCustomers] = useState([])
+  const [staffAccounts, setStaffAccounts] = useState([])
   const [vehicleBookings, setVehicleBookings] = useState([])
   const [selectedInspectionId, setSelectedInspectionId] = useState('')
   const [historyState, setHistoryState] = useState({
@@ -238,6 +235,9 @@ export default function DigitalIntakeInspectionWorkspace() {
     status: 'capture_ready',
     message: '',
   })
+  const [submitIntent, setSubmitIntent] = useState(null)
+  const [arrivalPhotoUploads, setArrivalPhotoUploads] = useState({})
+  const arrivalPhotoInputRefs = useRef({})
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -269,6 +269,17 @@ export default function DigitalIntakeInspectionWorkspace() {
   }, [isTechnician, user?.accessToken])
 
   useEffect(() => {
+    if (!user?.accessToken) {
+      setStaffAccounts([])
+      return
+    }
+
+    void listStaffAccounts(user.accessToken)
+      .then((items) => setStaffAccounts(items.filter((account) => account?.isActive !== false)))
+      .catch(() => setStaffAccounts([]))
+  }, [user?.accessToken])
+
+  useEffect(() => {
     if (!draft.vehicleId || !user?.accessToken || isTechnician) {
       setVehicleBookings([])
       return
@@ -283,14 +294,151 @@ export default function DigitalIntakeInspectionWorkspace() {
     () => customers.find((customer) => customer.id === draft.customerUserId) ?? null,
     [customers, draft.customerUserId],
   )
-  const customerVehicleOptions = selectedCustomer?.vehicles ?? []
-
+  const customerVehicleOptions = useMemo(() => selectedCustomer?.vehicles ?? [], [selectedCustomer])
+  const selectedVehicle = useMemo(
+    () => customerVehicleOptions.find((vehicle) => vehicle.id === draft.vehicleId) ?? null,
+    [customerVehicleOptions, draft.vehicleId],
+  )
+  const selectedBooking = useMemo(
+    () => vehicleBookings.find((booking) => booking.id === draft.bookingId) ?? null,
+    [vehicleBookings, draft.bookingId],
+  )
   const selectedInspection = useMemo(
     () => getSelectedInspection(inspections, selectedInspectionId),
     [inspections, selectedInspectionId],
   )
+  const customerSelectItems = useMemo(
+    () =>
+      customers.map((customer) => ({
+        value: customer.id,
+        label: customer.displayName || customer.email || customer.id,
+        helper: customer.email || customer.id,
+      })),
+    [customers],
+  )
+  const vehicleSelectItems = useMemo(
+    () =>
+      customerVehicleOptions.map((vehicle) => ({
+        value: vehicle.id,
+        label: formatVehicleOptionLabel(vehicle),
+      })),
+    [customerVehicleOptions],
+  )
+  const bookingSelectItems = useMemo(
+    () =>
+      vehicleBookings.map((booking) => ({
+        value: booking.id,
+        label: formatBookingOptionLabel(booking),
+      })),
+    [vehicleBookings],
+  )
   const inspectionSummaryCount = selectedInspection?.findings?.length ?? 0
-  const routeLinks = isTechnician ? technicianLinks : staffLinks
+  const heroCopy = getIntakeWorkspaceHeroCopy(isTechnician)
+  const draftStatus = getDraftStatusMeta(draft.status)
+  const defaultReceivedByStaff = getUserDisplayLabel(user)
+  const isSubmittingPending = captureState.status === 'capture_submitting' && submitIntent === 'pending'
+  const isSubmittingCompleted = captureState.status === 'capture_submitting' && submitIntent === 'completed'
+  const selectedVisitTypeMeta =
+    visitTypeOptions.find((option) => option.value === draft.visitType) ?? visitTypeOptions[0]
+  const effectiveNextRoute = resolveIntakeNextRoute(draft.visitType, draft.nextRoute)
+  const nextRouteLabel =
+    nextRouteLabels[effectiveNextRoute] ?? (formatLabel(effectiveNextRoute) || 'Next handoff')
+  const primaryActionLabel = getIntakeWorkspacePrimaryActionLabel(draft.visitType)
+  const visibleRequirementOptions = useMemo(
+    () =>
+      getIntakeRequirementOptions({
+        arrivalType: draft.arrivalType,
+        visitType: draft.visitType,
+      }),
+    [draft.arrivalType, draft.visitType],
+  )
+  const reasonForVisitOptions = useMemo(
+    () => getReasonForVisitOptions({ visitType: draft.visitType, currentValue: draft.reasonForVisit }),
+    [draft.reasonForVisit, draft.visitType],
+  )
+  const reasonForVisitSelectItems = useMemo(
+    () => reasonForVisitOptions.map((option) => ({ value: option, label: option })),
+    [reasonForVisitOptions],
+  )
+  const receivedByStaffOptions = useMemo(() => {
+    const options = new Set()
+    const currentValue = String(draft.receivedByStaff ?? '').trim()
+    const currentUserLabel = String(defaultReceivedByStaff ?? '').trim()
+
+    if (currentValue) {
+      options.add(currentValue)
+    }
+    if (currentUserLabel) {
+      options.add(currentUserLabel)
+    }
+
+    for (const account of staffAccounts) {
+      const label = String(account?.displayName ?? account?.email ?? '').trim()
+      if (label) {
+        options.add(label)
+      }
+    }
+
+    return [...options]
+  }, [defaultReceivedByStaff, draft.receivedByStaff, staffAccounts])
+  const receivedByStaffSelectItems = useMemo(
+    () => receivedByStaffOptions.map((option) => ({ value: option, label: option })),
+    [receivedByStaffOptions],
+  )
+  const activeRequirementsChecklist = useMemo(
+    () =>
+      visibleRequirementOptions.reduce((accumulator, option) => {
+        accumulator[option.value] = draft.requirementsChecklist[option.value]
+        return accumulator
+      }, {}),
+    [draft.requirementsChecklist, visibleRequirementOptions],
+  )
+  const requirementsBadge = getIntakeRequirementsBadge(
+    activeRequirementsChecklist,
+    draft.missingRequirementsNote,
+  )
+
+  const intakeContext = useMemo(() => {
+    const items = []
+
+    if (selectedCustomer) {
+      items.push({
+        label: 'Customer',
+        value: selectedCustomer.displayName || selectedCustomer.email || selectedCustomer.id,
+        sub: selectedCustomer.email || selectedCustomer.id,
+      })
+    }
+
+    if (selectedVehicle) {
+      items.push({
+        label: 'Vehicle',
+        value: formatVehicleOptionLabel(selectedVehicle),
+        sub: `Vehicle ID: ${selectedVehicle.id}`,
+      })
+    } else if (draft.vehicleId.trim()) {
+      items.push({
+        label: 'Vehicle',
+        value: draft.vehicleId.trim(),
+        sub: isTechnician ? 'Manual vehicle reference' : 'Vehicle selected without profile details',
+      })
+    }
+
+    if (selectedBooking) {
+      items.push({
+        label: 'Booking',
+        value: selectedBooking.id,
+        sub: formatBookingOptionLabel(selectedBooking),
+      })
+    } else if (draft.bookingId.trim()) {
+      items.push({
+        label: 'Booking',
+        value: draft.bookingId.trim(),
+        sub: 'Manual booking reference',
+      })
+    }
+
+    return items
+  }, [draft.bookingId, draft.vehicleId, isTechnician, selectedBooking, selectedCustomer, selectedVehicle])
 
   const updateDraft = (patch) => {
     setDraft((current) => ({
@@ -299,26 +447,184 @@ export default function DigitalIntakeInspectionWorkspace() {
     }))
   }
 
-  const buildPayload = () => {
-    const finding =
-      draft.findingLabel.trim() || draft.findingCategory.trim() || draft.findingNotes.trim()
-        ? {
-            category: draft.findingCategory.trim() || 'general',
-            label: draft.findingLabel.trim() || 'Inspection note',
-            severity: draft.findingSeverity,
-            notes: draft.findingNotes.trim() || undefined,
-            isVerified: draft.findingVerified,
+  const updateVisitType = (visitType) => {
+    setDraft((current) => ({
+      ...current,
+      visitType,
+      nextRoute: resolveIntakeNextRoute(visitType, current.nextRoute),
+    }))
+  }
+
+  const updateRequirement = (field, checked) => {
+    setDraft((current) => ({
+      ...current,
+      requirementsChecklist: {
+        ...current.requirementsChecklist,
+        [field]: checked,
+      },
+    }))
+  }
+
+  const updateArrivalPhoto = (slot, value) => {
+    setDraft((current) => ({
+      ...current,
+      arrivalPhotos: {
+        ...current.arrivalPhotos,
+        [slot]: value,
+      },
+    }))
+  }
+
+  const updateArrivalPhotoFile = (slot, file) => {
+    if (!file || typeof FileReader === 'undefined') {
+      updateArrivalPhoto(slot, '')
+      setArrivalPhotoUploads((current) => ({
+        ...current,
+        [slot]: null,
+      }))
+      return
+    }
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      setArrivalPhotoUploads((current) => ({
+        ...current,
+        [slot]: {
+          file,
+          fileName: file.name,
+          previewUrl: typeof reader.result === 'string' ? reader.result : '',
+        },
+      }))
+      updateArrivalPhoto(slot, getArrivalPhotoTemporaryRef(slot))
+      if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
+    }
+
+    reader.onerror = () => {
+      setArrivalPhotoUploads((current) => ({
+        ...current,
+        [slot]: null,
+      }))
+      updateArrivalPhoto(slot, '')
+    }
+
+    reader.readAsDataURL(file)
+  }
+
+  const updateChecklistItem = (item, value) => {
+    setDraft((current) => ({
+      ...current,
+      checklist: {
+        ...current.checklist,
+        [item]: value,
+      },
+    }))
+  }
+
+  const toggleDamageArea = (area) => {
+    setDraft((current) => ({
+      ...current,
+      damageAreas: current.damageAreas.includes(area)
+        ? current.damageAreas.filter((item) => item !== area)
+        : [...current.damageAreas, area],
+    }))
+  }
+
+  const buildPayload = (nextDraft = draft) =>
+    buildIntakeInspectionPayload({
+      draft: nextDraft,
+      userId: user?.id,
+    })
+
+  const resolvePendingArrivalPhotoFile = async (slot) => {
+    const uploadState = arrivalPhotoUploads[slot]
+    const directFile = uploadState?.file
+
+    if (
+      directFile &&
+      typeof directFile === 'object' &&
+      typeof directFile.arrayBuffer === 'function' &&
+      typeof directFile.size === 'number'
+    ) {
+      return {
+        file: directFile,
+        fileName: directFile.name || `${slot}.jpg`,
+      }
+    }
+
+    const previewUrl = String(uploadState?.previewUrl ?? '').trim()
+    if (previewUrl.startsWith('data:')) {
+      const previewResponse = await fetch(previewUrl)
+      const previewBlob = await previewResponse.blob()
+      return {
+        file: previewBlob,
+        fileName: String(uploadState?.fileName ?? `${slot}.jpg`).trim() || `${slot}.jpg`,
+      }
+    }
+
+    return null
+  }
+
+  const persistPendingArrivalPhotos = async (nextDraft) => {
+    const vehicleId = String(nextDraft.vehicleId ?? '').trim()
+    const pendingSlots = Object.entries(nextDraft.arrivalPhotos ?? {}).filter(([, value]) =>
+      isArrivalPhotoTemporaryRef(value),
+    )
+
+    if (!pendingSlots.length) {
+      return nextDraft
+    }
+
+    if (!vehicleId) {
+      throw new ApiError('Select a vehicle before uploading arrival photos.', 400, {
+        path: '/api/vehicles/:id/inspections/photos/upload',
+      })
+    }
+
+    const uploadedRefs = await Promise.all(
+      pendingSlots.map(async ([slot]) => {
+        const resolvedUpload = await resolvePendingArrivalPhotoFile(slot)
+
+        if (!resolvedUpload) {
+          return [slot, '']
+        }
+
+        const uploadedPhoto = await uploadVehicleInspectionPhoto({
+          vehicleId,
+          slot,
+          file: resolvedUpload.file,
+          fileName: resolvedUpload.fileName,
+          accessToken: user.accessToken,
+        })
+
+        return [slot, uploadedPhoto.attachmentRef]
+      }),
+    )
+
+    setArrivalPhotoUploads((current) => {
+      const nextUploads = { ...current }
+      for (const [slot, uploadedRef] of uploadedRefs) {
+        if (!uploadedRef) {
+          delete nextUploads[slot]
+        } else if (nextUploads[slot]) {
+          nextUploads[slot] = {
+            ...nextUploads[slot],
+            attachmentRef: uploadedRef,
           }
-        : null
+          delete nextUploads[slot].file
+        }
+      }
+      return nextUploads
+    })
 
     return {
-      inspectionType: draft.inspectionType,
-      status: draft.status,
-      bookingId: draft.bookingId.trim() || undefined,
-      inspectorUserId: user?.id,
-      notes: draft.notes.trim() || undefined,
-      attachmentRefs: splitRefs(draft.attachmentRefsText),
-      findings: finding ? [finding] : [],
+      ...nextDraft,
+      arrivalPhotos: {
+        ...nextDraft.arrivalPhotos,
+        ...Object.fromEntries(uploadedRefs),
+      },
     }
   }
 
@@ -386,7 +692,7 @@ export default function DigitalIntakeInspectionWorkspace() {
     }
   }
 
-  const saveInspection = async () => {
+  const saveInspection = async (nextStatus) => {
     if (!canUseInspection) {
       setCaptureState({
         status: 'forbidden_role',
@@ -403,14 +709,6 @@ export default function DigitalIntakeInspectionWorkspace() {
       return
     }
 
-    if (draft.inspectionType === 'completion' && !draft.findingLabel.trim()) {
-      setCaptureState({
-        status: 'completion_missing_findings',
-        message: 'Completion inspections need at least one finding before they can support release verification.',
-      })
-      return
-    }
-
     if (!user?.accessToken) {
       setCaptureState({
         status: 'capture_failed',
@@ -419,366 +717,564 @@ export default function DigitalIntakeInspectionWorkspace() {
       return
     }
 
+    const normalizedDraft = {
+      ...draft,
+      status: nextStatus,
+      receivedByStaff: draft.receivedByStaff || defaultReceivedByStaff,
+    }
+
+    setSubmitIntent(nextStatus)
     setCaptureState({
       status: 'capture_submitting',
-      message: '',
+      message: 'Saving intake and syncing arrival evidence...',
     })
 
     try {
+      const normalizedDraftWithUploads = await persistPendingArrivalPhotos(normalizedDraft)
       const savedInspection = await createVehicleInspection({
-        vehicleId: draft.vehicleId.trim(),
-        inspection: buildPayload(),
+        vehicleId: normalizedDraftWithUploads.vehicleId.trim(),
+        inspection: buildPayload(normalizedDraftWithUploads),
         accessToken: user.accessToken,
       })
-      const nextStatus = getStaffInspectionCaptureSuccessState(savedInspection)
+      const nextCaptureState = getStaffInspectionCaptureSuccessState(savedInspection)
 
       setInspections((current) => [savedInspection, ...current.filter((item) => item.id !== savedInspection.id)])
       setSelectedInspectionId(savedInspection.id)
+      setDraft((current) => ({
+        ...current,
+        arrivalPhotos: normalizedDraftWithUploads.arrivalPhotos,
+        status: savedInspection.status || nextStatus,
+        receivedByStaff: current.receivedByStaff || defaultReceivedByStaff,
+      }))
+      setSubmitIntent(null)
       setCaptureState({
-        status: nextStatus,
-        message: `Inspection saved with ${formatLabel(savedInspection.verificationState)} evidence state.`,
+        status: nextCaptureState,
+        message: `${
+          savedInspection.status === 'pending' ? 'Pending intake draft saved' : 'Intake inspection saved'
+        } with ${formatLabel(savedInspection.verificationState)} evidence state.`,
       })
       setHistoryState({
         status: 'history_loaded',
         message: 'Latest saved inspection is selected below.',
       })
     } catch (error) {
-      let nextStatus = 'capture_failed'
+      let nextCaptureState = 'capture_failed'
 
       if (error instanceof ApiError && error.status === 403) {
-        nextStatus = 'forbidden_role'
+        nextCaptureState = 'forbidden_role'
       } else if (error instanceof ApiError && error.status === 404) {
-        nextStatus = 'vehicle_not_found'
+        nextCaptureState = 'vehicle_not_found'
       } else if (error instanceof ApiError && error.status === 409) {
-        nextStatus = 'booking_vehicle_conflict'
+        nextCaptureState = 'booking_vehicle_conflict'
       } else if (error instanceof ApiError && error.status === 400) {
-        nextStatus = 'completion_missing_findings'
+        nextCaptureState = 'capture_failed'
       }
 
       setCaptureState({
-        status: nextStatus,
+        status: nextCaptureState,
         message: error?.message || 'Inspection could not be saved.',
       })
+      setSubmitIntent(null)
     }
   }
 
   return (
     <div className="ops-page-shell">
-      <section className="ops-page-header">
-        <div className="space-y-2">
-          <p className="ops-page-kicker">Digital Intake And Inspection</p>
-          <h1 className="ops-page-title">
-            {isTechnician ? 'Capture Vehicle Condition And Workshop Findings' : 'Capture Vehicle Condition Before Release Decisions'}
-          </h1>
-          <p className="ops-page-copy">
-            {isTechnician
-              ? 'Use this technician surface to review known vehicle history, capture intake or completion findings, and keep inspection evidence attached to the vehicle before and after service work.'
-              : 'Use this staff surface for vehicle-scoped intake, pre-repair, completion, and return inspection records. QA release review stays separate in the quality-gate workspace and should not replace physical inspection evidence.'}
-          </p>
-        </div>
-      </section>
-
-      <section className="ops-summary-grid">
-        <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Inspection capture</p>
-              <p className="mt-3 text-xl font-black tracking-tight text-ink-primary">
-                {isTechnician ? 'Technician-owned findings' : 'Vehicle-scoped intake'}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-ink-muted">
-                {isTechnician
-                  ? 'Capture the condition you observed on the vehicle without creating separate booking or job-order truth.'
-                  : 'Staff records observed condition and findings against the vehicle. Booking id is optional and only references existing booking truth.'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
-              <ClipboardCheck size={14} />
-            </div>
-          </div>
-        </div>
-        <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Vehicle history</p>
-              <p className="mt-3 text-xl font-black tracking-tight text-ink-primary">
-                {isTechnician ? 'History before repair' : 'Known vehicle lookup'}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-ink-muted">
-                {isTechnician
-                  ? 'Load the active vehicle first so you can compare current findings against prior intake or return records.'
-                  : 'Inspection history is vehicle-scoped today. Staff should start from a known customer vehicle rather than expecting a broad queue on this page.'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-blue-500/15 bg-blue-500/10 text-blue-300">
-              <History size={14} />
-            </div>
-          </div>
-        </div>
-        <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-                {isTechnician ? 'Verification state' : 'QA boundary'}
-              </p>
-              <p className="mt-3 text-xl font-black tracking-tight text-ink-primary">
-                {isTechnician ? 'Verified evidence matters' : 'Release review stays separate'}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-ink-muted">
-                {isTechnician
-                  ? 'Verified findings and clear notes help the next release review without replacing the later QA gate process.'
-                  : 'QA review uses job-order quality gates after work evidence exists. Super-admin overrides stay audit-visible and do not erase inspection findings.'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/15 bg-emerald-500/10 text-emerald-300">
-              <ShieldCheck size={14} />
-            </div>
-          </div>
-        </div>
-        <div className="card p-5 transition-colors hover:border-[rgba(240,124,0,0.35)]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">History state</p>
-              <p className="mt-3 text-3xl font-black tracking-tight tabular-nums text-ink-primary">
-                {inspections.length}
-              </p>
-              <p className="mt-1.5 text-[11px] text-ink-muted">
-                {historyState.status === 'history_loaded'
-                  ? 'Loaded inspection records for the active vehicle'
-                  : 'Enter a vehicle id to load inspection history'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
-              <FileSearch size={14} />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className={`grid gap-4 ${isTechnician ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
-        {routeLinks.map((item) => (
-          <RouteCard key={item.href} item={item} />
-        ))}
-      </section>
+      <PageHeader
+        eyebrow="Digital Intake And Inspection"
+        title={heroCopy.title}
+        description={heroCopy.description}
+        meta={
+          <>
+            <span className="badge badge-gray">{isTechnician ? 'Technician workflow' : 'Staff workflow'}</span>
+            <span className="badge badge-gray">{inspections.length} loaded record{inspections.length === 1 ? '' : 's'}</span>
+          </>
+        }
+      />
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <div className="card p-5 md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="card-title">Live Vehicle Inspection Capture</p>
+              <p className="card-title">Front-Desk Flow</p>
               <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                {isTechnician
-                  ? 'Save one vehicle-owned inspection record and keep the evidence tied to the vehicle being serviced.'
-                  : 'Save one vehicle-owned inspection record. Do not create booking or job-order truth here.'}
+                Capture the visit, then record the vehicle condition.
               </p>
             </div>
-            <span className="badge badge-gray">{isTechnician ? 'Assigned vehicle context' : 'Vehicle and booking selectors'}</span>
+            <span className={draftStatus.badgeClassName}>{draftStatus.label}</span>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {!isTechnician ? (
-              <label className="text-xs text-ink-muted">
-                Customer
-                <select
-                  value={draft.customerUserId}
-                  onChange={(event) =>
-                    updateDraft({
-                      customerUserId: event.target.value,
-                      vehicleId: '',
-                      bookingId: '',
-                    })
-                  }
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                >
-                  <option value="">Choose a customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.displayName} / {customer.email}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <label className="text-xs text-ink-muted">
-              Vehicle
-              {isTechnician ? (
-                <input
-                  value={draft.vehicleId}
-                  onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                  placeholder="Paste vehicle UUID"
-                />
-              ) : (
-                <select
-                  value={draft.vehicleId}
-                  onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                >
-                  <option value="">Choose a customer vehicle</option>
-                  {customerVehicleOptions.map((vehicle) => (
-                    <option key={vehicle.id} value={vehicle.id}>
-                      {vehicle.plateNumber || vehicle.id} / {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </label>
-            <label className="text-xs text-ink-muted">
-              Optional booking
-              {isTechnician ? (
-                <input
-                  value={draft.bookingId}
-                  onChange={(event) => updateDraft({ bookingId: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                  placeholder="Booking UUID if this came from intake"
-                />
-              ) : (
-                <select
-                  value={draft.bookingId}
-                  onChange={(event) => updateDraft({ bookingId: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                >
-                  <option value="">No booking link</option>
-                  {vehicleBookings.map((booking) => (
-                    <option key={booking.id} value={booking.id}>
-                      {booking.customerLabel} / {booking.scheduledDate} / {booking.status}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </label>
-            <label className="text-xs text-ink-muted">
-              Inspection type
-              <select
-                value={draft.inspectionType}
-                onChange={(event) => updateDraft({ inspectionType: event.target.value })}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="intake">Intake</option>
-                <option value="pre_repair">Pre Repair</option>
-                <option value="completion">Completion</option>
-                <option value="return">Return</option>
-              </select>
-            </label>
-            <label className="text-xs text-ink-muted">
-              Status
-              <select
-                value={draft.status}
-                onChange={(event) => updateDraft({ status: event.target.value })}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="pending">Pending</option>
-                <option value="completed">Completed</option>
-                <option value="needs_followup">Needs Followup</option>
-                <option value="void">Void</option>
-              </select>
-            </label>
-            <label className="text-xs text-ink-muted md:col-span-2">
-              Notes
-              <textarea
-                value={draft.notes}
-                onChange={(event) => updateDraft({ notes: event.target.value })}
-                rows={3}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                placeholder="Describe the condition observed during intake or inspection."
-              />
-            </label>
-            <label className="text-xs text-ink-muted md:col-span-2">
-              Attachment refs
-              <input
-                value={draft.attachmentRefsText}
-                onChange={(event) => updateDraft({ attachmentRefsText: event.target.value })}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                placeholder="upload://vehicle/intake-front, upload://vehicle/intake-dashboard"
-              />
-            </label>
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">Primary Finding</p>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="text-xs text-ink-muted">
-                Category
-                <select
-                  value={draft.findingCategory}
-                  onChange={(event) => updateDraft({ findingCategory: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                >
-                  {inspectionFindingCategoryOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs text-ink-muted">
-                Severity
-                <select
-                  value={draft.findingSeverity}
-                  onChange={(event) => updateDraft({ findingSeverity: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                >
-                  <option value="info">Info</option>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </label>
-              <label className="text-xs text-ink-muted md:col-span-2">
-                Finding label
-                <input
-                  value={draft.findingLabel}
-                  onChange={(event) => updateDraft({ findingLabel: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                  placeholder="Brake pedal response confirmed"
-                />
-              </label>
-              <label className="text-xs text-ink-muted md:col-span-2">
-                Finding notes
-                <textarea
-                  value={draft.findingNotes}
-                  onChange={(event) => updateDraft({ findingNotes: event.target.value })}
-                  rows={3}
-                  className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                  placeholder="Evidence notes or customer-safe observation."
-                />
-              </label>
-            </div>
-            <label className="mt-3 flex items-center gap-2 text-sm text-ink-secondary">
-              <input
-                type="checkbox"
-                checked={draft.findingVerified}
-                onChange={(event) => updateDraft({ findingVerified: event.target.checked })}
-                className="h-4 w-4 accent-[#f07c00]"
-              />
-              Mark this finding as verified evidence
-            </label>
-          </div>
-
-          {captureState.message ? (
-            <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${getMessageTone(captureState.status)}`}>
-              {captureState.message}
-            </div>
-          ) : null}
-
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={saveInspection}
-              disabled={captureState.status === 'capture_submitting'}
-              className="btn-primary"
+          <div className="mt-5 space-y-4">
+            <IntakeSection
+              step="1"
+              title="Arrival"
+              description="Identify the arrival and link the right record."
+              badge={draft.arrivalType === 'with_booking' ? 'Booking arrival' : 'Walk-in arrival'}
             >
-              {captureState.status === 'capture_submitting' ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <BadgeCheck size={15} />
-              )}
-              Save Inspection
-            </button>
-            <button type="button" onClick={loadHistory} className="btn-ghost">
-              <FileSearch size={15} />
-              Load Vehicle History
-            </button>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-surface-border bg-surface-raised p-4 md:col-span-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Arrival mode</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {arrivalTypeOptions.map((option) => {
+                      const isSelected = draft.arrivalType === option.value
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => updateDraft({ arrivalType: option.value })}
+                          className={`rounded-2xl border p-4 text-left transition-colors ${
+                            isSelected
+                              ? 'border-brand-orange bg-brand-orange/10'
+                              : 'border-surface-border bg-surface-card hover:border-brand-orange/40'
+                          }`}
+                        >
+                          <p className="text-sm font-semibold text-ink-primary">{option.label}</p>
+                          <p className="mt-1 text-xs text-ink-muted">{option.helper}</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                {!isTechnician ? (
+                  <label className="label">
+                    Customer
+                    <PortalSelect
+                      value={draft.customerUserId}
+                      onValueChange={(nextValue) =>
+                        updateDraft({
+                          customerUserId: nextValue,
+                          vehicleId: '',
+                          bookingId: '',
+                        })
+                      }
+                      items={customerSelectItems}
+                      placeholder="Choose a customer"
+                      emptyOptionLabel="Choose a customer"
+                    />
+                  </label>
+                ) : null}
+                <label className="label">
+                  Vehicle
+                  {isTechnician ? (
+                    <input
+                      value={draft.vehicleId}
+                      onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
+                      className="input"
+                      placeholder="Paste vehicle UUID"
+                    />
+                  ) : (
+                    <PortalSelect
+                      value={draft.vehicleId}
+                      onValueChange={(nextValue) => updateDraft({ vehicleId: nextValue, bookingId: '' })}
+                      items={vehicleSelectItems}
+                      placeholder="Choose a customer vehicle"
+                      emptyOptionLabel="Choose a customer vehicle"
+                    />
+                  )}
+                </label>
+                <label className="label md:col-span-2">
+                  {draft.arrivalType === 'with_booking' ? 'Booking' : 'Booking reference'}
+                  {isTechnician ? (
+                    <input
+                      value={draft.bookingId}
+                      onChange={(event) => updateDraft({ bookingId: event.target.value })}
+                      className="input"
+                      placeholder={
+                        draft.arrivalType === 'with_booking'
+                          ? 'Paste the booking UUID for this arrival'
+                          : 'Optional booking UUID for linked arrivals'
+                      }
+                    />
+                  ) : (
+                    <PortalSelect
+                      value={draft.bookingId}
+                      onValueChange={(nextValue) => updateDraft({ bookingId: nextValue })}
+                      items={bookingSelectItems}
+                      placeholder={draft.arrivalType === 'with_booking' ? 'Choose a booking' : 'No booking link'}
+                      emptyOptionLabel={draft.arrivalType === 'with_booking' ? 'Choose a booking' : 'No booking link'}
+                    />
+                  )}
+                </label>
+                <div className="rounded-xl border border-surface-border bg-surface-raised p-4 md:col-span-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Selected context</p>
+                  {intakeContext.length ? (
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      {intakeContext.map((item) => (
+                        <div key={item.label} className="rounded-xl border border-surface-border bg-surface-card p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">{item.label}</p>
+                          <p className="mt-2 text-sm font-semibold text-ink-primary">{item.value}</p>
+                          {item.sub ? <p className="mt-1 text-xs text-ink-muted">{item.sub}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-ink-muted">
+                      Link the customer and vehicle before you move forward.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </IntakeSection>
+
+            <IntakeSection
+              step="2"
+              title="Visit Type"
+              description="Pick the handoff lane."
+              badge={selectedVisitTypeMeta.label}
+            >
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {visitTypeOptions.map((option) => {
+                    const isSelected = draft.visitType === option.value
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => updateVisitType(option.value)}
+                        className={`rounded-2xl border p-4 text-left transition-colors ${
+                          isSelected
+                            ? 'border-brand-orange bg-brand-orange/10'
+                            : 'border-surface-border bg-surface-raised hover:border-brand-orange/40'
+                        }`}
+                      >
+                        <p className="text-sm font-semibold text-ink-primary">{option.label}</p>
+                        <p className="mt-1 text-xs text-ink-muted">{nextRouteLabels[option.nextRoute]}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary">
+                    <input
+                      type="checkbox"
+                      checked={draft.isRepeatVisit}
+                      onChange={(event) => updateDraft({ isRepeatVisit: event.target.checked })}
+                      className="h-4 w-4 accent-[#f07c00]"
+                    />
+                    Repeat visit
+                  </label>
+                  <label className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary">
+                    <input
+                      type="checkbox"
+                      checked={draft.urgencyFlag}
+                      onChange={(event) => updateDraft({ urgencyFlag: event.target.checked })}
+                      className="h-4 w-4 accent-[#f07c00]"
+                    />
+                    Mark as urgent
+                  </label>
+                </div>
+              </div>
+            </IntakeSection>
+
+            <IntakeSection
+              step="3"
+              title="Customer Concern"
+              description="Capture the front-desk summary."
+              badge={draft.serviceConcern.trim() ? 'Concern captured' : 'Waiting for concern'}
+            >
+              <div className="grid gap-3">
+                <label className="label">
+                  Reason for visit
+                  <PortalSelect
+                    value={draft.reasonForVisit}
+                    onValueChange={(nextValue) => updateDraft({ reasonForVisit: nextValue })}
+                    items={reasonForVisitSelectItems}
+                    placeholder="Select the main reason for this visit"
+                    emptyOptionLabel="Select the main reason for this visit"
+                  />
+                </label>
+                <label className="label">
+                  Customer concern
+                  <textarea
+                    value={draft.serviceConcern}
+                    onChange={(event) => updateDraft({ serviceConcern: event.target.value })}
+                    rows={3}
+                    className="input min-h-[96px] resize-y"
+                    maxLength={intakeFieldMaxLengths.serviceConcern}
+                    placeholder="Summarize the reported issue."
+                  />
+                </label>
+                <label className="label">
+                  Requested service summary
+                  <textarea
+                    value={draft.requestedServiceSummary}
+                    onChange={(event) => updateDraft({ requestedServiceSummary: event.target.value })}
+                    rows={3}
+                    className="input min-h-[96px] resize-y"
+                    maxLength={intakeFieldMaxLengths.requestedServiceSummary}
+                    placeholder="What should happen next?"
+                  />
+                </label>
+              </div>
+            </IntakeSection>
+
+            <IntakeSection
+              step="4"
+              title="Requirements"
+              description="Check what the customer already brought in."
+              badge={requirementsBadge}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                {visibleRequirementOptions.map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft.requirementsChecklist[option.value])}
+                      onChange={(event) => updateRequirement(option.value, event.target.checked)}
+                      className="h-4 w-4 accent-[#f07c00]"
+                    />
+                    <span>
+                      <span className="font-medium text-ink-primary">{option.label}</span>
+                      <span className="mt-1 block text-xs text-ink-muted">
+                        {option.required ? 'Required for this visit.' : 'Optional for this visit.'}
+                        {option.helper ? ` ${option.helper}` : ''}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <label className="label mt-4">
+                Missing requirements note
+                <textarea
+                  value={draft.missingRequirementsNote}
+                  onChange={(event) => updateDraft({ missingRequirementsNote: event.target.value })}
+                  rows={3}
+                  className="input min-h-[96px] resize-y"
+                  maxLength={intakeFieldMaxLengths.missingRequirementsNote}
+                  placeholder="List anything still needed."
+                />
+              </label>
+            </IntakeSection>
+
+            <IntakeSection
+              step="5"
+              title="Arrival Inspection"
+              description="Record the condition before handoff."
+              badge={draft.damageAreas.length ? `${draft.damageAreas.length} marked area(s)` : 'No damage marked'}
+            >
+              <div className="grid gap-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="label">
+                    Current odometer (km)
+                    <input
+                      value={draft.currentOdometerKm}
+                      onChange={(event) => updateDraft({ currentOdometerKm: event.target.value })}
+                      className="input"
+                      inputMode="numeric"
+                      maxLength={intakeFieldMaxLengths.currentOdometerKm}
+                      placeholder="45230"
+                    />
+                  </label>
+                  <div>
+                    <p className="label">Fuel level on arrival</p>
+                    <div className="booking-segmented-control w-full flex-wrap">
+                      {fuelLevelOptions.map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => updateDraft({ fuelLevel: option })}
+                          className={`booking-tab-button ${
+                            draft.fuelLevel === option ? 'booking-tab-button-active' : ''
+                          }`}
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="label">Existing damage or marks</p>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {damageAreaOptions.map((area) => {
+                      const isSelected = draft.damageAreas.includes(area.value)
+
+                      return (
+                        <button
+                          key={area.value}
+                          type="button"
+                          onClick={() => toggleDamageArea(area.value)}
+                          className={`rounded-xl border px-4 py-3 text-left text-sm font-medium transition-colors ${
+                            isSelected
+                              ? 'border-brand-orange bg-brand-orange/10 text-ink-primary'
+                              : 'border-surface-border bg-surface-raised text-ink-secondary hover:border-brand-orange/40'
+                          }`}
+                        >
+                          {area.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <label className="label">
+                  Additional damage notes
+                  <textarea
+                    value={draft.damageNotes}
+                    onChange={(event) => updateDraft({ damageNotes: event.target.value })}
+                    rows={3}
+                    className="input min-h-[96px] resize-y"
+                    maxLength={intakeFieldMaxLengths.damageNotes}
+                    placeholder="Add quick condition notes."
+                  />
+                </label>
+
+                <div>
+                  <p className="label">Arrival photos</p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {arrivalPhotoSlots.map((slot) => (
+                      <div key={slot.value}>
+                        <p className="label">{slot.label}</p>
+                        <input
+                          ref={(node) => {
+                            arrivalPhotoInputRefs.current[slot.value] = node
+                          }}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => {
+                            const [file] = Array.from(event.target.files ?? [])
+                            updateArrivalPhotoFile(slot.value, file)
+                            event.target.value = ''
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => arrivalPhotoInputRefs.current[slot.value]?.click()}
+                          className="group flex h-[188px] w-full flex-col justify-between rounded-2xl border border-dashed border-surface-border bg-surface-raised p-4 text-left transition-colors hover:border-brand-orange/50 hover:bg-surface-hover"
+                        >
+                          {arrivalPhotoUploads[slot.value]?.previewUrl ? (
+                            <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+                              <Image
+                                src={arrivalPhotoUploads[slot.value].previewUrl}
+                                alt={`${slot.label} preview`}
+                                width={640}
+                                height={192}
+                                className="h-24 w-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex h-24 items-center justify-center rounded-xl border border-surface-border bg-surface-card text-ink-muted transition-colors group-hover:text-brand-orange">
+                              <div className="flex flex-col items-center gap-2 text-center">
+                                <span className="flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-surface-raised">
+                                  <Plus size={18} />
+                                </span>
+                                <span className="text-xs font-semibold uppercase tracking-[0.18em]">
+                                  Add photo
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <p className="text-sm font-semibold text-ink-primary">
+                              {getArrivalPhotoButtonLabel(arrivalPhotoUploads[slot.value]?.fileName)}
+                            </p>
+                            <p className="truncate text-sm leading-6 text-ink-muted">
+                              {getArrivalPhotoDisplayLabel(arrivalPhotoUploads[slot.value]?.fileName)}
+                            </p>
+                          </div>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="label">Inspection checklist</p>
+                  <div className="space-y-3">
+                    {checklistItemOptions.map((item) => (
+                      <div
+                        key={item.value}
+                        className="rounded-xl border border-surface-border bg-surface-raised p-3 md:flex md:items-center md:justify-between"
+                      >
+                        <p className="text-sm font-medium text-ink-primary">{item.label}</p>
+                        <div className="booking-segmented-control mt-3 w-full flex-wrap md:mt-0 md:w-auto">
+                          {[
+                            { value: 'ok', label: 'OK' },
+                            { value: 'issue', label: 'Issue' },
+                          ].map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => updateChecklistItem(item.value, option.value)}
+                              className={`booking-tab-button ${
+                                draft.checklist[item.value] === option.value ? 'booking-tab-button-active' : ''
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="label">
+                  Items left in vehicle
+                  <textarea
+                    value={draft.customerItems}
+                    onChange={(event) => updateDraft({ customerItems: event.target.value })}
+                    rows={3}
+                    className="input min-h-[96px] resize-y"
+                    maxLength={intakeFieldMaxLengths.customerItems}
+                    placeholder="List customer items left inside."
+                  />
+                </label>
+
+                <label className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-raised p-4 text-sm text-ink-secondary">
+                  <input
+                    type="checkbox"
+                    checked={draft.customerAcknowledged}
+                    onChange={(event) => updateDraft({ customerAcknowledged: event.target.checked })}
+                    className="h-4 w-4 accent-[#f07c00]"
+                  />
+                  Customer acknowledged the arrival summary.
+                </label>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="label">
+                    Customer signature name
+                    <input
+                      value={draft.customerSignatureName}
+                      onChange={(event) => updateDraft({ customerSignatureName: event.target.value })}
+                      className="input"
+                      maxLength={intakeFieldMaxLengths.customerSignatureName}
+                      placeholder="Customer full name"
+                    />
+                  </label>
+                  <label className="label">
+                    Received by staff
+                    <PortalSelect
+                      value={draft.receivedByStaff}
+                      onValueChange={(nextValue) => updateDraft({ receivedByStaff: nextValue })}
+                      items={receivedByStaffSelectItems}
+                      placeholder={defaultReceivedByStaff || 'Choose receiving staff'}
+                      emptyOptionLabel={defaultReceivedByStaff || 'Choose receiving staff'}
+                    />
+                  </label>
+                </div>
+
+                <label className="label">
+                  Additional staff notes
+                  <textarea
+                    value={draft.notes}
+                    onChange={(event) => updateDraft({ notes: event.target.value })}
+                    rows={3}
+                    className="input min-h-[96px] resize-y"
+                    maxLength={intakeFieldMaxLengths.notes}
+                    placeholder="Optional extra handoff notes."
+                  />
+                </label>
+              </div>
+            </IntakeSection>
           </div>
         </div>
 
@@ -786,24 +1282,22 @@ export default function DigitalIntakeInspectionWorkspace() {
           <section className="card p-5 md:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="card-title">Vehicle Inspection History</p>
+                <p className="card-title">Inspection History</p>
                 <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                  {isTechnician
-                    ? 'Load prior intake, pre-repair, and return records for the vehicle currently being worked on.'
-                    : 'Load prior intake and condition records for the vehicle currently being reviewed.'}
+                  Review past records for the active vehicle.
                 </p>
               </div>
               <span className="badge badge-gray">Read state: {formatLabel(historyState.status)}</span>
             </div>
 
             {historyState.message ? (
-              <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${getMessageTone(historyState.status)}`}>
+              <div className={`mt-4 ${getMessageTone(historyState.status)}`}>
                 {historyState.message}
               </div>
             ) : null}
 
             {historyState.status === 'history_loading' ? (
-              <div className="mt-4 flex items-center gap-2 rounded-2xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-secondary">
+              <div className="status-message status-message-warning mt-4 flex items-center gap-2">
                 <Loader2 size={15} className="animate-spin text-brand-orange" />
                 Loading live inspection history...
               </div>
@@ -820,11 +1314,11 @@ export default function DigitalIntakeInspectionWorkspace() {
                   />
                 ))
               ) : (
-                <div className="rounded-2xl border border-surface-border bg-surface-card px-4 py-8 text-center">
+                <div className="empty-panel px-4 py-8 text-center">
                   <AlertTriangle size={26} className="mx-auto text-brand-orange" />
                   <p className="mt-3 text-sm font-bold text-ink-primary">No inspection records loaded</p>
                   <p className="mt-2 text-sm text-ink-muted">
-                    Enter a vehicle id and load history, or save a first inspection for that vehicle.
+                    Load history or save the first inspection for this vehicle.
                   </p>
                 </div>
               )}
@@ -837,8 +1331,8 @@ export default function DigitalIntakeInspectionWorkspace() {
                 <p className="card-title">Selected Inspection Detail</p>
                 <p className="mt-2 text-sm leading-6 text-ink-secondary">
                   {isTechnician
-                    ? 'Review findings, verification, and notes before continuing work or adding new inspection evidence.'
-                    : 'Verification state is derived from findings and stays separate from lifecycle summary review.'}
+                    ? 'Review evidence before continuing work.'
+                    : 'Review the selected inspection evidence.'}
                 </p>
               </div>
               {selectedInspection ? (
@@ -865,7 +1359,8 @@ export default function DigitalIntakeInspectionWorkspace() {
                 <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
                   <p className="text-sm font-bold text-ink-primary">Findings</p>
                   <p className="mt-1 text-xs text-ink-muted">
-                    {inspectionSummaryCount} finding{inspectionSummaryCount === 1 ? '' : 's'} attached to this inspection record.
+                    {inspectionSummaryCount} finding{inspectionSummaryCount === 1 ? '' : 's'} attached to this inspection
+                    record.
                   </p>
                   <div className="mt-3 space-y-3">
                     {selectedInspection.findings?.length ? (
@@ -891,53 +1386,75 @@ export default function DigitalIntakeInspectionWorkspace() {
                 </div>
               </div>
             ) : (
-              <p className="mt-4 rounded-2xl border border-surface-border bg-surface-card p-4 text-sm text-ink-muted">
+              <div className="empty-panel mt-4">
                 Select an inspection from history to review its findings and verification state.
-              </p>
+              </div>
             )}
           </section>
         </div>
       </section>
 
-      <section className="card p-5 md:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="card-title">Workflow Notes</p>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-secondary">
-              {isTechnician
-                ? 'This page supports technician capture and vehicle history review. It should stay focused on evidence and condition tracking, not admin routing.'
-                : 'This workspace intentionally exposes existing inspection capability instead of creating duplicate booking, vehicle, job-order, or QA truth.'}
-            </p>
-          </div>
+      {captureState.message ? (
+        <div className={`mt-4 ${getMessageTone(captureState.status)}`}>
+          {captureState.message}
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">Vehicle History</p>
+      ) : null}
+
+      <section className="card mt-5 p-5 md:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="card-title">Next Step Actions</p>
             <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              {isTechnician
-                ? 'Load prior inspection records before you continue diagnosis, repair, or completion checks.'
-                : 'Create and read inspection records from the selected customer vehicle context.'}
+              Save the intake or continue the handoff.
             </p>
           </div>
-          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">
-              {isTechnician ? 'Workshop Discipline' : 'Queue Expectation'}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              {isTechnician
-                ? 'Use clear finding labels, verified evidence, and attachment refs so the next handoff is easy to review.'
-                : 'A broad intake queue is planned later, so staff should enter a known vehicle id for the demo.'}
+          <span className="badge badge-gray">{nextRouteLabel}</span>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,0.9fr)_auto] md:items-start">
+          <div className="rounded-2xl border border-brand-orange/20 bg-brand-orange/5 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Handoff plan</p>
+            <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedVisitTypeMeta.label}</p>
+            <p className="mt-1 text-sm text-ink-muted">{nextRouteLabel}</p>
+            <p className="mt-3 text-sm text-ink-muted">
+              {draft.visitType === 'insurance_related'
+                ? 'Continue this arrival in insurance after save.'
+                : draft.arrivalType === 'with_booking'
+                  ? 'Keep the booking linked when you hand this off.'
+                  : 'Walk-ins can stay unbooked until the next handoff.'}
             </p>
           </div>
-          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm font-bold text-ink-primary">
-              {isTechnician ? 'Job Order Handoff' : 'Product Boundary'}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-ink-secondary">
-              {isTechnician
-                ? 'Use Job Orders for progress and execution updates after inspection capture. This page stays vehicle-history-first.'
-                : 'Customer mobile remains customer-only and does not expose staff inspection capture controls.'}
-            </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void saveInspection('completed')}
+              disabled={captureState.status === 'capture_submitting'}
+              className="btn-primary"
+            >
+              {isSubmittingCompleted ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <BadgeCheck size={15} />
+              )}
+              {primaryActionLabel}
+            </button>
+            <button
+              type="button"
+              onClick={() => void saveInspection('pending')}
+              disabled={captureState.status === 'capture_submitting'}
+              className="btn-ghost"
+            >
+              {isSubmittingPending ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <FileSearch size={15} />
+              )}
+              Save Pending Draft
+            </button>
+            <button type="button" onClick={loadHistory} className="btn-ghost">
+              <FileSearch size={15} />
+              Load Vehicle History
+            </button>
           </div>
         </div>
       </section>

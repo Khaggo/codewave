@@ -27,6 +27,8 @@ import { VehicleLifecycleService } from '../services/vehicle-lifecycle.service';
 export class VehicleLifecycleController {
   constructor(private readonly vehicleLifecycleService: VehicleLifecycleService) {}
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
   @Get('vehicles/:id/timeline')
   @ApiOperation({ summary: 'Get the normalized lifecycle timeline for a vehicle.' })
   @ApiParam({
@@ -40,8 +42,11 @@ export class VehicleLifecycleController {
     isArray: true,
   })
   @ApiNotFoundResponse({ description: 'Vehicle not found.' })
-  findByVehicleId(@Param('id') id: string) {
-    return this.vehicleLifecycleService.findByVehicleId(id);
+  findByVehicleId(@Param('id') id: string, @Req() request: Request) {
+    return this.vehicleLifecycleService.findByVehicleId(
+      id,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @Post('vehicles/:id/lifecycle-summary/generate')

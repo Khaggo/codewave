@@ -16,8 +16,8 @@ Track insurance-related customer workflow and evidence without implying direct i
 
 - customer inquiry payloads
 - vehicle and user references
-- supporting document metadata
-- staff review and status updates
+- supporting document metadata and binary uploads
+- staff review and workflow updates
 
 ## Outputs
 
@@ -47,35 +47,60 @@ Key relations:
 
 - accept insurance-related inquiries from the owning customer or authorized staff
 - distinguish inquiry intake for CTPL and comprehensive cases without implying insurer-side processing
-- store supporting document metadata and review state
-- track inquiry state from submission to resolution or closure
-- create optional `insurance_records` when staff review approves an inquiry for longer-lived tracking
+- store supporting document metadata, uploaded file references, and review state
+- track inquiry state from submission through document follow-up, review, approval, payment, renewal, and closure
+- expose staff list and customer-history reads for internal workflow operations
+- automatically upsert follow-on `insurance_records` for vehicle tracking when an inquiry transitions to `closed`
+- expose a narrow live staff PATCH route for `status` plus optional `reviewNotes` on the general phase-1 review page
+- expose a broader live adviser/admin workflow PATCH route for collections metadata and future follow-up fields
+- expose a live adviser/admin custom broadcast route for insurance-only in-app customer messaging
 - expose inquiry updates to notifications and lifecycle modules
 - keep direct insurer integration out of assumed scope unless explicitly added later
 
 ## Process Flow
 
 1. Customer or authorized staff submits an insurance inquiry for a customer-owned vehicle.
-2. Required metadata is recorded and supporting documents can be attached while the inquiry remains open.
-3. Staff reviews and updates inquiry status through the internal workflow.
-4. When the inquiry reaches `approved_for_record`, an `insurance_record` is created or refreshed for vehicle-level tracking.
-5. Notifications and lifecycle updates are generated later as dependent integrations.
+2. Required metadata is recorded and supporting documents can be attached while the inquiry remains open through either the reference-document route or the binary upload route.
+3. Staff lists inquiries, filters by workflow tags, reviews one inquiry in detail, and uses `PATCH /insurance/inquiries/:id/status` for narrow status changes plus optional review notes on the general phase-1 review page.
+4. Staff collections work happens in the dedicated `/insurance/collections` workspace, which uses `PATCH /insurance/inquiries/:id/workflow` for payment metadata, due-date handling, overdue tagging, and later follow-up fields. Same-status workflow updates are allowed there so metadata-only edits can persist without forcing a status transition.
+5. Staff can send manual insurance-only custom broadcasts through `POST /api/insurance/broadcasts/send`, targeting either explicit case selections or the current server-side filtered queue while deduplicating to one in-app notification per customer per send action.
+6. Follow-on `insurance_records` support vehicle-level tracking records; the current service implementation upserts that record layer when an inquiry is moved to `closed`.
+7. Notifications and lifecycle updates are generated later as dependent integrations.
 
 ## Use Cases
 
 - customer submits an insurance concern
 - customer uploads supporting documents for their own inquiry
+- customer uploads payment proof or missing requirements after submission
 - staff reviews uploaded documents
-- service adviser or super admin advances inquiry status and creates a tracking record
-- customer reads vehicle-level insurance records after review approval
+- service adviser or super admin filters, assigns, annotates, and advances inquiry workflow
+- service adviser or super admin sends a manual insurance-only customer broadcast to a selected or server-filtered case audience
+- customer reads vehicle-level insurance records after the inquiry closes and the follow-on record is upserted automatically
 
 ## API Surface
 
 - `POST /insurance/inquiries`
+- `GET /insurance/inquiries`
 - `GET /insurance/inquiries/:id`
+- `GET /users/:id/insurance-inquiries`
 - `PATCH /insurance/inquiries/:id/status`
+- `PATCH /insurance/inquiries/:id/workflow`
+- `POST /api/insurance/broadcasts/send`
+- `POST /insurance/inquiries/:id/documents/upload`
 - `POST /insurance/inquiries/:id/documents`
 - `GET /vehicles/:id/insurance-records`
+
+## Manual Broadcasts
+
+- route: `POST /api/insurance/broadcasts/send`
+- channel: `in_app`
+- scope is insurance-only and limited to customer-linked, non-terminal inquiries; `closed`, `cancelled`, and `rejected` cases must be skipped
+- target modes are `selected_cases` and `filtered_results`
+- `selected_cases` resolves from explicit staff-selected insurance inquiries
+- `filtered_results` resolves from the current server-side insurance queue filters
+- one send action deduplicates by customer so a matching customer receives at most one in-app broadcast notification for that action
+- every eligible participating inquiry should record a `manual_broadcast_sent` activity trail for staff-side audit visibility
+- the response summary should distinguish targeted cases, eligible cases, deduplicated customers, sent notifications, skipped results, failed results, and per-inquiry outcomes
 
 ## Edge Cases
 
@@ -84,6 +109,11 @@ Key relations:
 - customer attempts to open an inquiry for another customer's vehicle
 - customer attempts to read a foreign insurance inquiry or vehicle insurance record
 - closed or rejected inquiries receive more document uploads
+- workflow filters return no staff-visible cases
+- collections staff need to persist payment metadata without changing the main inquiry status
+- overdue or due-soon follow-up requires customer-safe messaging that reflects `paymentStatus` and `paymentDueAt`
+- one customer may own multiple eligible inquiries, so manual broadcasts must deduplicate notification delivery while still preserving per-inquiry audit activity
+- phase-1 clients still contain legacy wording that should not be treated as canonical lifecycle status
 - users expect direct insurer integration when the module only tracks internal workflow
 - inquiry closes without clear record linkage
 

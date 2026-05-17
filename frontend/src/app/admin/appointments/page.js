@@ -1,7 +1,7 @@
-import BookingsList from '@/app/bookings/BookingsList'
+import { redirect } from 'next/navigation'
 
 export const metadata = { title: 'Admin Appointments' }
 
 export default function AdminAppointmentsPage() {
-  return <BookingsList />
+  redirect('/bookings')
 }

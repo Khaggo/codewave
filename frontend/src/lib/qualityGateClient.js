@@ -120,13 +120,13 @@ export const recordJobOrderQualityGateVerdict = async ({
   const normalizedNote = trimOrUndefined(note);
 
   if (!normalizedJobOrderId) {
-    throw new ApiError('Load a pre-check review before recording the head-technician verdict.', 400, {
+    throw new ApiError('Load a pre-check review before recording the QA verdict.', 400, {
       path: '/api/job-orders/:jobOrderId/qa/verdict',
     });
   }
 
   if (!['passed', 'blocked'].includes(normalizedVerdict)) {
-    throw new ApiError('Choose either Pass or Block before recording the head-technician verdict.', 400, {
+    throw new ApiError('Choose either Pass or Block before recording the QA verdict.', 400, {
       path: '/api/job-orders/:jobOrderId/qa/verdict',
     });
   }

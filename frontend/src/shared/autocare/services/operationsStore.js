@@ -1,14 +1,64 @@
 import { appointments as initialAppointments, shopProducts as initialProducts } from './mockData.js'
 
 export const LOW_STOCK_THRESHOLD = 5
+const STOCK_ADJUSTMENT_ACTIONS = new Set(['add', 'subtract'])
 
 function normalizeCategoryName(name) {
   return typeof name === 'string' ? name.trim().toLowerCase() : ''
 }
 
+function normalizeStockThreshold(value, fallback = LOW_STOCK_THRESHOLD) {
+  const threshold = Number(value)
+
+  if (!Number.isFinite(threshold) || threshold < 0) {
+    return fallback
+  }
+
+  return Math.trunc(threshold)
+}
+
+function resolveStockThresholdInput(value, fallback = LOW_STOCK_THRESHOLD) {
+  if (value === undefined) {
+    return fallback
+  }
+
+  const threshold = normalizeStockThreshold(value, Number.NaN)
+
+  if (!Number.isFinite(threshold)) {
+    throw new Error('Low-stock threshold must be zero or greater.')
+  }
+
+  return threshold
+}
+
+export function getInventoryStockState(quantity, threshold = LOW_STOCK_THRESHOLD) {
+  const normalizedQuantity = Math.max(0, Math.trunc(Number(quantity) || 0))
+  const normalizedThreshold = normalizeStockThreshold(threshold)
+
+  if (normalizedQuantity === 0) {
+    return 'out_of_stock'
+  }
+
+  if (normalizedQuantity <= normalizedThreshold) {
+    return 'low_stock'
+  }
+
+  return 'in_stock'
+}
+
+function cloneAdjustmentRecord(record) {
+  return { ...record }
+}
+
 function cloneProduct(product) {
+  const lowStockThreshold = normalizeStockThreshold(product.lowStockThreshold)
+  const stock = Math.max(0, Math.trunc(Number(product.stock) || 0))
+
   return {
     ...product,
+    stock,
+    lowStockThreshold,
+    stockState: getInventoryStockState(stock, lowStockThreshold),
     images: [...(product.images ?? [])],
   }
 }
@@ -50,6 +100,7 @@ function buildCatalogSeed() {
     return {
       ...product,
       categoryId: category.id,
+      lowStockThreshold: normalizeStockThreshold(product.lowStockThreshold),
       sku: product.sku ?? '',
       description: product.description ?? '',
       images: [...(product.images ?? [])],
@@ -78,6 +129,7 @@ function buildInitialState() {
     categories: catalogSeed.categories,
     appointments: cloneAppointments(),
     activity: [],
+    inventoryAdjustmentHistory: [],
     counters: {
       appointment: initialAppointments.length + 1,
       checkout: 1,
@@ -85,6 +137,7 @@ function buildInitialState() {
       activity: 1,
       category: catalogSeed.categories.length + 1,
       product: catalogSeed.products.length + 1,
+      inventoryAdjustment: 1,
     },
   }
 }
@@ -151,8 +204,24 @@ export function getOperationsActivitySnapshot() {
   return getStore().state.activity.map(cloneActivityEvent)
 }
 
-export function getLowStockProducts(threshold = LOW_STOCK_THRESHOLD) {
-  return getInventoryProductsSnapshot().filter((product) => product.stock < threshold)
+export function getInventoryAdjustmentHistorySnapshot(productId = null) {
+  const history = getStore().state.inventoryAdjustmentHistory.map(cloneAdjustmentRecord)
+
+  if (!productId) {
+    return history
+  }
+
+  return history.filter((record) => record.productId === productId)
+}
+
+export function getLowStockProducts(threshold) {
+  return getInventoryProductsSnapshot().filter((product) => {
+    if (Number.isFinite(Number(threshold))) {
+      return product.stock <= normalizeStockThreshold(threshold)
+    }
+
+    return product.stockState !== 'in_stock'
+  })
 }
 
 function normalizeTimestamp(value) {
@@ -194,6 +263,10 @@ export function sanitizeProductInput(input = {}, { categoryId, categoryName } = 
 
   if (!Number.isFinite(stock) || stock < 0) {
     throw new Error('Product stock must be zero or greater.')
+  }
+
+  if (!Number.isInteger(stock)) {
+    throw new Error('Product stock must be a whole number.')
   }
 
   const createdAt = normalizeTimestamp(input.createdAt)
@@ -272,6 +345,7 @@ export function addInventoryProduct(input) {
     ...product,
     category: category.name,
     categoryId: category.id,
+    lowStockThreshold: resolveStockThresholdInput(input?.lowStockThreshold),
     images: [...product.images],
   }
 
@@ -334,8 +408,137 @@ export function updateInventoryProduct(productId, input) {
         ...updatedFields,
         category: category.name,
         categoryId: category.id,
+        lowStockThreshold: resolveStockThresholdInput(input?.lowStockThreshold, product.lowStockThreshold),
         images: [...updatedFields.images],
         updatedAt: new Date().toISOString(),
+      }
+
+      return updatedProduct
+    }),
+  }
+
+  emitChange()
+  return cloneProduct(updatedProduct)
+}
+
+function normalizeAdjustmentInput(input = {}) {
+  const actor = typeof input.actor === 'string' ? input.actor.trim() : ''
+  const actionType = typeof input.actionType === 'string' ? input.actionType.trim().toLowerCase() : ''
+  const quantity = Number(input.quantity)
+  const reason = typeof input.reason === 'string' ? input.reason.trim() : ''
+  const note = typeof input.note === 'string' ? input.note.trim() : ''
+
+  if (!actor) {
+    throw new Error('Adjustment actor is required.')
+  }
+
+  if (!STOCK_ADJUSTMENT_ACTIONS.has(actionType)) {
+    throw new Error('Adjustment action type must be add or subtract.')
+  }
+
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new Error('Adjustment quantity must be greater than 0.')
+  }
+
+  if (!Number.isInteger(quantity)) {
+    throw new Error('Adjustment quantity must be a whole number.')
+  }
+
+  if (!reason) {
+    throw new Error('Adjustment reason is required.')
+  }
+
+  return {
+    actor,
+    actionType,
+    quantity,
+    reason,
+    note,
+    timestamp: normalizeTimestamp(input.timestamp),
+  }
+}
+
+export function updateInventoryProductThreshold(productId, lowStockThreshold) {
+  const store = getStore()
+  const existingProduct = store.state.products.find((product) => product.id === productId)
+
+  if (!existingProduct) {
+    throw new Error(`Product ${productId} does not exist.`)
+  }
+
+  const nextThreshold = resolveStockThresholdInput(lowStockThreshold, Number.NaN)
+
+  let updatedProduct = null
+
+  store.state = {
+    ...store.state,
+    products: store.state.products.map((product) => {
+      if (product.id !== productId) {
+        return product
+      }
+
+      updatedProduct = {
+        ...product,
+        lowStockThreshold: nextThreshold,
+        updatedAt: new Date().toISOString(),
+      }
+
+      return updatedProduct
+    }),
+  }
+
+  emitChange()
+  return cloneProduct(updatedProduct)
+}
+
+export function addInventoryAdjustment(productId, input) {
+  const store = getStore()
+  const existingProduct = store.state.products.find((product) => product.id === productId)
+
+  if (!existingProduct) {
+    throw new Error(`Product ${productId} does not exist.`)
+  }
+
+  const adjustment = normalizeAdjustmentInput(input)
+  const delta = adjustment.actionType === 'add' ? adjustment.quantity : adjustment.quantity * -1
+  const previousQuantity = Math.max(0, Math.trunc(Number(existingProduct.stock) || 0))
+  const newQuantity = previousQuantity + delta
+
+  if (newQuantity < 0) {
+    throw new Error('Adjusted quantity cannot go below 0.')
+  }
+
+  const historyRecord = {
+    id: `adj-${store.state.counters.inventoryAdjustment}`,
+    timestamp: adjustment.timestamp,
+    actor: adjustment.actor,
+    productId,
+    actionType: adjustment.actionType,
+    previousQuantity,
+    newQuantity,
+    delta,
+    reason: adjustment.reason,
+    note: adjustment.note,
+  }
+
+  let updatedProduct = null
+
+  store.state = {
+    ...store.state,
+    counters: {
+      ...store.state.counters,
+      inventoryAdjustment: store.state.counters.inventoryAdjustment + 1,
+    },
+    inventoryAdjustmentHistory: [historyRecord, ...store.state.inventoryAdjustmentHistory],
+    products: store.state.products.map((product) => {
+      if (product.id !== productId) {
+        return product
+      }
+
+      updatedProduct = {
+        ...product,
+        stock: newQuantity,
+        updatedAt: adjustment.timestamp,
       }
 
       return updatedProduct
@@ -394,6 +597,10 @@ export function checkoutCart({ customerId, items }) {
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
       throw new Error('Quantity must be greater than zero.')
+    }
+
+    if (!Number.isInteger(quantity)) {
+      throw new Error('Quantity must be a whole number.')
     }
 
     const existing = aggregatedItems.get(product.id)

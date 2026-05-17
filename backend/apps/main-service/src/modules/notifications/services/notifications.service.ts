@@ -24,7 +24,7 @@ import {
   NotificationTriggerPlanAction,
   NotificationTriggerPlannerService,
 } from './notification-trigger-planner.service';
-import { SmtpMailService } from './smtp-mail.service';
+import { MailDeliveryService } from './mail-delivery.service';
 
 type NotificationActor = {
   userId: string;
@@ -83,7 +83,7 @@ export class NotificationsService {
     private readonly notificationsRepository: NotificationsRepository,
     private readonly usersService: UsersService,
     private readonly notificationTriggerPlanner: NotificationTriggerPlannerService,
-    private readonly smtpMailService: SmtpMailService,
+    private readonly mailDeliveryService: MailDeliveryService,
     @InjectQueue(NOTIFICATIONS_QUEUE_NAME)
     private readonly notificationsQueue: Queue,
   ) {}
@@ -121,6 +121,10 @@ export class NotificationsService {
 
     if (skipReason) {
       return this.recordSkippedNotification(payload, skipReason);
+    }
+
+    if (payload.channel === 'in_app' && !payload.scheduledFor) {
+      return this.recordInAppNotification(payload);
     }
 
     const notification = await this.notificationsRepository.createNotification({
@@ -340,11 +344,26 @@ export class NotificationsService {
       return notification;
     }
 
-    const user = await this.assertTargetUser(notification.userId, true);
     const attemptNumber = notification.attempts.length + 1;
 
+    if (notification.channel === 'in_app') {
+      await this.notificationsRepository.createDeliveryAttempt({
+        notificationId,
+        attemptNumber,
+        status: 'sent',
+        providerMessageId: 'in_app',
+      });
+
+      return this.notificationsRepository.updateNotificationStatus(notificationId, {
+        status: 'sent',
+        deliveredAt: new Date(),
+      });
+    }
+
+    const user = await this.assertTargetUser(notification.userId, true);
+
     try {
-      const result = await this.smtpMailService.sendMail({
+      const result = await this.mailDeliveryService.sendMail({
         to: user.email,
         subject: notification.title,
         text: notification.message,
@@ -387,6 +406,24 @@ export class NotificationsService {
       attemptNumber: notification.attempts.length + 1,
       status: 'skipped',
       errorMessage: skipReason,
+    });
+
+    return this.notificationsRepository.findNotificationById(notification.id);
+  }
+
+  private async recordInAppNotification(payload: EnqueueNotificationInput) {
+    const notification = await this.notificationsRepository.createNotification({
+      ...payload,
+      status: 'sent',
+      deliveredAt: new Date(),
+      scheduledFor: payload.scheduledFor ?? null,
+    });
+
+    await this.notificationsRepository.createDeliveryAttempt({
+      notificationId: notification.id,
+      attemptNumber: notification.attempts.length + 1,
+      status: 'sent',
+      providerMessageId: 'in_app',
     });
 
     return this.notificationsRepository.findNotificationById(notification.id);

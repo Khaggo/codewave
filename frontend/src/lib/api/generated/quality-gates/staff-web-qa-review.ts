@@ -2,7 +2,7 @@ import type { JobOrderQualityGateResponse, QualityGateFindingResponse } from './
 
 export type StaffQualityGateReviewRole = 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
 export type StaffQualityGateOverrideRole = 'super_admin';
-export type StaffQualityGateVerdictRole = 'head_technician';
+export type StaffQualityGateVerdictRole = 'head_technician' | 'super_admin';
 
 export type StaffQualityGateReviewState =
   | 'qa_ready'
@@ -47,6 +47,7 @@ export interface StaffQualityGateRule<TState extends string> {
 
 export const staffQualityGateReviewRoles: StaffQualityGateReviewRole[] = [
   'technician',
+  'head_technician',
   'service_adviser',
   'super_admin',
 ];
@@ -57,6 +58,7 @@ export const staffQualityGateOverrideRoles: StaffQualityGateOverrideRole[] = [
 
 export const staffQualityGateVerdictRoles: StaffQualityGateVerdictRole[] = [
   'head_technician',
+  'super_admin',
 ];
 
 export const staffQualityGateReviewRules: StaffQualityGateRule<StaffQualityGateReviewState>[] = [

@@ -3,6 +3,8 @@ import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { isAllowedCorsOrigin } from '@shared/config/cors';
 
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger';
@@ -23,7 +25,13 @@ async function bootstrap() {
       origin: string | undefined,
       callback: (error: Error | null, allow?: boolean) => void,
     ) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (
+        isAllowedCorsOrigin({
+          origin,
+          allowedOrigins,
+          env: configService.get<string>('env', 'development'),
+        })
+      ) {
         callback(null, true);
         return;
       }
@@ -42,6 +50,23 @@ async function bootstrap() {
   );
 
   setupSwagger(app);
+
+  const rabbitmqUrl = configService.get<string>('rabbitmq.url');
+  if (rabbitmqUrl) {
+    app.connectMicroservice<MicroserviceOptions>({
+      transport: Transport.RMQ,
+      options: {
+        urls: [rabbitmqUrl],
+        queue: configService.get<string>('rabbitmq.queue', 'autocare_events'),
+        queueOptions: {
+          durable: true,
+        },
+        noAck: false,
+      },
+    });
+
+    await app.startAllMicroservices();
+  }
 
   await app.listen(configService.get<number>('ports.mainService', 3000));
 }

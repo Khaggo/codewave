@@ -195,7 +195,7 @@ describe('BookingsService', () => {
       scheduledDate: '2026-04-20',
       serviceIds: ['service-1'],
       notes: 'Please check the brakes too.',
-    });
+    }, { userId: 'user-1', role: 'customer' });
 
     expect(bookingsRepository.create).toHaveBeenCalled();
     expect(bookingsRepository.createOrReplaceReservationPayment).toHaveBeenCalled();
@@ -216,8 +216,22 @@ describe('BookingsService', () => {
         timeSlotId: 'slot-1',
         scheduledDate: '2026-04-20',
         serviceIds: ['service-1'],
-      }),
+      }, { userId: 'user-1', role: 'customer' }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects booking creation when a customer targets another user account', async () => {
+    const { service } = await createModule();
+
+    await expect(
+      service.create({
+        userId: 'user-1',
+        vehicleId: 'vehicle-1',
+        timeSlotId: 'slot-1',
+        scheduledDate: '2026-04-20',
+        serviceIds: ['service-1'],
+      }, { userId: 'other-user', role: 'customer' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('rejects booking creation when the selected slot is already full', async () => {
@@ -234,7 +248,7 @@ describe('BookingsService', () => {
         timeSlotId: 'slot-1',
         scheduledDate: '2026-04-20',
         serviceIds: ['service-1'],
-      }),
+      }, { userId: 'user-1', role: 'customer' }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -416,7 +430,7 @@ describe('BookingsService', () => {
         timeSlotId: 'slot-1',
         scheduledDate: '2026-10-15',
         serviceIds: ['service-1'],
-      }),
+      }, { userId: 'user-1', role: 'customer' }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -526,7 +540,10 @@ describe('BookingsService', () => {
       paymentGateway,
     });
 
-    const reservationPayment = await service.getReservationPayment('booking-1');
+    const reservationPayment = await service.getReservationPayment('booking-1', {
+      userId: 'user-1',
+      role: 'customer',
+    });
 
     expect(paymentGateway.retrieveReservationPayment).toHaveBeenCalledWith('cs_paid_1');
     expect(bookingsRepository.updateStatus).toHaveBeenCalledWith(
@@ -579,7 +596,10 @@ describe('BookingsService', () => {
       paymentGateway,
     });
 
-    const reservationPayment = await service.getReservationPayment('booking-1');
+    const reservationPayment = await service.getReservationPayment('booking-1', {
+      userId: 'user-1',
+      role: 'customer',
+    });
 
     expect(paymentGateway.retrieveReservationPayment).toHaveBeenCalledWith('cs_expired_1');
     expect(repositoryMock.createOrReplaceReservationPayment).toHaveBeenCalledWith(

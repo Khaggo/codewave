@@ -51,25 +51,43 @@ const normalizeInspection = (inspection) => {
   };
 };
 
+const getApiErrorMessage = (data, response) => {
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message;
+  }
+
+  if (Array.isArray(data?.message) && data.message.length > 0) {
+    return data.message.map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
+  }
+
+  return `Request failed with status ${response.status}`;
+};
+
+const isUploadableBlob = (value) =>
+  value &&
+  typeof value === 'object' &&
+  typeof value.arrayBuffer === 'function' &&
+  typeof value.size === 'number';
+
 const request = async (path, { accessToken, body, method = 'GET' } = {}) => {
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
+    headers: isFormData
+      ? {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        }
+      : {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+    body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
   });
 
   const data = await parseResponse(response);
 
   if (!response.ok) {
-    const message =
-      data?.message && typeof data.message === 'string'
-        ? data.message
-        : `Request failed with status ${response.status}`;
-
-    throw new ApiError(message, response.status, data);
+    throw new ApiError(getApiErrorMessage(data, response), response.status, data);
   }
 
   return data;
@@ -103,4 +121,31 @@ export const createVehicleInspection = async ({ vehicleId, inspection, accessTok
       body: inspection,
     }),
   );
+};
+
+export const uploadVehicleInspectionPhoto = async ({ vehicleId, slot, file, fileName, accessToken }) => {
+  if (!vehicleId) {
+    throw new ApiError('Select a vehicle before uploading an inspection photo.', 400, {
+      path: '/api/vehicles/:id/inspections/photos/upload',
+    });
+  }
+
+  if (!isUploadableBlob(file)) {
+    throw new ApiError('Choose an image file before uploading inspection evidence.', 400, {
+      path: '/api/vehicles/:id/inspections/photos/upload',
+    });
+  }
+
+  const formData = new FormData();
+  formData.append('file', file, String(fileName ?? file.name ?? 'inspection-photo.jpg'));
+
+  if (String(slot ?? '').trim()) {
+    formData.append('slot', String(slot).trim());
+  }
+
+  return request(`/api/vehicles/${vehicleId}/inspections/photos/upload`, {
+    method: 'POST',
+    accessToken,
+    body: formData,
+  });
 };

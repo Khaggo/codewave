@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -473,6 +474,81 @@ export class JobOrdersController {
       payload,
       request.user as { userId: string; role: string },
     );
+  }
+
+  @Post(':id/invoice/paymongo/checkout')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Create or refresh a PayMongo checkout session for a finalized service invoice.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Job-order identifier.',
+    example: '7bc8926d-8eb7-4c97-85ab-4597a58e1f43',
+  })
+  @ApiOkResponse({
+    description: 'The updated job order with PayMongo checkout metadata attached to the invoice record.',
+    type: JobOrderResponseDto,
+  })
+  @ApiConflictResponse({ description: 'The job order is not finalized, already paid, or cannot start online payment.' })
+  @ApiForbiddenResponse({ description: 'Only the responsible service adviser or a super admin can start checkout.' })
+  @ApiNotFoundResponse({ description: 'Job order not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  createInvoicePaymongoCheckout(@Param('id') id: string, @Req() request: Request) {
+    return this.jobOrdersService.createInvoicePaymongoCheckout(
+      id,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post(':id/invoice/paymongo/reconcile')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Refresh the latest PayMongo payment state for a finalized service invoice.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Job-order identifier.',
+    example: '7bc8926d-8eb7-4c97-85ab-4597a58e1f43',
+  })
+  @ApiOkResponse({
+    description: 'The refreshed job order with updated service-invoice payment state.',
+    type: JobOrderResponseDto,
+  })
+  @ApiConflictResponse({ description: 'No PayMongo checkout session exists or the invoice cannot be refreshed.' })
+  @ApiForbiddenResponse({ description: 'Only the responsible service adviser or a super admin can refresh checkout.' })
+  @ApiNotFoundResponse({ description: 'Job order not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  reconcileInvoicePaymongoCheckout(@Param('id') id: string, @Req() request: Request) {
+    return this.jobOrdersService.reconcileInvoicePaymongoCheckout(
+      id,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post('payments/paymongo/webhook')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Receive PayMongo webhooks for service-invoice checkout sessions.' })
+  @ApiOkResponse({
+    description: 'Webhook accepted.',
+    schema: {
+      example: {
+        received: true,
+        ignored: false,
+        eventType: 'checkout_session.payment.paid',
+        jobOrderId: '7bc8926d-8eb7-4c97-85ab-4597a58e1f43',
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid webhook payload or signature.' })
+  handleServiceInvoicePaymongoWebhook(
+    @Req() request: Request & { rawBody?: Buffer },
+    @Headers('paymongo-signature') signatureHeader?: string,
+  ) {
+    const rawPayload = request.rawBody ?? request.body;
+    return this.jobOrdersService.handlePaymongoWebhook(rawPayload, signatureHeader);
   }
 
   @Get(':id/invoice/pdf')

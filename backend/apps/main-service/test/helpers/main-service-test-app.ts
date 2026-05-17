@@ -61,6 +61,7 @@ import {
   inspectionStatusEnum,
   inspectionTypeEnum,
 } from '../../src/modules/inspections/schemas/inspections.schema';
+import { InspectionEvidenceStorageService } from '../../src/modules/inspections/services/inspection-evidence-storage.service';
 import { InspectionsService } from '../../src/modules/inspections/services/inspections.service';
 import { JobOrdersController } from '../../src/modules/job-orders/controllers/job-orders.controller';
 import { AddJobOrderPhotoDto } from '../../src/modules/job-orders/dto/add-job-order-photo.dto';
@@ -116,7 +117,7 @@ import {
 } from '../../src/modules/notifications/schemas/notifications.schema';
 import { NotificationTriggerPlannerService } from '../../src/modules/notifications/services/notification-trigger-planner.service';
 import { NotificationsService } from '../../src/modules/notifications/services/notifications.service';
-import { SmtpMailService } from '../../src/modules/notifications/services/smtp-mail.service';
+import { MailDeliveryService } from '../../src/modules/notifications/services/mail-delivery.service';
 import { AiWorkerProcessor } from '../../src/modules/ai-worker/ai-worker.processor';
 import { QualityGatesController } from '../../src/modules/quality-gates/controllers/quality-gates.controller';
 import { QualityGatesRepository } from '../../src/modules/quality-gates/repositories/quality-gates.repository';
@@ -763,6 +764,17 @@ type InsuranceDocumentRecord = {
   updatedAt: Date;
 };
 
+type InsuranceActivityRecord = {
+  id: string;
+  inquiryId: string;
+  action: string;
+  actorUserId: string | null;
+  documentType: InsuranceDocumentType | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type InsuranceRecordRecord = {
   id: string;
   inquiryId: string;
@@ -1026,6 +1038,7 @@ const cloneBackJob = (
 const cloneInsuranceInquiry = (
   inquiry: InsuranceInquiryRecord | null | undefined,
   documents: InsuranceDocumentRecord[],
+  activities: InsuranceActivityRecord[],
 ) => {
   if (!inquiry) {
     return inquiry ?? null;
@@ -1037,6 +1050,10 @@ const cloneInsuranceInquiry = (
       .filter((document) => document.inquiryId === inquiry.id)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((document) => ({ ...document })),
+    activities: activities
+      .filter((activity) => activity.inquiryId === inquiry.id)
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+      .map((activity) => ({ ...activity })),
   };
 };
 
@@ -3021,7 +3038,9 @@ class InMemoryVehicleLifecycleRepository {
 class InMemoryInsuranceRepository {
   private readonly inquiries = new Map<string, InsuranceInquiryRecord>();
   private readonly documents: InsuranceDocumentRecord[] = [];
+  private readonly activities: InsuranceActivityRecord[] = [];
   private readonly records = new Map<string, InsuranceRecordRecord>();
+  failNextUploadedDocumentPersistence = false;
 
   async create(payload: CreateInsuranceInquiryDto & { createdByUserId: string }) {
     const now = new Date();
@@ -3054,7 +3073,7 @@ class InMemoryInsuranceRepository {
       throw new NotFoundException('Insurance inquiry not found');
     }
 
-    return cloneInsuranceInquiry(inquiry, this.documents);
+    return cloneInsuranceInquiry(inquiry, this.documents, this.activities);
   }
 
   async updateStatus(
@@ -3100,11 +3119,97 @@ class InMemoryInsuranceRepository {
     return this.findById(id);
   }
 
+  async addUploadedDocument(
+    id: string,
+    payload: {
+      document: AddInsuranceDocumentDto;
+      activity: {
+        action: string;
+        actorUserId?: string | null;
+        documentType?: InsuranceDocumentType | null;
+        notes?: string | null;
+      };
+      uploadedByUserId: string;
+    },
+  ) {
+    if (this.failNextUploadedDocumentPersistence) {
+      this.failNextUploadedDocumentPersistence = false;
+      throw new Error('Simulated insurance upload persistence failure');
+    }
+
+    const inquiry = this.inquiries.get(id);
+    if (!inquiry) {
+      throw new NotFoundException('Insurance inquiry not found');
+    }
+
+    const now = new Date();
+    this.documents.push({
+      id: randomUUID(),
+      inquiryId: id,
+      fileName: payload.document.fileName,
+      fileUrl: payload.document.fileUrl,
+      documentType: payload.document.documentType,
+      notes: payload.document.notes ?? null,
+      uploadedByUserId: payload.uploadedByUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    this.activities.push({
+      id: randomUUID(),
+      inquiryId: id,
+      action: payload.activity.action,
+      actorUserId: payload.activity.actorUserId ?? null,
+      documentType: payload.activity.documentType ?? null,
+      notes: payload.activity.notes ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return this.findById(id);
+  }
+
+  async appendActivity(
+    inquiryId: string,
+    payload: {
+      action: string;
+      actorUserId?: string | null;
+      documentType?: InsuranceDocumentType | null;
+      notes?: string | null;
+    },
+  ) {
+    if (!this.inquiries.has(inquiryId)) {
+      throw new NotFoundException('Insurance inquiry not found');
+    }
+
+    const now = new Date();
+    const activity: InsuranceActivityRecord = {
+      id: randomUUID(),
+      inquiryId,
+      action: payload.action,
+      actorUserId: payload.actorUserId ?? null,
+      documentType: payload.documentType ?? null,
+      notes: payload.notes ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.activities.push(activity);
+    return { ...activity };
+  }
+
+  async listActivitiesByInquiryId(inquiryId: string) {
+    return this.activities
+      .filter((activity) => activity.inquiryId === inquiryId)
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+      .map((activity) => ({ ...activity }));
+  }
+
   async findByUserId(userId: string) {
     return Array.from(this.inquiries.values())
       .filter((inquiry) => inquiry.userId === userId)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents));
+      .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents, this.activities));
   }
 
   async upsertRecordFromInquiry(payload: {
@@ -3159,7 +3264,7 @@ class InMemoryInsuranceRepository {
   async listForAnalytics() {
     return Array.from(this.inquiries.values())
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents));
+      .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents, this.activities));
   }
 }
 
@@ -4432,7 +4537,7 @@ class FakeGoogleIdentityService {
   }
 }
 
-class FakeSmtpMailService {
+class FakeMailDeliveryService {
   readonly sentMessages: Array<{
     to: string;
     subject: string;
@@ -4485,7 +4590,7 @@ export async function createMainServiceTestApp(): Promise<{
   const qualityGatesRepository = new InMemoryQualityGatesRepository();
   const aiWorkerQueue = new InMemoryAiWorkerQueue();
   const googleIdentityService = new FakeGoogleIdentityService();
-  const smtpMailService = new FakeSmtpMailService();
+  const smtpMailService = new FakeMailDeliveryService();
   const inspectionsRepository = new InMemoryInspectionsRepository();
   const vehicleLifecycleRepository = new InMemoryVehicleLifecycleRepository();
 
@@ -4526,6 +4631,7 @@ export async function createMainServiceTestApp(): Promise<{
       QualityGateDiscrepancyEngineService,
       QualityGateSemanticAuditorService,
       QualityGatesService,
+      InspectionEvidenceStorageService,
       InspectionsService,
       VehicleLifecycleSummaryProviderService,
       VehicleLifecycleService,
@@ -4533,7 +4639,7 @@ export async function createMainServiceTestApp(): Promise<{
       AutocareEventBusService,
       LoyaltyAccrualPlannerService,
       { provide: GoogleIdentityService, useValue: googleIdentityService },
-      { provide: SmtpMailService, useValue: smtpMailService },
+      { provide: MailDeliveryService, useValue: smtpMailService },
       {
         provide: ConfigService,
         useValue: {
@@ -4561,6 +4667,15 @@ export async function createMainServiceTestApp(): Promise<{
             providerPaymentId: 'test-payment',
             checkoutUrl: 'https://example.test/paymongo/checkout',
             failureReason: null,
+          }),
+          retrieveReservationPayment: async (providerPaymentId: string) => ({
+            provider: 'paymongo',
+            status: 'pending',
+            providerPaymentId,
+            referenceNumber: null,
+            checkoutUrl: 'https://example.test/paymongo/checkout',
+            failureReason: null,
+            paidAt: null,
           }),
         },
       },

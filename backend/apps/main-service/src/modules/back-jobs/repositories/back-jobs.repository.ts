@@ -62,6 +62,7 @@ export class BackJobsRepository extends BaseRepository {
         findings: {
           orderBy: desc(backJobFindings.createdAt),
         },
+        returnInspection: true,
       },
     });
 
@@ -75,6 +76,7 @@ export class BackJobsRepository extends BaseRepository {
         findings: {
           orderBy: desc(backJobFindings.createdAt),
         },
+        returnInspection: true,
       },
     });
   }
@@ -86,6 +88,7 @@ export class BackJobsRepository extends BaseRepository {
         findings: {
           orderBy: desc(backJobFindings.createdAt),
         },
+        returnInspection: true,
       },
       orderBy: desc(backJobs.createdAt),
     });
@@ -97,6 +100,7 @@ export class BackJobsRepository extends BaseRepository {
         findings: {
           orderBy: desc(backJobFindings.createdAt),
         },
+        returnInspection: true,
       },
       orderBy: [desc(backJobs.createdAt), desc(backJobs.id)],
     });

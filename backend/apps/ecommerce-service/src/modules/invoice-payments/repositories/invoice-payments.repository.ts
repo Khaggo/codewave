@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
 
 type InvoiceStatus = 'pending_payment' | 'partially_paid' | 'paid' | 'overdue' | 'cancelled';
-type PaymentMethod = 'cash' | 'bank_transfer' | 'check' | 'other';
+type PaymentMethod = 'cash' | 'bank_transfer' | 'check' | 'other' | 'paymongo';
 
 type InvoiceRecord = {
   id: string;
@@ -15,6 +15,14 @@ type InvoiceRecord = {
   totalCents: number;
   amountPaidCents: number;
   amountDueCents: number;
+  paymentChannel: 'manual' | 'online_provider' | null;
+  onlinePaymentProvider: string | null;
+  onlinePaymentStatus: 'pending' | 'paid' | 'failed' | 'expired' | 'cancelled' | 'unavailable' | null;
+  onlinePaymentSessionId: string | null;
+  onlinePaymentCheckoutUrl: string | null;
+  onlinePaymentReference: string | null;
+  onlinePaymentPaidAt: Date | null;
+  onlinePaymentFailureReason: string | null;
   productIds: string[];
   productCategoryIds: string[];
   issuedAt: Date;
@@ -61,6 +69,14 @@ export class InvoicePaymentsRepository {
       totalCents: payload.totalCents,
       amountPaidCents: 0,
       amountDueCents: payload.totalCents,
+      paymentChannel: null,
+      onlinePaymentProvider: null,
+      onlinePaymentStatus: null,
+      onlinePaymentSessionId: null,
+      onlinePaymentCheckoutUrl: null,
+      onlinePaymentReference: null,
+      onlinePaymentPaidAt: null,
+      onlinePaymentFailureReason: null,
       productIds: [...(payload.productIds ?? [])],
       productCategoryIds: [...(payload.productCategoryIds ?? [])],
       issuedAt,
@@ -91,6 +107,19 @@ export class InvoicePaymentsRepository {
 
   async findInvoiceByOrderId(orderId: string) {
     const invoice = Array.from(this.invoices.values()).find((entry) => entry.orderId === orderId);
+    return invoice
+      ? {
+          ...invoice,
+          productIds: [...invoice.productIds],
+          productCategoryIds: [...invoice.productCategoryIds],
+        }
+      : null;
+  }
+
+  async findInvoiceByOnlinePaymentSessionId(providerPaymentId: string) {
+    const invoice = Array.from(this.invoices.values()).find(
+      (entry) => entry.onlinePaymentSessionId === providerPaymentId,
+    );
     return invoice
       ? {
           ...invoice,

@@ -67,7 +67,7 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const nextErrors = validateProfileForm(form);
 
     if (Object.keys(nextErrors).length > 0) {
@@ -75,23 +75,39 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
       return;
     }
 
-    onSaveProfile({
-      phoneNumber: normalizePhoneNumber(form.phoneNumber),
-      address: form.address.trim(),
-      licensePlate: form.licensePlate.trim().toUpperCase(),
-      vehicleMake: form.vehicleMake.trim(),
-      vehicleModel: form.vehicleModel.trim(),
-      vehicleColor: form.vehicleColor.trim(),
-      vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
-      vehicleDisplayName: formatVehicleDisplayName({
-        vehicleMake: form.vehicleMake,
-        vehicleModel: form.vehicleModel,
-        vehicleYear: form.vehicleYear,
-      }),
-    });
+    const normalizedCurrentAddress = String(account?.address ?? '').trim();
+    const normalizedRequestedAddress = form.address.trim();
 
-    setIsEditing(false);
-    Alert.alert('Profile Updated', 'Your profile details were saved successfully.');
+    if (normalizedRequestedAddress !== normalizedCurrentAddress) {
+      Alert.alert(
+        'Address Locked',
+        'Address editing is not connected to a live customer profile field yet. Leave it unchanged for now and save your phone or vehicle updates separately.',
+      );
+      return;
+    }
+
+    try {
+      await onSaveProfile?.({
+        phoneNumber: normalizePhoneNumber(form.phoneNumber),
+        licensePlate: form.licensePlate.trim().toUpperCase(),
+        vehicleMake: form.vehicleMake.trim(),
+        vehicleModel: form.vehicleModel.trim(),
+        vehicleColor: form.vehicleColor.trim(),
+        vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
+        vehicleDisplayName: formatVehicleDisplayName({
+          vehicleMake: form.vehicleMake,
+          vehicleModel: form.vehicleModel,
+          vehicleYear: form.vehicleYear,
+        }),
+      });
+
+      setIsEditing(false);
+      Alert.alert('Profile Updated', 'Your profile details were saved successfully.');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'We could not save your profile changes right now.';
+      Alert.alert('Profile Update Failed', message);
+    }
   };
 
   return (
@@ -155,7 +171,7 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
         onChangeText={() => null}
         placeholder=""
         editable={false}
-        helperText="Username is fixed for this account."
+        helperText="Username is fixed for your account."
       />
 
       <FormField
@@ -243,9 +259,8 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
         label="Vehicle Color"
         value={form.vehicleColor}
         onChangeText={(value) => handleFieldChange('vehicleColor', value)}
-        placeholder="Silver"
+        placeholder="White"
         autoCapitalize="words"
-        error={errors.vehicleColor}
         isFocused={focusedField === 'vehicleColor'}
         onFocus={() => setFocusedField('vehicleColor')}
         onBlur={() => setFocusedField('')}
@@ -331,26 +346,26 @@ const styles = StyleSheet.create({
   primaryButton: {
     marginTop: 6,
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    paddingVertical: 16,
+    borderRadius: radius.md,
+    paddingVertical: 13,
     alignItems: 'center',
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   secondaryButton: {
-    marginTop: 12,
-    borderRadius: radius.medium,
+    marginTop: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: 16,
+    paddingVertical: 13,
     alignItems: 'center',
   },
   secondaryButtonText: {
     color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

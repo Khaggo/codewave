@@ -1,4 +1,4 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, radius } from '../theme';
 import { getPasswordChecks } from '../utils/validation';
@@ -14,7 +14,7 @@ const checklistItems = [
 export default function PasswordChecklist({
   password,
   visible = true,
-  title = 'Password Requirements',
+  title = 'Password requirements',
 }) {
   if (!visible) {
     return null;
@@ -32,9 +32,9 @@ export default function PasswordChecklist({
         return (
           <View key={item.key} style={styles.row}>
             <View style={[styles.iconWrap, isComplete && styles.iconWrapComplete]}>
-              <MaterialCommunityIcons
+              <Feather
                 name={isComplete ? 'check' : 'minus'}
-                size={12}
+                size={11}
                 color={isComplete ? colors.onPrimary : colors.mutedText}
               />
             </View>
@@ -49,20 +49,20 @@ export default function PasswordChecklist({
 const styles = StyleSheet.create({
   container: {
     marginTop: -2,
-    marginBottom: 20,
-    gap: 10,
+    marginBottom: 16,
+    gap: 8,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.large,
-    backgroundColor: colors.surfaceStrong,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceRaised,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   title: {
     color: colors.labelText,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1.8,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
     marginBottom: 4,
   },
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.input,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   iconWrapComplete: {
     borderColor: colors.primary,
@@ -87,8 +87,8 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
   },
   complete: {
     color: colors.text,

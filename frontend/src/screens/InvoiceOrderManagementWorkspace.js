@@ -3,12 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
-  BarChart3,
   Clock3,
-  Database,
-  ExternalLink,
   LoaderCircle,
-  PackageCheck,
   ReceiptText,
   RefreshCcw,
   Search,
@@ -17,7 +13,7 @@ import {
   Wrench,
 } from 'lucide-react'
 
-import PortalLink from '@/components/PortalLink'
+import PageHeader from '@/components/ui/PageHeader'
 import { ApiError, listAdminCustomers } from '@/lib/authClient'
 import { getInvoiceAgingAnalytics } from '@/lib/analyticsAdminClient'
 import { getJobOrderById, listJobOrderWorkbenchSummaries } from '@/lib/jobOrderWorkbenchClient'
@@ -32,6 +28,10 @@ import {
   getStaffInvoiceOrderLoadState,
   staffInvoiceOrderPaymentCopy,
 } from '@/lib/api/generated/invoice-orders/staff-web-invoice-order-management'
+import {
+  getInvoicePdfStateLabel,
+  getLoadMessageTone,
+} from './invoiceOrderManagementView.mjs'
 
 const LOAD_STATE_LABELS = {
   invoice_order_ready: 'Ready',
@@ -79,81 +79,29 @@ const formatLabel = (value, fallback = 'Unknown') => {
     .join(' ')
 }
 
-const shortId = (value) => {
-  const normalizedValue = String(value ?? '').trim()
-  return normalizedValue ? normalizedValue.slice(0, 8).toUpperCase() : 'NONE'
-}
+const getLoadMessageToneClass = (status) =>
+  getLoadMessageTone(status) === 'success'
+    ? 'status-message status-message-success'
+    : getLoadMessageTone(status) === 'danger'
+      ? 'status-message status-message-danger'
+      : 'status-message status-message-warning'
 
-const getInvoicePdfStateLabel = (serviceInvoice) => {
-  if (!serviceInvoice) {
-    return 'Awaiting invoice'
-  }
-
-  if (serviceInvoice.pdfEmailError) {
-    return 'Email retry needed'
-  }
-
-  if (serviceInvoice.pdfEmailSentAt) {
-    return 'PDF emailed'
-  }
-
-  if (serviceInvoice.pdfGeneratedAt) {
-    return 'PDF generated'
-  }
-
-  return 'Generation pending'
-}
-
-const getLoadMessageToneClass = (status) => {
-  if (status === 'invoice_order_loaded') {
-    return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-  }
-
-  if (
-    status === 'invoice_order_failed' ||
-    status === 'invoice_order_runtime_unavailable' ||
-    status === 'invoice_order_forbidden_role' ||
-    status === 'invoice_order_unauthorized'
-  ) {
-    return 'border-red-500/25 bg-red-500/10 text-red-200'
-  }
-
-  return 'border-amber-500/25 bg-amber-500/10 text-amber-100'
-}
-
-function InfoPanel({ icon: Icon = Database, title, body, tone = 'info' }) {
-  const toneClass =
-    tone === 'warning'
-      ? 'border-amber-500/20 bg-amber-500/10 text-amber-300'
-      : tone === 'danger'
-        ? 'border-red-500/20 bg-red-500/10 text-red-300'
-        : 'border-brand-orange/15 bg-brand-orange/10 text-brand-orange'
+function InfoPanel({ icon: Icon = AlertTriangle, title, body, tone = 'info' }) {
+  const panelTone =
+    tone === 'danger'
+      ? 'status-message status-message-danger'
+      : tone === 'warning'
+        ? 'status-message status-message-warning'
+        : 'status-message status-message-warning'
 
   return (
-    <div className="card flex gap-3 p-4">
-      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border ${toneClass}`}>
+    <div className={`flex gap-3 ${panelTone}`}>
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
         <Icon size={18} />
       </div>
       <div>
-        <p className="text-sm font-bold text-ink-primary">{title}</p>
-        <p className="mt-1 text-sm leading-6 text-ink-muted">{body}</p>
-      </div>
-    </div>
-  )
-}
-
-function MetricCard({ icon: Icon, label, value, sub }) {
-  return (
-    <div className="card p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</p>
-          <p className="mt-3 text-3xl font-black text-ink-primary">{value}</p>
-          {sub ? <p className="mt-2 text-xs leading-5 text-ink-muted">{sub}</p> : null}
-        </div>
-        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-brand-orange/15 bg-brand-orange/10 text-brand-orange">
-          <Icon size={20} />
-        </div>
+        <p className="text-sm font-semibold text-ink-primary">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-ink-secondary">{body}</p>
       </div>
     </div>
   )
@@ -168,20 +116,20 @@ function StatusBadge({ value }) {
     normalizedKey.includes('failed') ||
     normalizedKey.includes('cancelled') ||
     normalizedKey.includes('canceled')
-        ? 'badge-red'
-        : normalizedKey.includes('unpaid') ||
-            normalizedKey.includes('pending') ||
-            normalizedKey.includes('partial') ||
-            normalizedKey.includes('due') ||
-            normalizedKey.includes('processing')
-          ? 'badge-orange'
-          : normalizedKey.includes('paid') ||
-              normalizedKey.includes('fulfilled') ||
-              normalizedKey === 'finalized' ||
-              normalizedKey.includes('settled') ||
-              normalizedKey.includes('completed')
-            ? 'badge-green'
-            : 'badge-gray'
+      ? 'badge-red'
+      : normalizedKey.includes('unpaid') ||
+          normalizedKey.includes('pending') ||
+          normalizedKey.includes('partial') ||
+          normalizedKey.includes('due') ||
+          normalizedKey.includes('processing')
+        ? 'badge-orange'
+        : normalizedKey.includes('paid') ||
+            normalizedKey.includes('fulfilled') ||
+            normalizedKey === 'finalized' ||
+            normalizedKey.includes('settled') ||
+            normalizedKey.includes('completed')
+          ? 'badge-green'
+          : 'badge-gray'
 
   return <span className={`badge ${cls}`}>{formatLabel(normalizedValue, 'Unknown')}</span>
 }
@@ -195,55 +143,37 @@ function DetailTile({ label, value, breakAll = false }) {
   )
 }
 
-function RouteLedger({ routes }) {
-  return (
-    <div className="grid gap-3 lg:grid-cols-3">
-      {routes.map((route) => (
-        <div key={`${route.method}-${route.path}`} className="rounded-2xl border border-surface-border bg-surface-raised p-4">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-sm font-bold text-ink-primary">{route.label}</p>
-            <span className={`badge ${route.status === 'live' ? 'badge-green' : 'badge-orange'}`}>
-              {route.status === 'live' ? 'Ready' : 'Planned'}
-            </span>
-          </div>
-          {route.notes ? <p className="mt-3 text-xs leading-5 text-ink-muted">{route.notes}</p> : null}
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function PaymentEntries({ entries }) {
   if (!entries?.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-surface-border bg-surface-raised px-4 py-8 text-center">
+      <div className="empty-panel">
         <ReceiptText size={22} className="mx-auto text-ink-muted" />
-        <p className="mt-3 text-sm font-bold text-ink-primary">No payment entries yet</p>
-        <p className="mt-2 text-xs leading-5 text-ink-muted">
-          Payment-entry creation is backend-owned and remains manual tracking, not payment-gateway settlement.
+        <p className="mt-3 text-sm font-semibold text-ink-primary">No payment entries yet</p>
+        <p className="mt-2 text-sm leading-6 text-ink-secondary">
+          Payment entries appear here after the selected invoice has recorded follow-through.
         </p>
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-sm">
+    <div className="table-scroll">
+      <table className="data-table min-w-[720px]">
         <thead>
-          <tr className="border-b border-surface-border text-left text-xs text-ink-muted">
-            <th className="px-4 py-3 font-semibold">Received</th>
-            <th className="px-4 py-3 font-semibold">Amount</th>
-            <th className="px-4 py-3 font-semibold">Method</th>
-            <th className="px-4 py-3 font-semibold">Reference</th>
+          <tr>
+            <th>Received</th>
+            <th>Amount</th>
+            <th>Method</th>
+            <th>Reference</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-surface-border">
+        <tbody>
           {entries.map((entry) => (
-            <tr key={entry.id} className="hover:bg-surface-hover">
-              <td className="px-4 py-3.5 text-ink-secondary">{formatDateTime(entry.receivedAt)}</td>
-              <td className="px-4 py-3.5 font-bold text-ink-primary">{entry.amountLabel}</td>
-              <td className="px-4 py-3.5 text-ink-secondary">{entry.paymentMethodLabel}</td>
-              <td className="px-4 py-3.5 text-ink-secondary">{entry.reference ?? 'No reference'}</td>
+            <tr key={entry.id}>
+              <td className="text-ink-secondary">{formatDateTime(entry.receivedAt)}</td>
+              <td className="font-semibold text-ink-primary">{entry.amountLabel}</td>
+              <td className="text-ink-secondary">{entry.paymentMethodLabel}</td>
+              <td className="text-ink-secondary">{entry.reference ?? 'No reference'}</td>
             </tr>
           ))}
         </tbody>
@@ -303,15 +233,16 @@ export default function InvoiceOrderManagementWorkspace() {
               snapshot?.trackedInvoicePolicies?.length,
           ),
         }),
-        message: 'Invoice-aging analytics loaded from the live read model.',
+        message: 'Completion history loaded from the latest invoice-aging snapshot.',
         snapshot,
       })
     } catch (error) {
       setAgingState({
-        status: error instanceof ApiError && error.status === 0
-          ? 'invoice_order_runtime_unavailable'
-          : 'invoice_order_failed',
-        message: error?.message || 'Invoice-aging analytics could not be loaded.',
+        status:
+          error instanceof ApiError && error.status === 0
+            ? 'invoice_order_runtime_unavailable'
+            : 'invoice_order_failed',
+        message: error?.message || 'Completion history could not be loaded.',
         snapshot: null,
       })
     }
@@ -389,8 +320,8 @@ export default function InvoiceOrderManagementWorkspace() {
           hasData: Boolean(jobOrder?.invoiceRecord),
         }),
         message: jobOrder?.invoiceRecord
-          ? 'Service invoice-ready record loaded from the finalized job order.'
-          : 'Job order loaded, but it has not produced an invoice-ready record yet.',
+          ? 'Service record loaded for invoice follow-through.'
+          : 'Job order loaded, but no invoice-ready record is attached yet.',
         jobOrder,
       })
     } catch (error) {
@@ -436,8 +367,8 @@ export default function InvoiceOrderManagementWorkspace() {
           partialFailure: Boolean(snapshot.invoiceError),
         }),
         message: snapshot.invoiceError
-          ? 'Order loaded, but invoice detail was not available yet.'
-          : 'Order and invoice tracking loaded.',
+          ? 'Order loaded, but invoice detail is still unavailable.'
+          : 'Order and invoice detail loaded.',
         order: snapshot.order,
         invoice: snapshot.invoice,
         invoiceError: snapshot.invoiceError,
@@ -462,42 +393,59 @@ export default function InvoiceOrderManagementWorkspace() {
   const ecommerceOrder = ecommerceState.order ?? null
   const ecommerceInvoice = ecommerceState.invoice ?? null
   const paymentEntries = ecommerceInvoice?.paymentEntries ?? []
-  const hasFinanceDetail = Boolean(jobOrderState.jobOrder || ecommerceOrder || serviceInvoice || ecommerceInvoice)
   const ecommerceLoadLabel = LOAD_STATE_LABELS[ecommerceState.status] ?? 'Order Lookup'
   const jobOrderLoadLabel = LOAD_STATE_LABELS[jobOrderState.status] ?? 'Service Invoice Lookup'
   const agingLoadLabel = LOAD_STATE_LABELS[agingState.status] ?? 'Invoice Aging'
-  const serviceInvoiceSummaryValue =
-    jobOrderState.status === 'invoice_order_loading'
-      ? 'Loading Service Record'
-      : serviceInvoice
-        ? 'Invoice Ready'
-        : jobOrderState.jobOrder
-          ? 'No Invoice Record'
-          : 'Awaiting Lookup'
-  const servicePaymentStateValue = serviceInvoice?.paymentStatus
-    ? formatLabel(serviceInvoice.paymentStatus)
-    : serviceInvoice
-      ? 'Unrecorded'
-      : 'Awaiting Service Invoice'
-  const ecommerceOrderStateValue =
-    ecommerceState.status === 'invoice_order_loading'
-      ? 'Loading Order'
-      : ecommerceOrder?.status
-        ? formatLabel(ecommerceOrder.status)
-        : ecommerceState.status === 'invoice_order_partial'
-          ? 'Invoice Pending'
-          : ecommerceState.status === 'invoice_order_runtime_unavailable'
-            ? 'Runtime Offline'
-            : ecommerceState.status === 'invoice_order_failed'
-              ? 'Unavailable'
-              : 'Awaiting Order'
+
+  const queueCards = useMemo(
+    () => [
+      {
+        key: 'service',
+        icon: Wrench,
+        label: 'Service invoice-ready',
+        status: jobOrderLoadLabel,
+        body: serviceInvoice
+          ? `${serviceInvoice.invoiceReference} is ready for payment follow-through.`
+          : jobOrderState.message || 'Load a finalized job order to review its invoice-ready record.',
+      },
+      {
+        key: 'order',
+        icon: ShoppingBag,
+        label: 'Order completion',
+        status: ecommerceLoadLabel,
+        body: ecommerceOrder
+          ? `${ecommerceOrder.orderNumber} is available for invoice and payment review.`
+          : ecommerceState.message || 'Load a customer order to inspect invoice and payment detail.',
+      },
+      {
+        key: 'history',
+        icon: Clock3,
+        label: 'Completion history',
+        status: agingLoadLabel,
+        body: invoiceAging?.totals?.trackedInvoices
+          ? `${invoiceAging.totals.trackedInvoices} tracked invoices are visible in the latest aging snapshot.`
+          : agingState.message || 'Refresh aging data when you need queue context for older records.',
+      },
+    ],
+    [
+      agingLoadLabel,
+      agingState.message,
+      ecommerceLoadLabel,
+      ecommerceOrder,
+      ecommerceState.message,
+      invoiceAging?.totals?.trackedInvoices,
+      jobOrderLoadLabel,
+      jobOrderState.message,
+      serviceInvoice,
+    ],
+  )
 
   if (!user?.accessToken) {
     return (
       <InfoPanel
         icon={ShieldAlert}
         title="Staff sign-in required"
-        body="Sign in as a service adviser or super admin before opening Invoice & Order Management."
+        body="Sign in as a service adviser or super admin before opening Invoices & Orders."
         tone="warning"
       />
     )
@@ -507,7 +455,7 @@ export default function InvoiceOrderManagementWorkspace() {
     return (
       <InfoPanel
         icon={ShieldAlert}
-        title="Invoice & Order Management is adviser/admin only"
+        title="Invoices & Orders is adviser/admin only"
         body="Technician sessions can work inside assigned job orders, but invoice/order management stays with service advisers and super admins."
         tone="warning"
       />
@@ -516,34 +464,31 @@ export default function InvoiceOrderManagementWorkspace() {
 
   return (
     <div className="ops-page-shell">
-      <section className="ops-page-header">
-        <div className="space-y-2">
-          <p className="ops-page-kicker">Financial Operations</p>
-          <h1 className="ops-page-title">Invoice & Order Management</h1>
-          <p className="ops-page-copy">
-            Inspect service invoice readiness, known ecommerce order snapshots, and aging analytics from one
-            structured staff finance surface.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={loadInvoiceAging}
-          disabled={agingState.status === 'invoice_order_loading'}
-          className="ops-action-secondary min-w-[148px] self-start disabled:cursor-not-allowed disabled:opacity-60 xl:self-auto"
-        >
-          <RefreshCcw size={14} className={agingState.status === 'invoice_order_loading' ? 'animate-spin' : undefined} />
-          Refresh
-        </button>
-      </section>
+      <PageHeader
+        eyebrow="Financial Operations"
+        title="Invoices & Orders"
+        description="Review invoice-ready work, payment entries, and completion records."
+        actions={(
+          <button
+            type="button"
+            onClick={loadInvoiceAging}
+            disabled={agingState.status === 'invoice_order_loading'}
+            className="ops-action-secondary min-w-[148px] self-start disabled:cursor-not-allowed disabled:opacity-60 xl:self-auto"
+          >
+            <RefreshCcw size={14} className={agingState.status === 'invoice_order_loading' ? 'animate-spin' : undefined} />
+            Refresh
+          </button>
+        )}
+      />
 
       <section className="ops-control-strip">
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1fr)_auto]">
-          <label className="text-xs text-ink-muted">
-            Job order
+          <label>
+            <span className="label">Service record</span>
             <select
               value={jobOrderId}
               onChange={(event) => setJobOrderId(event.target.value)}
-              className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="select"
             >
               <option value="">Choose a finalized job order</option>
               {jobOrderOptions.map((jobOrder) => (
@@ -564,19 +509,19 @@ export default function InvoiceOrderManagementWorkspace() {
             ) : (
               <Search size={14} />
             )}
-            Load Job Order
+            Load Service
           </button>
-          <label className="text-xs text-ink-muted">
-            Customer
+          <label>
+            <span className="label">Customer</span>
             <select
               value={selectedCustomerUserId}
               onChange={(event) => {
                 setSelectedCustomerUserId(event.target.value)
                 setEcommerceOrderId('')
               }}
-              className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="select"
             >
-              <option value="">Choose customer for ecommerce orders</option>
+              <option value="">Choose customer for order lookup</option>
               {customerOptions.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.displayName} / {customer.email}
@@ -584,12 +529,12 @@ export default function InvoiceOrderManagementWorkspace() {
               ))}
             </select>
           </label>
-          <label className="text-xs text-ink-muted">
-            Ecommerce order
+          <label>
+            <span className="label">Order record</span>
             <select
               value={ecommerceOrderId}
               onChange={(event) => setEcommerceOrderId(event.target.value)}
-              className="mt-1 w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="select"
             >
               <option value="">{selectedCustomerUserId ? 'Choose ecommerce order' : 'Choose customer first'}</option>
               {ecommerceOrderOptions.map((order) => (
@@ -615,341 +560,127 @@ export default function InvoiceOrderManagementWorkspace() {
         </div>
       </section>
 
-      <section className="ops-summary-grid">
-        <MetricCard
-          icon={Database}
-          label="Service Invoice State"
-          value={serviceInvoiceSummaryValue}
-          sub={serviceInvoice ? serviceInvoice.invoiceReference : `Service: ${jobOrderLoadLabel}`}
-        />
-        <MetricCard
-          icon={BarChart3}
-          label="Aging Snapshot"
-          value={invoiceAging?.totals?.trackedInvoices ?? 0}
-          sub={`${agingBuckets.length} buckets • ${trackedInvoicePolicies.length} reminder policies`}
-        />
-        <MetricCard
-          icon={ReceiptText}
-          label="Service Payment State"
-          value={servicePaymentStateValue}
-          sub={
-            serviceInvoice
-              ? `${formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)} due after ${formatInvoiceOrderCurrency(serviceInvoice.reservationFeeDeductionCents)} reservation deduction`
-              : 'Service payment stays in the Job Order Workbench.'
-          }
-        />
-        <MetricCard
-          icon={PackageCheck}
-          label="Ecommerce Order State"
-          value={ecommerceOrderStateValue}
-          sub={
-            ecommerceOrder
-              ? ecommerceOrder.orderNumber
-              : `Orders: ${ecommerceLoadLabel}`
-          }
-        />
-      </section>
-
       <section className="space-y-5">
-        {(serviceInvoice || ecommerceInvoice || ecommerceOrder) ? (
-          <div className="ops-panel">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="ops-panel">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="card-title">Financial Snapshot</p>
+              <p className="card-title">Invoice & Order Queue</p>
               <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Group aging analytics, payment-state guidance, and live lookup notices before drilling into a
-                specific billing record.
+                Focus on records that are ready for payment or invoice follow-through.
               </p>
             </div>
             <span className="badge badge-gray">{agingLoadLabel}</span>
           </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
-            <div className="space-y-4">
-              <div className="ops-panel-muted">
-                <p className="text-sm font-bold text-ink-primary">Payment-state boundary</p>
-                <p className="mt-2 text-sm leading-6 text-ink-muted">{staffInvoiceOrderPaymentCopy}</p>
-              </div>
+          <div className="mt-4 grid gap-4 xl:grid-cols-3">
+            {queueCards.map((card) => {
+              const Icon = card.icon
 
-              {agingState.message ? (
-                <div className={`rounded-xl border px-4 py-3 text-xs ${getLoadMessageToneClass(agingState.status)}`}>
-                  {agingState.message}
+              return (
+                <div key={card.key} className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">{card.label}</p>
+                      <p className="mt-2 text-sm font-semibold text-ink-primary">{card.status}</p>
+                    </div>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
+                      <Icon size={18} />
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-ink-secondary">{card.body}</p>
                 </div>
-              ) : null}
+              )
+            })}
+          </div>
+        </div>
 
-              <div className="rounded-2xl border border-surface-border bg-surface-raised p-4">
-                <p className="text-sm font-bold text-ink-primary">Aging Buckets</p>
-                <div className="mt-4 grid gap-3">
-                  {agingBuckets.length ? (
-                    agingBuckets.map((bucket) => (
-                      <div key={bucket.bucket} className="flex items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-card px-4 py-3">
-                        <span className="text-sm text-ink-secondary">{bucket.label ?? formatLabel(bucket.bucket)}</span>
-                        <span className="text-xl font-black text-ink-primary">{bucket.count}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm leading-6 text-ink-muted">
-                      No aging buckets are present in the latest analytics snapshot.
-                    </p>
-                  )}
+        <div className="ops-panel">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="card-title">Invoice</p>
+              <p className="mt-1 text-sm leading-6 text-ink-muted">
+                Review the current invoice snapshot without leaving the completion queue.
+              </p>
+            </div>
+            <span className="badge badge-gray">
+              {serviceInvoice ? 'Service invoice ready' : ecommerceInvoice ? 'Order invoice ready' : 'Awaiting invoice'}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">Service invoice</p>
+                  <p className="mt-2 text-xl font-bold text-ink-primary">{serviceInvoice?.invoiceReference ?? 'Not loaded'}</p>
                 </div>
+                <StatusBadge value={serviceInvoice?.paymentStatus ?? 'awaiting invoice'} />
               </div>
+              {serviceInvoice ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <DetailTile label="Total" value={formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)} />
+                  <DetailTile label="Amount recorded" value={formatInvoiceOrderCurrency(serviceInvoice.amountPaidCents)} />
+                  <DetailTile label="Receipt" value={serviceInvoice.officialReceiptReference ?? 'Generated on finalization'} />
+                  <DetailTile label="PDF delivery" value={getInvoicePdfStateLabel(serviceInvoice)} />
+                </div>
+              ) : (
+                <p className="mt-3 text-sm leading-6 text-ink-muted">
+                  Load a finalized job order to review the service invoice-ready record.
+                </p>
+              )}
             </div>
 
             <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-bold text-ink-primary">Tracked Reminder Policies</p>
-                  <p className="mt-1 text-xs leading-5 text-ink-muted">
-                    Reminder analytics remain read-only here and may lag owner workflow writes.
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">Order invoice</p>
+                  <p className="mt-2 text-xl font-bold text-ink-primary">{ecommerceInvoice?.invoiceNumber ?? 'Not loaded'}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => loadInvoiceAging()}
-                  disabled={agingState.status === 'invoice_order_loading'}
-                  className="ops-action-secondary sm:min-w-[148px]"
-                >
-                  <RefreshCcw size={14} className={agingState.status === 'invoice_order_loading' ? 'animate-spin' : undefined} />
-                  Refresh Aging
-                </button>
+                <StatusBadge value={ecommerceInvoice?.status ?? 'awaiting invoice'} />
               </div>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[720px] text-sm">
-                  <thead>
-                    <tr className="border-b border-surface-border text-left text-xs text-ink-muted">
-                      <th className="px-4 py-3 font-semibold">Invoice</th>
-                      <th className="px-4 py-3 font-semibold">Latest Status</th>
-                      <th className="px-4 py-3 font-semibold">Scheduled For</th>
-                      <th className="px-4 py-3 font-semibold">Rule Count</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-border">
-                    {trackedInvoicePolicies.length ? (
-                      trackedInvoicePolicies.map((policy) => (
-                        <tr key={policy.invoiceId} className="hover:bg-surface-hover">
-                          <td className="px-4 py-3.5 font-semibold text-ink-primary break-all">{policy.invoiceId}</td>
-                          <td className="px-4 py-3.5 text-ink-secondary">{policy.latestReminderStatus}</td>
-                          <td className="px-4 py-3.5 text-ink-secondary">{policy.latestScheduledForLabel}</td>
-                          <td className="px-4 py-3.5 font-bold text-ink-primary">{policy.reminderRuleIds?.length ?? 0}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-ink-muted">
-                          No tracked reminder policies are present in the latest snapshot.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-          </div>
-        ) : null}
-
-        {hasFinanceDetail ? (
-          <div className="grid gap-5 xl:grid-cols-2">
-          <div className="ops-panel">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="card-title">Job Order Billing Detail</p>
-                <p className="mt-1 text-sm leading-6 text-ink-muted">
-                  Inspect a loaded job order to confirm invoice-ready state, recorded payment details, and the
-                  owner workflow that still controls service billing actions.
-                </p>
-              </div>
-              <span className="badge badge-gray">{jobOrderLoadLabel}</span>
-            </div>
-
-            {jobOrderState.message ? (
-              <div className={`mt-4 rounded-xl border px-4 py-3 text-xs ${getLoadMessageToneClass(jobOrderState.status)}`}>
-                {jobOrderState.message}
-              </div>
-            ) : null}
-
-            {jobOrderState.jobOrder ? (
-              <div className="mt-4 space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
-                  <DetailTile label="Job Order" value={`JO-${shortId(jobOrderState.jobOrder.id)}`} />
-                  <DetailTile label="Status" value={formatLabel(jobOrderState.jobOrder.status)} />
-                  <DetailTile label="Source" value={formatLabel(jobOrderState.jobOrder.sourceType)} />
+              {ecommerceInvoice ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <DetailTile label="Total" value={ecommerceInvoice.totalLabel} />
+                  <DetailTile label="Amount due" value={ecommerceInvoice.amountDueLabel} />
+                  <DetailTile label="Aging" value={ecommerceInvoice.agingBucketLabel} />
+                  <DetailTile label="Due at" value={formatDateTime(ecommerceInvoice.dueAt)} />
                 </div>
-
-                {serviceInvoice ? (
-                  <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">
-                          Service Invoice-Ready Record
-                        </p>
-                        <p className="mt-2 text-xl font-bold text-ink-primary">{serviceInvoice.invoiceReference}</p>
-                      </div>
-                      <StatusBadge value={serviceInvoice.paymentStatus} />
-                    </div>
-
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      <DetailTile label="Subtotal Before Deduction" value={formatInvoiceOrderCurrency(serviceInvoice.subtotalAmountCents)} />
-                      <DetailTile
-                        label="Reservation Fee Deduction"
-                        value={formatInvoiceOrderCurrency(serviceInvoice.reservationFeeDeductionCents)}
-                      />
-                      <DetailTile label="Invoice Total" value={formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)} />
-                      <DetailTile label="Amount Recorded" value={formatInvoiceOrderCurrency(serviceInvoice.amountPaidCents)} />
-                      <DetailTile label="Payment Method" value={formatLabel(serviceInvoice.paymentMethod, 'Not recorded')} />
-                      <DetailTile label="Paid At" value={formatDateTime(serviceInvoice.paidAt)} />
-                      <DetailTile label="Official Receipt" value={serviceInvoice.officialReceiptReference ?? 'Generated on finalization'} />
-                      <DetailTile label="Finalized By" value={serviceInvoice.finalizedByUserId} breakAll />
-                      <DetailTile label="PDF Delivery" value={getInvoicePdfStateLabel(serviceInvoice)} />
-                    </div>
-
-                    {serviceInvoice.summary ? (
-                      <div className="mt-4 rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
-                        <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Invoice summary</p>
-                        <p className="mt-2 text-sm leading-6 text-ink-secondary">{serviceInvoice.summary}</p>
-                      </div>
-                    ) : null}
-
-                    {serviceInvoice.pdfEmailError ? (
-                      <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
-                        PDF delivery issue: {serviceInvoice.pdfEmailError}
-                      </div>
-                    ) : null}
-
-                    <p className="mt-4 text-sm leading-6 text-ink-muted">
-                      Service invoice payment stays owned by the Job Order Workbench. This finance surface is read-only and now reflects the reservation-fee deduction, official receipt, and PDF/email trail from finalization.
-                    </p>
-                  </div>
-                ) : (
-                  <InfoPanel
-                    icon={Clock3}
-                    title="Not invoice-ready yet"
-                    body="This job order has not produced an invoice-ready record. Use the Job Order Workbench to complete work evidence, QA gates, and finalization."
-                    tone="warning"
-                  />
-                )}
-
-                <PortalLink href="/admin/job-orders" className="btn-ghost w-fit">
-                  <ExternalLink size={14} />
-                  Open Job Order Workbench
-                </PortalLink>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="ops-panel">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="card-title">Ecommerce Order Detail</p>
-                <p className="mt-1 text-sm leading-6 text-ink-muted">
-                  Review a known ecommerce order snapshot and its linked invoice detail without duplicating the
-                  owner workflows that manage fulfillment or billing updates.
-                </p>
-              </div>
-              <span className="badge badge-gray">{ecommerceLoadLabel}</span>
-            </div>
-
-            {ecommerceState.message ? (
-              <div className={`mt-4 rounded-xl border px-4 py-3 text-xs ${getLoadMessageToneClass(ecommerceState.status)}`}>
-                {ecommerceState.message}
-              </div>
-            ) : null}
-
-            {ecommerceOrder ? (
-              <div className="mt-4 space-y-4">
-                <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">
-                        Ecommerce Order Snapshot
-                      </p>
-                      <p className="mt-2 text-xl font-bold text-ink-primary">{ecommerceOrder.orderNumber}</p>
-                      <p className="mt-1 break-all text-xs text-ink-muted">{ecommerceOrder.id}</p>
-                    </div>
-                    <StatusBadge value={ecommerceOrder.status} />
-                  </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    <DetailTile label="Subtotal" value={ecommerceOrder.subtotalLabel} />
-                    <DetailTile label="Items" value={ecommerceOrder.items?.length ?? 0} />
-                    <DetailTile label="Created" value={formatDateTime(ecommerceOrder.createdAt)} />
-                  </div>
-                </div>
-
-                {ecommerceInvoice ? (
-                  <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">
-                          Ecommerce Invoice Tracking
-                        </p>
-                        <p className="mt-2 text-xl font-bold text-ink-primary">{ecommerceInvoice.invoiceNumber}</p>
-                      </div>
-                      <StatusBadge value={ecommerceInvoice.status} />
-                    </div>
-
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      <DetailTile label="Total" value={ecommerceInvoice.totalLabel} />
-                      <DetailTile label="Amount Due" value={ecommerceInvoice.amountDueLabel} />
-                      <DetailTile label="Aging" value={ecommerceInvoice.agingBucketLabel} />
-                      <DetailTile label="Due At" value={formatDateTime(ecommerceInvoice.dueAt)} />
-                    </div>
-                  </div>
-                ) : ecommerceState.invoiceError ? (
+              ) : ecommerceState.invoiceError ? (
+                <div className="mt-3">
                   <InfoPanel
                     icon={AlertTriangle}
                     title="Invoice detail unavailable"
                     body={ecommerceState.invoiceError}
                     tone="warning"
                   />
-                ) : null}
-              </div>
-            ) : null}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm leading-6 text-ink-muted">
+                  Load an ecommerce order to inspect the linked invoice detail.
+                </p>
+              )}
+            </div>
           </div>
-          </div>
-        ) : (
-          <InfoPanel
-            icon={ReceiptText}
-            title="Load a finalized job order or known ecommerce order"
-            body="This page now stays focused on real billing detail only. Load a finalized job order or a known ecommerce order from the control strip to inspect records here."
-          />
-        )}
+        </div>
 
         <div className="ops-panel">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="card-title">Payment Entries</p>
               <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Review ecommerce invoice payment-entry history here while service payment remains summarized
-                separately in the service billing surface.
+                Review payment entries for the selected invoice context.
               </p>
             </div>
             <span className="badge badge-gray">
-              {ecommerceInvoice ? `${paymentEntries.length} ecommerce entr${paymentEntries.length === 1 ? 'y' : 'ies'}` : 'Ecommerce invoice only'}
+              {ecommerceInvoice ? `${paymentEntries.length} ecommerce entr${paymentEntries.length === 1 ? 'y' : 'ies'}` : 'Invoice detail only'}
             </span>
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[0.88fr_1.12fr]">
             <div className="space-y-4">
               <div className="ops-panel-muted">
-                <p className="text-sm font-bold text-ink-primary">Service payment record</p>
-                <p className="mt-2 text-sm leading-6 text-ink-muted">
-                  {serviceInvoice
-                    ? `${formatInvoiceOrderCurrency(serviceInvoice.amountPaidCents)} recorded against ${formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)} total after a ${formatInvoiceOrderCurrency(serviceInvoice.reservationFeeDeductionCents)} reservation-fee deduction. OR ${serviceInvoice.officialReceiptReference} is ${serviceInvoice.pdfEmailSentAt ? 'already emailed to the customer.' : 'still waiting for PDF/email delivery.'}`
-                    : 'Service payment recording still happens in the Job Order Workbench after finalization.'}
-                </p>
-              </div>
-
-              <div className="ops-panel-muted">
-                <p className="text-sm font-bold text-ink-primary">Ecommerce invoice coverage</p>
-                <p className="mt-2 text-sm leading-6 text-ink-muted">
-                  {ecommerceState.invoiceError
-                    ? ecommerceState.invoiceError
-                    : ecommerceInvoice
-                      ? `Invoice ${ecommerceInvoice.invoiceNumber} is visible here with ${paymentEntries.length} tracked payment entr${paymentEntries.length === 1 ? 'y' : 'ies'}.`
-                      : 'Load a known ecommerce order to inspect invoice payment-entry history.'}
-                </p>
+                <p className="text-sm font-bold text-ink-primary">Payment boundary</p>
+                <p className="mt-2 text-sm leading-6 text-ink-muted">{staffInvoiceOrderPaymentCopy}</p>
               </div>
             </div>
 
@@ -959,6 +690,85 @@ export default function InvoiceOrderManagementWorkspace() {
           </div>
         </div>
 
+        <div className="ops-panel">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="card-title">History</p>
+              <p className="mt-1 text-sm leading-6 text-ink-muted">
+                Review aging and reminder history.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadInvoiceAging()}
+              disabled={agingState.status === 'invoice_order_loading'}
+              className="ops-action-secondary sm:min-w-[148px]"
+            >
+              <RefreshCcw size={14} className={agingState.status === 'invoice_order_loading' ? 'animate-spin' : undefined} />
+              Refresh Aging
+            </button>
+          </div>
+
+          {agingState.message ? (
+            <div className={`mt-4 ${getLoadMessageToneClass(agingState.status)}`}>
+              {agingState.message}
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-[0.84fr_1.16fr]">
+            <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+              <p className="text-sm font-bold text-ink-primary">Aging buckets</p>
+              <div className="mt-4 grid gap-3">
+                {agingBuckets.length ? (
+                  agingBuckets.map((bucket) => (
+                    <div key={bucket.bucket} className="flex items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+                      <span className="text-sm text-ink-secondary">{bucket.label ?? formatLabel(bucket.bucket)}</span>
+                      <span className="text-xl font-black text-ink-primary">{bucket.count}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm leading-6 text-ink-muted">
+                    No aging buckets are visible in the latest snapshot.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+              <p className="text-sm font-bold text-ink-primary">Tracked reminder policies</p>
+              <div className="mt-4 table-scroll">
+                <table className="data-table min-w-[720px]">
+                  <thead>
+                    <tr>
+                      <th>Invoice</th>
+                      <th>Latest Status</th>
+                      <th>Scheduled For</th>
+                      <th>Rule Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trackedInvoicePolicies.length ? (
+                      trackedInvoicePolicies.map((policy) => (
+                        <tr key={policy.invoiceId}>
+                          <td className="break-all font-semibold text-ink-primary">{policy.invoiceId}</td>
+                          <td className="text-ink-secondary">{policy.latestReminderStatus}</td>
+                          <td className="text-ink-secondary">{policy.latestScheduledForLabel}</td>
+                          <td className="font-semibold text-ink-primary">{policy.reminderRuleIds?.length ?? 0}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="text-center text-ink-muted">
+                          No reminder policies are visible in the latest snapshot.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
     </div>
   )

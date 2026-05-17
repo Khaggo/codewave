@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
-import { insuranceInquiryTypeEnum } from '../schemas/insurance.schema';
+import { insuranceCasePurposeEnum, insuranceInquiryTypeEnum } from '../schemas/insurance.schema';
 
 export class CreateInsuranceInquiryDto {
   @ApiProperty({
@@ -24,6 +24,14 @@ export class CreateInsuranceInquiryDto {
   })
   @IsEnum(insuranceInquiryTypeEnum.enumValues)
   inquiryType!: (typeof insuranceInquiryTypeEnum.enumValues)[number];
+
+  @ApiPropertyOptional({
+    enum: insuranceCasePurposeEnum.enumValues,
+    example: 'quotation',
+  })
+  @IsOptional()
+  @IsEnum(insuranceCasePurposeEnum.enumValues)
+  purpose?: (typeof insuranceCasePurposeEnum.enumValues)[number];
 
   @ApiProperty({
     example: 'Accident repair inquiry',

@@ -253,8 +253,8 @@ export class QualityGatesService {
 
   async recordReviewerVerdict(jobOrderId: string, payload: RecordQualityGateVerdictDto, actor: QualityGateActor) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
-    if (resolvedActor.role !== 'head_technician') {
-      throw new ForbiddenException('Only head technicians can record QA verdicts');
+    if (!['head_technician', 'super_admin'].includes(resolvedActor.role)) {
+      throw new ForbiddenException('Only head technicians or super admins can record QA verdicts');
     }
 
     const jobOrder = await this.jobOrdersRepository.findById(jobOrderId);
@@ -272,7 +272,7 @@ export class QualityGatesService {
     if (payload.verdict === 'blocked' && jobOrder.status === 'ready_for_qa') {
       await this.jobOrdersRepository.updateStatus(jobOrderId, {
         status: 'in_progress',
-        reason: payload.note ?? 'Head technician blocked QA review and returned work to remediation.',
+        reason: payload.note ?? 'QA reviewer blocked release and returned work to remediation.',
       });
     }
 
@@ -414,11 +414,26 @@ export class QualityGatesService {
     jobOrder: Awaited<ReturnType<JobOrdersRepository['findById']>>,
     completedWorkText: string,
   ) {
+    const linkedBackJob =
+      jobOrder.sourceType === 'back_job'
+        ? await this.backJobsRepository.findOptionalById(jobOrder.sourceId)
+        : null;
     const inspections = await this.inspectionsRepository.findByVehicleId(jobOrder.vehicleId);
     return this.qualityGateDiscrepancyEngine.evaluate({
       sourceType: jobOrder.sourceType as 'booking' | 'back_job',
       sourceId: jobOrder.sourceId,
       completedWorkText,
+      jobOrderCreatedAt: jobOrder.createdAt ?? null,
+      backJobReturnInspectionId: linkedBackJob?.returnInspectionId ?? null,
+      uploadedPhotoEvidence: (jobOrder.photos ?? [])
+        .filter((photo) => photo.deletedAt == null)
+        .map((photo) => ({
+          id: photo.id,
+          linkedEntityType: photo.linkedEntityType as 'job_order' | 'progress_entry' | 'work_item' | 'qa_review',
+          linkedEntityId: photo.linkedEntityId ?? null,
+          caption: photo.caption ?? null,
+          createdAt: photo.createdAt,
+        })),
       inspections: inspections.map((inspection) => ({
         id: inspection.id,
         bookingId: inspection.bookingId ?? null,
@@ -501,14 +516,15 @@ export class QualityGatesService {
   }
 
   private buildBlockingReason(findings: QualityGateFinding[]) {
-    const rankedFindings = [...findings].sort((left, right) => {
+    const rankedFindings = [...findings]
+      .filter((finding) => finding.severity !== 'info')
+      .sort((left, right) => {
       const leftRisk = left.provenance?.riskContribution ?? this.fallbackRiskContribution(left);
       const rightRisk = right.provenance?.riskContribution ?? this.fallbackRiskContribution(right);
       return rightRisk - leftRisk;
     });
 
-    return rankedFindings[0]?.message
-      ?? 'Quality gate found blocking issues that must be resolved before release.';
+    return rankedFindings[0]?.message ?? null;
   }
 
   private fallbackRiskContribution(finding: QualityGateFinding) {

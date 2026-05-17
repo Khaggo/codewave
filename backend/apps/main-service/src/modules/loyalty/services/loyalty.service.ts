@@ -32,6 +32,10 @@ type LoyaltyActor = {
   role: string;
 };
 
+const DEFAULT_SERVICE_PAYMENT_RULE_PROMO_LABEL = 'SYSTEM_DEFAULT_SERVICE_PAYMENT_V1';
+const DEFAULT_SERVICE_PAYMENT_RULE_REASON =
+  'Automatically provisioned default service-payment loyalty rule.';
+
 @Injectable()
 export class LoyaltyService {
   constructor(
@@ -155,6 +159,55 @@ export class LoyaltyService {
       ...payload,
       actorUserId: resolvedActor.id,
     });
+  }
+
+  async ensureDefaultServicePaymentRule(actor: LoyaltyActor) {
+    const resolvedActor = await this.assertSuperAdminActor(actor.userId);
+    const existingRules = await this.loyaltyRepository.listEarningRules({ includeInactive: true });
+    const defaultRule = existingRules.find(
+      (rule) => rule.promoLabel === DEFAULT_SERVICE_PAYMENT_RULE_PROMO_LABEL,
+    );
+
+    const defaultPayload = {
+      name: 'Default service payment points',
+      description: 'Automatically award 1 point for every PHP100 on paid service invoices.',
+      accrualSource: 'service' as const,
+      formulaType: 'amount_ratio' as const,
+      amountStepCents: 10_000,
+      pointsPerStep: 1,
+      minimumAmountCents: undefined,
+      eligibleServiceTypes: [] as string[],
+      eligibleServiceCategories: [] as string[],
+      eligibleProductIds: [] as string[],
+      eligibleProductCategoryIds: [] as string[],
+      promoLabel: DEFAULT_SERVICE_PAYMENT_RULE_PROMO_LABEL,
+      activeFrom: undefined,
+      activeUntil: undefined,
+      status: 'active' as const,
+      reason: DEFAULT_SERVICE_PAYMENT_RULE_REASON,
+    };
+
+    if (!defaultRule) {
+      return this.loyaltyRepository.createEarningRule({
+        ...defaultPayload,
+        actorUserId: resolvedActor.id,
+      });
+    }
+
+    const updatedRule = await this.loyaltyRepository.updateEarningRule(defaultRule.id, {
+      ...defaultPayload,
+      actorUserId: resolvedActor.id,
+    });
+
+    if (updatedRule.status !== 'active') {
+      return this.loyaltyRepository.updateEarningRuleStatus(defaultRule.id, {
+        status: 'active',
+        reason: DEFAULT_SERVICE_PAYMENT_RULE_REASON,
+        actorUserId: resolvedActor.id,
+      });
+    }
+
+    return updatedRule;
   }
 
   async applyLoyaltyAccrual(

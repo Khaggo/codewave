@@ -14,31 +14,38 @@
 - live controller: `backend/apps/main-service/src/modules/insurance/controllers/insurance.controller.ts`
 - web helper: `frontend/src/lib/insuranceStaffClient.js`
 - web surface: `frontend/src/app/insurance/InsuranceContent.js`
+- collections surface: `frontend/src/app/insurance/collections/CollectionsContent.js`
+- collections helpers: `frontend/src/app/insurance/collections/insuranceCollectionsView.mjs`
 
 ## Route Status
 
 | Route | Status | Source | Web Purpose |
 | --- | --- | --- | --- |
-| `GET /api/insurance/review-queue` | `planned` | task contract | future staff queue read model for adviser/admin review |
+| `GET /api/insurance/inquiries` | `live` | controller + web client | load the live staff table/list with optional workflow filters |
 | `GET /api/insurance/inquiries/:id` | `live` | Swagger/controller | refresh one known insurance inquiry before staff action |
-| `PATCH /api/insurance/inquiries/:id/status` | `live` | Swagger/controller | update inquiry status and review notes from the staff web surface |
-| `POST /api/insurance/inquiries/:id/documents` | `live` | Swagger/controller | reference route for downstream evidence additions after review asks for more files |
+| `GET /api/users/:id/insurance-inquiries` | `live` | controller + staff client | load staff-side customer insurance history when needed |
+| `PATCH /api/insurance/inquiries/:id/status` | `live` | controller + shipped web client | narrow phase-1 review save route for `status` and optional `reviewNotes` |
+| `PATCH /api/insurance/inquiries/:id/workflow` | `live` | controller + collections web client | broader adviser/admin workflow route for collections metadata and later staff follow-up fields |
+| `POST /api/insurance/broadcasts/send` | `live` | controller + shipped web client | send custom in-app insurance broadcasts to selected or server-filtered case audiences |
+| `POST /api/insurance/inquiries/:id/documents/upload` | `live` | Swagger/controller | accept PDF/image uploads for inquiry evidence |
+| `POST /api/insurance/inquiries/:id/documents` | `live` | Swagger/controller | keep legacy reference-document attachment available |
 
 ## Important Contract Constraint
 
-- there is **no live staff queue list route** in the current backend Swagger surface
-- this slice must not pretend that the queue is already live
-- current web behavior therefore splits into:
-  - planned queue cards backed by task-approved mocks
-  - live detail loading through `GET /api/insurance/inquiries/:id`
-  - live status updates through `PATCH /api/insurance/inquiries/:id/status`
+- the phase-1 web page no longer depends on a planned mock queue contract
+- the live workspace is driven by:
+  - `GET /api/insurance/inquiries` for the staff list and summary filters
+  - `GET /api/insurance/inquiries/:id` for detail refresh
+  - `PATCH /api/insurance/inquiries/:id/status` for the general phase-1 review page save
+- the dedicated collections workspace lives at `/insurance/collections` and uses `PATCH /api/insurance/inquiries/:id/workflow` for broader payment metadata updates
+- the workflow route allows same-status updates so advisers can persist payment metadata and follow-up notes without forcing a status transition
 
-## Staff Review Queue States
+## Staff Review List States
 
 | State | Meaning |
 | --- | --- |
-| `queue_loaded` | mock-backed queue cards exist for adviser/admin review |
-| `queue_empty` | the planned queue has no review items |
+| `queue_loaded` | live staff cases are visible in the table/list workspace |
+| `queue_empty` | the live list has no cases for the current filters |
 | `detail_loaded` | the selected inquiry detail is available for staff review |
 | `forbidden_role` | the current portal role must not access the insurance review workspace |
 | `load_failed` | a non-classified API or network failure blocked detail loading |
@@ -49,7 +56,8 @@
 | --- | --- |
 | `status_update_ready` | the selected inquiry is ready for a valid transition |
 | `status_update_submitting` | the live status update request is in flight |
-| `status_update_saved` | the backend accepted the status change and returned canonical inquiry state |
+| `status_update_saved` | the general phase-1 review page saved a valid `status` plus optional `reviewNotes` update through the narrow live route |
+| `collections_workflow_saved` | the collections workspace saved payment metadata or follow-up fields through the broader workflow route, including same-status metadata-only updates |
 | `forbidden_role` | the current role cannot update insurance review status |
 | `inquiry_not_found` | the selected inquiry no longer exists |
 | `invalid_transition` | the requested next status is not valid for the inquiry's current backend state |
@@ -62,24 +70,46 @@
 - `frontend/src/mocks/insurance/mocks.ts`
 - `frontend/src/lib/insuranceStaffClient.js`
 - `frontend/src/app/insurance/InsuranceContent.js`
+- `frontend/src/app/insurance/collections/CollectionsContent.js`
+- `frontend/src/app/insurance/collections/CollectionsPanels.js`
+- `frontend/src/app/insurance/collections/insuranceCollectionsView.mjs`
 
 ## Contract Rules
 
 - only `service_adviser` and `super_admin` may use the staff insurance review workspace
-- queue cards are a planned read model and must stay clearly labeled as such until the backend exposes a live list route
-- live staff edits are limited to the backend DTO fields:
+- the live list route accepts optional `status`, `paymentStatus`, and `renewalStatus` filters
+- the web workspace shows summary cards, a live table/list, workflow detail, payment and renewal tags, staff notes, and activity visibility from the current inquiry payload
+- the live `PATCH /api/insurance/inquiries/:id/status` route persists only:
   - `status`
   - `reviewNotes`
+- the general phase-1 review page is contract-aligned to that narrow route and keeps broader workflow fields read-only in the detail tabs
+- the live `PATCH /api/insurance/inquiries/:id/workflow` route persists broader workflow metadata including `documentStatus`, `paymentStatus`, `renewalStatus`, `paymentDueAt`, `policyExpiryAt`, `renewalDueAt`, `assignedStaffId`, and optional `reviewNotes`
+- the collections workspace at `/insurance/collections` uses the workflow route for payment verification, due-date handling, overdue marking, and future staff follow-up fields
+- same-status workflow updates are valid on the workflow route so metadata-only collections changes can save without a main status transition
 - customer intake fields such as subject, description, provider, policy number, and notes are read-only in this workspace
 - role failures, missing records, and invalid transitions must remain distinct states in both contract packs and UI messaging
 - this slice does not add insurer payout, settlement, or third-party integration behavior
+- live phase-1 statuses are `submitted`, `needs_documents`, `under_review`, `for_approval`, `approved`, `payment_pending`, `active`, `for_renewal`, `closed`, `rejected`, and `cancelled`
+- live workflow tags are `documentStatus`, `paymentStatus`, and `renewalStatus`; they complement the main inquiry status instead of replacing it
+
+## Phase 4C Custom Broadcasts
+
+- the insurance review workspace now supports insurance-only custom in-app broadcasts through `POST /api/insurance/broadcasts/send`
+- custom broadcasts support only these target modes: `selected_cases` and `filtered_results`
+- `selected_cases` sends resolve from the explicitly checked insurance inquiries in the staff workspace
+- `filtered_results` sends resolve from the current server-side insurance queue filters, not from the client-only search narrowing used in the visible table
+- broadcasts target only customer-linked, non-terminal insurance inquiries; cases that are `closed`, `cancelled`, `rejected`, or otherwise ineligible must be skipped rather than silently treated as sent
+- each broadcast action deduplicates by customer so one customer receives at most one in-app broadcast notification per send action even if multiple eligible inquiries match
+- the staff-side audit trail for each eligible participating inquiry is `manual_broadcast_sent`
+- the returned summary must distinguish targeted cases, eligible cases, deduplicated customers, sent notifications, skipped results, failed results, and per-inquiry result rows
 
 ## Acceptance States
 
 - queue loaded
 - queue empty
 - detail loaded
-- status update saved
+- contract-aligned phase-1 status update saved through the narrow route
+- collections workflow update saved through the broader route
 - forbidden role
 - inquiry not found
 - invalid transition
@@ -89,5 +119,6 @@
 ## Notes
 
 - This slice upgrades the staff/admin insurance page from placeholder content into a contract-aware review workspace.
-- The queue stays honest about its current status: planned read model today, live detail and status update routes right now.
-- The next backend improvement for this surface is a real adviser/admin review-queue endpoint so the web page can drop the mock-backed queue layer.
+- The current web screen is already backed by the live staff list route rather than a mock review queue.
+- The customer-history route exists for staff drill-down, but the shipped phase-1 page is centered on the live list/detail workspace.
+- The main review page now stays aligned to the narrow `/status` contract, while the shipped collections workspace at `/insurance/collections` handles broader payment workflow edits through `/workflow`.

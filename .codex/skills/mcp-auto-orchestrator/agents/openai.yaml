@@ -1,4 +1,4 @@
 interface:
   display_name: "MCP Auto Orchestrator"
   short_description: "Apply the repo MCP-first workflow, then bootstrap and route work through the right MCPs."
-  default_prompt: "Run the MCP-first token-efficiency workflow first, then bootstrap MCPs, then continue the requested codewave work with Swagger, Serena, or the smallest relevant MCP."
+  default_prompt: "Run the MCP-first token-efficiency workflow first, then bootstrap MCPs, then continue the requested codewave work with Swagger, Serena, or the smallest relevant MCP. If I ask to set or restate the current objective, route through the global /goal prompt first."

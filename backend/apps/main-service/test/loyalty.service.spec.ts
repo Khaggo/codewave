@@ -377,4 +377,52 @@ describe('LoyaltyService', () => {
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('creates the default active service-payment rule when none exists yet', async () => {
+    const loyaltyRepository = {
+      listEarningRules: jest.fn().mockResolvedValue([]),
+      createEarningRule: jest.fn().mockResolvedValue({
+        id: 'default-rule-1',
+        promoLabel: 'SYSTEM_DEFAULT_SERVICE_PAYMENT_V1',
+        status: 'active',
+      }),
+    };
+
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'admin-1',
+        isActive: true,
+        role: 'super_admin',
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        LoyaltyService,
+        LoyaltyAccrualPlannerService,
+        { provide: LoyaltyRepository, useValue: loyaltyRepository },
+        { provide: UsersService, useValue: usersService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(LoyaltyService);
+
+    await service.ensureDefaultServicePaymentRule({
+      userId: 'admin-1',
+      role: 'super_admin',
+    });
+
+    expect(loyaltyRepository.createEarningRule).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: 'admin-1',
+        name: 'Default service payment points',
+        accrualSource: 'service',
+        formulaType: 'amount_ratio',
+        amountStepCents: 10_000,
+        pointsPerStep: 1,
+        promoLabel: 'SYSTEM_DEFAULT_SERVICE_PAYMENT_V1',
+        status: 'active',
+      }),
+    );
+  });
 });

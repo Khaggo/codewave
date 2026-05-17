@@ -18,7 +18,7 @@ const validateEmail = (value) => /\S+@\S+\.\S+/.test(value)
 const buildLoginErrors = (form) => {
   const errors = {}
 
-  if (!validateEmail(form.email.trim())) errors.email = 'Enter a valid staff email address.'
+  if (!validateEmail(form.email.trim())) errors.email = 'Enter a valid email address.'
   if (!form.password.trim()) errors.password = 'Password is required.'
 
   return errors
@@ -208,19 +208,22 @@ export default function Login({ onAuthenticated, initialError }) {
         </div>
       </div>
 
-      <div className="flex-1 lg:w-[42%] flex items-center justify-center px-6 py-10" style={{ background: '#111111' }}>
+      <div
+        className="flex-1 lg:w-[42%] flex items-center justify-center px-6 py-10"
+        style={{
+          background:
+            'radial-gradient(circle at top left, rgba(240,124,0,0.08) 0%, rgba(17,17,17,1) 34%), #111111',
+        }}
+      >
         <div className="w-full max-w-[390px]">
           <p className="text-xs font-bold uppercase tracking-[0.2em] mb-3" style={{ color: '#f07c00' }}>
             Admin Access Portal
           </p>
-          <h2 className="text-3xl font-black text-white leading-tight">Staff Login</h2>
-          <p className="text-sm mt-2 mb-8" style={{ color: 'rgba(255,255,255,0.42)' }}>
-            Sign in with your staff credentials to open the Cruisers Crib operations workspace.
-          </p>
+          <h2 className="text-3xl font-black text-white leading-tight">Login</h2>
 
           {notice?.text ? (
             <div
-              className="flex items-start gap-2.5 mb-5 rounded-xl px-4 py-3"
+              className="flex items-start gap-2.5 mt-6 mb-5 rounded-xl px-4 py-3"
               style={{
                 background: 'rgba(239,68,68,0.08)',
                 border: '1px solid rgba(239,68,68,0.18)',
@@ -231,13 +234,13 @@ export default function Login({ onAuthenticated, initialError }) {
             </div>
           ) : null}
 
-          <form onSubmit={handleLoginSubmit} className="space-y-4" noValidate>
+          <form onSubmit={handleLoginSubmit} className="space-y-4 mt-6" noValidate>
             <InputField
-              label="Staff Email"
+              label="Email"
               icon={Mail}
               value={loginForm.email}
               onChange={(event) => setLoginForm((current) => ({ ...current, email: event.target.value }))}
-              placeholder="staff@example.com"
+              placeholder="email@example.com"
               autoComplete="email"
               error={errors.email}
             />

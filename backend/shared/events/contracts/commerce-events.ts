@@ -44,7 +44,7 @@ export interface InvoicePaymentRecordedEventPayload {
   invoiceNumber: string;
   paymentEntryId: string;
   amountCents: number;
-  paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'other';
+  paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'other' | 'paymongo';
   receivedAt: string;
   invoiceStatus: 'pending_payment' | 'partially_paid' | 'paid' | 'overdue' | 'cancelled';
   amountPaidCents: number;

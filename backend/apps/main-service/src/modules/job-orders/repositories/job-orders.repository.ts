@@ -354,6 +354,17 @@ export class JobOrdersRepository extends BaseRepository {
     });
   }
 
+  async findByInvoiceOnlinePaymentSessionId(providerPaymentId: string) {
+    const invoiceRecord = await this.db.query.jobOrderInvoiceRecords.findFirst({
+      where: eq(jobOrderInvoiceRecords.onlinePaymentSessionId, providerPaymentId),
+    });
+    if (!invoiceRecord) {
+      return null;
+    }
+
+    return this.findOptionalById(invoiceRecord.jobOrderId);
+  }
+
   async findFinalizedByCustomerUserId(customerUserId: string) {
     return this.db.query.jobOrders.findMany({
       where: and(eq(jobOrders.customerUserId, customerUserId), eq(jobOrders.status, 'finalized')),
@@ -467,13 +478,21 @@ export class JobOrdersRepository extends BaseRepository {
   }
 
   async updateInvoiceRecord(id: string, payload: Partial<{
-    paymentStatus: 'pending_payment' | 'paid';
-    amountPaidCents: number | null;
-    paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'other' | null;
-    paymentReference: string | null;
-    paidAt: Date | null;
-    recordedByUserId: string | null;
-    summary: string | null;
+      paymentStatus: 'pending_payment' | 'paid';
+      amountPaidCents: number | null;
+      paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'other' | null;
+      paymentChannel: 'manual' | 'online_provider' | null;
+      paymentReference: string | null;
+      onlinePaymentProvider: string | null;
+      onlinePaymentStatus: 'pending' | 'paid' | 'failed' | 'expired' | 'cancelled' | 'unavailable' | null;
+      onlinePaymentSessionId: string | null;
+      onlinePaymentCheckoutUrl: string | null;
+      onlinePaymentReference: string | null;
+      onlinePaymentPaidAt: Date | null;
+      onlinePaymentFailureReason: string | null;
+      paidAt: Date | null;
+      recordedByUserId: string | null;
+      summary: string | null;
     pdfGeneratedAt: Date | null;
     pdfEmailSentAt: Date | null;
     pdfEmailError: string | null;
@@ -502,12 +521,15 @@ export class JobOrdersRepository extends BaseRepository {
       .update(jobOrderInvoiceRecords)
       .set({
         paymentStatus: 'paid',
-        amountPaidCents: payload.amountPaidCents,
-        paymentMethod: payload.paymentMethod,
-        paymentReference: payload.reference ?? null,
-        paidAt: payload.receivedAt,
-        recordedByUserId: payload.recordedByUserId,
-        updatedAt: new Date(),
+          amountPaidCents: payload.amountPaidCents,
+          paymentMethod: payload.paymentMethod,
+          paymentChannel: 'manual',
+          paymentReference: payload.reference ?? null,
+          onlinePaymentStatus: null,
+          onlinePaymentFailureReason: null,
+          paidAt: payload.receivedAt,
+          recordedByUserId: payload.recordedByUserId,
+          updatedAt: new Date(),
       })
       .where(eq(jobOrderInvoiceRecords.id, invoiceRecord.id))
       .returning();

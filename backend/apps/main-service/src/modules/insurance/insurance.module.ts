@@ -7,12 +7,13 @@ import { VehiclesModule } from '@main-modules/vehicles/vehicles.module';
 
 import { InsuranceController } from './controllers/insurance.controller';
 import { InsuranceRepository } from './repositories/insurance.repository';
+import { InsuranceDocumentStorageService } from './services/insurance-document-storage.service';
 import { InsuranceService } from './services/insurance.service';
 
 @Module({
   imports: [AuthModule, UsersModule, VehiclesModule, NotificationsModule],
   controllers: [InsuranceController],
-  providers: [InsuranceRepository, InsuranceService],
-  exports: [InsuranceRepository, InsuranceService],
+  providers: [InsuranceRepository, InsuranceDocumentStorageService, InsuranceService],
+  exports: [InsuranceRepository, InsuranceDocumentStorageService, InsuranceService],
 })
 export class InsuranceModule {}

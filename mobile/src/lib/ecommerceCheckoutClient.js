@@ -296,6 +296,8 @@ const formatInvoiceAgingBucketLabel = (agingBucket) => {
 
 const formatInvoicePaymentMethodLabel = (paymentMethod) => {
   switch (paymentMethod) {
+    case 'paymongo':
+      return 'PayMongo';
     case 'cash':
       return 'Cash';
     case 'bank_transfer':
@@ -362,6 +364,13 @@ const normalizeInvoice = (invoice) => {
   const daysPastDue = toNumber(invoice.daysPastDue);
   const status = trimOrNull(invoice.status) ?? 'pending_payment';
   const agingBucket = trimOrNull(invoice.agingBucket) ?? 'current';
+  const paymentChannel = trimOrNull(invoice.paymentChannel);
+  const onlinePaymentProvider = trimOrNull(invoice.onlinePaymentProvider);
+  const onlinePaymentStatus = trimOrNull(invoice.onlinePaymentStatus);
+  const onlinePaymentCheckoutUrl = trimOrNull(invoice.onlinePaymentCheckoutUrl);
+  const onlinePaymentReference = trimOrNull(invoice.onlinePaymentReference);
+  const onlinePaymentPaidAt = trimOrNull(invoice.onlinePaymentPaidAt);
+  const onlinePaymentFailureReason = trimOrNull(invoice.onlinePaymentFailureReason);
 
   return {
     id,
@@ -380,6 +389,13 @@ const normalizeInvoice = (invoice) => {
     amountDueCents,
     amountDueAmount: amountDueCents / 100,
     amountDueLabel: formatEcommerceCurrency(amountDueCents),
+    paymentChannel,
+    onlinePaymentProvider,
+    onlinePaymentStatus,
+    onlinePaymentCheckoutUrl,
+    onlinePaymentReference,
+    onlinePaymentPaidAt,
+    onlinePaymentFailureReason,
     agingBucket,
     agingBucketLabel: formatInvoiceAgingBucketLabel(agingBucket),
     daysPastDue,
@@ -806,6 +822,60 @@ export const getCustomerOrderInvoice = async ({ orderId, accessToken } = {}) => 
     throw new ApiError('The invoice-tracking payload was missing required fields.', 500, {
       orderId: normalizedOrderId,
       path: '/api/orders/:id/invoice',
+      payload: data,
+    });
+  }
+
+  return normalizedInvoice;
+};
+
+export const startCustomerOrderInvoicePaymongoCheckout = async ({ orderId, accessToken } = {}) => {
+  const normalizedOrderId = String(orderId ?? '').trim();
+
+  if (!normalizedOrderId) {
+    throw new ApiError('Select an order before starting PayMongo checkout.', 400, {
+      orderId,
+      path: '/api/orders/:id/invoice/paymongo/checkout',
+    });
+  }
+
+  const data = await request(`/api/orders/${encodeURIComponent(normalizedOrderId)}/invoice/paymongo/checkout`, {
+    method: 'POST',
+    headers: buildAuthHeaders(accessToken),
+  });
+  const normalizedInvoice = normalizeInvoice(data);
+
+  if (!normalizedInvoice) {
+    throw new ApiError('The online-payment invoice payload was missing required fields.', 500, {
+      orderId: normalizedOrderId,
+      path: '/api/orders/:id/invoice/paymongo/checkout',
+      payload: data,
+    });
+  }
+
+  return normalizedInvoice;
+};
+
+export const reconcileCustomerOrderInvoicePaymongoCheckout = async ({ orderId, accessToken } = {}) => {
+  const normalizedOrderId = String(orderId ?? '').trim();
+
+  if (!normalizedOrderId) {
+    throw new ApiError('Select an order before refreshing PayMongo checkout.', 400, {
+      orderId,
+      path: '/api/orders/:id/invoice/paymongo/reconcile',
+    });
+  }
+
+  const data = await request(`/api/orders/${encodeURIComponent(normalizedOrderId)}/invoice/paymongo/reconcile`, {
+    method: 'POST',
+    headers: buildAuthHeaders(accessToken),
+  });
+  const normalizedInvoice = normalizeInvoice(data);
+
+  if (!normalizedInvoice) {
+    throw new ApiError('The refreshed online-payment invoice payload was missing required fields.', 500, {
+      orderId: normalizedOrderId,
+      path: '/api/orders/:id/invoice/paymongo/reconcile',
       payload: data,
     });
   }

@@ -3,30 +3,37 @@
 import { motion } from 'framer-motion'
 import { LockKeyhole, UserRound } from 'lucide-react'
 import { useState } from 'react'
+import PageHeader from '@/components/ui/PageHeader'
 import AccountSecurity from './AccountSecurity.js'
 import ProfileInformation from './ProfileInformation.js'
+import { settingsTabs } from './settingsView.mjs'
 
-const tabs = [
-  {
-    key: 'profile',
-    label: 'Profile Information',
-    icon: UserRound,
-  },
-  {
-    key: 'security',
-    label: 'Account Security',
-    icon: LockKeyhole,
-  },
-]
+const tabIcons = {
+  profile: UserRound,
+  security: LockKeyhole,
+}
 
 export default function SettingsWorkspace() {
   const [activeTab, setActiveTab] = useState('profile')
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="flex flex-wrap gap-2 rounded-2xl border border-surface-border bg-surface-card p-2 w-fit">
-        {tabs.map((tab) => {
-          const Icon = tab.icon
+    <div className="ops-page-shell max-w-4xl">
+      <PageHeader
+        eyebrow="Staff Settings"
+        title="Profile And Account Security"
+        description="Review staff details and current account security controls."
+        meta={
+          <>
+            <span className="badge badge-gray">Profile</span>
+            <span className="badge badge-gray">Security</span>
+          </>
+        }
+      />
+
+      <div className="toolbar-surface w-fit p-2">
+        <div className="flex flex-wrap gap-2">
+        {settingsTabs.map((tab) => {
+          const Icon = tabIcons[tab.key]
           const active = tab.key === activeTab
 
           return (
@@ -43,6 +50,7 @@ export default function SettingsWorkspace() {
             </button>
           )
         })}
+        </div>
       </div>
 
       <motion.div

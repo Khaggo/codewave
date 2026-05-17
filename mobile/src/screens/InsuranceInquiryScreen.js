@@ -1,38 +1,260 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as DocumentPicker from 'expo-document-picker';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
   Platform,
-  SafeAreaView,
+  Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError, listCustomerVehicles } from '../lib/authClient';
 import {
-  addInsuranceInquiryDocument,
   buildOwnedVehicleInsuranceLabel,
+  createEmptyCustomerInsuranceSnapshot,
   canAttachCustomerInsuranceDocument,
   createInitialCustomerInsuranceDraft,
-  createInitialCustomerInsuranceDocumentDraft,
   createInsuranceInquiry,
-  createEmptyCustomerInsuranceSnapshot,
   customerInsuranceDocumentTypeOptions,
   getInsuranceInquiryById,
   getCustomerInsuranceTrackingState,
   listVehicleInsuranceRecords,
+  uploadInsuranceInquiryDocumentFile,
 } from '../lib/insuranceClient';
+import {
+  REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
+  buildCustomerInsuranceOverviewState,
+  buildCustomerInsuranceStatusState,
+  buildRequirementsChecklist,
+  clearRememberedInquiryForVehicle,
+  createPickedInsuranceDocumentDraft,
+  doesCustomerInsuranceInquiryMatchVehicle,
+  getCustomerInsurancePaymentSummary,
+  getVehicleScopedCustomerInquiryId,
+  getRememberedInquiryForVehicle,
+  hydrateRememberedInquiryMappings,
+  isTerminalCustomerInquiryStatus,
+  rememberInquiryForVehicle,
+  serializeRememberedInquiryMappings,
+  shouldDeferCustomerInsuranceTrackingRefresh,
+} from './insuranceModuleView.mjs';
+import InsuranceDocumentsPanel from './insurance/InsuranceDocumentsPanel';
+import InsuranceHomePanel from './insurance/InsuranceHomePanel';
+import InsuranceModeShell from './insurance/InsuranceModeShell';
+import {
+  insuranceFonts,
+  insurancePalette,
+  InsuranceSectionDivider,
+} from './insurance/InsurancePanelPrimitives';
+import InsuranceRequestPanel from './insurance/InsuranceRequestPanel';
+import InsuranceStatusDetailPanel from './insurance/InsuranceStatusDetailPanel';
 import { colors, radius } from '../theme';
 
 const inquiryTypeOptions = [
   { value: 'comprehensive', label: 'Comprehensive' },
   { value: 'ctpl', label: 'CTPL' },
 ];
+
+const purposeOptions = [
+  { value: 'new_application', label: 'New' },
+  { value: 'renewal', label: 'Renewal' },
+  { value: 'claim', label: 'Claim' },
+  { value: 'quotation', label: 'Quotation' },
+];
+
+const getRememberedInquiryStorageKey = (userId) => {
+  const normalizedUserId = String(userId ?? '').trim();
+  return normalizedUserId
+    ? `${REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY}:${normalizedUserId}`
+    : REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY;
+};
+
+const getPurposeLabel = (value) =>
+  purposeOptions.find((option) => option.value === value)?.label ?? 'Request';
+
+const getRequestGuidance = ({ purpose = 'claim' } = {}) => {
+  switch (purpose) {
+    case 'new_application':
+      return {
+        sectionHelper: 'Start a fresh application for this vehicle.',
+        processLine: 'Staff review the intake first, then prepare the estimate and insurer follow-up.',
+        descriptionPlaceholder: 'Share the vehicle use, coverage need, or concern.',
+        notesPlaceholder: 'Optional application detail',
+        providerPlaceholder: 'Preferred insurer or broker',
+        policyPlaceholder: 'Leave blank if no old policy',
+      };
+    case 'renewal':
+      return {
+        sectionHelper: 'Prepare the next renewal quote and confirm the current policy details.',
+        processLine: 'Staff review the intake first, then prepare the renewal quote and follow-up updates.',
+        descriptionPlaceholder: 'Share the renewal request, timing, or concern.',
+        notesPlaceholder: 'Optional renewal detail',
+        providerPlaceholder: 'Current insurer or broker',
+        policyPlaceholder: 'Current or replacement policy number',
+      };
+    case 'quotation':
+      return {
+        sectionHelper: 'Ask for coverage pricing or a policy estimate.',
+        processLine: 'Staff review the intake first, then prepare the quotation or estimate.',
+        descriptionPlaceholder: 'Tell staff what coverage or pricing you need.',
+        notesPlaceholder: 'Optional quotation detail',
+        providerPlaceholder: 'Preferred insurer or broker',
+        policyPlaceholder: 'Policy reference if available',
+      };
+    case 'claim':
+    default:
+      return {
+        sectionHelper: 'Start the claim intake and capture the incident clearly.',
+        processLine: 'Staff review the intake first, then prepare the estimate and insurer approval steps.',
+        descriptionPlaceholder: 'Describe the incident, damage, or claim concern.',
+        notesPlaceholder: 'Optional claim detail',
+        providerPlaceholder: 'Insurer or broker',
+        policyPlaceholder: 'Policy number',
+      };
+  }
+};
+
+const buildInsuranceInquirySubject = ({ purpose = 'claim', vehicleLabel = '' } = {}) => {
+  const purposeLabel = getPurposeLabel(purpose);
+  const trimmedVehicleLabel = String(vehicleLabel ?? '').trim();
+
+  return trimmedVehicleLabel
+    ? `${purposeLabel} - ${trimmedVehicleLabel}`
+    : `${purposeLabel} insurance request`;
+};
+
+const formatMissingRequiredDocumentSummary = (missingRequiredDocuments = []) =>
+  (Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments : [])
+    .map((item) => String(item?.label ?? '').trim())
+    .filter(Boolean)
+    .join(', ');
+
+const buildProcessStepState = ({ active, done }) => ({
+  active: Boolean(active || done),
+  done: Boolean(done),
+});
+
+const getInsuranceProcessSteps = ({
+  latestInquiry = null,
+  missingRequiredDocuments = [],
+} = {}) => {
+  const purpose = latestInquiry?.purpose ?? 'claim';
+  const status = latestInquiry?.status ?? 'submitted';
+  const paymentStatus = latestInquiry?.paymentStatus ?? 'not_required';
+  const renewalStatus = latestInquiry?.renewalStatus ?? 'not_applicable';
+  const missingCount = Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments.length : 0;
+  const reviewReached = ['under_review', 'for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status);
+  const approvalReached = ['for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status);
+  const paymentRelevant =
+    status === 'payment_pending' ||
+    ['proof_submitted', 'verifying', 'paid', 'overdue', 'unpaid', 'awaiting_payment'].includes(paymentStatus);
+  const renewalRelevant =
+    purpose === 'renewal' ||
+    status === 'for_renewal' ||
+    ['upcoming', 'quoted', 'awaiting_customer', 'renewed', 'expired'].includes(renewalStatus);
+  const steps = [
+    {
+      key: 'intake',
+      label: 'Inquiry received',
+      ...buildProcessStepState({ active: true, done: Boolean(latestInquiry?.id) }),
+    },
+    {
+      key: 'documents',
+      label: missingCount > 0 ? 'Documents needed' : 'Documents ready',
+      ...buildProcessStepState({
+        active: Boolean(latestInquiry?.id),
+        done: Boolean(latestInquiry?.id) && missingCount === 0,
+      }),
+    },
+    {
+      key: 'review',
+      label: 'Estimate and review',
+      ...buildProcessStepState({
+        active: reviewReached,
+        done: ['for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status),
+      }),
+    },
+    {
+      key: 'approval',
+      label: 'Approval',
+      ...buildProcessStepState({
+        active: approvalReached,
+        done: ['approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status),
+      }),
+    },
+  ];
+
+  if (paymentRelevant) {
+    steps.push({
+      key: 'payment',
+      label: 'Payment follow-up',
+      ...buildProcessStepState({
+        active: paymentRelevant,
+        done: paymentStatus === 'paid',
+      }),
+    });
+  }
+
+  if (renewalRelevant) {
+    steps.push({
+      key: 'renewal',
+      label: 'Renewal',
+      ...buildProcessStepState({
+        active: renewalRelevant,
+        done: renewalStatus === 'renewed',
+      }),
+    });
+  }
+
+  if (status === 'active') {
+    steps.push({
+      key: 'active',
+      label: 'Active',
+      ...buildProcessStepState({
+        active: true,
+        done: true,
+      }),
+    });
+  } else if (status === 'closed') {
+    steps.push({
+      key: 'closed',
+      label: 'Completed',
+      ...buildProcessStepState({
+        active: true,
+        done: true,
+      }),
+    });
+  } else if (status === 'cancelled') {
+    steps.push({
+      key: 'cancelled',
+      label: 'Cancelled',
+      ...buildProcessStepState({
+        active: true,
+        done: false,
+      }),
+    });
+  } else if (status === 'rejected') {
+    steps.push({
+      key: 'rejected',
+      label: 'Stopped',
+      ...buildProcessStepState({
+        active: true,
+        done: false,
+      }),
+    });
+  }
+
+  return steps;
+};
 
 const formatTimestampLabel = (value) => {
   if (!value) {
@@ -62,6 +284,119 @@ const normalizeRouteId = (value) => {
   return normalizedValue.length ? normalizedValue : null;
 };
 
+const formatWorkflowLabel = (value) =>
+  String(value ?? '')
+    .split('_')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ') || '--';
+
+const buildInitialDocumentUploadDraft = () => ({
+  documentType: 'photo',
+  fileName: '',
+  fileUri: '',
+  mimeType: 'application/pdf',
+  notes: '',
+  fileSizeLabel: null,
+});
+
+const inferMimeType = (fileName, fallbackType = 'application/pdf') => {
+  const normalizedFileName = String(fileName ?? '').trim().toLowerCase();
+
+  if (normalizedFileName.endsWith('.pdf')) {
+    return 'application/pdf';
+  }
+
+  if (normalizedFileName.endsWith('.png')) {
+    return 'image/png';
+  }
+
+  if (normalizedFileName.endsWith('.webp')) {
+    return 'image/webp';
+  }
+
+  if (normalizedFileName.endsWith('.heic')) {
+    return 'image/heic';
+  }
+
+  if (normalizedFileName.endsWith('.jpg') || normalizedFileName.endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+
+  return String(fallbackType ?? '').trim() || 'application/pdf';
+};
+
+const buildRenewalPrompt = (inquiry) => {
+  switch (inquiry?.renewalStatus) {
+    case 'upcoming':
+      return {
+        title: 'Renewal reminder',
+        message: 'Your renewal window is coming up. Keep an eye on this request for the next quote or follow-up step.',
+        tone: 'default',
+      };
+    case 'quoted':
+      return {
+        title: 'Renewal quote ready',
+        message: 'A renewal quote is already being prepared or has been shared. Refresh for the latest customer-safe status.',
+        tone: 'default',
+      };
+    case 'awaiting_customer':
+      return {
+        title: 'Renewal waiting on you',
+        message: 'Staff are waiting for your next renewal decision or supporting documents.',
+        tone: 'default',
+      };
+    case 'renewed':
+      return {
+        title: 'Renewal completed',
+        message: 'This renewal is already tagged as completed.',
+        tone: 'success',
+      };
+    case 'expired':
+      return {
+        title: 'Renewal overdue',
+        message: 'This insurance record is past its renewal window. Contact staff if you still need coverage support.',
+        tone: 'danger',
+      };
+    default:
+      return {
+        title: 'Renewal visibility',
+        message: 'Renewal reminders will appear here once staff tag the request for follow-up.',
+        tone: 'default',
+      };
+  }
+};
+
+const getLatestInsuranceRecord = (records) =>
+  (Array.isArray(records) ? records : []).reduce((currentLatest, record) => {
+    const currentValue = new Date(record?.updatedAt ?? record?.createdAt ?? 0).getTime();
+    const latestValue = new Date(
+      currentLatest?.updatedAt ?? currentLatest?.createdAt ?? 0,
+    ).getTime();
+
+    return currentValue > latestValue ? record : currentLatest;
+  }, null);
+
+const buildHistoryRecordTitle = (record) => {
+  const statusLabel = formatWorkflowLabel(record?.status);
+
+  return record?.inquiryTypeLabel
+    ? `${record.inquiryTypeLabel} - ${statusLabel}`
+    : statusLabel;
+};
+
+const buildHistoryRecordSummary = (record) => {
+  const latestUpdateLabel = formatTimestampLabel(record?.updatedAt ?? record?.createdAt);
+  const summaryParts = [
+    record?.statusHint,
+    latestUpdateLabel !== '--' ? `Latest update: ${latestUpdateLabel}` : null,
+    record?.providerName ? `Provider: ${record.providerName}` : null,
+    record?.policyNumber ? `Policy no.: ${record.policyNumber}` : null,
+  ].filter(Boolean);
+
+  return summaryParts.join(' ') || 'Completed insurance record.';
+};
+
 function InsuranceStatePanel({
   icon,
   title,
@@ -76,6 +411,7 @@ function InsuranceStatePanel({
       style={[
         styles.statePanel,
         tone === 'danger' && styles.statePanelDanger,
+        tone === 'warning' && styles.statePanelWarning,
         tone === 'success' && styles.statePanelSuccess,
       ]}
     >
@@ -102,46 +438,8 @@ function InsuranceStatePanel({
   );
 }
 
-function InquiryStatusBadge({ value }) {
-  return (
-    <View style={styles.statusBadge}>
-      <Text style={styles.statusBadgeText}>{value}</Text>
-    </View>
-  );
-}
-
-function DetailRow({ label, value }) {
-  if (!value) {
-    return null;
-  }
-
-  return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailRowLabel}>{label}</Text>
-      <Text style={styles.detailRowValue}>{value}</Text>
-    </View>
-  );
-}
-
-function InsuranceRecordCard({ title, subtitle, status, metadata = [] }) {
-  return (
-    <View style={styles.timelineCard}>
-      <View style={styles.timelineCardHeader}>
-        <View style={styles.timelineCardCopy}>
-          <Text style={styles.timelineCardTitle}>{title}</Text>
-          <Text style={styles.timelineCardSubtitle}>{subtitle}</Text>
-        </View>
-        <InquiryStatusBadge value={status} />
-      </View>
-
-      {metadata.map((item) => (
-        <DetailRow key={`${item.label}-${item.value}`} label={item.label} value={item.value} />
-      ))}
-    </View>
-  );
-}
-
 export default function InsuranceInquiryScreen({ account, navigation, route }) {
+  const insets = useSafeAreaInsets();
   const accessToken = account?.accessToken ?? null;
   const userId = account?.userId ?? null;
   const accountOwnedVehicles = useMemo(
@@ -169,11 +467,14 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const routeInquiryId = normalizeRouteId(route?.params?.inquiryId);
   const fallbackVehicleId =
     normalizeRouteId(account?.primaryVehicleId) ?? normalizeRouteId(ownedVehicles[0]?.id);
-  const [selectedVehicleId, setSelectedVehicleId] = useState(
-    routeVehicleId ?? fallbackVehicleId,
-  );
+  const initialVehicleId = routeVehicleId ?? fallbackVehicleId;
+  const [selectedVehicleId, setSelectedVehicleId] = useState(initialVehicleId);
+  const [activePanel, setActivePanel] = useState('home');
+  const [activeInsuranceTab, setActiveInsuranceTab] = useState('home');
+  const [isVehiclePickerOpen, setIsVehiclePickerOpen] = useState(false);
   const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
-  const [documentDraft, setDocumentDraft] = useState(createInitialCustomerInsuranceDocumentDraft());
+  const [stagedDocuments, setStagedDocuments] = useState([]);
+  const [documentDraft, setDocumentDraft] = useState(buildInitialDocumentUploadDraft());
   const [intakeState, setIntakeState] = useState(initialSnapshot.intakeState);
   const [intakeMessage, setIntakeMessage] = useState('');
   const [documentUploadState, setDocumentUploadState] = useState('document_idle');
@@ -181,15 +482,237 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const [trackingState, setTrackingState] = useState(initialSnapshot.trackingState);
   const [trackingMessage, setTrackingMessage] = useState('');
   const [latestInquiry, setLatestInquiry] = useState(null);
-  const [latestInquiryId, setLatestInquiryId] = useState(routeInquiryId);
+  const [latestInquiryId, setLatestInquiryId] = useState(
+    routeInquiryId ?? getRememberedInquiryForVehicle(initialVehicleId),
+  );
   const [claimStatusUpdates, setClaimStatusUpdates] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasHydratedRememberedInquiryMappings, setHasHydratedRememberedInquiryMappings] =
+    useState(false);
+  const latestInquiryVehicleIdRef = useRef(routeVehicleId ?? initialVehicleId ?? null);
+  const rememberedInquiryLookupByVehicleRef = useRef({
+    vehicleId: null,
+    inquiryId: routeInquiryId ?? undefined,
+  });
+
+  useEffect(() => {
+    setActivePanel('home');
+    setActiveInsuranceTab('home');
+  }, [selectedVehicleId]);
+
+  useEffect(() => {
+    if (!hasSession || !ownedVehicles.length) {
+      setIsVehiclePickerOpen(false);
+    }
+  }, [hasSession, ownedVehicles.length]);
 
   const selectedVehicle =
     ownedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const isVehiclePickerAvailable = hasSession && ownedVehicles.length > 0;
+  const selectedVehicleLabel = selectedVehicle
+    ? buildOwnedVehicleInsuranceLabel(selectedVehicle)
+    : '';
   const latestInquiryCanAcceptDocuments = canAttachCustomerInsuranceDocument(latestInquiry);
+  const canSubmitNewInquiry =
+    !latestInquiry || isTerminalCustomerInquiryStatus(latestInquiry.status);
+  const canReuseOnFileDocuments =
+    Boolean(latestInquiry?.id) && !isTerminalCustomerInquiryStatus(latestInquiry.status);
+  const activePurpose = latestInquiry?.purpose ?? draft.purpose;
+  const requestPurpose = draft.purpose;
+  const requestOnFileDocuments = useMemo(
+    () => (canReuseOnFileDocuments ? latestInquiry?.documents ?? [] : []),
+    [canReuseOnFileDocuments, latestInquiry?.documents],
+  );
+  const requestOnFileDocumentsByType = useMemo(
+    () => new Map(requestOnFileDocuments.map((document) => [document.documentType, document])),
+    [requestOnFileDocuments],
+  );
+  const hasOnFileRenewalPolicy = Boolean(requestOnFileDocumentsByType.get('policy'));
+  const requestChecklistUploadedTypes = useMemo(() => {
+    const mergedTypes = new Set(stagedDocuments.map((document) => document.documentType));
+
+    requestOnFileDocuments.forEach((document) => {
+      if (
+        requestPurpose === 'renewal' &&
+        document.documentType === 'policy' &&
+        draft.renewalPolicyMode === 'replace'
+      ) {
+        return;
+      }
+
+      mergedTypes.add(document.documentType);
+    });
+
+    return [...mergedTypes];
+  }, [draft.renewalPolicyMode, requestOnFileDocuments, requestPurpose, stagedDocuments]);
+  const requestGuidance = useMemo(
+    () => getRequestGuidance({ purpose: activePurpose }),
+    [activePurpose],
+  );
+  const requestRequirementsChecklist = useMemo(
+    () =>
+      buildRequirementsChecklist({
+        purpose: requestPurpose,
+        uploadedTypes: requestChecklistUploadedTypes,
+      }),
+    [requestChecklistUploadedTypes, requestPurpose],
+  );
+  const requirementsChecklist = useMemo(
+    () =>
+      buildRequirementsChecklist({
+        purpose: activePurpose,
+        status: latestInquiry?.status,
+        uploadedTypes: latestInquiry?.documents?.map((document) => document.documentType) ?? [],
+      }),
+    [activePurpose, latestInquiry],
+  );
+  const missingRequiredDocuments = useMemo(
+    () => requirementsChecklist.required.filter((item) => !item.complete),
+    [requirementsChecklist],
+  );
+  const paymentSummary = useMemo(
+    () =>
+      getCustomerInsurancePaymentSummary({
+        status: latestInquiry?.status,
+        paymentStatus: latestInquiry?.paymentStatus,
+        paymentDueAt: latestInquiry?.paymentDueAt,
+      }),
+    [latestInquiry?.paymentDueAt, latestInquiry?.paymentStatus, latestInquiry?.status],
+  );
+  const overviewState = useMemo(
+    () =>
+      buildCustomerInsuranceOverviewState({
+        selectedVehicleLabel,
+        latestInquiry,
+        missingRequiredDocuments,
+        historyCount: claimStatusUpdates.length,
+    }),
+    [claimStatusUpdates.length, latestInquiry, missingRequiredDocuments, selectedVehicleLabel],
+  );
+  const latestStatusUpdateLabel = useMemo(() => {
+    if (latestInquiry?.statusHint) {
+      return latestInquiry.statusHint;
+    }
+
+    const latestRecord = getLatestInsuranceRecord(claimStatusUpdates);
+
+    if (latestRecord?.statusHint) {
+      return latestRecord.statusHint;
+    }
+
+    return formatTimestampLabel(latestRecord?.updatedAt ?? latestRecord?.createdAt);
+  }, [claimStatusUpdates, latestInquiry?.statusHint]);
+  const isTrackingStale = trackingState === 'tracking_load_failed' && Boolean(latestInquiry?.id || claimStatusUpdates.length);
+  const statusState = useMemo(
+    () =>
+      buildCustomerInsuranceStatusState({
+        latestInquiry,
+        missingRequiredDocuments,
+        latestUpdateLabel: latestStatusUpdateLabel,
+        isStale: isTrackingStale,
+      }),
+    [isTrackingStale, latestInquiry, latestStatusUpdateLabel, missingRequiredDocuments],
+  );
+  const processSteps = useMemo(
+    () =>
+      getInsuranceProcessSteps({
+        latestInquiry,
+        missingRequiredDocuments,
+      }),
+    [latestInquiry, missingRequiredDocuments],
+  );
+  const currentRequestSummary = useMemo(() => {
+    if (!latestInquiry?.id) {
+      return {
+        purposeLabel: getPurposeLabel(activePurpose),
+        inquiryTypeLabel:
+          inquiryTypeOptions.find((option) => option.value === draft.inquiryType)?.label ??
+          'Insurance',
+        stageLabel: 'Not submitted',
+        statusHint: requestGuidance.sectionHelper,
+      };
+    }
+
+    return {
+      purposeLabel: getPurposeLabel(latestInquiry.purpose),
+      inquiryTypeLabel: latestInquiry.inquiryTypeLabel ?? 'Insurance',
+      stageLabel: formatWorkflowLabel(latestInquiry.status),
+      statusHint: latestInquiry.statusHint ?? requestGuidance.sectionHelper,
+    };
+  }, [activePurpose, draft.inquiryType, latestInquiry, requestGuidance.sectionHelper]);
+  const shellSummaryChips = useMemo(() => {
+    const missingCount = missingRequiredDocuments.length;
+    const missingLabelSummary = formatMissingRequiredDocumentSummary(missingRequiredDocuments);
+    return [
+      {
+        label: 'Purpose',
+        value: currentRequestSummary.purposeLabel,
+      },
+      {
+        label: 'Stage',
+        value: currentRequestSummary.stageLabel,
+      },
+      {
+        label: 'Docs',
+        value: missingCount > 0 ? missingLabelSummary || `${missingCount} missing` : 'Ready',
+        icon: missingCount > 0 ? 'alert-circle-outline' : 'check-circle-outline',
+        emphasis: missingCount > 0,
+      },
+    ];
+  }, [currentRequestSummary.purposeLabel, currentRequestSummary.stageLabel, missingRequiredDocuments]);
+  const sortedHistoryRecords = useMemo(() => {
+    return [...claimStatusUpdates].sort((left, right) => {
+      const leftTimestamp = new Date(left?.updatedAt ?? left?.createdAt ?? 0).getTime();
+      const rightTimestamp = new Date(right?.updatedAt ?? right?.createdAt ?? 0).getTime();
+
+      return rightTimestamp - leftTimestamp;
+    });
+  }, [claimStatusUpdates]);
+  const historySummary = sortedHistoryRecords.length
+    ? `${sortedHistoryRecords.length} recorded insurance update${sortedHistoryRecords.length === 1 ? '' : 's'} ${sortedHistoryRecords.length === 1 ? 'is' : 'are'} already available for this vehicle.`
+    : 'Vehicle-level insurance records will appear here after staff close and record a customer-safe case.';
+  const latestHistoryRecord = sortedHistoryRecords[0] ?? null;
+  const historyLatestUpdateLabel =
+    latestHistoryRecord?.statusHint ??
+    formatTimestampLabel(latestHistoryRecord?.updatedAt ?? latestHistoryRecord?.createdAt);
+  const historyStatusState = useMemo(
+    () => ({
+      title: sortedHistoryRecords.length ? 'Completed records' : 'No history yet',
+      summary: historySummary,
+      latestUpdateLabel: historyLatestUpdateLabel,
+      timeline: [],
+    }),
+    [historyLatestUpdateLabel, historySummary, sortedHistoryRecords.length],
+  );
+  const homeTitle = 'Home';
+  const statusTitle = 'Status';
+  const statusSubtitle = 'Track review, approval, and next action';
+  const getSettledRememberedInquiryIdForSelectedVehicle = () => {
+    if (!selectedVehicleId) {
+      return undefined;
+    }
+
+    return rememberedInquiryLookupByVehicleRef.current.vehicleId === selectedVehicleId
+      ? rememberedInquiryLookupByVehicleRef.current.inquiryId
+      : undefined;
+  };
+  const getVehicleScopedLatestInquiryId = ({
+    inquiryIdOverride = null,
+    vehicleIdOverride = selectedVehicleId,
+  } = {}) =>
+    String(inquiryIdOverride ?? '').trim() ||
+    getVehicleScopedCustomerInquiryId({
+      selectedVehicleId: vehicleIdOverride,
+      routeInquiryId,
+      latestInquiryId,
+      latestInquiryVehicleId: latestInquiryVehicleIdRef.current,
+      rememberedInquiryId:
+        rememberedInquiryLookupByVehicleRef.current.vehicleId === vehicleIdOverride
+          ? rememberedInquiryLookupByVehicleRef.current.inquiryId
+          : undefined,
+    });
 
   useEffect(() => {
     const hasInvalidVehicleParam = route?.params?.vehicleId && !routeVehicleId;
@@ -214,6 +737,98 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       setLiveOwnedVehicles(accountOwnedVehicles);
     }
   }, [accountOwnedVehicles]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    setHasHydratedRememberedInquiryMappings(false);
+
+    loadPersistedRememberedInquiryMappings().then(() => {
+      if (!isMounted) {
+        return;
+      }
+
+      if (!routeInquiryId) {
+        const resumedInquiryId = getRememberedInquiryForVehicle(
+          routeVehicleId ?? selectedVehicleId ?? fallbackVehicleId,
+        );
+
+        if (resumedInquiryId) {
+          latestInquiryVehicleIdRef.current = routeVehicleId ?? selectedVehicleId ?? fallbackVehicleId;
+          setLatestInquiryId((currentInquiryId) => currentInquiryId ?? resumedInquiryId);
+        }
+      }
+
+      setHasHydratedRememberedInquiryMappings(true);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fallbackVehicleId, rememberedInquiryStorageKey, routeInquiryId, routeVehicleId]);
+
+  useEffect(() => {
+    if (!routeVehicleId) {
+      return;
+    }
+
+    const rememberedInquiryId = hasHydratedRememberedInquiryMappings
+      ? getRememberedInquiryForVehicle(routeVehicleId)
+      : null;
+    rememberedInquiryLookupByVehicleRef.current = {
+      vehicleId: routeVehicleId,
+      inquiryId: routeInquiryId ?? (hasHydratedRememberedInquiryMappings ? rememberedInquiryId : undefined),
+    };
+    setSelectedVehicleId(routeVehicleId);
+    latestInquiryVehicleIdRef.current = routeVehicleId;
+    setLatestInquiryId(
+      routeInquiryId ?? (hasHydratedRememberedInquiryMappings ? rememberedInquiryId : null),
+    );
+  }, [hasHydratedRememberedInquiryMappings, routeInquiryId, routeVehicleId]);
+
+  useEffect(() => {
+    if (!selectedVehicleId) {
+      rememberedInquiryLookupByVehicleRef.current = {
+        vehicleId: null,
+        inquiryId: undefined,
+      };
+      latestInquiryVehicleIdRef.current = null;
+      setLatestInquiry(null);
+      setLatestInquiryId(null);
+      return;
+    }
+
+    if (!routeInquiryId) {
+      if (!hasHydratedRememberedInquiryMappings) {
+        rememberedInquiryLookupByVehicleRef.current = {
+          vehicleId: selectedVehicleId,
+          inquiryId: undefined,
+        };
+        return;
+      }
+
+      const rememberedInquiryId = getRememberedInquiryForVehicle(selectedVehicleId);
+      rememberedInquiryLookupByVehicleRef.current = {
+        vehicleId: selectedVehicleId,
+        inquiryId: rememberedInquiryId ?? null,
+      };
+      if (
+        !doesCustomerInsuranceInquiryMatchVehicle({
+          inquiry: latestInquiry,
+          vehicleId: selectedVehicleId,
+        })
+      ) {
+        setLatestInquiry(null);
+      }
+      latestInquiryVehicleIdRef.current = rememberedInquiryId ? selectedVehicleId : null;
+      setLatestInquiryId(rememberedInquiryId ?? null);
+    }
+  }, [
+    hasHydratedRememberedInquiryMappings,
+    latestInquiry,
+    routeInquiryId,
+    selectedVehicleId,
+  ]);
 
   useEffect(() => {
     let isMounted = true;
@@ -309,10 +924,48 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
   const resetDraftState = () => {
     setDraft(createInitialCustomerInsuranceDraft());
+    setStagedDocuments([]);
   };
 
   const resetDocumentDraftState = () => {
-    setDocumentDraft(createInitialCustomerInsuranceDocumentDraft());
+    setDocumentDraft(buildInitialDocumentUploadDraft());
+  };
+
+  const rememberedInquiryStorageKey = getRememberedInquiryStorageKey(account?.userId);
+
+  const loadPersistedRememberedInquiryMappings = async () => {
+    try {
+      const serializedMappings = await AsyncStorage.getItem(rememberedInquiryStorageKey);
+      hydrateRememberedInquiryMappings(serializedMappings);
+    } catch {
+      // Ignore resume-cache failures and keep the screen functional.
+    }
+  };
+
+  const persistRememberedInquiryMappings = async () => {
+    try {
+      await AsyncStorage.setItem(rememberedInquiryStorageKey, serializeRememberedInquiryMappings());
+    } catch {
+      // Ignore persistence failures so resume storage never blocks the customer flow.
+    }
+  };
+
+  const syncRememberedInquiry = async (vehicleId, inquiry) => {
+    if (!vehicleId) {
+      return;
+    }
+
+    if (inquiry?.id && !isTerminalCustomerInquiryStatus(inquiry.status)) {
+      rememberInquiryForVehicle({
+        vehicleId,
+        inquiryId: inquiry.id,
+      });
+      await persistRememberedInquiryMappings();
+      return;
+    }
+
+    clearRememberedInquiryForVehicle(vehicleId);
+    await persistRememberedInquiryMappings();
   };
 
   const refreshTracking = async ({ inquiryIdOverride } = {}) => {
@@ -328,7 +981,21 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return;
     }
 
-    const knownInquiryId = inquiryIdOverride ?? latestInquiryId ?? null;
+    const knownInquiryId = getVehicleScopedLatestInquiryId({
+      inquiryIdOverride,
+    });
+
+    if (
+      shouldDeferCustomerInsuranceTrackingRefresh({
+        hasHydratedRememberedInquiryMappings,
+        knownInquiryId,
+        settledRememberedInquiryIdForSelectedVehicle:
+          getSettledRememberedInquiryIdForSelectedVehicle(),
+      })
+    ) {
+      return;
+    }
+
     setIsRefreshing(true);
     setTrackingState('tracking_loading');
     setTrackingMessage('');
@@ -343,6 +1010,15 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             inquiryId: knownInquiryId,
             accessToken,
           });
+          if (
+            !doesCustomerInsuranceInquiryMatchVehicle({
+              inquiry: nextInquiry,
+              vehicleId: selectedVehicleId,
+            })
+          ) {
+            inquiryNotFound = true;
+            nextInquiry = null;
+          }
         } catch (error) {
           if (error instanceof ApiError && error.status === 404) {
             inquiryNotFound = true;
@@ -358,8 +1034,15 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         accessToken,
       });
 
+      await syncRememberedInquiry(selectedVehicleId, nextInquiry ?? null);
+      latestInquiryVehicleIdRef.current = nextInquiry?.vehicleId ?? null;
       setLatestInquiry(nextInquiry ?? null);
       setClaimStatusUpdates(nextRecords);
+      setLatestInquiryId(
+        nextInquiry?.id && !isTerminalCustomerInquiryStatus(nextInquiry.status)
+          ? nextInquiry.id
+          : null,
+      );
       setTrackingState(
         inquiryNotFound && !nextRecords.length
           ? 'tracking_not_found'
@@ -370,7 +1053,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       );
       setTrackingMessage(
         inquiryNotFound && !nextRecords.length
-          ? 'The known inquiry could not be found anymore, but you can still track approved vehicle records here when they exist.'
+          ? 'The known inquiry could not be found anymore, but you can still track vehicle insurance records here when they exist.'
           : '',
       );
     } catch (error) {
@@ -391,45 +1074,191 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return;
     }
 
+    if (
+      shouldDeferCustomerInsuranceTrackingRefresh({
+        hasHydratedRememberedInquiryMappings,
+        knownInquiryId: getVehicleScopedLatestInquiryId(),
+        settledRememberedInquiryIdForSelectedVehicle:
+          getSettledRememberedInquiryIdForSelectedVehicle(),
+      })
+    ) {
+      return;
+    }
+
     refreshTracking();
     // The screen should refresh when the selected vehicle changes or the session becomes valid.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSession, selectedVehicleId]);
+  }, [
+    hasHydratedRememberedInquiryMappings,
+    hasSession,
+    latestInquiryId,
+    selectedVehicleId,
+  ]);
 
-  const handleDraftChange = (field, value) => {
-    setDraft((currentDraft) => ({
-      ...currentDraft,
-      [field]: value,
-    }));
+  useEffect(() => {
+    if (activePanel !== 'documents') {
+      return;
+    }
 
+    if (
+      latestInquiry?.id &&
+      latestInquiryCanAcceptDocuments &&
+      documentUploadState === 'document_idle'
+    ) {
+      setDocumentUploadState('document_ready');
+      setDocumentUploadMessage('');
+    }
+  }, [
+    activePanel,
+    documentUploadState,
+    latestInquiry?.id,
+    latestInquiryCanAcceptDocuments,
+  ]);
+
+  const handleDraftPatch = () => {
     if (hasSession && ownedVehicles.length && selectedVehicle) {
       setIntakeState('draft_ready');
       setIntakeMessage('');
     }
   };
 
-  const handleDocumentDraftChange = (field, value) => {
-    setDocumentDraft((currentDraft) => ({
-      ...currentDraft,
-      [field]: value,
-    }));
+  const handleDocumentDraftPatch = () => {
     setDocumentUploadState('document_ready');
     setDocumentUploadMessage('');
+  };
+
+  const handleOpenVehiclePicker = () => {
+    if (!hasSession || !ownedVehicles.length) {
+      setIsVehiclePickerOpen(false);
+      return;
+    }
+
+    setIsVehiclePickerOpen(true);
   };
 
   const handleSelectVehicle = (vehicleId) => {
     setSelectedVehicleId(vehicleId);
     setTrackingMessage('');
+    latestInquiryVehicleIdRef.current = vehicleId;
     setLatestInquiry(null);
-    setLatestInquiryId(null);
+    setLatestInquiryId(getRememberedInquiryForVehicle(vehicleId));
     setClaimStatusUpdates([]);
     setIntakeMessage('');
     setDocumentUploadState('document_idle');
     setDocumentUploadMessage('');
     resetDocumentDraftState();
+    setStagedDocuments([]);
     if (hasSession && ownedVehicles.length) {
       setIntakeState('draft_ready');
     }
+  };
+
+  const handleRemoveStagedDocument = (documentType) => {
+    setStagedDocuments((currentDocuments) =>
+      currentDocuments.filter((document) => document.documentType !== documentType),
+    );
+    handleDraftPatch();
+  };
+
+  const handleStageDocument = async (documentType) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: ['application/pdf', 'image/*'],
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const asset = result.assets?.[0];
+
+      if (!asset) {
+        setIntakeState('validation_error');
+        setIntakeMessage('We could not read the selected document. Try choosing the file again.');
+        return;
+      }
+
+      const stagedDocument = createPickedInsuranceDocumentDraft({
+        documentType,
+        asset,
+      });
+
+      setStagedDocuments((currentDocuments) => {
+        const nextDocuments = currentDocuments.filter((document) => document.documentType !== documentType);
+        return [...nextDocuments, stagedDocument];
+      });
+      setIntakeState('draft_ready');
+      setIntakeMessage(`${asset.name} is staged and ready to submit with this request.`);
+    } catch (error) {
+      setIntakeState('submit_failed');
+      setIntakeMessage(
+        buildCustomerErrorMessage(error, 'We could not open the document picker right now.'),
+      );
+    }
+  };
+
+  const pickCustomerInsuranceDocument = async () => {
+    if (!latestInquiry?.id) {
+      setDocumentUploadState('document_missing_inquiry');
+      setDocumentUploadMessage('Submit a request first, then select a document for upload.');
+      return;
+    }
+
+    if (!latestInquiryCanAcceptDocuments) {
+      setDocumentUploadState('document_closed');
+      setDocumentUploadMessage(
+        'This inquiry is already closed or rejected, so the backend will not accept more documents.',
+      );
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: ['application/pdf', 'image/*'],
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const asset = result.assets?.[0];
+
+      if (!asset) {
+        setDocumentUploadState('document_validation_error');
+        setDocumentUploadMessage('We could not read the selected document. Try choosing the file again.');
+        return;
+      }
+
+      setDocumentDraft((currentDraft) => ({
+        ...currentDraft,
+        ...createPickedInsuranceDocumentDraft({
+          documentType: currentDraft.documentType,
+          asset,
+        }),
+        notes: currentDraft.notes,
+      }));
+      setDocumentUploadState('document_ready');
+      setDocumentUploadMessage(`Selected ${asset.name}. Ready to upload when you are.`);
+    } catch (error) {
+      setDocumentUploadState('document_failed');
+      setDocumentUploadMessage(
+        buildCustomerErrorMessage(error, 'We could not open the document picker right now.'),
+      );
+    }
+  };
+
+  const handleClearPickedDocument = () => {
+    setDocumentDraft((currentDraft) => ({
+      ...buildInitialDocumentUploadDraft(),
+      documentType: currentDraft.documentType,
+      notes: currentDraft.notes,
+    }));
+    setDocumentUploadState('document_ready');
+    setDocumentUploadMessage('Selected file cleared. Choose another document when you are ready.');
   };
 
   const handleSubmitInquiry = async () => {
@@ -451,9 +1280,24 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return;
     }
 
-    if (!String(draft.subject ?? '').trim() || !String(draft.description ?? '').trim()) {
+    if (!String(draft.description ?? '').trim()) {
       setIntakeState('validation_error');
-      setIntakeMessage('Subject and description are required before the inquiry can be submitted.');
+      setIntakeMessage('Tell staff what happened before the request can be submitted.');
+      return;
+    }
+
+    const missingRequestDocuments = requestRequirementsChecklist.required.filter(
+      (item) => !item.complete,
+    );
+
+    if (missingRequestDocuments.length) {
+      const missingLabelSummary = formatMissingRequiredDocumentSummary(missingRequestDocuments);
+      setIntakeState('validation_error');
+      setIntakeMessage(
+        missingLabelSummary
+          ? `Attach these required documents before submit: ${missingLabelSummary}.`
+          : 'Attach the required documents before submit.',
+      );
       return;
     }
 
@@ -462,11 +1306,17 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setIntakeMessage('');
 
     try {
+      const requestSubject = buildInsuranceInquirySubject({
+        purpose: draft.purpose,
+        vehicleLabel: selectedVehicleLabel,
+      });
+      const documentsQueuedForSubmit = [...stagedDocuments];
       const createdInquiry = await createInsuranceInquiry({
         userId,
         vehicleId: selectedVehicle.id,
+        purpose: draft.purpose,
         inquiryType: draft.inquiryType,
-        subject: draft.subject,
+        subject: requestSubject,
         description: draft.description,
         providerName: draft.providerName,
         policyNumber: draft.policyNumber,
@@ -474,15 +1324,81 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         accessToken,
       });
 
-      setLatestInquiry(createdInquiry);
-      setLatestInquiryId(createdInquiry?.id ?? null);
+      let latestCreatedInquiry = createdInquiry;
+      const failedUploads = [];
+
+      for (const stagedDocument of documentsQueuedForSubmit) {
+        try {
+          latestCreatedInquiry = await uploadInsuranceInquiryDocumentFile({
+            inquiryId: createdInquiry.id,
+            documentType: stagedDocument.documentType,
+            file: {
+              uri: String(stagedDocument.fileUri ?? '').trim(),
+              name: String(stagedDocument.fileName ?? '').trim(),
+              type: inferMimeType(stagedDocument.fileName, stagedDocument.mimeType),
+            },
+            notes: stagedDocument.notes,
+            accessToken,
+          });
+        } catch (error) {
+          failedUploads.push({
+            document: stagedDocument,
+            error,
+          });
+        }
+      }
+
+      setLatestInquiry(latestCreatedInquiry);
+      latestInquiryVehicleIdRef.current = latestCreatedInquiry?.vehicleId ?? selectedVehicle.id;
+      setLatestInquiryId(latestCreatedInquiry?.id ?? null);
+      await syncRememberedInquiry(selectedVehicle.id, latestCreatedInquiry);
+      setDraft(createInitialCustomerInsuranceDraft());
+
+      if (failedUploads.length) {
+        const firstFailedDocument = failedUploads[0]?.document ?? null;
+        const remainingDocuments = failedUploads.map((entry) => entry.document);
+        setStagedDocuments(remainingDocuments);
+        if (firstFailedDocument) {
+          setDocumentDraft({
+            documentType: firstFailedDocument.documentType,
+            fileName: firstFailedDocument.fileName,
+            fileUri: firstFailedDocument.fileUri,
+            mimeType: firstFailedDocument.mimeType,
+            notes: firstFailedDocument.notes,
+            fileSizeLabel: firstFailedDocument.fileSizeLabel,
+          });
+        } else {
+          resetDocumentDraftState();
+        }
+        setActiveInsuranceTab('documents');
+        setActivePanel('documents');
+        setDocumentUploadState('document_ready');
+        setDocumentUploadMessage(
+          `${failedUploads.length} staged document${
+            failedUploads.length === 1 ? '' : 's'
+          } still need upload. Review the pending files below and continue from Documents.`,
+        );
+        setIntakeState('submitted_inquiry');
+        setIntakeMessage(
+          `Request submitted, but ${failedUploads.length} document${
+            failedUploads.length === 1 ? '' : 's'
+          } still need upload before staff have the full intake package.`,
+        );
+        await refreshTracking({
+          inquiryIdOverride: latestCreatedInquiry?.id ?? null,
+        });
+        return;
+      }
+
+      setStagedDocuments([]);
+      setDocumentUploadState('document_idle');
+      setDocumentUploadMessage('');
       setIntakeState('submitted_inquiry');
       setIntakeMessage(
-        `Inquiry submitted successfully with backend status ${createdInquiry?.status ?? 'submitted'}.`,
+        `Request submitted successfully with backend status ${latestCreatedInquiry?.status ?? 'submitted'}.`,
       );
-      resetDraftState();
       await refreshTracking({
-        inquiryIdOverride: createdInquiry?.id ?? null,
+        inquiryIdOverride: latestCreatedInquiry?.id ?? null,
       });
     } catch (error) {
       if (error instanceof ApiError && error.status === 400) {
@@ -503,7 +1419,47 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
   };
 
-  const handleUploadDocument = async () => {
+  const handleUsePendingUpload = (documentType) => {
+    const stagedDocument =
+      stagedDocuments.find((document) => document.documentType === documentType) ?? null;
+
+    if (!stagedDocument) {
+      return;
+    }
+
+    setDocumentDraft({
+      documentType: stagedDocument.documentType,
+      fileName: stagedDocument.fileName,
+      fileUri: stagedDocument.fileUri,
+      mimeType: stagedDocument.mimeType,
+      notes: stagedDocument.notes,
+      fileSizeLabel: stagedDocument.fileSizeLabel,
+    });
+    setStagedDocuments((currentDocuments) =>
+      currentDocuments.filter((document) => document.documentType !== documentType),
+    );
+    setDocumentUploadState('document_ready');
+    setDocumentUploadMessage(
+      `${stagedDocument.fileName} is ready to upload to this request.`,
+    );
+  };
+
+  const handleDiscardPendingUpload = (documentType) => {
+    const stagedDocument =
+      stagedDocuments.find((document) => document.documentType === documentType) ?? null;
+
+    setStagedDocuments((currentDocuments) =>
+      currentDocuments.filter((document) => document.documentType !== documentType),
+    );
+    setDocumentUploadState('document_ready');
+    setDocumentUploadMessage(
+      stagedDocument?.fileName
+        ? `${stagedDocument.fileName} was removed from the staged upload list.`
+        : 'Pending staged document removed.',
+    );
+  };
+
+  const handleUploadPickedDocument = async () => {
     if (!hasSession) {
       setDocumentUploadState('document_unauthorized');
       setDocumentUploadMessage('Sign in first so the app can attach insurance documents.');
@@ -524,9 +1480,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       return;
     }
 
-    if (!String(documentDraft.fileName ?? '').trim() || !String(documentDraft.fileUrl ?? '').trim()) {
+    if (!String(documentDraft.fileName ?? '').trim() || !String(documentDraft.fileUri ?? '').trim()) {
       setDocumentUploadState('document_validation_error');
-      setDocumentUploadMessage('Document name and file URL/reference are required before upload.');
+      setDocumentUploadMessage('Select a PDF or image document before upload.');
       return;
     }
 
@@ -535,17 +1491,22 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setDocumentUploadMessage('');
 
     try {
-      const updatedInquiry = await addInsuranceInquiryDocument({
+      const updatedInquiry = await uploadInsuranceInquiryDocumentFile({
         inquiryId: latestInquiry.id,
         documentType: documentDraft.documentType,
-        fileName: documentDraft.fileName,
-        fileUrl: documentDraft.fileUrl,
+        file: {
+          uri: String(documentDraft.fileUri ?? '').trim(),
+          name: String(documentDraft.fileName ?? '').trim(),
+          type: inferMimeType(documentDraft.fileName, documentDraft.mimeType),
+        },
         notes: documentDraft.notes,
         accessToken,
       });
 
       setLatestInquiry(updatedInquiry);
+      latestInquiryVehicleIdRef.current = updatedInquiry?.vehicleId ?? selectedVehicleId;
       setLatestInquiryId(updatedInquiry?.id ?? null);
+      await syncRememberedInquiry(selectedVehicleId, updatedInquiry);
       setTrackingState(
         getCustomerInsuranceTrackingState({
           latestInquiry: updatedInquiry,
@@ -580,477 +1541,353 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
   };
 
-  const heroSubtitle = hasSession
-    ? 'Create an insurance inquiry using your owned vehicle, then track current inquiry status and vehicle-level claim updates without exposing staff-only review details.'
-    : 'Sign in as a customer to create an insurance inquiry and see customer-safe claim-status updates.';
+  const openDocumentsPanel = ({ documentType, message = '' } = {}) => {
+    if (documentType) {
+      setDocumentDraft((currentDraft) => ({
+        ...currentDraft,
+        documentType,
+      }));
+    }
+
+    if (latestInquiry?.id && latestInquiryCanAcceptDocuments) {
+      setDocumentUploadState('document_ready');
+      setDocumentUploadMessage(message);
+    }
+
+    setActivePanel('documents');
+  };
+  const handleOpenPanel = (panelKey) => {
+    if (panelKey === 'documents') {
+      if (latestInquiry?.id && !latestInquiryCanAcceptDocuments) {
+        setDocumentUploadState('document_closed');
+        setDocumentUploadMessage(
+          'This inquiry is no longer accepting supporting documents, so uploads are locked for this vehicle.',
+        );
+        setActivePanel('documents');
+        return;
+      }
+
+      openDocumentsPanel({
+        documentType: missingRequiredDocuments[0]?.type,
+      });
+      return;
+    }
+
+    setActivePanel(panelKey);
+  };
+  const handleChangeInsuranceTab = (section) => {
+    if (section === 'documents') {
+      handleOpenPanel(section);
+      setActiveInsuranceTab(section);
+      return;
+    }
+
+    setActiveInsuranceTab(section);
+    setActivePanel(section === 'home' ? 'home' : section);
+  };
+
+  const handleOpenInsuranceHomeSection = (section) => {
+    handleChangeInsuranceTab(section);
+  };
+
+  const historyStatusSection = (
+    <InsuranceSectionDivider title="History">
+      <Text style={styles.statusSectionEyebrow}>History</Text>
+      <Text style={styles.statusSectionTitle}>Recorded vehicle updates</Text>
+      <Text style={styles.statusSectionSubtitle}>{historyStatusState.summary}</Text>
+      {historyStatusState.latestUpdateLabel && historyStatusState.latestUpdateLabel !== '--' ? (
+        <Text style={styles.statusSectionMeta}>
+          Latest update: {historyStatusState.latestUpdateLabel}
+        </Text>
+      ) : null}
+
+      {sortedHistoryRecords.length ? (
+        <View style={styles.statusHistoryList}>
+          {sortedHistoryRecords.map((record) => (
+            <View
+              key={`${record.status}-${record.updatedAt ?? record.createdAt ?? record.id ?? record.policyNumber ?? record.inquiryTypeLabel ?? 'history'}`}
+              style={styles.statusHistoryRow}
+            >
+              <Text style={styles.statusHistoryLabel}>{buildHistoryRecordTitle(record)}</Text>
+              <Text style={styles.statusHistorySummary}>{buildHistoryRecordSummary(record)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.statusHistoryEmpty}>
+          Completed insurance records will appear here after staff close and record them.
+        </Text>
+      )}
+    </InsuranceSectionDivider>
+  );
+
+  const insuranceModeUsesPanelScroll =
+    activeInsuranceTab === 'request' ||
+    activeInsuranceTab === 'documents' ||
+    activeInsuranceTab === 'status';
+  const contentInsetStyle = {
+    paddingTop: Math.max(insets.top, 18),
+    paddingBottom: Math.max(insets.bottom, 24),
+  };
+  const screenContent = (
+    <View
+      style={[
+        styles.content,
+        contentInsetStyle,
+        insuranceModeUsesPanelScroll && styles.fixedModeContent,
+      ]}
+    >
+      {!hasSession ? (
+        <InsuranceStatePanel
+          icon="lock-outline"
+          title="Customer session required"
+          message="Sign in to create and track insurance requests."
+          actionLabel="Sign in"
+          onAction={() => navigation.navigate('Login')}
+          tone="danger"
+        />
+      ) : null}
+
+      {hasSession && vehicleLoadState === 'loading' && !ownedVehicles.length ? (
+        <InsuranceStatePanel
+          icon="car-clock"
+          title="Loading owned vehicles"
+          message="Checking your garage."
+          loading
+        />
+      ) : null}
+
+      {hasSession && vehicleLoadState === 'failed' && !ownedVehicles.length ? (
+        <InsuranceStatePanel
+          icon="alert-circle-outline"
+          title="Vehicle lookup failed"
+          message={vehicleLoadMessage || 'We could not load your owned vehicles right now.'}
+          actionLabel="Retry"
+          onAction={() => setVehicleReloadKey((currentKey) => currentKey + 1)}
+          tone="danger"
+        />
+      ) : null}
+
+      {hasSession &&
+      !ownedVehicles.length &&
+      vehicleLoadState !== 'loading' &&
+      vehicleLoadState !== 'failed' ? (
+        <InsuranceStatePanel
+          icon="car-off"
+          title="No owned vehicle on file"
+          message="Insurance intake starts from a customer-owned vehicle."
+          tone="danger"
+        />
+      ) : null}
+
+      {hasSession && ownedVehicles.length ? (
+        <Modal
+          animationType="slide"
+          transparent
+          visible={isVehiclePickerOpen}
+          onRequestClose={() => setIsVehiclePickerOpen(false)}
+        >
+          <Pressable
+            style={styles.sheetBackdrop}
+            onPress={() => setIsVehiclePickerOpen(false)}
+          >
+            <Pressable style={styles.sheetCard}>
+              <Text style={styles.sheetTitle}>Choose vehicle</Text>
+              <ScrollView style={styles.sheetList} contentContainerStyle={styles.sheetListContent}>
+                {ownedVehicles.map((vehicle) => {
+                  const vehicleLabel = buildOwnedVehicleInsuranceLabel(vehicle);
+                  const selected = vehicle.id === selectedVehicleId;
+
+                  return (
+                    <TouchableOpacity
+                      key={vehicle.id}
+                      style={[styles.sheetRow, selected && styles.sheetRowSelected]}
+                      onPress={() => {
+                        handleSelectVehicle(vehicle.id);
+                        setIsVehiclePickerOpen(false);
+                      }}
+                      activeOpacity={0.88}
+                    >
+                      <Text style={styles.sheetRowLabel}>{vehicleLabel}</Text>
+                      {selected ? <Text style={styles.sheetRowMeta}>Current</Text> : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
+
+      {trackingMessage ? (
+        <InsuranceStatePanel
+          icon={trackingState === 'tracking_not_found' ? 'file-question-outline' : 'information-outline'}
+          title="Tracking update"
+          message={trackingMessage}
+          loading={trackingState === 'tracking_loading' || isRefreshing}
+        />
+      ) : null}
+      <InsuranceModeShell
+        activeSection={activeInsuranceTab}
+        onChangeSection={handleChangeInsuranceTab}
+        selectedVehicleLabel={selectedVehicleLabel}
+        isVehiclePickerAvailable={isVehiclePickerAvailable}
+        onOpenVehiclePicker={handleOpenVehiclePicker}
+        summaryChips={shellSummaryChips}
+      >
+        {activeInsuranceTab === 'home' ? (
+          <InsuranceHomePanel
+            title={homeTitle}
+            selectedVehicleLabel={selectedVehicleLabel}
+            currentRequestSummary={currentRequestSummary}
+            overviewState={overviewState}
+            statusState={statusState}
+            onOpenSection={handleOpenInsuranceHomeSection}
+          />
+        ) : null}
+
+        {activeInsuranceTab === 'request' ? (
+          <InsuranceRequestPanel
+            bottomInset={insets.bottom}
+            selectedVehicleLabel={selectedVehicleLabel}
+            draft={draft}
+            purposeOptions={purposeOptions}
+            inquiryTypeOptions={inquiryTypeOptions}
+            requestGuidance={requestGuidance}
+            isRefreshing={isRefreshing}
+            onRefresh={refreshTracking}
+            onChangeDraft={(patch) => {
+              setDraft((current) => ({ ...current, ...patch }))
+              handleDraftPatch()
+            }}
+            onSubmit={handleSubmitInquiry}
+            isSubmitting={isSubmitting}
+            intakeState={intakeState}
+            intakeMessage={intakeMessage}
+            checklist={requestRequirementsChecklist}
+            stagedDocuments={stagedDocuments}
+            onFileDocuments={requestOnFileDocuments}
+            hasOnFileRenewalPolicy={hasOnFileRenewalPolicy}
+            canSubmitRequest={canSubmitNewInquiry}
+            onStageDocument={handleStageDocument}
+            onRemoveStagedDocument={handleRemoveStagedDocument}
+          />
+        ) : null}
+
+        {activeInsuranceTab === 'documents' ? (
+          <InsuranceDocumentsPanel
+            bottomInset={insets.bottom}
+            checklist={requirementsChecklist}
+            latestInquiry={latestInquiry}
+            purposeLabel={getPurposeLabel(activePurpose)}
+            isRefreshing={isRefreshing}
+            onRefresh={refreshTracking}
+            onChangeDocumentDraft={(patch) => {
+              setDocumentDraft((current) => ({ ...current, ...patch }))
+              handleDocumentDraftPatch()
+            }}
+            onPickDocument={pickCustomerInsuranceDocument}
+            onUploadDocument={handleUploadPickedDocument}
+            isUploadingDocument={isUploadingDocument}
+            documentDraft={documentDraft}
+            documentTypeOptions={customerInsuranceDocumentTypeOptions}
+            onClearPickedDocument={handleClearPickedDocument}
+            uploadMessage={documentUploadMessage}
+            uploadState={documentUploadState}
+            canAcceptDocuments={Boolean(latestInquiry?.id && latestInquiryCanAcceptDocuments)}
+            pendingUploads={stagedDocuments}
+            onUsePendingUpload={handleUsePendingUpload}
+            onDiscardPendingUpload={handleDiscardPendingUpload}
+          />
+        ) : null}
+
+        {activeInsuranceTab === 'status' ? (
+          <InsuranceStatusDetailPanel
+            eyebrow="Status"
+            title={statusTitle}
+            subtitle={statusSubtitle}
+            statusState={statusState}
+            processSteps={processSteps}
+            isRefreshing={isRefreshing}
+            onRefresh={refreshTracking}
+          >
+            <InsuranceSectionDivider title="Request path">
+              <Text style={styles.statusSectionMeta}>
+                {currentRequestSummary.purposeLabel} • {currentRequestSummary.inquiryTypeLabel}
+              </Text>
+              <Text style={styles.statusSectionSubtitle}>{currentRequestSummary.statusHint}</Text>
+            </InsuranceSectionDivider>
+
+            {latestInquiry?.paymentDueAt || latestInquiry?.renewalDueAt || latestInquiry?.policyExpiryAt ? (
+              <InsuranceSectionDivider title="Deadlines">
+                {latestInquiry?.paymentDueAt ? (
+                  <Text style={styles.statusSectionMeta}>
+                    Payment due: {formatTimestampLabel(latestInquiry.paymentDueAt)}
+                  </Text>
+                ) : null}
+                {latestInquiry?.renewalDueAt ? (
+                  <Text style={styles.statusSectionMeta}>
+                    Renewal due: {formatTimestampLabel(latestInquiry.renewalDueAt)}
+                  </Text>
+                ) : null}
+                {latestInquiry?.policyExpiryAt ? (
+                  <Text style={styles.statusSectionMeta}>
+                    Policy expiry: {formatTimestampLabel(latestInquiry.policyExpiryAt)}
+                  </Text>
+                ) : null}
+              </InsuranceSectionDivider>
+            ) : null}
+
+            {latestInquiry?.paymentStatus && latestInquiry.paymentStatus !== 'not_required' ? (
+              <InsuranceSectionDivider title="Payment">
+                <Text style={styles.statusSectionSubtitle}>{paymentSummary.message}</Text>
+              </InsuranceSectionDivider>
+            ) : null}
+
+            {latestInquiry?.renewalStatus && latestInquiry.renewalStatus !== 'not_applicable' ? (
+              <InsuranceSectionDivider title="Renewal">
+                <Text style={styles.statusSectionSubtitle}>
+                  {buildRenewalPrompt(latestInquiry).message}
+                </Text>
+              </InsuranceSectionDivider>
+            ) : null}
+
+            {historyStatusSection}
+          </InsuranceStatusDetailPanel>
+        ) : null}
+      </InsuranceModeShell>
+
+      {trackingState === 'tracking_loading' && !trackingMessage ? (
+        <InsuranceStatePanel
+          icon="refresh"
+          title="Loading insurance updates"
+          message="Checking the latest request and vehicle history."
+          loading
+        />
+      ) : null}
+
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.screen}
       >
-        <ScrollView
-          contentContainerStyle={styles.content}
+        {insuranceModeUsesPanelScroll ? <View style={styles.fixedModeViewport}>{screenContent}</View> : <ScrollView
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={refreshTracking}
+              tintColor={colors.primary}
+            />
+          }
         >
-          <View style={styles.heroCard}>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.88}>
-              <MaterialCommunityIcons name="arrow-left" size={20} color={colors.text} />
-            </TouchableOpacity>
-            <Text style={styles.eyebrow}>CUSTOMER INSURANCE</Text>
-            <Text style={styles.title}>Insurance inquiry intake</Text>
-            <Text style={styles.subtitle}>{heroSubtitle}</Text>
-            <View style={styles.routePill}>
-              <Text style={styles.routePillText}>Live routes: create inquiry, upload document metadata, get inquiry by id, vehicle insurance records</Text>
-            </View>
-          </View>
-
-          {!hasSession ? (
-            <InsuranceStatePanel
-              icon="lock-outline"
-              title="Customer session required"
-              message="This mobile flow only works for a signed-in customer account because insurance creation and tracking are bearer-token protected."
-              actionLabel="Sign in"
-              onAction={() => navigation.navigate('Login')}
-              tone="danger"
-            />
-          ) : null}
-
-          {hasSession && vehicleLoadState === 'loading' && !ownedVehicles.length ? (
-            <InsuranceStatePanel
-              icon="car-clock"
-              title="Loading owned vehicles"
-              message="Checking your live garage before insurance intake starts."
-              loading
-            />
-          ) : null}
-
-          {hasSession && vehicleLoadState === 'failed' && !ownedVehicles.length ? (
-            <InsuranceStatePanel
-              icon="alert-circle-outline"
-              title="Vehicle lookup failed"
-              message={vehicleLoadMessage || 'We could not load your owned vehicles right now.'}
-              actionLabel="Retry"
-              onAction={() => setVehicleReloadKey((currentKey) => currentKey + 1)}
-              tone="danger"
-            />
-          ) : null}
-
-          {hasSession &&
-          !ownedVehicles.length &&
-          vehicleLoadState !== 'loading' &&
-          vehicleLoadState !== 'failed' ? (
-            <InsuranceStatePanel
-              icon="car-off"
-              title="No owned vehicle on file"
-              message="Insurance intake can only start from a customer-owned vehicle. Complete vehicle onboarding first, then come back here."
-              tone="danger"
-            />
-          ) : null}
-
-          {hasSession && ownedVehicles.length ? (
-            <>
-              <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                  <View>
-                    <Text style={styles.sectionTitle}>Select vehicle</Text>
-                    <Text style={styles.sectionSubtitle}>
-                      Vehicle ownership is the backend gate for insurance intake.
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.vehicleList}>
-                  {ownedVehicles.map((vehicle) => {
-                    const isSelected = vehicle.id === selectedVehicleId;
-
-                    return (
-                      <TouchableOpacity
-                        key={vehicle.id}
-                        style={[styles.selectionChip, isSelected && styles.selectionChipSelected]}
-                        onPress={() => handleSelectVehicle(vehicle.id)}
-                        activeOpacity={0.88}
-                      >
-                        <Text
-                          style={[
-                            styles.selectionChipText,
-                            isSelected && styles.selectionChipTextSelected,
-                          ]}
-                        >
-                          {buildOwnedVehicleInsuranceLabel(vehicle)}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                  <View>
-                    <Text style={styles.sectionTitle}>Create insurance inquiry</Text>
-                    <Text style={styles.sectionSubtitle}>
-                      Status values stay staff-owned. This form only collects customer-safe intake details.
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.typeRow}>
-                  {inquiryTypeOptions.map((option) => {
-                    const isSelected = draft.inquiryType === option.value;
-
-                    return (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[styles.typeChip, isSelected && styles.typeChipSelected]}
-                        onPress={() => handleDraftChange('inquiryType', option.value)}
-                        activeOpacity={0.88}
-                      >
-                        <Text
-                          style={[
-                            styles.typeChipText,
-                            isSelected && styles.typeChipTextSelected,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <Text style={styles.fieldLabel}>Subject</Text>
-                <TextInput
-                  value={draft.subject}
-                  onChangeText={(value) => handleDraftChange('subject', value)}
-                  placeholder="Accident repair inquiry"
-                  placeholderTextColor={colors.mutedText}
-                  style={styles.input}
-                />
-
-                <Text style={styles.fieldLabel}>Description</Text>
-                <TextInput
-                  value={draft.description}
-                  onChangeText={(value) => handleDraftChange('description', value)}
-                  placeholder="Describe the concern, damage, or claim context."
-                  placeholderTextColor={colors.mutedText}
-                  style={[styles.input, styles.multilineInput]}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-
-                <Text style={styles.fieldLabel}>Provider name</Text>
-                <TextInput
-                  value={draft.providerName}
-                  onChangeText={(value) => handleDraftChange('providerName', value)}
-                  placeholder="Optional insurer or broker name"
-                  placeholderTextColor={colors.mutedText}
-                  style={styles.input}
-                />
-
-                <Text style={styles.fieldLabel}>Policy number</Text>
-                <TextInput
-                  value={draft.policyNumber}
-                  onChangeText={(value) => handleDraftChange('policyNumber', value)}
-                  placeholder="Optional policy reference"
-                  placeholderTextColor={colors.mutedText}
-                  style={styles.input}
-                  autoCapitalize="characters"
-                />
-
-                <Text style={styles.fieldLabel}>Notes</Text>
-                <TextInput
-                  value={draft.notes}
-                  onChangeText={(value) => handleDraftChange('notes', value)}
-                  placeholder="Optional customer-side notes"
-                  placeholderTextColor={colors.mutedText}
-                  style={[styles.input, styles.multilineInput]}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
-
-                {intakeMessage ? (
-                  <InsuranceStatePanel
-                    icon={
-                      intakeState === 'submitted_inquiry'
-                        ? 'check-decagram-outline'
-                        : intakeState === 'submitting'
-                          ? 'progress-clock'
-                          : 'alert-circle-outline'
-                    }
-                    title={
-                      intakeState === 'submitted_inquiry'
-                        ? 'Inquiry submitted'
-                        : intakeState === 'submitting'
-                          ? 'Submitting inquiry'
-                          : 'Insurance intake update'
-                    }
-                    message={intakeMessage}
-                    tone={intakeState === 'submitted_inquiry' ? 'success' : 'default'}
-                    loading={intakeState === 'submitting'}
-                  />
-                ) : null}
-
-                <TouchableOpacity
-                  style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
-                  onPress={handleSubmitInquiry}
-                  disabled={isSubmitting}
-                  activeOpacity={0.9}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator color={colors.onPrimary} size="small" />
-                  ) : (
-                    <>
-                      <MaterialCommunityIcons
-                        name="shield-check-outline"
-                        size={18}
-                        color={colors.onPrimary}
-                      />
-                      <Text style={styles.primaryButtonText}>Submit insurance inquiry</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : null}
-
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Claim-status visibility</Text>
-                <Text style={styles.sectionSubtitle}>
-                  Current mobile truth comes from a known inquiry id and vehicle-level insurance records. Staff review notes stay hidden here.
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={() => refreshTracking()}
-                activeOpacity={0.88}
-              >
-                <MaterialCommunityIcons name="refresh" size={18} color={colors.text} />
-                <Text style={styles.secondaryButtonText}>Refresh</Text>
-              </TouchableOpacity>
-            </View>
-
-            {trackingMessage ? (
-              <InsuranceStatePanel
-                icon={trackingState === 'tracking_not_found' ? 'file-question-outline' : 'information-outline'}
-                title={
-                  trackingState === 'tracking_not_found'
-                    ? 'Known inquiry missing'
-                    : 'Tracking update'
-                }
-                message={trackingMessage}
-                loading={trackingState === 'tracking_loading' || isRefreshing}
-              />
-            ) : null}
-
-            {trackingState === 'tracking_loading' && !trackingMessage ? (
-              <InsuranceStatePanel
-                icon="refresh"
-                title="Loading claim-status updates"
-                message="We’re checking the latest inquiry state and vehicle-level insurance records."
-                loading
-              />
-            ) : null}
-
-            {latestInquiry ? (
-              <>
-                <InsuranceRecordCard
-                  title={latestInquiry.subject}
-                  subtitle={latestInquiry.statusHint}
-                  status={latestInquiry.status}
-                  metadata={[
-                    { label: 'Inquiry type', value: latestInquiry.inquiryTypeLabel },
-                    { label: 'Created', value: formatTimestampLabel(latestInquiry.createdAt) },
-                    { label: 'Provider', value: latestInquiry.providerName },
-                    { label: 'Policy no.', value: latestInquiry.policyNumber },
-                    { label: 'Documents', value: String(latestInquiry.documentCount) },
-                  ]}
-                />
-
-                <View style={styles.documentSection}>
-                  <View style={styles.documentSectionHeader}>
-                    <View style={styles.documentSectionCopy}>
-                      <Text style={styles.documentSectionTitle}>Supporting documents</Text>
-                      <Text style={styles.documentSectionText}>
-                        Attach document metadata and a file URL/reference. Binary camera or gallery upload stays out of scope until a storage service exists.
-                      </Text>
-                    </View>
-                    <View style={styles.documentCountBadge}>
-                      <Text style={styles.documentCountText}>{latestInquiry.documentCount}</Text>
-                    </View>
-                  </View>
-
-                  {latestInquiry.status === 'needs_documents' ? (
-                    <InsuranceStatePanel
-                      icon="file-alert-outline"
-                      title="Staff requested more documents"
-                      message="This inquiry is in needs_documents, so attach the requested supporting files and then refresh tracking."
-                    />
-                  ) : null}
-
-                  {!latestInquiryCanAcceptDocuments ? (
-                    <InsuranceStatePanel
-                      icon="lock-alert-outline"
-                      title="Document upload is locked"
-                      message="Closed or rejected inquiries cannot accept more supporting documents."
-                      tone="danger"
-                    />
-                  ) : null}
-
-                  {latestInquiry.documents?.length ? (
-                    <View style={styles.documentList}>
-                      {latestInquiry.documents.map((document) => (
-                        <View key={document.id ?? `${document.fileName}-${document.fileUrl}`} style={styles.documentCard}>
-                          <View style={styles.documentCardHeader}>
-                            <View style={styles.documentCardCopy}>
-                              <Text style={styles.documentCardTitle}>{document.fileName}</Text>
-                              <Text style={styles.documentCardText}>{document.fileUrl}</Text>
-                            </View>
-                            <InquiryStatusBadge value={document.documentTypeLabel} />
-                          </View>
-                          <DetailRow label="Notes" value={document.notes} />
-                          <DetailRow label="Uploaded" value={formatTimestampLabel(document.createdAt)} />
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <View style={styles.emptyDocumentCard}>
-                      <Text style={styles.emptyDocumentTitle}>No supporting documents yet</Text>
-                      <Text style={styles.emptyDocumentText}>
-                        Add an OR/CR, policy copy, photo, estimate, or other reference to help staff review the inquiry.
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={styles.documentUploadForm}>
-                    <Text style={styles.fieldLabel}>Document type</Text>
-                    <View style={styles.documentTypeRow}>
-                      {customerInsuranceDocumentTypeOptions.map((option) => {
-                        const isSelected = documentDraft.documentType === option.value;
-
-                        return (
-                          <TouchableOpacity
-                            key={option.value}
-                            style={[styles.documentTypeChip, isSelected && styles.documentTypeChipSelected]}
-                            onPress={() => handleDocumentDraftChange('documentType', option.value)}
-                            activeOpacity={0.88}
-                            disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
-                          >
-                            <Text
-                              style={[
-                                styles.documentTypeChipText,
-                                isSelected && styles.documentTypeChipTextSelected,
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    <Text style={styles.fieldLabel}>Document name</Text>
-                    <TextInput
-                      value={documentDraft.fileName}
-                      onChangeText={(value) => handleDocumentDraftChange('fileName', value)}
-                      placeholder="or-cr-scan.pdf"
-                      placeholderTextColor={colors.mutedText}
-                      style={styles.input}
-                      editable={latestInquiryCanAcceptDocuments && !isUploadingDocument}
-                    />
-
-                    <Text style={styles.fieldLabel}>File URL or reference</Text>
-                    <TextInput
-                      value={documentDraft.fileUrl}
-                      onChangeText={(value) => handleDocumentDraftChange('fileUrl', value)}
-                      placeholder="https://files.example/insurance/or-cr-scan.pdf"
-                      placeholderTextColor={colors.mutedText}
-                      style={styles.input}
-                      autoCapitalize="none"
-                      editable={latestInquiryCanAcceptDocuments && !isUploadingDocument}
-                    />
-
-                    <Text style={styles.fieldLabel}>Document notes</Text>
-                    <TextInput
-                      value={documentDraft.notes}
-                      onChangeText={(value) => handleDocumentDraftChange('notes', value)}
-                      placeholder="Optional note for staff review"
-                      placeholderTextColor={colors.mutedText}
-                      style={[styles.input, styles.multilineInput]}
-                      multiline
-                      numberOfLines={3}
-                      textAlignVertical="top"
-                      editable={latestInquiryCanAcceptDocuments && !isUploadingDocument}
-                    />
-
-                    {documentUploadMessage ? (
-                      <InsuranceStatePanel
-                        icon={documentUploadState === 'document_uploaded' ? 'file-check-outline' : 'alert-circle-outline'}
-                        title={documentUploadState === 'document_uploaded' ? 'Document uploaded' : 'Document upload update'}
-                        message={documentUploadMessage}
-                        tone={documentUploadState === 'document_uploaded' ? 'success' : 'default'}
-                        loading={documentUploadState === 'document_uploading' || isUploadingDocument}
-                      />
-                    ) : null}
-
-                    <TouchableOpacity
-                      style={[
-                        styles.primaryButton,
-                        (!latestInquiryCanAcceptDocuments || isUploadingDocument) && styles.primaryButtonDisabled,
-                      ]}
-                      onPress={handleUploadDocument}
-                      disabled={!latestInquiryCanAcceptDocuments || isUploadingDocument}
-                      activeOpacity={0.9}
-                    >
-                      {isUploadingDocument ? (
-                        <ActivityIndicator color={colors.onPrimary} size="small" />
-                      ) : (
-                        <>
-                          <MaterialCommunityIcons
-                            name="file-upload-outline"
-                            size={18}
-                            color={colors.onPrimary}
-                          />
-                          <Text style={styles.primaryButtonText}>Attach supporting document</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </>
-            ) : null}
-
-            {claimStatusUpdates.length ? (
-              claimStatusUpdates.map((record) => (
-                <InsuranceRecordCard
-                  key={record.id}
-                  title={`${record.inquiryTypeLabel} vehicle record`}
-                  subtitle={record.statusHint}
-                  status={record.status}
-                  metadata={[
-                    { label: 'Recorded', value: formatTimestampLabel(record.createdAt) },
-                    { label: 'Latest update', value: formatTimestampLabel(record.updatedAt) },
-                    { label: 'Provider', value: record.providerName },
-                    { label: 'Policy no.', value: record.policyNumber },
-                  ]}
-                />
-              ))
-            ) : null}
-
-            {!claimStatusUpdates.length && !latestInquiry && trackingState !== 'tracking_loading' ? (
-              <InsuranceStatePanel
-                icon="clipboard-text-search-outline"
-                title="No claim-status updates yet"
-                message="After you submit an inquiry, this screen can show the current inquiry state and later vehicle-level insurance records when staff approve them for tracking."
-              />
-            ) : null}
-          </View>
-        </ScrollView>
+          {screenContent}
+        </ScrollView>}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1072,113 +1909,64 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 36,
   },
-  heroCard: {
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.large,
-    backgroundColor: colors.surface,
-    padding: 22,
-    marginBottom: 18,
+  scrollContent: {
+    flexGrow: 1,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
-    marginBottom: 16,
+  fixedModeViewport: {
+    flex: 1,
   },
-  eyebrow: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.6,
-    marginBottom: 10,
+  fixedModeContent: {
+    flex: 1,
+    minHeight: 0,
   },
-  title: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-    marginBottom: 10,
+  homeFocusWrap: {
+    marginBottom: 2,
   },
-  subtitle: {
-    color: colors.mutedText,
-    fontSize: 14,
-    lineHeight: 22,
+  sheetBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.38)',
   },
-  routePill: {
-    marginTop: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
-  },
-  routePillText: {
-    color: colors.labelText,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  sectionCard: {
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.large,
+  sheetCard: {
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     backgroundColor: colors.surface,
     padding: 20,
-    marginBottom: 18,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-    gap: 12,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 20,
-    maxWidth: 520,
-  },
-  vehicleList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 10,
   },
-  selectionChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
+  sheetList: {
+    maxHeight: 360,
   },
-  selectionChipSelected: {
-    borderColor: colors.primary,
+  sheetListContent: {
+    paddingBottom: 4,
+  },
+  sheetTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  sheetRow: {
+    minHeight: 52,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+    justifyContent: 'center',
+    paddingVertical: 10,
+  },
+  sheetRowSelected: {
     backgroundColor: colors.primarySoft,
   },
-  selectionChipText: {
+  sheetRowLabel: {
     color: colors.text,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
-  selectionChipTextSelected: {
+  sheetRowMeta: {
     color: colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
   },
   typeRow: {
     flexDirection: 'row',
@@ -1247,22 +2035,87 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
-  secondaryButton: {
-    minHeight: 42,
+  secondaryActionButton: {
+    minHeight: 48,
     paddingHorizontal: 14,
-    borderRadius: radius.pill,
+    borderRadius: radius.medium,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.primaryGlow,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
+    marginBottom: 14,
   },
-  secondaryButtonText: {
+  secondaryActionButtonText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  homeCardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14,
+  },
+  homeCard: {
+    flexGrow: 1,
+    flexBasis: 160,
+    minWidth: 150,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: radius.large,
+    padding: 14,
+    minHeight: 148,
+  },
+  homeCardEmphasized: {
+    borderColor: colors.primaryGlow,
+    backgroundColor: '#1C1A20',
+  },
+  homeCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  homeCardIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeCardTitle: {
     color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  homeCardText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+    flex: 1,
+  },
+  homeCardActionRow: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  homeCardActionText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   documentSection: {
     borderWidth: 1,
@@ -1362,6 +2215,93 @@ const styles = StyleSheet.create({
   documentUploadForm: {
     marginTop: 2,
   },
+  selectedDocumentCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.medium,
+    padding: 14,
+    marginBottom: 14,
+  },
+  selectedDocumentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  selectedDocumentIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedDocumentCopy: {
+    flex: 1,
+  },
+  selectedDocumentTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  selectedDocumentMeta: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  selectedDocumentActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
+  },
+  checklistHeading: {
+    color: colors.labelText,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  checklistGroup: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  checklistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  checklistIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checklistIconWrapComplete: {
+    borderColor: colors.primaryGlow,
+    backgroundColor: colors.primarySoft,
+  },
+  checklistRowText: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 18,
+    flex: 1,
+  },
+  checklistRowTextComplete: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  checklistHelperText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   documentTypeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1400,6 +2340,9 @@ const styles = StyleSheet.create({
   },
   statePanelDanger: {
     borderColor: 'rgba(255, 107, 107, 0.4)',
+  },
+  statePanelWarning: {
+    borderColor: 'rgba(234, 179, 8, 0.35)',
   },
   statePanelSuccess: {
     borderColor: 'rgba(63, 215, 143, 0.35)',
@@ -1446,6 +2389,67 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 13,
     fontWeight: '700',
+  },
+  timelineStepList: {
+    gap: 10,
+  },
+  timelineStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 2,
+  },
+  timelineStepRail: {
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  timelineStepDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  timelineStepDotDone: {
+    borderColor: colors.primaryGlow,
+    backgroundColor: colors.primary,
+  },
+  timelineStepDotCurrent: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  timelineStepCopy: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.medium,
+    padding: 12,
+  },
+  timelineStepHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 6,
+  },
+  timelineStepTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+    flex: 1,
+  },
+  timelineStepText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  timelineStepMeta: {
+    color: colors.labelText,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 8,
   },
   timelineCard: {
     borderWidth: 1,
@@ -1503,6 +2507,61 @@ const styles = StyleSheet.create({
   detailRowValue: {
     color: colors.text,
     fontSize: 14,
+    lineHeight: 20,
+  },
+  statusSectionEyebrow: {
+    color: insurancePalette.amber,
+    fontFamily: insuranceFonts.body,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  statusSectionTitle: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  statusSectionSubtitle: {
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  statusSectionMeta: {
+    color: insurancePalette.textDim,
+    fontFamily: insuranceFonts.body,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  statusHistoryList: {
+    marginTop: 2,
+  },
+  statusHistoryRow: {
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: insurancePalette.divider,
+    gap: 4,
+  },
+  statusHistoryLabel: {
+    color: insurancePalette.text,
+    fontFamily: insuranceFonts.heading,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  statusHistorySummary: {
+    color: insurancePalette.textMuted,
+    fontFamily: insuranceFonts.body,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  statusHistoryEmpty: {
+    color: colors.mutedText,
+    fontSize: 13,
     lineHeight: 20,
   },
 });

@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
@@ -38,7 +38,7 @@ describe('VehiclesService', () => {
       make: 'Toyota',
       model: 'Vios',
       year: 2020,
-    });
+    }, { userId: 'user-1', role: 'customer' });
 
     expect(usersService.findById).toHaveBeenCalledWith('user-1');
     expect(vehiclesRepository.findByPlateNumber).toHaveBeenCalledWith('ABC1234');
@@ -73,7 +73,7 @@ describe('VehiclesService', () => {
         make: 'Toyota',
         model: 'Vios',
         year: 2020,
-      }),
+      }, { userId: 'missing-user-id', role: 'customer' }),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(vehiclesRepository.create).not.toHaveBeenCalled();
   });
@@ -110,13 +110,47 @@ describe('VehiclesService', () => {
         make: 'Toyota',
         model: 'Vios',
         year: 2020,
-      }),
+      }, { userId: 'user-1', role: 'customer' }),
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(vehiclesRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects vehicle creation when a customer targets another user record', async () => {
+    const usersService = {
+      findById: jest.fn(),
+    };
+
+    const vehiclesRepository = {
+      findByPlateNumber: jest.fn(),
+      create: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        VehiclesService,
+        { provide: VehiclesRepository, useValue: vehiclesRepository },
+        { provide: UsersService, useValue: usersService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(VehiclesService);
+
+    await expect(
+      service.create({
+        userId: 'user-1',
+        plateNumber: 'ABC1234',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2020,
+      }, { userId: 'other-user', role: 'customer' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(usersService.findById).not.toHaveBeenCalled();
     expect(vehiclesRepository.create).not.toHaveBeenCalled();
   });
 
   it('propagates not found when updating a missing vehicle', async () => {
     const vehiclesRepository = {
+      findById: jest.fn().mockResolvedValue(null),
       findByPlateNumber: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockRejectedValue(new NotFoundException('Vehicle not found')),
     };
@@ -139,7 +173,7 @@ describe('VehiclesService', () => {
     await expect(
       service.update('missing-vehicle-id', {
         color: 'Blue',
-      }),
+      }, { userId: 'user-1', role: 'service_adviser' }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

@@ -247,3 +247,140 @@ export const loadStaffInventorySnapshot = async ({ accessToken } = {}) => {
       categoriesResult.status === 'rejected' && isRuntimeUnavailable(categoriesResult.reason),
   };
 };
+
+const slugify = (value) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
+const toPriceCents = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
+    throw new ApiError('Enter a valid non-negative price.', 400, {
+      reason: 'invalid_price',
+      value,
+    });
+  }
+
+  return Math.round(numericValue * 100);
+};
+
+export const createStaffInventoryCategory = async ({ accessToken, name, description } = {}) => {
+  const normalizedName = String(name ?? '').trim();
+
+  if (!accessToken) {
+    throw new ApiError('Sign in as staff before creating a category.', 401, {
+      path: '/api/product-categories',
+    });
+  }
+
+  if (!normalizedName) {
+    throw new ApiError('Category name is required.', 400, {
+      path: '/api/product-categories',
+    });
+  }
+
+  const payload = {
+    name: normalizedName,
+    slug: slugify(normalizedName),
+    description: String(description ?? '').trim() || undefined,
+    isActive: true,
+  };
+
+  return buildStaffInventoryCategoryPresentation(
+    await request('/api/product-categories', {
+      accessToken,
+      method: 'POST',
+      body: payload,
+    }),
+  );
+};
+
+export const createStaffInventoryProduct = async ({
+  accessToken,
+  categoryId,
+  name,
+  sku,
+  description,
+  pricePhp,
+  isActive = true,
+} = {}) => {
+  const normalizedName = String(name ?? '').trim();
+  const normalizedSku = String(sku ?? '').trim();
+  const normalizedCategoryId = String(categoryId ?? '').trim();
+
+  if (!accessToken) {
+    throw new ApiError('Sign in as staff before publishing a product.', 401, {
+      path: '/api/products',
+    });
+  }
+
+  if (!normalizedCategoryId || !normalizedName || !normalizedSku) {
+    throw new ApiError('Category, product name, and SKU are required.', 400, {
+      path: '/api/products',
+    });
+  }
+
+  const payload = {
+    categoryId: normalizedCategoryId,
+    name: normalizedName,
+    slug: slugify(normalizedName),
+    sku: normalizedSku,
+    description: String(description ?? '').trim() || undefined,
+    priceCents: toPriceCents(pricePhp),
+    isActive,
+  };
+
+  return buildStaffInventoryProductPresentation(
+    await request('/api/products', {
+      accessToken,
+      method: 'POST',
+      body: payload,
+    }),
+  );
+};
+
+export const updateStaffInventoryProduct = async ({
+  accessToken,
+  productId,
+  categoryId,
+  name,
+  sku,
+  description,
+  pricePhp,
+  isActive,
+} = {}) => {
+  const normalizedProductId = String(productId ?? '').trim();
+
+  if (!accessToken) {
+    throw new ApiError('Sign in as staff before updating a product.', 401, {
+      path: '/api/products/:id',
+    });
+  }
+
+  if (!normalizedProductId) {
+    throw new ApiError('Select a product before updating it.', 400, {
+      path: '/api/products/:id',
+    });
+  }
+
+  const payload = {
+    categoryId: categoryId ? String(categoryId).trim() : undefined,
+    name: name ? String(name).trim() : undefined,
+    slug: name ? slugify(name) : undefined,
+    sku: sku ? String(sku).trim() : undefined,
+    description: description !== undefined ? String(description).trim() || undefined : undefined,
+    priceCents: pricePhp !== undefined ? toPriceCents(pricePhp) : undefined,
+    isActive,
+  };
+
+  return buildStaffInventoryProductPresentation(
+    await request(`/api/products/${encodeURIComponent(normalizedProductId)}`, {
+      accessToken,
+      method: 'PATCH',
+      body: payload,
+    }),
+  );
+};

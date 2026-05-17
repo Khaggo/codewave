@@ -11,6 +11,7 @@ import { VehiclesModule } from '@main-modules/vehicles/vehicles.module';
 import { JobOrdersController } from './controllers/job-orders.controller';
 import { JobOrdersRepository } from './repositories/job-orders.repository';
 import { JobOrderEvidenceStorageService } from './services/job-order-evidence-storage.service';
+import { JobOrderInvoicePaymongoService } from './services/job-order-invoice-paymongo.service';
 import { JobOrderInvoicePdfService } from './services/job-order-invoice-pdf.service';
 import { JobOrdersService } from './services/job-orders.service';
 
@@ -28,6 +29,7 @@ import { JobOrdersService } from './services/job-orders.service';
   providers: [
     JobOrdersRepository,
     JobOrderEvidenceStorageService,
+    JobOrderInvoicePaymongoService,
     JobOrderInvoicePdfService,
     JobOrdersService,
   ],

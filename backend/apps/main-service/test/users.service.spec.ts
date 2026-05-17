@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 
 import { UsersRepository } from '@main-modules/users/repositories/users.repository';
 import { UsersService } from '@main-modules/users/services/users.service';
@@ -138,5 +138,109 @@ describe('UsersService', () => {
         staffCode: 'SA-0001',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rejects customer access to another user profile record', async () => {
+    const repository = {
+      findById: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: UsersRepository,
+          useValue: repository,
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(UsersService);
+
+    await expect(
+      service.findById('user-1', {
+        userId: 'other-user',
+        role: 'customer',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repository.findById).not.toHaveBeenCalled();
+  });
+
+  it('allows staff roles to update another user profile record', async () => {
+    const repository = {
+      update: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        profile: {
+          firstName: 'Updated',
+        },
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: UsersRepository,
+          useValue: repository,
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(UsersService);
+
+    await expect(
+      service.update(
+        'user-1',
+        {
+          firstName: 'Updated',
+        },
+        {
+          userId: 'staff-user',
+          role: 'service_adviser',
+        },
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: 'user-1',
+      }),
+    );
+    expect(repository.update).toHaveBeenCalledWith('user-1', {
+      firstName: 'Updated',
+    });
+  });
+
+  it('rejects customer address creation on another user record', async () => {
+    const repository = {
+      addAddress: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: UsersRepository,
+          useValue: repository,
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(UsersService);
+
+    await expect(
+      service.addAddress(
+        'user-1',
+        {
+          label: 'Home',
+          addressLine1: '123 Main St',
+          city: 'Quezon City',
+          province: 'Metro Manila',
+        },
+        {
+          userId: 'other-user',
+          role: 'customer',
+        },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repository.addAddress).not.toHaveBeenCalled();
   });
 });

@@ -1,73 +1,221 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import * as CheckboxPrimitives from '@radix-ui/react-checkbox'
+import * as Collapsible from '@radix-ui/react-collapsible'
+import * as ScrollAreaPrimitives from '@radix-ui/react-scroll-area'
+import * as TabsPrimitives from '@radix-ui/react-tabs'
 import {
+  Activity,
   AlertTriangle,
-  CheckCircle2,
+  BadgeCheck,
+  Camera,
+  CalendarClock,
+  Check,
+  ChevronDown,
+  ChevronRight,
   ClipboardList,
+  FileText,
   FileClock,
   RefreshCw,
+  Search,
   ShieldAlert,
   ShieldCheck,
+  Wallet,
 } from 'lucide-react'
+import PageHeader from '@/components/ui/PageHeader'
+import PortalSelect from '@/components/ui/PortalSelect'
 import { useUser } from '@/lib/userContext'
-import { ApiError, listAdminCustomers } from '@/lib/authClient'
+import { ApiError } from '@/lib/authClient'
 import {
   getInsuranceInquiryById,
-  listInsuranceInquiriesByUserId,
+  listInsuranceInquiries,
+  sendInsuranceBroadcasts,
+  sendInsuranceReminders,
   updateInsuranceInquiryStatus,
 } from '@/lib/insuranceStaffClient'
 import {
   getAllowedInsuranceStatusTargets,
-  getSelectedInsuranceQueueItem,
-  getStaffInsuranceQueueState,
   insuranceReviewStaffRoles,
 } from '@/lib/api/generated/insurance/staff-web-insurance'
+import {
+  buildInsurancePrimaryFocus,
+  buildInsuranceBroadcastRequest,
+  buildInsuranceDocumentReviewState,
+  buildInsuranceReminderRequest,
+  buildInsuranceTableRow,
+  formatStatusLabel,
+  getInsuranceBroadcastComposerState,
+  getInsuranceDetailTabs,
+  getNextInsuranceWorkspaceViewState,
+  getInsuranceQueueFilterSummary,
+  getInsuranceReviewStepNote,
+  getInsuranceReminderComposerState,
+  getInsuranceSummaryCards,
+  buildInsuranceWorkspaceSections,
+  shouldApplyInsuranceAsyncResult,
+  summarizeInsuranceBroadcastResult,
+  summarizeInsuranceReminderResult,
+  shouldIncludeInsuranceInquiryInLiveQueue,
+} from './insuranceView.mjs'
 
-const STATUS_META = {
-  submitted: { label: 'Submitted', cls: 'badge-orange' },
-  under_review: { label: 'Under Review', cls: 'badge-blue' },
-  needs_documents: { label: 'Needs Documents', cls: 'badge-gray' },
-  approved_for_record: { label: 'Approved For Record', cls: 'badge-green' },
-  rejected: { label: 'Rejected', cls: 'badge-gray' },
-  closed: { label: 'Closed', cls: 'badge-gray' },
+const INQUIRY_STATUS_OPTIONS = [
+  'submitted',
+  'needs_documents',
+  'under_review',
+  'for_approval',
+  'approved',
+  'payment_pending',
+  'active',
+  'for_renewal',
+]
+
+const PAYMENT_STATUS_OPTIONS = ['not_required', 'unpaid', 'proof_submitted', 'verifying', 'paid', 'overdue']
+const RENEWAL_STATUS_OPTIONS = [
+  'not_applicable',
+  'upcoming',
+  'quoted',
+  'awaiting_customer',
+  'renewed',
+  'expired',
+]
+const REMINDER_TYPE_OPTIONS = ['missing_documents', 'payment_pending', 'overdue_payment', 'renewal_follow_up']
+const REMINDER_TARGET_MODE_OPTIONS = ['single_case', 'selected_cases', 'filtered_results']
+const BROADCAST_TARGET_MODE_OPTIONS = ['selected_cases', 'filtered_results']
+
+const POSITIVE_BADGE_VALUES = new Set(['approved', 'active', 'complete', 'paid', 'renewed'])
+const WARNING_BADGE_VALUES = new Set([
+  'submitted',
+  'needs_documents',
+  'payment_pending',
+  'for_renewal',
+  'incomplete',
+  'proof_submitted',
+  'unpaid',
+  'overdue',
+  'upcoming',
+  'quoted',
+  'awaiting_customer',
+  'expired',
+])
+const INFO_BADGE_VALUES = new Set(['under_review', 'for_approval', 'under_verification', 'verifying'])
+
+const SUMMARY_CARD_ICONS = {
+  'New Inquiries': ClipboardList,
+  'Payment Pending': Wallet,
+  'For Renewal': CalendarClock,
+  'Needs Documents': FileClock,
 }
 
-const formatStatusLabel = (value) =>
-  STATUS_META[value]?.label ??
-  String(value ?? '')
-    .split('_')
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(' ')
+const DEFAULT_FILTERS = {
+  status: 'all',
+  paymentStatus: 'all',
+  renewalStatus: 'all',
+  search: '',
+}
+
+const DEFAULT_UPDATE_DRAFT = {
+  status: 'submitted',
+  reviewNotes: '',
+}
+const DEFAULT_REMINDER_TYPE = 'missing_documents'
+const DEFAULT_REMINDER_TARGET_MODE = 'selected_cases'
+const DEFAULT_BROADCAST_TARGET_MODE = 'selected_cases'
+
+const normalizeFilterValue = (value) => (value && value !== 'all' ? value : undefined)
+
+const getBadgeClassName = (value) => {
+  if (POSITIVE_BADGE_VALUES.has(value)) return 'badge-green'
+  if (WARNING_BADGE_VALUES.has(value)) return 'badge-orange'
+  if (INFO_BADGE_VALUES.has(value)) return 'badge-blue'
+  return 'badge-gray'
+}
+
+const formatReminderTargetModeLabel = (value) => {
+  switch (value) {
+    case 'single_case':
+      return 'Single Case'
+    case 'selected_cases':
+      return 'Selected Cases'
+    case 'filtered_results':
+      return 'Filtered Results'
+    default:
+      return formatStatusLabel(value)
+  }
+}
 
 const formatDateTime = (value) => {
   if (!value) return 'Not available'
 
-  return new Date(value).toLocaleString('en-PH', {
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return 'Not available'
+  }
+
+  return parsedDate.toLocaleString('en-PH', {
     month: 'short',
     day: 'numeric',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   })
 }
 
-function StatusBadge({ status }) {
-  const meta = STATUS_META[status] ?? { label: formatStatusLabel(status), cls: 'badge-gray' }
-  return <span className={`badge ${meta.cls}`}>{meta.label}</span>
+const formatDateOnly = (value) => {
+  if (!value) return 'Not set'
+
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return 'Not set'
+  }
+
+  return parsedDate.toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
+
+const getTimelineItems = (inquiry) => [
+  {
+    key: 'submitted',
+    label: 'Submitted',
+    complete: Boolean(inquiry?.createdAt),
+    note: inquiry?.subject || 'Customer intake created',
+  },
+  {
+    key: 'review',
+    label: 'Review',
+    complete: ['under_review', 'for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(
+      inquiry?.status,
+    ),
+    note: getInsuranceReviewStepNote(inquiry),
+  },
+  {
+    key: 'payment',
+    label: 'Payment',
+    complete: ['proof_submitted', 'verifying', 'paid'].includes(inquiry?.paymentStatus),
+    note: formatStatusLabel(inquiry?.paymentStatus || 'not_required'),
+  },
+  {
+    key: 'renewal',
+    label: 'Renewal',
+    complete: ['upcoming', 'quoted', 'awaiting_customer', 'renewed', 'expired'].includes(inquiry?.renewalStatus),
+    note: formatStatusLabel(inquiry?.renewalStatus || 'not_applicable'),
+  },
+]
 
 function SummaryTile({ icon: Icon, label, value, sub }) {
   return (
-    <div className="card p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs text-ink-muted">{label}</p>
-          <p className="text-2xl font-black text-ink-primary mt-1">{value}</p>
-          {sub ? <p className="text-[11px] text-ink-muted mt-1">{sub}</p> : null}
+    <div className="card h-full p-4 md:p-5">
+      <div className="flex h-full items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-muted">{label}</p>
+          <p className="mt-3 text-3xl font-black tracking-tight text-ink-primary">{value}</p>
+          {sub ? <p className="mt-2 max-w-[18rem] text-xs leading-5 text-ink-secondary">{sub}</p> : null}
         </div>
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#f07c00]/15"
           style={{ background: 'rgba(240, 124, 0, 0.14)', color: '#f07c00' }}
         >
           <Icon size={18} />
@@ -79,22 +227,493 @@ function SummaryTile({ icon: Icon, label, value, sub }) {
 
 function BlockingState({ title, copy }) {
   return (
-    <div className="card px-5 py-10 text-center">
+    <div className="empty-panel px-5 py-10 text-center">
       <ShieldAlert size={34} className="mx-auto mb-3" style={{ color: '#f07c00' }} />
       <p className="text-sm font-bold text-ink-primary">{title}</p>
-      <p className="text-xs text-ink-muted mt-2 max-w-lg mx-auto">{copy}</p>
+      <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">{copy}</p>
     </div>
   )
 }
 
-function DetailRow({ label, value }) {
-  if (!value) return null
+function WorkflowBadge({ value, children }) {
+  const label = children ?? formatStatusLabel(value)
+  return <span className={`badge ${getBadgeClassName(value)}`}>{label}</span>
+}
 
+function DetailField({ label, value }) {
   return (
     <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
       <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">{label}</p>
-      <p className="text-sm text-ink-primary mt-1 whitespace-pre-wrap">{value}</p>
+      <p className="mt-1 text-sm text-ink-primary whitespace-pre-wrap">{value || 'Not set'}</p>
     </div>
+  )
+}
+
+const getInsuranceDocumentIcon = (documentType) => {
+  switch (documentType) {
+    case 'or_cr':
+    case 'policy':
+      return FileText
+    case 'photo':
+      return Camera
+    case 'police_report':
+      return ShieldAlert
+    case 'estimate':
+      return ClipboardList
+    case 'proof_of_payment':
+      return BadgeCheck
+    default:
+      return FileText
+  }
+}
+
+const getInsurancePaymentGuidance = (inquiry) => {
+  const paymentStatus = inquiry?.paymentStatus ?? 'not_required'
+  const status = inquiry?.status ?? 'submitted'
+  const purpose = inquiry?.purpose ?? 'claim'
+
+  switch (paymentStatus) {
+    case 'proof_submitted':
+      return 'Customer proof of payment is already on file. Staff still need to verify it before the case can move forward.'
+    case 'verifying':
+      return 'Payment proof is under verification right now.'
+    case 'paid':
+      return 'Payment is settled for this insurance case.'
+    case 'unpaid':
+      return 'Payment is required before the case can move forward.'
+    case 'overdue':
+      return 'Payment is overdue. Staff should follow up or agree on the next payment step.'
+    case 'not_required':
+    default:
+      if (status === 'active') {
+        return purpose === 'renewal'
+          ? 'This renewal is already active. No separate payment follow-up is blocking the customer right now.'
+          : 'This case is already active. No extra customer payment follow-up is blocking the request right now.'
+      }
+
+      return status === 'payment_pending'
+        ? 'This case is in a payment follow-up lane, but no concrete customer payment status has been recorded yet.'
+        : purpose === 'renewal'
+          ? 'Renewal cases only need customer payment here when staff move them into a payment-follow-up step for proof collection or billing.'
+          : 'Claims and standard inquiries do not use this tab unless staff move the case into payment follow-up for proof collection or billing.'
+  }
+}
+
+const getInsuranceRenewalGuidance = (inquiry) => {
+  const renewalStatus = inquiry?.renewalStatus ?? 'not_applicable'
+  const status = inquiry?.status ?? 'submitted'
+  const purpose = inquiry?.purpose ?? 'claim'
+
+  switch (renewalStatus) {
+    case 'upcoming':
+      return 'Renewal follow-up is scheduled. The customer should watch for the next quote or staff instruction.'
+    case 'quoted':
+      return 'A renewal quote is already being prepared or has been shared. Customer review happens from the renewal follow-up step.'
+    case 'awaiting_customer':
+      return 'Renewal is waiting on the customer for a decision, supporting file, or payment confirmation.'
+    case 'renewed':
+      return 'Renewal is complete and the policy is already marked as renewed.'
+    case 'expired':
+      return 'The renewal window is overdue. Staff should contact the customer before coverage lapses further.'
+    case 'not_applicable':
+    default:
+      if (purpose === 'renewal' || status === 'for_renewal') {
+        return 'This request is in the renewal lane, but the next renewal detail has not been fully recorded yet.'
+      }
+
+      if (status === 'active') {
+        return 'This case is already active. Renewal only becomes relevant again when staff mark the policy for future renewal follow-up.'
+      }
+
+      return 'Renewal is not active for this case yet. Staff switch a case into For Renewal when the policy is nearing expiry or the customer asks for renewal help.'
+  }
+}
+
+function EmptyPanel({ title, copy }) {
+  return (
+    <div className="empty-panel px-4 py-10 text-center">
+      <AlertTriangle size={28} className="mx-auto mb-3 text-ink-dim" />
+      <p className="text-sm font-bold text-ink-primary">{title}</p>
+      <p className="mt-2 text-xs text-ink-muted">{copy}</p>
+    </div>
+  )
+}
+
+function FilterSelect({ label, value, onChange, options, includeAll = true, disabled = false }) {
+  const items = options.map((option) => ({
+    value: option,
+    label: formatStatusLabel(option),
+  }))
+
+  return (
+    <label className="label">
+      {label}
+      <PortalSelect
+        value={value}
+        onValueChange={onChange}
+        placeholder={label}
+        items={items}
+        emptyOptionLabel={includeAll ? 'All' : undefined}
+        disabled={disabled}
+      />
+    </label>
+  )
+}
+
+function SurfaceCheckbox({ checked, onCheckedChange, label }) {
+  return (
+    <CheckboxPrimitives.Root
+      checked={checked}
+      onCheckedChange={onCheckedChange}
+      aria-label={label}
+      className="primitive-checkbox"
+    >
+      <CheckboxPrimitives.Indicator className="flex items-center justify-center text-black">
+        <Check size={12} strokeWidth={3} />
+      </CheckboxPrimitives.Indicator>
+    </CheckboxPrimitives.Root>
+  )
+}
+
+function WorkspaceSectionHeader({ title, description, action = null }) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-surface-border px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="max-w-2xl">
+        <p className="card-title">{title}</p>
+        {description ? <p className="mt-1 text-xs leading-5 text-ink-muted">{description}</p> : null}
+      </div>
+      {action}
+    </div>
+  )
+}
+
+function FocusPanel({ title, description, tone = 'neutral', meta = [] }) {
+  const badgeClass =
+    tone === 'ready' ? 'badge-green' : tone === 'attention' ? 'badge-orange' : 'badge-gray'
+
+  return (
+    <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-ink-primary">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-ink-secondary">{description}</p>
+        </div>
+        <span className={`badge ${badgeClass}`}>{tone === 'ready' ? 'Ready' : tone === 'attention' ? 'Next step' : 'Guide'}</span>
+      </div>
+      {meta.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {meta.map((item) => (
+            <span key={item} className="badge badge-gray">
+              {item}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function CompactActionPanel({
+  title,
+  description,
+  open,
+  onOpenChange,
+  summary,
+  children,
+}) {
+  return (
+    <Collapsible.Root open={open} onOpenChange={onOpenChange} className="rounded-2xl border border-surface-border bg-surface-card">
+      <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink-primary">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-ink-muted">{description}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {summary}
+          <Collapsible.Trigger className="ops-action-secondary">
+            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {open ? 'Hide panel' : 'Open panel'}
+          </Collapsible.Trigger>
+        </div>
+      </div>
+      <Collapsible.Content className="border-t border-surface-border px-4 py-4">
+        {children}
+      </Collapsible.Content>
+    </Collapsible.Root>
+  )
+}
+
+function InsuranceDetailTabContent({ inquiry, tabKey }) {
+  if (!inquiry) {
+    return (
+      <EmptyPanel
+        title="No case selected"
+        copy="Choose a case from the insurance table to review its workflow tabs and edit the phase-1 fields."
+      />
+    )
+  }
+
+  if (tabKey === 'overview') {
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        <DetailField label="Customer" value={inquiry.customerDisplayName} />
+        <DetailField label="Vehicle" value={inquiry.vehicleLabel} />
+        <DetailField label="Subject" value={inquiry.subject} />
+        <DetailField label="Purpose" value={formatStatusLabel(inquiry.purpose)} />
+        <DetailField label="Inquiry Type" value={formatStatusLabel(inquiry.inquiryType)} />
+        <DetailField label="Assigned Staff" value={inquiry.assignedStaffId} />
+        <DetailField label="Provider Name" value={inquiry.providerName} />
+        <DetailField label="Policy Number" value={inquiry.policyNumber} />
+        <DetailField label="Created" value={formatDateTime(inquiry.createdAt)} />
+        <DetailField label="Last Updated" value={formatDateTime(inquiry.updatedAt)} />
+        <div className="md:col-span-2">
+          <DetailField label="Description" value={inquiry.description} />
+        </div>
+        <div className="md:col-span-2">
+          <DetailField label="Review Notes" value={inquiry.reviewNotes || inquiry.notes} />
+        </div>
+      </div>
+    )
+  }
+
+  if (tabKey === 'documents') {
+    const documentReviewState = buildInsuranceDocumentReviewState(inquiry)
+
+    return (
+      <div className="min-w-0 space-y-4">
+        <div className="overflow-hidden rounded-2xl border border-surface-border bg-surface-raised p-4 md:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-ink-primary">Document review status</p>
+                <WorkflowBadge value={inquiry.documentStatus} />
+                <span className="badge badge-gray">{inquiry.documentCount} file(s)</span>
+              </div>
+              <p className="text-xs leading-5 text-ink-muted">
+                {documentReviewState.allRequiredReady
+                  ? 'All required files for this case are already on file.'
+                  : `Still needed before review is clean: ${documentReviewState.missingRequiredItems.map((item) => item.label).join(', ')}.`}
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[280px]">
+              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Required Coverage</p>
+                <p className="mt-2 text-lg font-black tracking-tight text-ink-primary">
+                  {documentReviewState.requiredReadyCount}/{documentReviewState.requiredTotalCount}
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {documentReviewState.allRequiredReady ? 'Ready for review' : 'Missing at least one core file'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Helpful On File</p>
+                <p className="mt-2 text-lg font-black tracking-tight text-ink-primary">
+                  {documentReviewState.supportingItems.filter((item) => item.complete).length}
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  Extra claim, quote, or renewal attachments already uploaded
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="grid min-w-0 gap-3 xl:grid-cols-2">
+          <div className="min-w-0 rounded-2xl border border-surface-border bg-surface-raised p-4">
+            <p className="text-sm font-semibold text-ink-primary">Required now</p>
+            <div className="mt-3 space-y-2">
+              {documentReviewState.requiredItems.map((item) => (
+                <div
+                  key={item.type}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-card px-3 py-2"
+                >
+                  <span className="text-sm text-ink-primary">{item.label}</span>
+                  <span className={`badge ${item.complete ? 'badge-green' : 'badge-gray'}`}>
+                    {item.complete ? 'On file' : 'Missing'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="min-w-0 rounded-2xl border border-surface-border bg-surface-raised p-4">
+            <p className="text-sm font-semibold text-ink-primary">Helpful next</p>
+            <div className="mt-3 space-y-2">
+              {documentReviewState.supportingItems.length ? (
+                documentReviewState.supportingItems.map((item) => (
+                  <div
+                    key={item.type}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-card px-3 py-2"
+                  >
+                    <span className="text-sm text-ink-primary">{item.label}</span>
+                    <span className={`badge ${item.complete ? 'badge-blue' : 'badge-gray'}`}>
+                      {item.complete ? 'Attached' : 'Optional'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-ink-muted">
+                  No extra supporting files are suggested for this purpose beyond the uploaded set.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+        {inquiry.documents?.length ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-surface-border bg-surface-raised/60 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Uploaded files</p>
+              <p className="mt-1 text-sm text-ink-secondary">
+                Review the exact evidence attached to this case. Required files should stay on top, while supporting files help staff verify the concern faster.
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-[28px] border border-surface-border bg-surface-raised p-3 md:p-4">
+              <div className="space-y-3">
+                {inquiry.documents.map((document) => {
+                  const DocumentIcon = getInsuranceDocumentIcon(document.documentType)
+
+                  return (
+                    <article
+                      key={document.id ?? `${document.fileName}-${document.fileUrl}`}
+                      className="min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-surface-card p-4 shadow-card-sm"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#f07c00]/15"
+                          style={{ background: 'rgba(240, 124, 0, 0.14)', color: '#f07c00' }}
+                        >
+                          <DocumentIcon size={18} />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-3">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="break-words text-sm font-bold leading-6 text-ink-primary">
+                                {document.fileName}
+                              </p>
+                              <p className="mt-1 text-[11px] text-ink-muted">
+                                Uploaded {formatDateTime(document.createdAt)}
+                              </p>
+                            </div>
+                            <WorkflowBadge value={document.documentTypeLabel || document.documentType}>
+                              {document.documentTypeLabel || formatStatusLabel(document.documentType)}
+                            </WorkflowBadge>
+                          </div>
+
+                          {document.notes ? (
+                            <div className="rounded-xl border border-surface-border bg-surface-raised px-3 py-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-dim">
+                                Staff note
+                              </p>
+                              <p className="mt-2 text-sm leading-6 text-ink-secondary">{document.notes}</p>
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-dashed border-surface-border bg-surface-raised/70 px-3 py-3">
+                              <p className="text-xs text-ink-muted">No staff note attached.</p>
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-dim">
+                            <span className="rounded-full border border-surface-border bg-surface-raised px-2.5 py-1">
+                              Ready for review
+                            </span>
+                            {document.fileUrl ? (
+                              <span className="rounded-full border border-surface-border bg-surface-raised px-2.5 py-1">
+                                Stored in insurance uploads
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <EmptyPanel
+            title="No uploaded documents yet"
+            copy="This case has not received any phase-1 insurance attachments from customer or staff uploads."
+          />
+        )}
+      </div>
+    )
+  }
+
+  if (tabKey === 'timeline') {
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        {getTimelineItems(inquiry).map((item) => (
+          <div key={item.key} className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-ink-primary">{item.label}</p>
+              <span className={`badge ${item.complete ? 'badge-green' : 'badge-gray'}`}>
+                {item.complete ? 'Tracked' : 'Waiting'}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-ink-muted">{item.note}</p>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (tabKey === 'payment') {
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        <DetailField label="Payment Status" value={formatStatusLabel(inquiry.paymentStatus)} />
+        <DetailField label="Payment Due" value={formatDateOnly(inquiry.paymentDueAt)} />
+        <div className="md:col-span-2">
+          <DetailField label="Payment Guidance" value={getInsurancePaymentGuidance(inquiry)} />
+        </div>
+        <div className="md:col-span-2">
+          <DetailField
+            label="When This Tab Matters"
+            value="Use Payment only when staff intentionally move the case into payment follow-up. For most claim intake and standard review work, the customer never needs to do anything here."
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (tabKey === 'renewal') {
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        <DetailField label="Renewal Status" value={formatStatusLabel(inquiry.renewalStatus)} />
+        <DetailField label="Policy Expiry" value={formatDateOnly(inquiry.policyExpiryAt)} />
+        <DetailField label="Renewal Due" value={formatDateOnly(inquiry.renewalDueAt)} />
+        <DetailField label="Assigned Staff" value={inquiry.assignedStaffId} />
+        <div className="md:col-span-2">
+          <DetailField label="Renewal Guidance" value={getInsuranceRenewalGuidance(inquiry)} />
+        </div>
+      </div>
+    )
+  }
+
+  return inquiry.activities?.length ? (
+    <div className="space-y-3">
+      {inquiry.activities.map((activityItem) => (
+        <div
+          key={activityItem.id ?? `${activityItem.action}-${activityItem.createdAt}`}
+          className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Activity size={14} className="text-ink-dim" />
+              <p className="text-sm font-semibold text-ink-primary">{formatStatusLabel(activityItem.action)}</p>
+            </div>
+            <p className="text-[11px] text-ink-muted">{formatDateTime(activityItem.createdAt)}</p>
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">
+            Actor: {activityItem.actorUserId || 'System'}{activityItem.documentType ? ` | ${formatStatusLabel(activityItem.documentType)}` : ''}
+          </p>
+          {activityItem.notes ? <p className="mt-2 text-sm text-ink-secondary">{activityItem.notes}</p> : null}
+        </div>
+      ))}
+    </div>
+  ) : (
+    <EmptyPanel
+      title="No activity recorded yet"
+      copy="Activity entries will appear here as staff or customer actions land on the case."
+    />
   )
 }
 
@@ -102,122 +721,341 @@ export default function InsuranceContent() {
   const user = useUser()
   const role = user?.role ?? null
   const canReviewInsurance = insuranceReviewStaffRoles.includes(role)
-  const [queueItems, setQueueItems] = useState([])
-  const [customers, setCustomers] = useState([])
-  const [selectedCustomerUserId, setSelectedCustomerUserId] = useState('')
+  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [inquiries, setInquiries] = useState([])
   const [selectedInquiryId, setSelectedInquiryId] = useState('')
-  const [manualInquiryId, setManualInquiryId] = useState('')
-  const [liveInquiry, setLiveInquiry] = useState(null)
+  const [activeDetailTab, setActiveDetailTab] = useState('overview')
+  const [listState, setListState] = useState('idle')
+  const [listMessage, setListMessage] = useState('')
   const [detailState, setDetailState] = useState('idle')
   const [detailMessage, setDetailMessage] = useState('')
   const [updateState, setUpdateState] = useState('status_update_ready')
   const [updateMessage, setUpdateMessage] = useState('')
-  const [updateDraft, setUpdateDraft] = useState({
-    status: 'under_review',
-    reviewNotes: '',
+  const [updateDraft, setUpdateDraft] = useState(DEFAULT_UPDATE_DRAFT)
+  const [reloadTick, setReloadTick] = useState(0)
+  const [selectedInquiryIds, setSelectedInquiryIds] = useState([])
+  const [reminderType, setReminderType] = useState(DEFAULT_REMINDER_TYPE)
+  const [reminderTargetMode, setReminderTargetMode] = useState(DEFAULT_REMINDER_TARGET_MODE)
+  const [reminderState, setReminderState] = useState('idle')
+  const [reminderMessage, setReminderMessage] = useState('')
+  const [reminderResults, setReminderResults] = useState([])
+  const [broadcastTitle, setBroadcastTitle] = useState('')
+  const [broadcastMessage, setBroadcastMessage] = useState('')
+  const [broadcastTargetMode, setBroadcastTargetMode] = useState(DEFAULT_BROADCAST_TARGET_MODE)
+  const [broadcastState, setBroadcastState] = useState('idle')
+  const [broadcastStatusMessage, setBroadcastStatusMessage] = useState('')
+  const [broadcastSummary, setBroadcastSummary] = useState(null)
+  const [broadcastResults, setBroadcastResults] = useState([])
+  const [isReminderPanelOpen, setIsReminderPanelOpen] = useState(false)
+  const [isBroadcastPanelOpen, setIsBroadcastPanelOpen] = useState(false)
+  const previousSelectedInquiryIdRef = useRef('')
+  const selectedInquiryIdRef = useRef('')
+  const workspaceStateRef = useRef({
+    activeDetailTab: 'overview',
+    detailMessage: '',
+    detailState: 'idle',
+    updateDraft: DEFAULT_UPDATE_DRAFT,
+    updateMessage: '',
+    updateState: 'status_update_ready',
   })
 
-  const queueState = useMemo(() => getStaffInsuranceQueueState(queueItems), [queueItems])
-  const selectedQueueItem = useMemo(
-    () => getSelectedInsuranceQueueItem(queueItems, selectedInquiryId),
-    [queueItems, selectedInquiryId],
-  )
-  const activeInquiry =
-    liveInquiry && liveInquiry.id === (manualInquiryId || selectedInquiryId)
-      ? liveInquiry
-      : selectedQueueItem
-  const nextStatuses = useMemo(
-    () => getAllowedInsuranceStatusTargets(activeInquiry?.status ?? 'closed'),
-    [activeInquiry?.status],
-  )
+  workspaceStateRef.current = {
+    activeDetailTab,
+    detailMessage,
+    detailState,
+    updateDraft,
+    updateMessage,
+    updateState,
+  }
+  selectedInquiryIdRef.current = selectedInquiryId
+
+  const detailTabs = useMemo(() => getInsuranceDetailTabs(), [])
 
   useEffect(() => {
     if (!user?.accessToken || !canReviewInsurance) {
-      setCustomers([])
+      setInquiries([])
+      setListState('idle')
       return
     }
 
-    void listAdminCustomers(user.accessToken)
-      .then((items) => setCustomers(items))
-      .catch(() => setCustomers([]))
-  }, [canReviewInsurance, user?.accessToken])
+    let ignore = false
+
+    const loadInquiries = async () => {
+      setListState('loading')
+      setListMessage('')
+
+      try {
+        const records = await listInsuranceInquiries({
+          accessToken: user.accessToken,
+          status: normalizeFilterValue(filters.status),
+          paymentStatus: normalizeFilterValue(filters.paymentStatus),
+          renewalStatus: normalizeFilterValue(filters.renewalStatus),
+        })
+
+        if (ignore) return
+
+        setInquiries(records)
+        setListState('loaded')
+      } catch (error) {
+        if (ignore) return
+
+        setListState('load_failed')
+        setListMessage(error?.message || 'Insurance cases could not be loaded.')
+      }
+    }
+
+    void loadInquiries()
+
+    return () => {
+      ignore = true
+    }
+  }, [canReviewInsurance, filters.paymentStatus, filters.renewalStatus, filters.status, reloadTick, user?.accessToken])
+
+  const filteredInquiries = useMemo(() => {
+    const searchNeedle = filters.search.trim().toLowerCase()
+    const liveQueueInquiries = inquiries.filter((inquiry) =>
+      shouldIncludeInsuranceInquiryInLiveQueue({
+        inquiry,
+        statusFilter: normalizeFilterValue(filters.status),
+      }),
+    )
+
+    if (!searchNeedle) {
+      return liveQueueInquiries
+    }
+
+    return liveQueueInquiries.filter((inquiry) =>
+      [
+        inquiry.id,
+        inquiry.customerDisplayName,
+        inquiry.vehicleLabel,
+        inquiry.subject,
+        inquiry.purpose,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(searchNeedle)),
+    )
+  }, [filters.search, filters.status, inquiries])
+
+  const queueFilterSummary = useMemo(
+    () =>
+      getInsuranceQueueFilterSummary({
+        totalCount: inquiries.length,
+        visibleCount: filteredInquiries.length,
+        filters,
+      }),
+    [filteredInquiries.length, filters, inquiries.length],
+  )
+
+  const activeFilterCount = useMemo(
+    () =>
+      [filters.status, filters.paymentStatus, filters.renewalStatus]
+        .filter((value) => value && value !== 'all').length + (filters.search.trim() ? 1 : 0),
+    [filters],
+  )
 
   useEffect(() => {
-    if (!user?.accessToken || !selectedCustomerUserId || !canReviewInsurance) {
-      setQueueItems([])
+    if (!filteredInquiries.length) {
+      setSelectedInquiryId('')
       return
     }
 
-    setDetailMessage('')
-    void listInsuranceInquiriesByUserId({
-      userId: selectedCustomerUserId,
-      accessToken: user.accessToken,
+    if (!filteredInquiries.some((inquiry) => inquiry.id === selectedInquiryId)) {
+      setSelectedInquiryId(filteredInquiries[0].id)
+    }
+  }, [filteredInquiries, selectedInquiryId])
+
+  const selectedInquiry = useMemo(
+    () => filteredInquiries.find((inquiry) => inquiry.id === selectedInquiryId) ?? null,
+    [filteredInquiries, selectedInquiryId],
+  )
+
+  const nextStatuses = useMemo(
+    () => getAllowedInsuranceStatusTargets(selectedInquiry?.status ?? 'closed'),
+    [selectedInquiry?.status],
+  )
+
+  useEffect(() => {
+    if (!selectedInquiry) {
+      previousSelectedInquiryIdRef.current = ''
+      if (!inquiries.length) {
+        setActiveDetailTab(detailTabs[0]?.key ?? 'overview')
+        setDetailState('idle')
+        setDetailMessage('')
+        setUpdateDraft(DEFAULT_UPDATE_DRAFT)
+        setUpdateState('status_update_ready')
+        setUpdateMessage('')
+      }
+      return
+    }
+
+    const nextViewState = getNextInsuranceWorkspaceViewState({
+      currentActiveDetailTab: workspaceStateRef.current.activeDetailTab,
+      currentDetailMessage: workspaceStateRef.current.detailMessage,
+      currentDetailState: workspaceStateRef.current.detailState,
+      currentUpdateDraft: workspaceStateRef.current.updateDraft,
+      currentUpdateMessage: workspaceStateRef.current.updateMessage,
+      currentUpdateState: workspaceStateRef.current.updateState,
+      detailTabs,
+      nextInquiry: selectedInquiry,
+      nextStatuses,
+      previousInquiryId: previousSelectedInquiryIdRef.current,
     })
-      .then((items) => {
-        setQueueItems(items)
-        setSelectedInquiryId(items[0]?.id ?? '')
-        setManualInquiryId(items[0]?.id ?? '')
-      })
-      .catch((error) => {
-        setQueueItems([])
-        setDetailState('load_failed')
-        setDetailMessage(error?.message || 'Insurance inquiries could not be loaded for this customer.')
-      })
-  }, [canReviewInsurance, selectedCustomerUserId, user?.accessToken])
+
+    previousSelectedInquiryIdRef.current = selectedInquiry.id
+    setActiveDetailTab(nextViewState.activeDetailTab)
+    setDetailState(nextViewState.detailState)
+    setDetailMessage(nextViewState.detailMessage)
+    setUpdateDraft(nextViewState.updateDraft)
+    setUpdateState(nextViewState.updateState)
+    setUpdateMessage(nextViewState.updateMessage)
+  }, [detailTabs, inquiries.length, nextStatuses, selectedInquiry])
+
+  const summaryCards = useMemo(
+    () => getInsuranceSummaryCards({ inquiries }),
+    [inquiries],
+  )
+
+  const tableRows = useMemo(
+    () => filteredInquiries.map((inquiry) => buildInsuranceTableRow(inquiry)),
+    [filteredInquiries],
+  )
+  const selectedVisibleInquiryIds = useMemo(
+    () => filteredInquiries.filter((inquiry) => selectedInquiryIds.includes(inquiry.id)).map((inquiry) => inquiry.id),
+    [filteredInquiries, selectedInquiryIds],
+  )
+  const allVisibleSelected =
+    filteredInquiries.length > 0 && selectedVisibleInquiryIds.length === filteredInquiries.length
+  const reminderResultBreakdown = useMemo(
+    () => ({
+      skipped: reminderResults.filter((result) => result.result === 'skipped'),
+      failed: reminderResults.filter((result) => result.result === 'failed'),
+    }),
+    [reminderResults],
+  )
+  const broadcastResultBreakdown = useMemo(
+    () => ({
+      sent: broadcastResults.filter((result) => result.status === 'sent'),
+      skipped: broadcastResults.filter((result) => result.status === 'skipped'),
+      failed: broadcastResults.filter((result) => result.status === 'failed'),
+    }),
+    [broadcastResults],
+  )
+  const reminderComposerState = useMemo(
+    () =>
+      getInsuranceReminderComposerState({
+        targetMode: reminderTargetMode,
+        selectedInquiryId,
+        selectedInquiryIds,
+        selectedVisibleInquiryIds,
+        filteredCount: filteredInquiries.length,
+      }),
+    [filteredInquiries.length, reminderTargetMode, selectedInquiryId, selectedInquiryIds, selectedVisibleInquiryIds],
+  )
+  const broadcastComposerState = useMemo(
+    () =>
+      getInsuranceBroadcastComposerState({
+        targetMode: broadcastTargetMode,
+        selectedInquiryIds,
+        filteredCount: filteredInquiries.length,
+        title: broadcastTitle,
+        message: broadcastMessage,
+      }),
+    [broadcastMessage, broadcastTargetMode, broadcastTitle, filteredInquiries.length, selectedInquiryIds],
+  )
+  const currentCaseLabel = selectedInquiry?.subject || selectedInquiry?.id || 'No case selected'
+  const workspaceSections = useMemo(() => buildInsuranceWorkspaceSections(), [])
+  const primaryFocus = useMemo(
+    () =>
+      buildInsurancePrimaryFocus({
+        selectedInquiry,
+        selectedCount: selectedInquiryIds.length,
+        filteredCount: filteredInquiries.length,
+        activeFilterCount,
+      }),
+    [activeFilterCount, filteredInquiries.length, selectedInquiry, selectedInquiryIds.length],
+  )
+
+  const handleFilterChange = (field) => (nextValueOrEvent) => {
+    const nextValue =
+      typeof nextValueOrEvent === 'string'
+        ? nextValueOrEvent
+        : nextValueOrEvent?.target?.value ?? 'all'
+
+    setFilters((current) => ({
+      ...current,
+      [field]: nextValue,
+    }))
+  }
 
   useEffect(() => {
-    if (!selectedQueueItem) return
+    setSelectedInquiryIds((currentIds) =>
+      currentIds.filter((inquiryId) => filteredInquiries.some((inquiry) => inquiry.id === inquiryId)),
+    )
+  }, [filteredInquiries])
 
-    setManualInquiryId(selectedQueueItem.id)
-    setLiveInquiry(null)
-    setDetailState('detail_loaded')
-    setDetailMessage('')
-  }, [selectedQueueItem])
+  const toggleInquirySelection = (inquiryId) => {
+    setSelectedInquiryIds((currentIds) =>
+      currentIds.includes(inquiryId)
+        ? currentIds.filter((currentId) => currentId !== inquiryId)
+        : [...currentIds, inquiryId],
+    )
+  }
 
-  useEffect(() => {
-    if (!activeInquiry) return
+  const handleToggleAllVisible = () => {
+    if (!filteredInquiries.length) {
+      return
+    }
 
-    setUpdateDraft({
-      status: nextStatuses[0] ?? activeInquiry.status,
-      reviewNotes: activeInquiry.reviewNotes ?? '',
+    setSelectedInquiryIds((currentIds) => {
+      const visibleIds = filteredInquiries.map((inquiry) => inquiry.id)
+
+      if (visibleIds.every((id) => currentIds.includes(id))) {
+        return currentIds.filter((id) => !visibleIds.includes(id))
+      }
+
+      return [...new Set([...currentIds, ...visibleIds])]
     })
-    setUpdateState('status_update_ready')
-    setUpdateMessage('')
-  }, [activeInquiry, nextStatuses])
+  }
 
-  const handleLoadLiveDetail = async () => {
-    if (!canReviewInsurance) {
-      setDetailState('forbidden_role')
-      setDetailMessage('Only service advisers and super admins can load staff insurance detail.')
+  const handleRefreshDetail = async () => {
+    if (!selectedInquiry?.id || !user?.accessToken) {
       return
     }
 
-    if (!user?.accessToken) {
-      setDetailState('load_failed')
-      setDetailMessage('A valid staff session is required before loading a live insurance inquiry.')
-      return
-    }
-
-    if (!manualInquiryId.trim()) {
-      setDetailState('load_failed')
-      setDetailMessage('Enter or select an inquiry id before loading live detail.')
-      return
-    }
+    const requestInquiryId = selectedInquiry.id
 
     setDetailState('loading')
     setDetailMessage('')
 
     try {
-      const inquiry = await getInsuranceInquiryById({
-        inquiryId: manualInquiryId.trim(),
+      const liveInquiry = await getInsuranceInquiryById({
+        inquiryId: requestInquiryId,
         accessToken: user.accessToken,
       })
 
-      setLiveInquiry(inquiry)
-      setSelectedInquiryId(inquiry.id)
-      setDetailState('detail_loaded')
-      setDetailMessage('Live inquiry detail loaded from the backend.')
+      setInquiries((currentInquiries) =>
+        currentInquiries.map((inquiry) => (inquiry.id === liveInquiry.id ? liveInquiry : inquiry)),
+      )
+      if (
+        shouldApplyInsuranceAsyncResult({
+          requestInquiryId,
+          selectedInquiryId: selectedInquiryIdRef.current,
+        })
+      ) {
+        setDetailState('detail_loaded')
+        setDetailMessage('Live insurance detail refreshed from the backend.')
+      }
     } catch (error) {
+      if (
+        !shouldApplyInsuranceAsyncResult({
+          requestInquiryId,
+          selectedInquiryId: selectedInquiryIdRef.current,
+        })
+      ) {
+        return
+      }
+
       if (error instanceof ApiError && error.status === 404) {
         setDetailState('inquiry_not_found')
       } else if (error instanceof ApiError && error.status === 403) {
@@ -226,56 +1064,64 @@ export default function InsuranceContent() {
         setDetailState('load_failed')
       }
 
-      setDetailMessage(error?.message || 'Insurance inquiry detail could not be loaded.')
+      setDetailMessage(error?.message || 'Insurance inquiry detail could not be refreshed.')
     }
   }
 
   const handleSaveStatus = async () => {
-    if (!canReviewInsurance) {
-      setUpdateState('forbidden_role')
-      setUpdateMessage('Only service advisers and super admins can update insurance status.')
+    if (!selectedInquiry?.id) {
+      setUpdateState('inquiry_not_found')
+      setUpdateMessage('Select a live insurance case before saving workflow changes.')
       return
     }
 
     if (!user?.accessToken) {
       setUpdateState('update_failed')
-      setUpdateMessage('A valid staff session is required before saving status changes.')
+      setUpdateMessage('A valid staff session is required before saving workflow changes.')
       return
     }
 
-    if (!activeInquiry?.id) {
-      setUpdateState('inquiry_not_found')
-      setUpdateMessage('Select a valid inquiry before saving a status update.')
-      return
-    }
+    const requestInquiryId = selectedInquiry.id
 
     setUpdateState('status_update_submitting')
     setUpdateMessage('')
 
     try {
       const updatedInquiry = await updateInsuranceInquiryStatus({
-        inquiryId: activeInquiry.id,
+        inquiryId: requestInquiryId,
         status: updateDraft.status,
         reviewNotes: updateDraft.reviewNotes,
         accessToken: user.accessToken,
       })
+      const refreshedNextStatuses = getAllowedInsuranceStatusTargets(updatedInquiry.status)
+      const refreshedUpdateDraft = {
+        status: refreshedNextStatuses[0] ?? updatedInquiry.status,
+        reviewNotes: updatedInquiry.reviewNotes ?? '',
+      }
 
-      setLiveInquiry(updatedInquiry)
-      setQueueItems((currentQueue) =>
-        currentQueue.map((item) =>
-          item.id === updatedInquiry.id
-            ? {
-                ...item,
-                status: updatedInquiry.status,
-                statusHint: updatedInquiry.statusHint,
-                updatedAt: updatedInquiry.updatedAt,
-              }
-            : item,
-        ),
+      setInquiries((currentInquiries) =>
+        currentInquiries.map((inquiry) => (inquiry.id === updatedInquiry.id ? updatedInquiry : inquiry)),
       )
-      setUpdateState('status_update_saved')
-      setUpdateMessage(`Insurance inquiry updated to ${formatStatusLabel(updatedInquiry.status)}.`)
+      if (
+        shouldApplyInsuranceAsyncResult({
+          requestInquiryId,
+          selectedInquiryId: selectedInquiryIdRef.current,
+        })
+      ) {
+        setUpdateDraft(refreshedUpdateDraft)
+        setUpdateState('status_update_saved')
+        setUpdateMessage(`Insurance workflow updated to ${formatStatusLabel(updatedInquiry.status)}.`)
+      }
     } catch (error) {
+      if (
+        !shouldApplyInsuranceAsyncResult({
+          requestInquiryId,
+          selectedInquiryId: selectedInquiryIdRef.current,
+        })
+      ) {
+        return
+      }
+
       if (error instanceof ApiError && error.status === 404) {
         setUpdateState('inquiry_not_found')
       } else if (error instanceof ApiError && error.status === 403) {
@@ -286,7 +1132,76 @@ export default function InsuranceContent() {
         setUpdateState('update_failed')
       }
 
-      setUpdateMessage(error?.message || 'Insurance status could not be updated.')
+      setUpdateMessage(error?.message || 'Insurance workflow could not be updated.')
+    }
+  }
+
+  const handleSendReminder = async () => {
+    if (!user?.accessToken) {
+      setReminderState('failed')
+      setReminderMessage('A valid staff session is required before sending insurance reminders.')
+      return
+    }
+
+    setReminderState('submitting')
+    setReminderMessage('')
+    setReminderResults([])
+
+    try {
+      const reminderPayload = buildInsuranceReminderRequest({
+        reminderType,
+        targetMode: reminderTargetMode,
+        selectedIds: reminderTargetMode === 'single_case' ? [selectedInquiryId] : selectedInquiryIds,
+        filters,
+      })
+
+      const reminderSummary = await sendInsuranceReminders({
+        ...reminderPayload,
+        accessToken: user.accessToken,
+      })
+
+      setReminderState('sent')
+      setReminderResults(Array.isArray(reminderSummary?.results) ? reminderSummary.results : [])
+      setReminderMessage(summarizeInsuranceReminderResult(reminderSummary))
+    } catch (error) {
+      setReminderState('failed')
+      setReminderMessage(error?.message || 'Insurance reminders could not be sent.')
+    }
+  }
+
+  const handleSendBroadcast = async () => {
+    if (!user?.accessToken) {
+      setBroadcastState('failed')
+      setBroadcastStatusMessage('A valid staff session is required before sending custom broadcasts.')
+      return
+    }
+
+    setBroadcastState('submitting')
+    setBroadcastStatusMessage('')
+    setBroadcastSummary(null)
+    setBroadcastResults([])
+
+    try {
+      const broadcastPayload = buildInsuranceBroadcastRequest({
+        targetMode: broadcastTargetMode,
+        selectedIds: selectedInquiryIds,
+        filters,
+        title: broadcastTitle,
+        message: broadcastMessage,
+      })
+
+      const broadcastSummary = await sendInsuranceBroadcasts({
+        ...broadcastPayload,
+        accessToken: user.accessToken,
+      })
+
+      setBroadcastState('sent')
+      setBroadcastSummary(broadcastSummary)
+      setBroadcastResults(Array.isArray(broadcastSummary?.results) ? broadcastSummary.results : [])
+      setBroadcastStatusMessage(summarizeInsuranceBroadcastResult(broadcastSummary))
+    } catch (error) {
+      setBroadcastState('failed')
+      setBroadcastStatusMessage(error?.message || 'Custom insurance broadcasts could not be sent.')
     }
   }
 
@@ -295,323 +1210,534 @@ export default function InsuranceContent() {
       <div className="space-y-5">
         <BlockingState
           title="Insurance review is adviser/admin only"
-          copy="This workspace is reserved for service advisers and super admins. The sidebar may already hide the page, but this page also blocks direct navigation for non-authorized roles."
+          copy="This workspace is reserved for service advisers and super admins. The page also blocks direct navigation for non-authorized roles."
         />
       </div>
     )
   }
 
   return (
-    <div className="space-y-5">
+    <div className="ops-page-shell">
+      <PageHeader
+        eyebrow="Insurance Review Workspace"
+        title="Live Staff Insurance Queue"
+        description="Review cases, update status, and manage follow-ups in one workspace."
+        actions={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className={`badge ${selectedInquiryIds.length ? 'badge-orange' : 'badge-gray'}`}>
+              {selectedInquiryIds.length} selected
+            </span>
+            <span className={`badge ${filteredInquiries.length ? 'badge-blue' : 'badge-gray'}`}>
+              {filteredInquiries.length} visible
+            </span>
+            <button
+              onClick={() => setReloadTick((current) => current + 1)}
+              className="ops-action-secondary"
+              disabled={listState === 'loading'}
+            >
+              <RefreshCw size={14} className={listState === 'loading' ? 'animate-spin' : undefined} />
+              Refresh Queue
+            </button>
+          </div>
+        }
+      />
+
+      <div className="ops-summary-grid">
+        {summaryCards.map((card) => {
+          const Icon = SUMMARY_CARD_ICONS[card.label] ?? ClipboardList
+          return <SummaryTile key={card.label} icon={Icon} {...card} />
+        })}
+      </div>
+
       <div className="card p-4 md:p-5">
-        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-muted">Insurance Review Workspace</p>
-            <h1 className="text-xl md:text-2xl font-black text-ink-primary mt-1">Queue, Detail, and Claim Status Updates</h1>
-            <p className="text-sm text-ink-muted mt-2 max-w-3xl">
-              This web surface keeps staff review distinct from customer intake. Enter a known inquiry id from mobile intake,
-              then review details and move the claim status without placeholder queue data.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="badge badge-orange">
-              Queue planned
-            </span>
-            <span className="badge badge-green">
-              Detail review ready
-            </span>
-            <span className="badge badge-green">
-              Status update ready
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
-        <SummaryTile
-          icon={ClipboardList}
-          label="Review Queue"
-          value={queueItems.length}
-          sub={queueState === 'queue_loaded' ? 'Queue items loaded' : 'Manual inquiry lookup for now'}
-        />
-        <SummaryTile
-          icon={ShieldCheck}
-          label="Allowed Roles"
-          value="2"
-          sub="service adviser, super admin"
-        />
-        <SummaryTile
-          icon={FileClock}
-          label="Selected Inquiry"
-          value={activeInquiry ? formatStatusLabel(activeInquiry.status) : 'None'}
-          sub={activeInquiry ? activeInquiry.subject : 'Pick a queue item or enter an inquiry id'}
-        />
-        <SummaryTile
-          icon={CheckCircle2}
-          label="Editable Fields"
-          value="2"
-          sub="status and review notes only"
-        />
-      </div>
-
-      <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3 text-xs text-ink-muted">
-        Pick a customer first, then choose from that customer&apos;s live insurance inquiries instead of pasting inquiry ids.
-      </div>
-
-      <div className="grid xl:grid-cols-[360px_minmax(0,1fr)] gap-5">
-        <div className="card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="card-title">Insurance Review Queue</p>
-              <p className="text-xs text-ink-muted mt-1">
-                Queue items load from the selected customer&apos;s live insurance inquiries.
-              </p>
-            </div>
-            <span className={`badge ${queueState === 'queue_loaded' ? 'badge-orange' : 'badge-gray'}`}>
-              {queueState === 'queue_loaded' ? 'Loaded' : 'Empty'}
-            </span>
-          </div>
-
-          <div className="space-y-3 mt-4">
-            <label className="block text-xs text-ink-muted">
-              Customer
-              <select
-                value={selectedCustomerUserId}
-                onChange={(event) => setSelectedCustomerUserId(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+        <WorkspaceSectionHeader
+          title={workspaceSections.queue.title}
+          description={workspaceSections.queue.description}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`badge ${selectedInquiryIds.length ? 'badge-orange' : 'badge-gray'}`}>{selectedInquiryIds.length} selected</span>
+              <span className={`badge ${filteredInquiries.length ? 'badge-blue' : 'badge-gray'}`}>{filteredInquiries.length} visible</span>
+              <button
+                onClick={() => setReloadTick((current) => current + 1)}
+                className="ops-action-secondary"
+                disabled={listState === 'loading'}
               >
-                <option value="">Choose customer</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.displayName} / {customer.email}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {queueItems.length === 0 ? (
-              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-8 text-center">
-                <p className="text-sm font-bold text-ink-primary">No queue items yet</p>
-                <p className="text-xs text-ink-muted mt-2">
-                  Select a customer with insurance activity to continue.
-                </p>
+                <RefreshCw size={14} className={listState === 'loading' ? 'animate-spin' : undefined} />
+                Refresh Queue
+              </button>
+            </div>
+          }
+        />
+
+        <div className="grid gap-4 px-4 py-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label className="label xl:col-span-1">
+              Search
+              <div className="relative">
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim" />
+                <input
+                  value={filters.search}
+                  onChange={handleFilterChange('search')}
+                  className="input pl-9"
+                  placeholder="Find by case, customer, or vehicle"
+                />
               </div>
-            ) : (
-              queueItems.map((item) => {
-                const isSelected = item.id === selectedInquiryId
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setSelectedInquiryId(item.id)}
-                    className={`w-full text-left rounded-xl border px-4 py-4 transition ${
-                      isSelected
-                        ? 'border-[#f07c00] bg-[#f07c00]/10'
-                        : 'border-surface-border bg-surface-card hover:border-[#f07c00]/60'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-mono font-bold" style={{ color: '#f07c00' }}>
-                          INQ-{item.id.slice(0, 8).toUpperCase()}
-                        </p>
-                        <p className="text-sm font-semibold text-ink-primary mt-1">{item.subject}</p>
-                        <p className="text-xs text-ink-muted mt-2 line-clamp-2">{item.statusHint}</p>
-                      </div>
-                      <StatusBadge status={item.status} />
-                    </div>
-                    <p className="text-[11px] text-ink-muted mt-3">
-                      {item.inquiryType.toUpperCase()} | {formatDateTime(item.updatedAt)}
-                    </p>
-                  </button>
-                )
-              })
-            )}
+            </label>
+            <FilterSelect
+              label="Status"
+              value={filters.status}
+              onChange={handleFilterChange('status')}
+              options={INQUIRY_STATUS_OPTIONS}
+            />
+            <FilterSelect
+              label="Payment"
+              value={filters.paymentStatus}
+              onChange={handleFilterChange('paymentStatus')}
+              options={PAYMENT_STATUS_OPTIONS}
+            />
+            <FilterSelect
+              label="Renewal"
+              value={filters.renewalStatus}
+              onChange={handleFilterChange('renewalStatus')}
+              options={RENEWAL_STATUS_OPTIONS}
+            />
           </div>
+
+          <FocusPanel
+            title={primaryFocus.title}
+            description={primaryFocus.description}
+            tone={primaryFocus.tone}
+            meta={[
+              queueFilterSummary.headline,
+              activeFilterCount ? `${activeFilterCount} active filter${activeFilterCount === 1 ? '' : 's'}` : 'All live cases in view',
+            ]}
+          />
         </div>
 
-        <div className="space-y-5">
-          <div className="card p-4 md:p-5">
-            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
-              <div>
-                <p className="card-title">Inquiry Detail</p>
-                <p className="text-xs text-ink-muted mt-1">
-                  Load the selected inquiry to confirm current staff state before updating it.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
-                <select
-                  value={manualInquiryId}
-                  onChange={(event) => setManualInquiryId(event.target.value)}
-                  className="w-full lg:w-[320px] rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                >
-                  <option value="">Choose inquiry</option>
-                  {queueItems.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.subject} / {formatStatusLabel(item.status)}
-                    </option>
-                  ))}
-                </select>
-                <button onClick={handleLoadLiveDetail} className="btn-primary justify-center">
-                  <RefreshCw size={14} /> Load Detail
-                </button>
-              </div>
+        {listMessage ? <div className="status-message status-message-danger mx-4 mb-4">{listMessage}</div> : null}
+
+        <div className="grid gap-4 px-4 pb-4">
+          <CompactActionPanel
+            title="Manual Reminder Send"
+            description="Open only when you need to follow up on a selected case or filtered queue."
+            open={isReminderPanelOpen}
+            onOpenChange={setIsReminderPanelOpen}
+            summary={
+              <>
+                <span className={`badge ${selectedInquiry ? 'badge-green' : 'badge-gray'}`}>{selectedInquiry ? 'Case ready' : 'Pick a case'}</span>
+                <span className={`badge ${reminderComposerState.canSend ? 'badge-orange' : 'badge-gray'}`}>{reminderComposerState.canSend ? 'Ready to send' : 'Pending'}</span>
+              </>
+            }
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="label">
+                Reminder Type
+                <PortalSelect
+                  value={reminderType}
+                  onValueChange={setReminderType}
+                  placeholder="Reminder type"
+                  items={REMINDER_TYPE_OPTIONS.map((option) => ({
+                    value: option,
+                    label: formatStatusLabel(option),
+                  }))}
+                />
+              </label>
+
+              <label className="label">
+                Target Mode
+                <PortalSelect
+                  value={reminderTargetMode}
+                  onValueChange={setReminderTargetMode}
+                  placeholder="Target mode"
+                  items={REMINDER_TARGET_MODE_OPTIONS.map((option) => ({
+                    value: option,
+                    label: formatReminderTargetModeLabel(option),
+                  }))}
+                />
+              </label>
             </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2.5">
+              <button onClick={handleToggleAllVisible} disabled={!filteredInquiries.length} className="ops-action-secondary">
+                {allVisibleSelected ? 'Clear visible selection' : 'Select visible cases'}
+              </button>
+              <button
+                onClick={() => setSelectedInquiryIds([])}
+                disabled={!selectedInquiryIds.length}
+                className="ops-action-secondary"
+              >
+                Clear selected cases
+              </button>
+              <button
+                onClick={handleSendReminder}
+                disabled={reminderState === 'submitting' || !reminderComposerState.canSend}
+                className="ops-action-primary"
+              >
+                {reminderState === 'submitting' ? <RefreshCw size={14} className="animate-spin" /> : <ShieldAlert size={14} />}
+                Send Reminder
+              </button>
+              <span className="text-xs text-ink-secondary">
+                {reminderComposerState.audienceLabel} • {reminderComposerState.summaryLabel}
+              </span>
+            </div>
+
+            {reminderMessage ? (
+              <div
+                className={`mt-4 ${
+                  reminderState === 'sent'
+                    ? 'status-message status-message-success'
+                    : 'status-message status-message-danger'
+                }`}
+              >
+                {reminderMessage}
+              </div>
+            ) : null}
+          </CompactActionPanel>
+
+          <CompactActionPanel
+            title="Custom Broadcast Send"
+            description="Use this only when you need a broader insurance-only in-app message."
+            open={isBroadcastPanelOpen}
+            onOpenChange={setIsBroadcastPanelOpen}
+            summary={
+              <>
+                <span className={`badge ${selectedInquiryIds.length ? 'badge-orange' : 'badge-gray'}`}>{selectedInquiryIds.length} selected</span>
+                <span className={`badge ${broadcastComposerState.canSend ? 'badge-green' : 'badge-gray'}`}>{broadcastComposerState.canSend ? 'Draft ready' : 'Drafting'}</span>
+              </>
+            }
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="label">
+                Target Mode
+                <PortalSelect
+                  value={broadcastTargetMode}
+                  onValueChange={setBroadcastTargetMode}
+                  placeholder="Target mode"
+                  items={BROADCAST_TARGET_MODE_OPTIONS.map((option) => ({
+                    value: option,
+                    label: formatReminderTargetModeLabel(option),
+                  }))}
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <label className="label">
+                Broadcast Title
+                <input
+                  value={broadcastTitle}
+                  onChange={(event) => setBroadcastTitle(event.target.value)}
+                  className="input"
+                  maxLength={120}
+                  placeholder="Insurance update for your app inbox"
+                />
+              </label>
+
+              <label className="label">
+                Broadcast Message
+                <textarea
+                  value={broadcastMessage}
+                  onChange={(event) => setBroadcastMessage(event.target.value)}
+                  rows={4}
+                  maxLength={1000}
+                  className="input min-h-[140px] resize-y"
+                  placeholder="Tell customers the next step."
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2.5">
+              <button onClick={handleToggleAllVisible} disabled={!filteredInquiries.length} className="ops-action-secondary">
+                {allVisibleSelected ? 'Clear visible selection' : 'Select visible cases'}
+              </button>
+              <button
+                onClick={() => setSelectedInquiryIds([])}
+                disabled={!selectedInquiryIds.length}
+                className="ops-action-secondary"
+              >
+                Clear selected cases
+              </button>
+              <button
+                onClick={handleSendBroadcast}
+                disabled={broadcastState === 'submitting' || !broadcastComposerState.canSend}
+                className="ops-action-primary"
+              >
+                {broadcastState === 'submitting' ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <ShieldCheck size={14} />
+                )}
+                Send Broadcast
+              </button>
+              <span className="text-xs text-ink-secondary">
+                {broadcastComposerState.audienceLabel} • {broadcastComposerState.summaryLabel}
+              </span>
+            </div>
+
+            {broadcastStatusMessage ? (
+              <div
+                className={`mt-4 ${
+                  broadcastState === 'sent'
+                    ? 'status-message status-message-success'
+                    : 'status-message status-message-danger'
+                }`}
+              >
+                {broadcastStatusMessage}
+              </div>
+            ) : null}
+          </CompactActionPanel>
+        </div>
+      </div>
+
+      <div className="grid gap-5">
+        <section className="table-surface">
+          <WorkspaceSectionHeader
+            title="Insurance Case List"
+            description={queueFilterSummary.detail}
+            action={
+              <span className={`badge ${filteredInquiries.length ? 'badge-orange' : 'badge-gray'}`}>
+                {filteredInquiries.length} visible case{filteredInquiries.length === 1 ? '' : 's'}
+              </span>
+            }
+          />
+
+          {listState === 'loading' ? (
+            <div className="px-4 py-8 text-sm text-ink-muted">Loading live insurance cases...</div>
+          ) : filteredInquiries.length ? (
+            <ScrollAreaPrimitives.Root className="table-scroll">
+              <ScrollAreaPrimitives.Viewport>
+              <table className="data-table w-full min-w-[1120px]">
+                <thead>
+                  <tr>
+                    <th>
+                      <SurfaceCheckbox
+                        checked={allVisibleSelected}
+                        onCheckedChange={handleToggleAllVisible}
+                        label="Select all visible insurance cases"
+                      />
+                    </th>
+                    <th>Customer</th>
+                    <th>Vehicle</th>
+                    <th>Status</th>
+                    <th>Documents</th>
+                    <th>Payment</th>
+                    <th>Renewal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableRows.map((row, index) => {
+                    const inquiry = filteredInquiries[index]
+                    const isSelected = inquiry.id === selectedInquiryId
+
+                    return (
+                      <tr
+                        key={row.key}
+                        onClick={() => setSelectedInquiryId(inquiry.id)}
+                        className={isSelected ? 'bg-[#f07c00]/10' : undefined}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td onClick={(event) => event.stopPropagation()}>
+                          <SurfaceCheckbox
+                            checked={selectedInquiryIds.includes(inquiry.id)}
+                            onCheckedChange={() => toggleInquirySelection(inquiry.id)}
+                            label={`Select insurance case ${inquiry.subject || inquiry.id}`}
+                          />
+                        </td>
+                        <td>
+                          <div className="space-y-1">
+                            <p className="font-semibold text-ink-primary">{row.customer}</p>
+                            <p className="text-xs text-ink-muted">{inquiry.subject || inquiry.id}</p>
+                          </div>
+                        </td>
+                        <td>{row.vehicle}</td>
+                        <td>
+                          <WorkflowBadge value={inquiry.status}>{row.status}</WorkflowBadge>
+                        </td>
+                        <td>
+                          <WorkflowBadge value={inquiry.documentStatus}>{row.documentStatus}</WorkflowBadge>
+                        </td>
+                        <td>
+                          <WorkflowBadge value={inquiry.paymentStatus}>{row.paymentStatus}</WorkflowBadge>
+                        </td>
+                        <td>
+                          <WorkflowBadge value={inquiry.renewalStatus}>
+                            {row.renewalStatus || formatStatusLabel(inquiry.renewalStatus)}
+                          </WorkflowBadge>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              </ScrollAreaPrimitives.Viewport>
+              <ScrollAreaPrimitives.Scrollbar orientation="horizontal" className="primitive-scrollbar">
+                <ScrollAreaPrimitives.Thumb className="primitive-scrollbar-thumb" />
+              </ScrollAreaPrimitives.Scrollbar>
+            </ScrollAreaPrimitives.Root>
+          ) : (
+            <EmptyPanel
+              title="No cases match the current filters"
+              copy={
+                queueFilterSummary.hasActiveFilters
+                  ? 'Broaden the filters or refresh the queue.'
+                  : inquiries.length
+                    ? 'Only cancelled, rejected, or closed cases remain, so the live queue is clear.'
+                    : 'No live insurance cases yet. Refresh when new intake arrives.'
+              }
+            />
+          )}
+        </section>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+          <div className="card overflow-hidden p-4 md:p-5">
+            <WorkspaceSectionHeader
+              title={workspaceSections.detail.title}
+              description={workspaceSections.detail.description}
+              action={
+                <button
+                  onClick={handleRefreshDetail}
+                  disabled={!selectedInquiry || detailState === 'loading'}
+                  className="ops-action-secondary"
+                >
+                  {detailState === 'loading' ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  Refresh Detail
+                </button>
+              }
+            />
 
             {detailMessage ? (
               <div
-                className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
+                className={`mt-4 ${
                   detailState === 'detail_loaded'
-                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                    ? 'status-message status-message-success'
                     : detailState === 'forbidden_role'
-                      ? 'border-orange-500/25 bg-orange-500/10 text-orange-100'
-                      : 'border-red-500/25 bg-red-500/10 text-red-200'
+                      ? 'status-message status-message-warning'
+                      : 'status-message status-message-danger'
                 }`}
               >
                 {detailMessage}
               </div>
             ) : null}
 
-            {activeInquiry ? (
-              <div className="grid md:grid-cols-2 gap-3 mt-4">
-                <DetailRow label="Current Status" value={formatStatusLabel(activeInquiry.status)} />
-                <DetailRow label="Inquiry Type" value={activeInquiry.inquiryType.toUpperCase()} />
-                <DetailRow label="Subject" value={activeInquiry.subject} />
-                <DetailRow label="Customer User" value={activeInquiry.userId} />
-                <DetailRow label="Vehicle" value={activeInquiry.vehicleId} />
-                <DetailRow label="Created" value={formatDateTime(activeInquiry.createdAt)} />
-                <DetailRow label="Provider Name" value={activeInquiry.providerName} />
-                <DetailRow label="Policy Number" value={activeInquiry.policyNumber} />
-                <DetailRow label="Customer Notes" value={activeInquiry.notes} />
-                <DetailRow label="Document Count" value={String(activeInquiry.documentCount ?? 0)} />
-                <div className="md:col-span-2">
-                  <DetailRow label="Description" value={activeInquiry.description} />
-                </div>
-                <div className="md:col-span-2 rounded-xl border border-surface-border bg-surface-raised px-4 py-4">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Supporting Documents</p>
-                  {activeInquiry.documents?.length ? (
-                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                      {activeInquiry.documents.map((document) => (
-                        <div
-                          key={document.id ?? `${document.fileName}-${document.fileUrl}`}
-                          className="rounded-xl border border-surface-border bg-surface-card px-4 py-3"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-bold text-ink-primary">{document.fileName}</p>
-                              <p className="mt-1 break-all text-xs text-ink-muted">{document.fileUrl}</p>
-                            </div>
-                            <span className="badge badge-blue">{document.documentTypeLabel ?? document.documentType}</span>
-                          </div>
-                          {document.notes ? (
-                            <p className="mt-3 text-xs leading-5 text-ink-secondary">{document.notes}</p>
-                          ) : null}
-                          <p className="mt-3 text-[11px] text-ink-muted">
-                            Uploaded {formatDateTime(document.createdAt)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-xs leading-5 text-ink-muted">
-                      No supporting document metadata is attached to this inquiry yet.
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-10 text-center mt-4">
-                <AlertTriangle size={28} className="mx-auto text-ink-dim mb-3" />
-                <p className="text-sm font-bold text-ink-primary">No inquiry selected yet</p>
-                <p className="text-xs text-ink-muted mt-2">
-                  Pick a queue item or load a known inquiry id. Customer-only intake fields remain read-only in this workspace.
-                </p>
-              </div>
-            )}
+            <TabsPrimitives.Root value={activeDetailTab} onValueChange={setActiveDetailTab} className="mt-4">
+              <TabsPrimitives.List className="flex flex-wrap gap-2">
+                {detailTabs.map((tab) => (
+                  <TabsPrimitives.Trigger
+                    key={tab.key}
+                    value={tab.key}
+                    className="primitive-tab-trigger"
+                  >
+                    {tab.label}
+                  </TabsPrimitives.Trigger>
+                ))}
+              </TabsPrimitives.List>
+
+              {detailTabs.map((tab) => (
+                <TabsPrimitives.Content key={tab.key} value={tab.key} className="mt-4 min-w-0">
+                  <ScrollAreaPrimitives.Root className="max-h-[640px] overflow-hidden rounded-2xl">
+                    <ScrollAreaPrimitives.Viewport className="h-[640px] min-w-0 pr-2">
+                      <InsuranceDetailTabContent inquiry={selectedInquiry} tabKey={tab.key} />
+                    </ScrollAreaPrimitives.Viewport>
+                    <ScrollAreaPrimitives.Scrollbar orientation="vertical" className="primitive-scrollbar">
+                      <ScrollAreaPrimitives.Thumb className="primitive-scrollbar-thumb" />
+                    </ScrollAreaPrimitives.Scrollbar>
+                  </ScrollAreaPrimitives.Root>
+                </TabsPrimitives.Content>
+              ))}
+            </TabsPrimitives.Root>
           </div>
 
           <div className="card p-4 md:p-5">
-            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-              <div>
-                <p className="card-title">Status Update</p>
-                <p className="text-xs text-ink-muted mt-1">
-                  Staff can edit only the fields the backend DTO supports: <strong>status</strong> and <strong>review notes</strong>.
-                </p>
-              </div>
-              <span className={`badge ${nextStatuses.length ? 'badge-green' : 'badge-gray'}`}>
-                {nextStatuses.length ? `${nextStatuses.length} valid next state${nextStatuses.length === 1 ? '' : 's'}` : 'No transitions'}
-              </span>
-            </div>
+            <WorkspaceSectionHeader
+              title={workspaceSections.actions.title}
+              description={workspaceSections.actions.description}
+              action={
+                <span className={`badge ${nextStatuses.length ? 'badge-green' : 'badge-gray'}`}>
+                  {nextStatuses.length ? `${nextStatuses.length} valid next state${nextStatuses.length === 1 ? '' : 's'}` : selectedInquiry ? 'View-only case' : 'Pick a live case'}
+                </span>
+              }
+            />
 
-            <div className="grid md:grid-cols-2 gap-3 mt-4">
-              <label className="text-xs text-ink-muted">
-                Next status
-                <select
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="label">
+                Next Status
+                <PortalSelect
                   value={updateDraft.status}
-                  onChange={(event) => setUpdateDraft((current) => ({ ...current, status: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                  disabled={!nextStatuses.length}
-                >
-                  {nextStatuses.length ? (
-                    nextStatuses.map((status) => (
-                      <option key={status} value={status}>
-                        {formatStatusLabel(status)}
-                      </option>
-                    ))
-                  ) : (
-                    <option value={activeInquiry?.status ?? 'closed'}>
-                      {activeInquiry ? 'No valid transition available' : 'Select an inquiry first'}
-                    </option>
-                  )}
-                </select>
+                  onValueChange={(nextStatus) => {
+                    setUpdateDraft((current) => ({ ...current, status: nextStatus }))
+                    setUpdateState('status_update_ready')
+                    setUpdateMessage('')
+                  }}
+                  placeholder="Next status"
+                  items={
+                    nextStatuses.length
+                      ? nextStatuses.map((status) => ({
+                          value: status,
+                          label: formatStatusLabel(status),
+                        }))
+                      : [
+                          {
+                            value: selectedInquiry?.status ?? 'closed',
+                            label: selectedInquiry ? 'This case is view-only' : 'Select a live case first',
+                          },
+                        ]
+                  }
+                  disabled={!selectedInquiry || !nextStatuses.length}
+                />
               </label>
-              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Review Control</p>
-                <p className="text-sm text-ink-primary mt-1">
-                  Status and notes are the only editable fields in this workflow.
-                </p>
-                <p className="text-xs text-ink-muted mt-2">
-                  Role failures, missing records, and invalid transitions stay distinct from one another.
-                </p>
-              </div>
-              <label className="text-xs text-ink-muted md:col-span-2">
-                Review notes
+
+              <label className="label md:col-span-2">
+                Review Notes
                 <textarea
-                  value={updateDraft.reviewNotes ?? ''}
-                  onChange={(event) => setUpdateDraft((current) => ({ ...current, reviewNotes: event.target.value }))}
+                  value={updateDraft.reviewNotes}
+                  onChange={(event) =>
+                    {
+                      setUpdateDraft((current) => ({ ...current, reviewNotes: event.target.value }))
+                      setUpdateState('status_update_ready')
+                      setUpdateMessage('')
+                    }
+                  }
                   rows={4}
-                  className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                  placeholder="Add staff review notes for the next status transition."
+                  className="input min-h-[120px] resize-y"
+                  placeholder="Add staff notes."
                 />
               </label>
             </div>
 
             {updateMessage ? (
               <div
-                className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
+                className={`mt-4 ${
                   updateState === 'status_update_saved'
-                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                    ? 'status-message status-message-success'
                     : updateState === 'forbidden_role'
-                      ? 'border-orange-500/25 bg-orange-500/10 text-orange-100'
-                      : 'border-red-500/25 bg-red-500/10 text-red-200'
+                      ? 'status-message status-message-warning'
+                      : 'status-message status-message-danger'
                 }`}
               >
                 {updateMessage}
               </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-2 mt-4">
+            <div className="mt-4 flex flex-wrap gap-2">
               <button
                 onClick={handleSaveStatus}
-                disabled={!activeInquiry || !nextStatuses.length || updateState === 'status_update_submitting'}
-                className="btn-primary"
+                disabled={!selectedInquiry || !nextStatuses.length || updateState === 'status_update_submitting'}
+                className="ops-action-primary"
               >
                 {updateState === 'status_update_submitting' ? (
                   <RefreshCw size={14} className="animate-spin" />
                 ) : (
                   <ShieldCheck size={14} />
                 )}
-                Save Status Update
+                Save Workflow Update
               </button>
-              <span className="badge badge-gray">Live detail/status routes only</span>
+              <span className="badge badge-gray">
+                {!selectedInquiry
+                  ? 'Pick a live case from the queue'
+                  : nextStatuses.length
+                    ? 'Status and review notes only'
+                    : 'View-only terminal case'}
+              </span>
             </div>
           </div>
         </div>

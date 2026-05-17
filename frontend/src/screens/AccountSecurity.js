@@ -32,14 +32,13 @@ export default function AccountSecurity() {
         </div>
 
         <div className="grid gap-4">
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="status-message status-message-warning">
             <div className="flex items-start gap-3">
               <AlertTriangle size={18} className="mt-0.5 flex-shrink-0 text-amber-300" />
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-amber-100">Prototype password change was removed</p>
-                <p className="text-sm text-amber-50/90">
-                  This settings tab was previously using a mock current-password check and a fake OTP. It has been disabled
-                  so staff accounts are not given a misleading security flow.
+                <p className="text-sm font-semibold text-ink-primary">Password self-service is paused</p>
+                <p className="text-sm text-ink-secondary">
+                  This tab previously depended on a temporary verification flow that is no longer shown to staff. Self-service password updates stay unavailable here until the production verification flow is connected end to end.
                 </p>
               </div>
             </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -13,6 +13,8 @@ import {
   Wrench,
 } from 'lucide-react'
 
+import PageHeader from '@/components/ui/PageHeader'
+import PortalSelect from '@/components/ui/PortalSelect'
 import { ApiError, listAdminCustomers, listStaffAccounts } from '@/lib/authClient'
 import {
   createBackJobCase,
@@ -35,6 +37,16 @@ import {
   getBackJobValidationState,
   isBackJobCustomerSafe,
 } from '@/lib/api/generated/back-jobs/staff-web-back-jobs'
+import {
+  buildBackJobReworkDraft,
+  buildBackJobStatusDraft,
+  defaultBackJobStatusDraft,
+  getBackJobCounts,
+  resolveBackJobReworkServiceAdviser,
+  splitCommaSeparatedIds,
+  toggleDelimitedIdValue,
+  upsertBackJob,
+} from './backJobsView.mjs'
 
 const STATUS_META = {
   reported: { label: 'Reported', cls: 'badge-red' },
@@ -87,12 +99,6 @@ const findingCategoryOptions = [
   { value: 'customer_report', label: 'Customer Report' },
 ]
 
-const splitCommaSeparatedIds = (value) =>
-  String(value ?? '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-
 const formatDateTime = (value) => {
   if (!value) return 'Not recorded'
 
@@ -102,14 +108,6 @@ const formatDateTime = (value) => {
   }
 
   return date.toLocaleString()
-}
-
-const upsertBackJob = (items, backJob) => {
-  if (!backJob) return items
-  const exists = items.some((item) => item.id === backJob.id)
-  return exists
-    ? items.map((item) => (item.id === backJob.id ? backJob : item))
-    : [backJob, ...items]
 }
 
 function StatCard({ icon: Icon, label, value, toneClass }) {
@@ -129,7 +127,7 @@ function StatCard({ icon: Icon, label, value, toneClass }) {
 function BackJobDetail({ backJob }) {
   if (!backJob) {
     return (
-      <div className="card p-5 text-sm text-ink-muted">
+      <div className="empty-panel text-sm text-ink-muted">
         Load a vehicle list, create a case, or search by back-job id to inspect live detail.
       </div>
     )
@@ -238,6 +236,7 @@ export default function BackJobsContent() {
   const [createState, setCreateState] = useState(initialCreateState)
   const [statusState, setStatusState] = useState(initialStatusState)
   const [reworkState, setReworkState] = useState(initialReworkState)
+  const detailSectionRef = useRef(null)
   const [createDraft, setCreateDraft] = useState({
     customerUserId: '',
     vehicleId: '',
@@ -252,32 +251,31 @@ export default function BackJobsContent() {
     findingNotes: '',
     findingValidated: true,
   })
-  const [statusDraft, setStatusDraft] = useState({
-    status: 'inspected',
-    returnInspectionId: '',
-    reviewNotes: '',
-    resolutionNotes: '',
-  })
-  const [reworkDraft, setReworkDraft] = useState({
-    itemName: 'Warranty rework',
-    itemDescription: '',
-    estimatedHours: '1',
-    notes: '',
-    assignedTechnicianIdsText: '',
-  })
+  const [statusDraft, setStatusDraft] = useState({ ...defaultBackJobStatusDraft })
+  const [reworkDraft, setReworkDraft] = useState(() => buildBackJobReworkDraft())
 
   const counts = useMemo(() => {
     const source = activeBackJob ? upsertBackJob(backJobs, activeBackJob) : backJobs
-    return {
-      total: source.length,
-      reported: source.filter((item) => item.status === 'reported').length,
-      approved: source.filter((item) => item.status === 'approved_for_rework').length,
-      unresolved: source.filter((item) => !['resolved', 'closed', 'rejected'].includes(item.status)).length,
-    }
+    return getBackJobCounts(source)
   }, [activeBackJob, backJobs])
 
   const allowedStatusTargets = getAllowedBackJobStatusTargets(activeBackJob?.status)
   const canSubmitRework = canCreateReworkJobOrder(activeBackJob)
+  const reworkServiceAdviserSnapshot = useMemo(
+    () =>
+      resolveBackJobReworkServiceAdviser({
+        activeBackJob,
+        vehicleJobOrders,
+        sessionUserId: user?.id,
+        sessionUserRole: role,
+        sessionStaffCode: user?.staffCode,
+      }),
+    [activeBackJob, role, user?.id, user?.staffCode, vehicleJobOrders],
+  )
+  const selectedReworkTechnicianIds = useMemo(
+    () => splitCommaSeparatedIds(reworkDraft.assignedTechnicianIdsText),
+    [reworkDraft.assignedTechnicianIdsText],
+  )
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === selectedCustomerUserId) ?? null,
     [customers, selectedCustomerUserId],
@@ -364,14 +362,40 @@ export default function BackJobsContent() {
 
   function syncActiveBackJob(backJob) {
     setActiveBackJob(backJob)
-    setBackJobs((current) => upsertBackJob(current, backJob))
-    setBackJobId(backJob?.id ?? '')
-    if (backJob?.returnInspectionId) {
-      setStatusDraft((current) => ({
-        ...current,
-        returnInspectionId: backJob.returnInspectionId,
-      }))
+    if (backJob) {
+      setBackJobs((current) => upsertBackJob(current, backJob))
     }
+    setBackJobId(backJob?.id ?? '')
+    setStatusDraft(
+      buildBackJobStatusDraft({
+        backJob,
+        allowedTargets: getAllowedBackJobStatusTargets(backJob?.status),
+      }),
+    )
+    setStatusState(initialStatusState)
+    setReworkDraft(buildBackJobReworkDraft())
+    setReworkState(initialReworkState)
+
+    if (backJob) {
+      requestAnimationFrame(() => {
+        detailSectionRef.current?.scrollIntoView({
+          block: 'start',
+          behavior: 'auto',
+        })
+      })
+    }
+  }
+
+  function clearActiveBackJobContext({ clearLoadedCases = false } = {}) {
+    setActiveBackJob(null)
+    setBackJobId('')
+    if (clearLoadedCases) {
+      setBackJobs([])
+    }
+    setStatusDraft(buildBackJobStatusDraft())
+    setStatusState(initialStatusState)
+    setReworkDraft(buildBackJobReworkDraft())
+    setReworkState(initialReworkState)
   }
 
   async function handleLoadVehicleBackJobs() {
@@ -389,6 +413,8 @@ export default function BackJobsContent() {
       setBackJobs(loadedBackJobs)
       if (loadedBackJobs.length > 0) {
         syncActiveBackJob(loadedBackJobs[0])
+      } else {
+        clearActiveBackJobContext()
       }
       setLoadState({
         status: loadedBackJobs.length > 0 ? 'back_jobs_loaded' : 'back_jobs_empty',
@@ -400,6 +426,7 @@ export default function BackJobsContent() {
       let nextStatus = 'back_jobs_failed'
       if (error instanceof ApiError && error.status === 403) nextStatus = 'back_jobs_forbidden_role'
       if (error instanceof ApiError && error.status === 404) nextStatus = 'back_jobs_not_found'
+      clearActiveBackJobContext({ clearLoadedCases: true })
       setLoadState({
         status: nextStatus,
         message: error?.message || 'Vehicle back-jobs could not be loaded.',
@@ -428,6 +455,9 @@ export default function BackJobsContent() {
       let nextStatus = 'back_jobs_failed'
       if (error instanceof ApiError && error.status === 403) nextStatus = 'back_jobs_forbidden_role'
       if (error instanceof ApiError && error.status === 404) nextStatus = 'back_jobs_not_found'
+      if (nextStatus === 'back_jobs_not_found') {
+        clearActiveBackJobContext()
+      }
       setLoadState({
         status: nextStatus,
         message: error?.message || 'Back-job detail could not be loaded.',
@@ -561,10 +591,13 @@ export default function BackJobsContent() {
       return
     }
 
-    if (!user?.id || !user?.staffCode) {
+    if (!reworkServiceAdviserSnapshot?.serviceAdviserUserId || !reworkServiceAdviserSnapshot?.serviceAdviserCode) {
       setReworkState({
         status: 'rework_failed',
-        message: 'A staff id and staff code are required to snapshot the service adviser.',
+        message:
+          role === 'super_admin'
+            ? 'The original job-order adviser snapshot could not be resolved for this back-job. Load the original vehicle history first or restore the original adviser linkage before creating rework.'
+            : 'A valid service adviser snapshot is required before creating rework.',
       })
       return
     }
@@ -574,8 +607,8 @@ export default function BackJobsContent() {
     try {
       const createdJobOrder = await createReworkJobOrderFromBackJob({
         backJob: activeBackJob,
-        serviceAdviserUserId: user.id,
-        serviceAdviserCode: user.staffCode,
+        serviceAdviserUserId: reworkServiceAdviserSnapshot.serviceAdviserUserId,
+        serviceAdviserCode: reworkServiceAdviserSnapshot.serviceAdviserCode,
         notes: reworkDraft.notes,
         items: [{
           name: reworkDraft.itemName,
@@ -609,7 +642,7 @@ export default function BackJobsContent() {
 
   if (!canManage) {
     return (
-      <div className="card p-6">
+      <div className="empty-panel text-left">
         <div className="flex items-center gap-3">
           <ShieldCheck size={20} className="text-red-400" />
           <div>
@@ -624,20 +657,18 @@ export default function BackJobsContent() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="card relative overflow-hidden p-5 md:p-6">
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-72 bg-gradient-to-l from-brand-orange/10 to-transparent" />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand-orange">Live Back-Jobs</p>
-            <h1 className="mt-3 text-3xl font-bold text-ink-primary">Review And Rework Workbench</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
-              Create return cases, validate inspection-backed findings, update review status, and create linked rework job orders without leaking staff-only review state to customer surfaces.
-            </p>
-          </div>
-          <span className="badge badge-gray">{backJobReviewContractSources.length} source contracts</span>
-        </div>
-      </section>
+    <div className="ops-page-shell">
+      <PageHeader
+        eyebrow="Live Back-Jobs"
+        title="Review And Rework Workbench"
+        description="Create return cases, validate inspection-backed findings, update review status, and create linked rework job orders without leaking staff-only review state to customer surfaces."
+        meta={
+          <>
+            <span className="badge badge-gray">{backJobReviewContractSources.length} source contracts</span>
+            <span className="badge badge-gray">{counts.total} loaded cases</span>
+          </>
+        }
+      />
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard icon={ClipboardList} label="Loaded Cases" value={counts.total} toneClass="border-surface-border bg-surface-raised text-brand-orange" />
@@ -646,7 +677,7 @@ export default function BackJobsContent() {
         <StatCard icon={CheckCircle2} label="Unresolved" value={counts.unresolved} toneClass="border-emerald-500/15 bg-emerald-500/10 text-emerald-400" />
       </section>
 
-      <section className="card p-5">
+      <section className="toolbar-surface">
         <div className="grid gap-4 lg:grid-cols-2">
           <form
             className="rounded-2xl border border-surface-border bg-surface-raised p-4"
@@ -657,38 +688,37 @@ export default function BackJobsContent() {
           >
             <p className="text-sm font-bold text-ink-primary">Load Vehicle Back-Jobs</p>
             <p className="mt-1 text-xs text-ink-muted">Choose a customer vehicle to review the return cases tied to that vehicle.</p>
-            <label className="mt-3 block text-xs text-ink-muted">
+            <label className="label mt-3">
               Customer
-              <select
+              <PortalSelect
                 value={selectedCustomerUserId}
-                onChange={(event) => {
-                  setSelectedCustomerUserId(event.target.value)
+                onValueChange={(nextValue) => {
+                  setSelectedCustomerUserId(nextValue)
                   setVehicleId('')
                 }}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="">Choose customer</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.displayName} / {customer.email}
-                  </option>
-                ))}
-              </select>
+                placeholder="Choose customer"
+                emptyOptionLabel="Choose customer"
+                items={customers.map((customer) => ({
+                  value: customer.id,
+                  label: customer.displayName || customer.email || customer.id,
+                  helper: customer.email || customer.id,
+                }))}
+              />
             </label>
-            <label className="mt-3 block text-xs text-ink-muted">
+            <label className="label mt-3">
               Vehicle
-              <select
+              <PortalSelect
                 value={vehicleId}
-                onChange={(event) => setVehicleId(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="">Choose vehicle</option>
-                {selectedCustomerVehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.plateNumber || vehicle.id} / {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setVehicleId}
+                placeholder="Choose vehicle"
+                emptyOptionLabel="Choose vehicle"
+                items={selectedCustomerVehicles.map((vehicle) => ({
+                  value: vehicle.id,
+                  label: vehicle.plateNumber || vehicle.id,
+                  helper:
+                    [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') || vehicle.id,
+                }))}
+              />
             </label>
             <button type="submit" className="btn-primary mt-3" disabled={loadState.status === 'back_jobs_loading'}>
               {loadState.status === 'back_jobs_loading' ? <RefreshCw size={15} className="animate-spin" /> : <Search size={15} />}
@@ -704,22 +734,31 @@ export default function BackJobsContent() {
             }}
           >
             <p className="text-sm font-bold text-ink-primary">Load Case Detail</p>
-            <p className="mt-1 text-xs text-ink-muted">Choose one loaded case when staff need to review specific back-job detail.</p>
-            <label className="mt-3 block text-xs text-ink-muted">
-              Back-job
-              <select
+            <p className="mt-1 text-xs text-ink-muted">
+              Paste a back-job id directly, or pick from the loaded vehicle cases when staff need to review one specific record.
+            </p>
+            <label className="label mt-3">
+              Back-job id
+              <input
                 value={backJobId}
                 onChange={(event) => setBackJobId(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="">Choose loaded case</option>
+                className="input"
+                list="loaded-back-job-options"
+                placeholder="Paste a back-job id or choose a loaded case"
+              />
+              <datalist id="loaded-back-job-options">
                 {backJobs.map((backJob) => (
                   <option key={backJob.id} value={backJob.id}>
                     {backJob.complaint} / {backJob.status}
                   </option>
                 ))}
-              </select>
+              </datalist>
             </label>
+            <p className="mt-2 text-xs text-ink-muted">
+              {backJobs.length
+                ? 'Loaded cases are available as suggestions, but you can still look up any back-job id directly.'
+                : 'No vehicle cases are loaded yet. You can still paste a known back-job id here.'}
+            </p>
             <button type="submit" className="btn-primary mt-3" disabled={loadState.status === 'back_jobs_loading'}>
               {loadState.status === 'back_jobs_loading' ? <RefreshCw size={15} className="animate-spin" /> : <Search size={15} />}
               Load Case Detail
@@ -729,10 +768,10 @@ export default function BackJobsContent() {
 
         {loadState.message ? (
           <div
-            className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+            className={`mt-4 ${
               ['back_jobs_loaded', 'back_jobs_empty'].includes(loadState.status)
-                ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                : 'border-red-500/25 bg-red-500/10 text-red-200'
+                ? 'status-message status-message-success'
+                : 'status-message status-message-danger'
             }`}
           >
             {loadState.message}
@@ -741,36 +780,36 @@ export default function BackJobsContent() {
       </section>
 
       {backJobs.length > 0 ? (
-        <section className="card overflow-hidden">
+        <section className="table-surface">
           <div className="border-b border-surface-border bg-surface-raised px-5 py-4">
             <p className="text-sm font-bold text-ink-primary">Loaded Vehicle Cases</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
+          <div className="table-scroll">
+            <table className="data-table min-w-[820px]">
               <thead>
-                <tr className="border-b border-surface-border text-left text-xs text-ink-muted">
-                  <th className="px-5 py-3 font-semibold">Back-Job</th>
-                  <th className="px-5 py-3 font-semibold">Original Job</th>
-                  <th className="px-5 py-3 font-semibold">Complaint</th>
-                  <th className="px-5 py-3 font-semibold">Status</th>
-                  <th className="px-5 py-3 font-semibold">Visibility</th>
-                  <th className="px-5 py-3 font-semibold">Action</th>
+                <tr>
+                  <th>Back-Job</th>
+                  <th>Original Job</th>
+                  <th>Complaint</th>
+                  <th>Status</th>
+                  <th>Visibility</th>
+                  <th>Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-surface-border">
+              <tbody>
                 {backJobs.map((backJob) => {
                   const statusMeta = STATUS_META[backJob.status] ?? STATUS_META.reported
                   const visibility = getBackJobCustomerVisibility(backJob.status)
                   return (
-                    <tr key={backJob.id} className="transition-colors hover:bg-surface-hover">
-                      <td className="px-5 py-3 font-mono text-xs text-brand-orange">{backJob.id}</td>
-                      <td className="px-5 py-3 font-mono text-xs text-ink-secondary">{backJob.originalJobOrderId}</td>
-                      <td className="px-5 py-3 text-ink-secondary">
+                    <tr key={backJob.id}>
+                      <td className="font-mono text-xs text-brand-orange">{backJob.id}</td>
+                      <td className="font-mono text-xs text-ink-secondary">{backJob.originalJobOrderId}</td>
+                      <td>
                         <p className="max-w-[260px] truncate">{backJob.complaint}</p>
                       </td>
-                      <td className="px-5 py-3"><span className={`badge ${statusMeta.cls}`}>{statusMeta.label}</span></td>
-                      <td className="px-5 py-3"><span className="badge badge-gray">{visibilityCopy[visibility]}</span></td>
-                      <td className="px-5 py-3">
+                      <td><span className={`badge ${statusMeta.cls}`}>{statusMeta.label}</span></td>
+                      <td><span className="badge badge-gray">{visibilityCopy[visibility]}</span></td>
+                      <td>
                         <button type="button" className="btn-ghost py-1.5 text-xs" onClick={() => syncActiveBackJob(backJob)}>
                           Review
                         </button>
@@ -784,7 +823,9 @@ export default function BackJobsContent() {
         </section>
       ) : null}
 
-      <BackJobDetail backJob={activeBackJob} />
+      <div ref={detailSectionRef}>
+        <BackJobDetail backJob={activeBackJob} />
+      </div>
 
       <section className="grid gap-5 xl:grid-cols-2">
         <form onSubmit={handleCreateBackJob} className="card p-5 space-y-4">
@@ -796,149 +837,164 @@ export default function BackJobsContent() {
             <Plus size={18} className="text-brand-orange" />
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Customer
-              <select
+              <PortalSelect
                 value={createDraft.customerUserId}
-                onChange={(event) =>
+                onValueChange={(nextValue) =>
                   setCreateDraft((current) => ({
                     ...current,
-                    customerUserId: event.target.value,
+                    customerUserId: nextValue,
                     vehicleId: '',
                     originalJobOrderId: '',
                     originalBookingId: '',
                     returnInspectionId: '',
                   }))
                 }
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="">Choose customer</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.displayName} / {customer.email}
-                  </option>
-                ))}
-              </select>
+                placeholder="Choose customer"
+                emptyOptionLabel="Choose customer"
+                items={customers.map((customer) => ({
+                  value: customer.id,
+                  label: customer.displayName || customer.email || customer.id,
+                  helper: customer.email || customer.id,
+                }))}
+              />
             </label>
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Vehicle
-              <select
+              <PortalSelect
                 value={createDraft.vehicleId}
-                onChange={(event) =>
+                onValueChange={(nextValue) =>
                   setCreateDraft((current) => ({
                     ...current,
-                    vehicleId: event.target.value,
+                    vehicleId: nextValue,
                     originalJobOrderId: '',
                     originalBookingId: '',
                     returnInspectionId: '',
                   }))
                 }
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="">Choose vehicle</option>
-                {(customers.find((customer) => customer.id === createDraft.customerUserId)?.vehicles ?? []).map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.plateNumber || vehicle.id} / {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')}
-                  </option>
-                ))}
-              </select>
+                placeholder="Choose vehicle"
+                emptyOptionLabel="Choose vehicle"
+                items={(customers.find((customer) => customer.id === createDraft.customerUserId)?.vehicles ?? []).map((vehicle) => ({
+                  value: vehicle.id,
+                  label: vehicle.plateNumber || vehicle.id,
+                  helper:
+                    [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') || vehicle.id,
+                }))}
+              />
             </label>
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Original job order
-              <select
+              <PortalSelect
                 value={createDraft.originalJobOrderId}
-                onChange={(event) => setCreateDraft((current) => ({ ...current, originalJobOrderId: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="">Choose finalized job order</option>
-                {vehicleJobOrders
+                onValueChange={(nextValue) =>
+                  setCreateDraft((current) => ({ ...current, originalJobOrderId: nextValue }))
+                }
+                placeholder="Choose finalized job order"
+                emptyOptionLabel="Choose finalized job order"
+                items={vehicleJobOrders
                   .filter((jobOrder) => jobOrder.status === 'finalized')
-                  .map((jobOrder) => (
-                    <option key={jobOrder.id} value={jobOrder.id}>
-                      JO-{jobOrder.id.slice(0, 8).toUpperCase()}
-                    </option>
-                  ))}
-              </select>
+                  .map((jobOrder) => ({
+                    value: jobOrder.id,
+                    label: `JO-${jobOrder.id.slice(0, 8).toUpperCase()}`,
+                    helper: `${jobOrder.id} • ${jobOrder.status.replaceAll('_', ' ')}`,
+                  }))}
+              />
             </label>
-            <label className="text-xs text-ink-muted">
+            <label className="label">
               Original booking
-              <select
+              <PortalSelect
                 value={createDraft.originalBookingId}
-                onChange={(event) => setCreateDraft((current) => ({ ...current, originalBookingId: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="">No booking reference</option>
-                {vehicleBookings.map((booking) => (
-                  <option key={booking.id} value={booking.id}>
-                    {booking.scheduledDate} / {booking.status}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(nextValue) =>
+                  setCreateDraft((current) => ({ ...current, originalBookingId: nextValue }))
+                }
+                placeholder="No booking reference"
+                emptyOptionLabel="No booking reference"
+                items={vehicleBookings.map((booking) => ({
+                  value: booking.id,
+                  label: booking.scheduledDate || booking.id,
+                  helper: `${booking.id} • ${booking.status}`,
+                }))}
+              />
             </label>
-            <label className="text-xs text-ink-muted md:col-span-2">
+            <label className="label md:col-span-2">
               Return inspection
-              <select
+              <PortalSelect
                 value={createDraft.returnInspectionId}
-                onChange={(event) => setCreateDraft((current) => ({ ...current, returnInspectionId: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              >
-                <option value="">No return inspection yet</option>
-                {vehicleInspections
+                onValueChange={(nextValue) =>
+                  setCreateDraft((current) => ({ ...current, returnInspectionId: nextValue }))
+                }
+                placeholder="No return inspection yet"
+                emptyOptionLabel="No return inspection yet"
+                items={vehicleInspections
                   .filter((inspection) => inspection.inspectionType === 'return')
-                  .map((inspection) => (
-                    <option key={inspection.id} value={inspection.id}>
-                      {inspection.createdAt} / {inspection.status}
-                    </option>
-                  ))}
-              </select>
+                  .map((inspection) => ({
+                    value: inspection.id,
+                    label: inspection.createdAt || inspection.id,
+                    helper: `${inspection.id} • ${inspection.status}`,
+                  }))}
+              />
             </label>
           </div>
-          <label className="block text-xs text-ink-muted">
+          <label className="label">
             Complaint
             <textarea
               value={createDraft.complaint}
               onChange={(event) => setCreateDraft((current) => ({ ...current, complaint: event.target.value }))}
               rows={3}
-              className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="input min-h-[96px] resize-y"
               placeholder="Customer reports the same concern after prior completed work."
             />
           </label>
-          <label className="block text-xs text-ink-muted">
+          <label className="label">
             Review notes
             <textarea
               value={createDraft.reviewNotes}
               onChange={(event) => setCreateDraft((current) => ({ ...current, reviewNotes: event.target.value }))}
               rows={2}
-              className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              className="input min-h-[84px] resize-y"
             />
           </label>
           <div className="rounded-xl border border-surface-border bg-surface-raised p-3">
             <p className="text-sm font-semibold text-ink-primary">Optional Finding</p>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Category
-                <select value={createDraft.findingCategory} onChange={(event) => setCreateDraft((current) => ({ ...current, findingCategory: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]">
-                  {findingCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
+                <PortalSelect
+                  value={createDraft.findingCategory}
+                  onValueChange={(nextValue) =>
+                    setCreateDraft((current) => ({ ...current, findingCategory: nextValue }))
+                  }
+                  placeholder="Choose category"
+                  items={findingCategoryOptions}
+                />
               </label>
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Severity
-                <select value={createDraft.findingSeverity} onChange={(event) => setCreateDraft((current) => ({ ...current, findingSeverity: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]">
-                  {Object.keys(SEVERITY_META).map((severity) => <option key={severity} value={severity}>{SEVERITY_META[severity].label}</option>)}
-                </select>
+                <PortalSelect
+                  value={createDraft.findingSeverity}
+                  onValueChange={(nextValue) =>
+                    setCreateDraft((current) => ({ ...current, findingSeverity: nextValue }))
+                  }
+                  placeholder="Choose severity"
+                  items={Object.keys(SEVERITY_META).map((severity) => ({
+                    value: severity,
+                    label: SEVERITY_META[severity].label,
+                  }))}
+                />
               </label>
-              <label className="text-xs text-ink-muted md:col-span-2">
+              <label className="label md:col-span-2">
                 Label
-                <input value={createDraft.findingLabel} onChange={(event) => setCreateDraft((current) => ({ ...current, findingLabel: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+                <input value={createDraft.findingLabel} onChange={(event) => setCreateDraft((current) => ({ ...current, findingLabel: event.target.value }))} className="input" />
               </label>
-              <label className="text-xs text-ink-muted md:col-span-2">
+              <label className="label md:col-span-2">
                 Notes
-                <textarea value={createDraft.findingNotes} onChange={(event) => setCreateDraft((current) => ({ ...current, findingNotes: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+                <textarea value={createDraft.findingNotes} onChange={(event) => setCreateDraft((current) => ({ ...current, findingNotes: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
               </label>
             </div>
           </div>
           {createState.message ? (
-            <div className={`rounded-xl border px-4 py-3 text-sm ${createState.status === 'create_saved' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : 'border-red-500/25 bg-red-500/10 text-red-200'}`}>
+            <div className={createState.status === 'create_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}>
               {createState.message}
             </div>
           ) : null}
@@ -954,42 +1010,47 @@ export default function BackJobsContent() {
               <p className="card-title">Review Status Update</p>
               <p className="mt-1 text-xs text-ink-muted">Move the selected case through review, approval, or closure.</p>
             </div>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Next status
-              <select
+              <PortalSelect
                 value={allowedStatusTargets.includes(statusDraft.status) ? statusDraft.status : (allowedStatusTargets[0] ?? '')}
-                onChange={(event) => setStatusDraft((current) => ({ ...current, status: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                onValueChange={(nextValue) => setStatusDraft((current) => ({ ...current, status: nextValue }))}
+                placeholder={allowedStatusTargets.length ? 'Choose next status' : 'No transitions available'}
+                items={allowedStatusTargets.map((status) => ({
+                  value: status,
+                  label: backJobStatusLabels[status],
+                }))}
                 disabled={!allowedStatusTargets.length}
-              >
-                {allowedStatusTargets.length ? allowedStatusTargets.map((status) => (
-                  <option key={status} value={status}>{backJobStatusLabels[status]}</option>
-                )) : <option value="">No transitions available</option>}
-              </select>
+              />
             </label>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Return inspection
-              <select value={statusDraft.returnInspectionId} onChange={(event) => setStatusDraft((current) => ({ ...current, returnInspectionId: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" >
-                <option value="">Choose return inspection</option>
-                {vehicleInspections
+              <PortalSelect
+                value={statusDraft.returnInspectionId}
+                onValueChange={(nextValue) =>
+                  setStatusDraft((current) => ({ ...current, returnInspectionId: nextValue }))
+                }
+                placeholder="Choose return inspection"
+                emptyOptionLabel="Choose return inspection"
+                items={vehicleInspections
                   .filter((inspection) => inspection.inspectionType === 'return')
-                  .map((inspection) => (
-                    <option key={inspection.id} value={inspection.id}>
-                      {inspection.createdAt} / {inspection.status}
-                    </option>
-                  ))}
-              </select>
+                  .map((inspection) => ({
+                    value: inspection.id,
+                    label: inspection.createdAt || inspection.id,
+                    helper: `${inspection.id} • ${inspection.status}`,
+                  }))}
+              />
             </label>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Review notes
-              <textarea value={statusDraft.reviewNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, reviewNotes: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              <textarea value={statusDraft.reviewNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, reviewNotes: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
             </label>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Resolution notes
-              <textarea value={statusDraft.resolutionNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, resolutionNotes: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              <textarea value={statusDraft.resolutionNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, resolutionNotes: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
             </label>
             {statusState.message ? (
-              <div className={`rounded-xl border px-4 py-3 text-sm ${statusState.status === 'status_saved' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : 'border-red-500/25 bg-red-500/10 text-red-200'}`}>
+              <div className={statusState.status === 'status_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}>
                 {statusState.message}
               </div>
             ) : null}
@@ -1007,42 +1068,93 @@ export default function BackJobsContent() {
               </div>
               <Link2 size={18} className="text-brand-orange" />
             </div>
-            <label className="block text-xs text-ink-muted">
+            <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+              <p className="text-xs text-ink-muted">Service adviser snapshot</p>
+              <p className="mt-1 text-sm font-semibold text-ink-primary">
+                {reworkServiceAdviserSnapshot?.serviceAdviserCode || 'Not resolved'}
+              </p>
+              <p className="mt-1 text-xs text-ink-secondary">
+                {reworkServiceAdviserSnapshot?.source === 'original_job_order'
+                  ? 'Inherited from the original finalized job order for clean adviser-of-record audit history.'
+                  : reworkServiceAdviserSnapshot?.source === 'session_user'
+                    ? 'Using the signed-in service adviser session because no original adviser snapshot was found.'
+                    : 'This back-job cannot create rework until a valid adviser-of-record snapshot is available.'}
+              </p>
+            </div>
+            <label className="label">
               Work item name
-              <input value={reworkDraft.itemName} onChange={(event) => setReworkDraft((current) => ({ ...current, itemName: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              <input value={reworkDraft.itemName} onChange={(event) => setReworkDraft((current) => ({ ...current, itemName: event.target.value }))} className="input" />
             </label>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Work item description
-              <textarea value={reworkDraft.itemDescription} onChange={(event) => setReworkDraft((current) => ({ ...current, itemDescription: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              <textarea value={reworkDraft.itemDescription} onChange={(event) => setReworkDraft((current) => ({ ...current, itemDescription: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
             </label>
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="text-xs text-ink-muted">
+              <label className="label">
                 Estimated hours
-                <input type="number" min="1" step="1" value={reworkDraft.estimatedHours} onChange={(event) => setReworkDraft((current) => ({ ...current, estimatedHours: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+                <input type="number" min="1" step="1" value={reworkDraft.estimatedHours} onChange={(event) => setReworkDraft((current) => ({ ...current, estimatedHours: event.target.value }))} className="input" />
               </label>
-              <label className="text-xs text-ink-muted">
-                Technician
-                <select value={reworkDraft.assignedTechnicianIdsText} onChange={(event) => setReworkDraft((current) => ({ ...current, assignedTechnicianIdsText: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]">
-                  <option value="">Unassigned</option>
-                  {technicianOptions.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.displayName} / {account.staffCode || account.roleLabel}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="label">
+                Assigned technicians
+                <div className="rounded-xl border border-surface-border bg-surface-raised p-3">
+                  <p className="text-xs text-ink-muted">
+                    {selectedReworkTechnicianIds.length > 0
+                      ? `${selectedReworkTechnicianIds.length} technician${selectedReworkTechnicianIds.length === 1 ? '' : 's'} selected`
+                      : 'No technicians selected yet'}
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {technicianOptions.length > 0 ? (
+                      technicianOptions.map((account) => {
+                        const checked = selectedReworkTechnicianIds.includes(account.id)
+                        return (
+                          <label
+                            key={account.id}
+                            className="flex items-start gap-3 rounded-xl border border-surface-border bg-surface-card px-3 py-3 text-sm text-ink-primary"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) =>
+                                setReworkDraft((current) => ({
+                                  ...current,
+                                  assignedTechnicianIdsText: toggleDelimitedIdValue(
+                                    current.assignedTechnicianIdsText,
+                                    account.id,
+                                    event.target.checked,
+                                  ),
+                                }))
+                              }
+                              className="mt-0.5 h-4 w-4 rounded border-surface-border bg-surface-input accent-[rgb(var(--brand-orange))]"
+                            />
+                            <span className="min-w-0">
+                              <span className="block font-medium text-ink-primary">{account.displayName}</span>
+                              <span className="mt-1 block text-xs text-ink-secondary">
+                                {account.staffCode || account.roleLabel}
+                              </span>
+                            </span>
+                          </label>
+                        )
+                      })
+                    ) : (
+                      <p className="text-xs text-ink-muted">
+                        No active technicians are available to assign right now.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            <label className="block text-xs text-ink-muted">
+            <label className="label">
               Rework notes
-              <textarea value={reworkDraft.notes} onChange={(event) => setReworkDraft((current) => ({ ...current, notes: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              <textarea value={reworkDraft.notes} onChange={(event) => setReworkDraft((current) => ({ ...current, notes: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
             </label>
             {!canSubmitRework ? (
-              <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+              <p className="status-message status-message-warning text-xs">
                 Rework job creation unlocks only when the selected back-job is approved for rework and has no linked rework job order.
               </p>
             ) : null}
             {reworkState.message ? (
-              <div className={`rounded-xl border px-4 py-3 text-sm ${reworkState.status === 'rework_saved' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : 'border-red-500/25 bg-red-500/10 text-red-200'}`}>
+              <div className={reworkState.status === 'rework_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}>
                 {reworkState.message}
               </div>
             ) : null}
@@ -1059,10 +1171,10 @@ export default function BackJobsContent() {
           <div>
             <p className="card-title">Live Back-Job Boundaries</p>
             <p className="mt-1 max-w-3xl text-sm text-ink-secondary">
-              This page only shows cases staff intentionally load by vehicle or case id. Customer-facing back-job lists remain planned work.
+              This page shows only the back-job cases staff intentionally load by vehicle or case id, so the workflow stays focused on active operational review instead of an artificial queue.
             </p>
           </div>
-          <span className="badge badge-gray">No placeholder cases</span>
+          <span className="badge badge-gray">Loaded on demand</span>
         </div>
       </section>
     </div>

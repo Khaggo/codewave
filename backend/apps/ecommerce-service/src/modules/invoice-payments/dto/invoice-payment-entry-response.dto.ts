@@ -17,10 +17,10 @@ export class InvoicePaymentEntryResponseDto {
   amountCents!: number;
 
   @ApiProperty({
-    enum: ['cash', 'bank_transfer', 'check', 'other'],
+    enum: ['cash', 'bank_transfer', 'check', 'other', 'paymongo'],
     example: 'cash',
   })
-  paymentMethod!: 'cash' | 'bank_transfer' | 'check' | 'other';
+  paymentMethod!: 'cash' | 'bank_transfer' | 'check' | 'other' | 'paymongo';
 
   @ApiPropertyOptional({
     example: 'RCPT-2026-0001',

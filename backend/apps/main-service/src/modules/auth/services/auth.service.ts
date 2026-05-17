@@ -63,6 +63,8 @@ const roleFallbackAccountTypes: Record<string, StaffAccountType> = {
   super_admin: 'admin',
 };
 
+const MAX_ACTIVE_HEAD_TECHNICIANS = 2;
+
 @Injectable()
 export class AuthService {
   private readonly accessSecret: string;
@@ -536,6 +538,8 @@ export class AuthService {
     payload: CreateStaffAccountDto,
     actor: { userId: string; role: string },
   ) {
+    await this.assertHeadTechnicianCapacity(payload.role, true);
+
     const accountType = this.resolveStaffAccountType(payload);
     const staffCode = payload.staffCode?.trim()
       ? payload.staffCode.trim().toUpperCase()
@@ -642,6 +646,17 @@ export class AuthService {
     }
 
     return roleFallbackAccountTypes[payload.role] ?? 'staff';
+  }
+
+  private async assertHeadTechnicianCapacity(role: string, willBeActive: boolean) {
+    if (role !== 'head_technician' || !willBeActive) {
+      return;
+    }
+
+    const activeHeadTechnicianCount = await this.usersService.countActiveUsersByRole('head_technician');
+    if (activeHeadTechnicianCount >= MAX_ACTIVE_HEAD_TECHNICIANS) {
+      throw new ConflictException('Only 2 head technicians can be active at the same time');
+    }
   }
 
   private normalizeEmailNameSegment(value: string) {
@@ -752,6 +767,10 @@ export class AuthService {
 
     if (user.role === 'customer') {
       throw new BadRequestException('Only staff accounts can be managed through this endpoint');
+    }
+
+    if (payload.isActive && !user.isActive) {
+      await this.assertHeadTechnicianCapacity(user.role, true);
     }
 
     const previousIsActive = user.isActive;
@@ -963,6 +982,12 @@ export class AuthService {
       dedupeKey: `auth-otp-${challenge.id}`,
       sourceId: challenge.id,
     });
+
+    if (!notification?.id || notification?.status === 'failed') {
+      throw new ServiceUnavailableException(
+        'OTP email could not be queued right now. Please try again later.',
+      );
+    }
 
     if (notification?.id && notification?.status === 'queued') {
       const deliveryResult = await this.notificationsService.deliverNotification(notification.id);

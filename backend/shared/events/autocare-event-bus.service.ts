@@ -41,6 +41,18 @@ export class AutocareEventBusService {
   private readonly publishedEvents: Array<
     AnyAuditEventEnvelope | AnyCommerceEventEnvelope | AnyLifecycleEventEnvelope | AnyServiceEventEnvelope
   > = [];
+  private readonly subscribers = new Map<
+    string,
+    Set<
+      (
+        event:
+          | AnyAuditEventEnvelope
+          | AnyCommerceEventEnvelope
+          | AnyLifecycleEventEnvelope
+          | AnyServiceEventEnvelope,
+      ) => void | Promise<void>
+    >
+  >();
 
   constructor(
     @Optional()
@@ -120,6 +132,8 @@ export class AutocareEventBusService {
       ),
     );
 
+    this.notifySubscribers(event);
+
     if (this.client) {
       void firstValueFrom(this.client.emit(event.name, event)).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Unknown RabbitMQ publish failure';
@@ -138,6 +152,33 @@ export class AutocareEventBusService {
     this.publishedEvents.length = 0;
   }
 
+  subscribe(
+    eventName: string,
+    handler: (
+      event:
+        | AnyAuditEventEnvelope
+        | AnyCommerceEventEnvelope
+        | AnyLifecycleEventEnvelope
+        | AnyServiceEventEnvelope,
+    ) => void | Promise<void>,
+  ) {
+    const subscribers = this.subscribers.get(eventName) ?? new Set();
+    subscribers.add(handler);
+    this.subscribers.set(eventName, subscribers);
+
+    return () => {
+      const registeredSubscribers = this.subscribers.get(eventName);
+      if (!registeredSubscribers) {
+        return;
+      }
+
+      registeredSubscribers.delete(handler);
+      if (registeredSubscribers.size === 0) {
+        this.subscribers.delete(eventName);
+      }
+    };
+  }
+
   private clone<
     TEvent extends
       | AnyAuditEventEnvelope
@@ -148,5 +189,25 @@ export class AutocareEventBusService {
     event: TEvent,
   ): TEvent {
     return JSON.parse(JSON.stringify(event)) as TEvent;
+  }
+
+  private notifySubscribers(
+    event:
+      | AnyAuditEventEnvelope
+      | AnyCommerceEventEnvelope
+      | AnyLifecycleEventEnvelope
+      | AnyServiceEventEnvelope,
+  ) {
+    const subscribers = this.subscribers.get(event.name);
+    if (!subscribers?.size) {
+      return;
+    }
+
+    for (const handler of subscribers) {
+      void Promise.resolve(handler(this.clone(event))).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : 'Unknown event subscriber failure';
+        this.logger.warn(`Failed to notify subscriber for ${event.name}: ${message}`);
+      });
+    }
   }
 }

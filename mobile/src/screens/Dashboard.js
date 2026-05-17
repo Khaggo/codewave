@@ -1,8 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  AppState,
   Alert,
   Animated,
   Easing,
@@ -11,7 +11,6 @@ import {
   Linking,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -21,6 +20,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError, requestChangePasswordOtp } from '../lib/authClient';
 import {
   buildOwnedVehicleLabel,
@@ -70,11 +70,16 @@ import {
   listCustomerOrders,
   loadCustomerCheckoutPreview,
   removeCustomerCartItem,
+  reconcileCustomerOrderInvoicePaymongoCheckout,
+  startCustomerOrderInvoicePaymongoCheckout,
   updateCustomerCartItem,
 } from '../lib/ecommerceCheckoutClient';
 import {
+  buildCustomerNotificationPanelSummary,
   createEmptyCustomerNotificationSnapshot,
   loadCustomerNotificationSnapshot,
+  markAllCustomerNotificationsReadLocally,
+  markCustomerNotificationReadLocally,
   updateCustomerNotificationPreferences,
 } from '../lib/notificationClient';
 import ShopCatalogSection from '../components/shop/ShopCatalogSection';
@@ -82,6 +87,11 @@ import DatePickerField from '../components/DatePickerField';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import FormField from '../components/FormField';
 import PasswordChecklist from '../components/PasswordChecklist';
+import {
+  REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
+  getRememberedInquiryForVehicle,
+  hydrateRememberedInquiryMappings,
+} from './insuranceModuleView.mjs';
 import { colors, radius } from '../theme';
 import {
   formatDate,
@@ -106,12 +116,6 @@ const tabs = [
 ];
 
 const genderOptions = ['Male', 'Female', 'Prefer not to say'];
-const profileSections = [
-  { key: 'rewards', label: 'Rewards', icon: 'star-four-points-outline' },
-  { key: 'garage', label: 'Garage', icon: 'garage-variant' },
-  { key: 'insurance', label: 'Insurance', icon: 'shield-outline' },
-  { key: 'backJobs', label: 'Back-Jobs', icon: 'information-outline' },
-];
 const storeSections = [
   { key: 'catalog', label: 'Catalog', icon: 'shopping-outline' },
   { key: 'orders', label: 'Orders', icon: 'receipt-text-outline' },
@@ -120,7 +124,7 @@ const notificationPreferenceOptions = [
   {
     key: 'emailEnabled',
     label: 'Email Delivery',
-    description: 'Turn customer email notifications on or off for all operational updates.',
+    description: 'Turn customer email notifications on or off for booking, invoice, back-job, and follow-up updates.',
   },
   {
     key: 'bookingRemindersEnabled',
@@ -130,7 +134,7 @@ const notificationPreferenceOptions = [
   {
     key: 'insuranceUpdatesEnabled',
     label: 'Insurance Updates',
-    description: 'Get notified when insurance inquiries move through review or need more documents.',
+    description: 'Get in-app insurance reminders when documents, payment, or renewal follow-up need your action.',
   },
   {
     key: 'invoiceRemindersEnabled',
@@ -199,7 +203,7 @@ const createInitialBookingHistoryState = () => ({
   errorMessage: '',
 });
 
-const createInitialCustomerServiceHistoryState = () => ({
+const createInitialServiceHistoryState = () => ({
   status: 'idle',
   items: [],
   errorMessage: '',
@@ -208,6 +212,11 @@ const createInitialCustomerServiceHistoryState = () => ({
 const createInitialBookingDetailState = () => ({
   status: 'idle',
   booking: null,
+  errorMessage: '',
+});
+
+const createInitialBookingReservationPaymentState = () => ({
+  status: 'idle',
   errorMessage: '',
 });
 
@@ -226,6 +235,7 @@ const createInitialDigitalGarageState = () => ({
 const createInitialLoyaltyState = () => ({
   status: 'idle',
   errorMessage: '',
+  hasLoadedSnapshot: false,
   redeemingRewardId: null,
   ...createEmptyCustomerLoyaltySnapshot(),
 });
@@ -610,17 +620,54 @@ const buildBookingDateCardItem = (availabilityDay, selectedTimeSlot) => {
 };
 
 const bookingStatusLabels = {
-  pending_payment: 'Awaiting reservation fee',
   pending: 'Pending staff review',
+  pending_payment: 'Awaiting reservation payment',
   confirmed: 'Confirmed by staff',
-  in_service: 'In service',
+  in_service: 'Vehicle in service',
   declined: 'Declined',
-  rescheduled: 'Rescheduled',
+  rescheduled: 'Rescheduled by staff',
   completed: 'Completed',
   cancelled: 'Cancelled',
 };
 
-const getBookingStatusLabel = (status) => bookingStatusLabels[status] || 'Unknown status';
+const getBookingStatusLabel = (status) => {
+  const normalizedStatus = String(status ?? '')
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedStatus) {
+    return 'Booking update pending';
+  }
+
+  return (
+    bookingStatusLabels[normalizedStatus] ||
+    normalizedStatus
+      .split('_')
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .join(' ')
+  );
+};
+
+const getReservationPaymentStatusLabel = (payment) => {
+  const status = String(payment?.status ?? '').trim().toLowerCase();
+
+  switch (status) {
+    case 'pending':
+      return 'Awaiting payment';
+    case 'paid':
+      return 'Paid';
+    case 'failed':
+      return 'Payment failed';
+    case 'expired':
+      return 'Payment expired';
+    case 'cancelled':
+      return 'Payment cancelled';
+    case 'refunded':
+      return 'Refunded';
+    default:
+      return 'Payment status unavailable';
+  }
+};
 
 const getBookingReference = (booking) =>
   booking?.id ? booking.id.slice(0, 8).toUpperCase() : '--------';
@@ -647,30 +694,6 @@ const getBookingTimeLabel = (booking) => {
   return `${booking.timeSlot.label} - ${formatBookingTimeSlotWindow(booking.timeSlot)}`;
 };
 
-const formatReservationAmount = (amountCents) => {
-  const normalizedAmount = Number(amountCents);
-  if (!Number.isFinite(normalizedAmount)) {
-    return 'PHP 0';
-  }
-
-  return new Intl.NumberFormat('en-PH', {
-    style: 'currency',
-    currency: 'PHP',
-    maximumFractionDigits: 0,
-  }).format(normalizedAmount / 100);
-};
-
-const getReservationPaymentStatusLabel = (payment) => {
-  const status = payment?.status;
-
-  if (status === 'paid') return 'Reservation fee paid';
-  if (status === 'failed') return 'Payment needs retry';
-  if (status === 'expired') return 'Payment expired';
-  if (status === 'cancelled') return 'Payment cancelled';
-  if (status === 'refunded') return 'Refund in review';
-  return 'Payment pending';
-};
-
 const buildBookingTrackingSteps = (booking) => {
   if (!booking) {
     return [
@@ -694,31 +717,6 @@ const buildBookingTrackingSteps = (booking) => {
   }
 
   const status = booking.status;
-  const reservationPayment = booking.reservationPayment ?? null;
-
-  if (status === 'pending_payment') {
-    return [
-      {
-        label: 'Booking Request',
-        status: 'Submitted',
-        state: 'done',
-      },
-      {
-        label: 'Reservation Fee',
-        status: getReservationPaymentStatusLabel(reservationPayment),
-        state: reservationPayment?.status === 'paid' ? 'done' : 'current',
-        note:
-          reservationPayment?.status === 'failed'
-            ? reservationPayment.failureReason || 'Retry the reservation payment session to keep this slot.'
-            : 'Pay the reservation fee before the slot can be confirmed and the QR code can be issued.',
-      },
-      {
-        label: 'Staff Confirmation',
-        status: 'Waiting for payment',
-        state: 'upcoming',
-      },
-    ];
-  }
 
   if (status === 'declined' || status === 'cancelled') {
     return [
@@ -755,39 +753,70 @@ const buildBookingTrackingSteps = (booking) => {
     ];
   }
 
-  if (status === 'in_service') {
-    return [
-      {
-        label: 'Reservation Fee',
-        status: reservationPayment?.status === 'paid' ? 'Paid' : 'Missing',
-        state: reservationPayment?.status === 'paid' ? 'done' : 'current',
-      },
-      {
-        label: 'Booking Confirmed',
-        status: 'Checked in',
-        state: 'done',
-      },
-      {
-        label: 'Workshop In Service',
-        status: 'In progress',
-        state: 'current',
-        note: 'Workshop execution is already in progress. Job-order and QA stages continue on the staff side.',
-      },
-    ];
-  }
-
   if (status === 'confirmed' || status === 'rescheduled') {
     return [
       {
-        label: 'Reservation Fee',
-        status: reservationPayment?.status === 'paid' ? 'Paid' : 'Awaiting review',
+        label: 'Booking Request',
+        status: 'Submitted',
         state: 'done',
       },
       {
         label: status === 'rescheduled' ? 'Rescheduled By Staff' : 'Staff Confirmed',
         status: getBookingStatusLabel(status),
         state: 'current',
-        note: 'Your slot is secured. QR release, arrival, adviser assignment, and workshop progress stay separate from booking status.',
+        note: 'Arrival, adviser assignment, and workshop progress stay separate from booking status.',
+      },
+      {
+        label: 'Appointment Outcome',
+        status: 'Upcoming',
+        state: 'upcoming',
+      },
+    ];
+  }
+
+  if (status === 'in_service') {
+    return [
+      {
+        label: 'Booking Request',
+        status: 'Submitted',
+        state: 'done',
+      },
+      {
+        label: 'Staff Review',
+        status: 'Confirmed',
+        state: 'done',
+      },
+      {
+        label: 'Workshop Service',
+        status: 'In Progress',
+        state: 'current',
+        note: 'Your vehicle is already in the workshop and service updates will continue through the job-order flow.',
+      },
+      {
+        label: 'Appointment Outcome',
+        status: 'Pending completion',
+        state: 'upcoming',
+      },
+    ];
+  }
+
+  if (status === 'pending_payment') {
+    return [
+      {
+        label: 'Booking Request',
+        status: 'Submitted',
+        state: 'done',
+      },
+      {
+        label: 'Reservation Payment',
+        status: 'Awaiting payment',
+        state: 'current',
+        note: 'Finish the reservation fee payment so staff can confirm this booking and generate the check-in QR code.',
+      },
+      {
+        label: 'Staff Review',
+        status: 'Pending payment confirmation',
+        state: 'upcoming',
       },
       {
         label: 'Appointment Outcome',
@@ -807,7 +836,7 @@ const buildBookingTrackingSteps = (booking) => {
       label: 'Staff Review',
       status: 'Pending',
       state: 'current',
-      note: 'Your request is recorded as pending until staff confirm, decline, or reschedule it.',
+      note: 'Your request is recorded and awaiting staff confirmation. You will see updates here if the slot is confirmed, rescheduled, or declined.',
     },
     {
       label: 'Appointment Outcome',
@@ -816,8 +845,6 @@ const buildBookingTrackingSteps = (booking) => {
     },
   ];
 };
-
-const recentServiceHistory = [];
 
 const shopProducts = [
   {
@@ -1177,6 +1204,9 @@ function ProfileAvatarButton({
 }
 
 function NotificationRow({ item, onDismiss, onOpen }) {
+  const requiresAction = item.requiresAction;
+  const statusLabel = requiresAction ? (item.unread ? 'Action needed' : 'Still pending') : (item.unread ? 'New update' : 'Viewed');
+
   return (
     <View style={styles.notificationRow}>
       <View style={[styles.notificationIconWrap, { backgroundColor: item.bgColor }]}>
@@ -1187,6 +1217,25 @@ function NotificationRow({ item, onDismiss, onOpen }) {
         <View style={styles.notificationTitleRow}>
           {item.unread ? <View style={styles.notificationUnreadDot} /> : null}
           <Text style={styles.notificationRowTitle}>{item.title}</Text>
+          <View
+            style={[
+              styles.notificationStatusPill,
+              requiresAction
+                ? styles.notificationStatusPillAction
+                : styles.notificationStatusPillInformational,
+            ]}
+          >
+            <Text
+              style={[
+                styles.notificationStatusPillText,
+                requiresAction
+                  ? styles.notificationStatusPillTextAction
+                  : styles.notificationStatusPillTextInformational,
+              ]}
+            >
+              {statusLabel}
+            </Text>
+          </View>
         </View>
         <Text style={styles.notificationRowMessage}>{item.message}</Text>
         <Text style={styles.notificationRowTime}>{item.timeLabel}</Text>
@@ -1208,7 +1257,7 @@ function ProfileSectionTab({ item, isActive, onPress }) {
     >
       <MaterialCommunityIcons
         name={item.icon}
-        size={16}
+        size={18}
         color={isActive ? colors.onPrimary : colors.mutedText}
       />
       <Text style={[styles.sectionTabText, isActive && styles.sectionTabTextActive]}>{item.label}</Text>
@@ -1690,73 +1739,74 @@ function BookingDateCard({ item, isSelected, onPress, isCompact, cardStyle }) {
       style={[
         styles.bookingDateCard,
         isCompact && styles.bookingDateCardCompact,
-        isSelected && styles.bookingDateCardActive,
         item.statusTone === 'success' && styles.bookingDateCardSuccess,
         item.statusTone === 'warning' && styles.bookingDateCardLimited,
         item.statusTone === 'danger' && styles.bookingDateCardDanger,
         !item.isSelectable && styles.bookingDateCardDisabled,
+        isSelected && styles.bookingDateCardActive,
       ]}
       onPress={item.isSelectable ? onPress : undefined}
       disabled={!item.isSelectable}
     >
-      <View style={styles.bookingDateCardHeader}>
+      <View style={styles.bookingDateLeading}>
         <Text
           style={[
             styles.bookingDateWeekday,
-            isSelected && styles.bookingDateTextActive,
             !item.isSelectable && styles.bookingDisabledSubtext,
           ]}
         >
           {item.weekday}
         </Text>
-        <View
-          style={[
-            styles.bookingDateStatusBadge,
-            item.statusTone === 'success' && styles.bookingDateStatusBadgeSuccess,
-            item.statusTone === 'warning' && styles.bookingDateStatusBadgeWarning,
-            item.statusTone === 'danger' && styles.bookingDateStatusBadgeDanger,
-            !item.isSelectable && styles.bookingDateStatusBadgeMuted,
-          ]}
-        >
-          <Text style={styles.bookingDateStatusText}>{item.statusLabel}</Text>
+        <View style={styles.bookingDateDayRow}>
+          <Text
+            style={[
+              styles.bookingDateDay,
+              !item.isSelectable && styles.bookingDisabledText,
+            ]}
+          >
+            {item.day}
+          </Text>
+          <Text
+            style={[
+              styles.bookingDateMonth,
+              !item.isSelectable && styles.bookingDisabledSubtext,
+            ]}
+          >
+            {item.month}
+          </Text>
         </View>
       </View>
-      <Text
+      <View style={styles.bookingDateBody}>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.bookingDateCapacityText,
+            !item.isSelectable && styles.bookingDisabledSubtext,
+          ]}
+        >
+          {item.capacityLabel}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.bookingDateDetailText,
+            !item.isSelectable && styles.bookingDisabledSubtext,
+          ]}
+        >
+          {item.detailLabel}
+        </Text>
+      </View>
+      <View
         style={[
-          styles.bookingDateDay,
-          isSelected && styles.bookingDateTextActive,
-          !item.isSelectable && styles.bookingDisabledText,
+          styles.bookingDateStatusBadge,
+          item.statusTone === 'success' && styles.bookingDateStatusBadgeSuccess,
+          item.statusTone === 'warning' && styles.bookingDateStatusBadgeWarning,
+          item.statusTone === 'danger' && styles.bookingDateStatusBadgeDanger,
+          !item.isSelectable && styles.bookingDateStatusBadgeMuted,
         ]}
       >
-        {item.day}
-      </Text>
-      <Text
-        style={[
-          styles.bookingDateMonth,
-          isSelected && styles.bookingDateTextActive,
-          !item.isSelectable && styles.bookingDisabledSubtext,
-        ]}
-      >
-        {item.month}
-      </Text>
-      <Text
-        style={[
-          styles.bookingDateCapacityText,
-          isSelected && styles.bookingDateTextActive,
-          !item.isSelectable && styles.bookingDisabledSubtext,
-        ]}
-      >
-        {item.capacityLabel}
-      </Text>
-      <Text
-        style={[
-          styles.bookingDateDetailText,
-          isSelected && styles.bookingDateTextActive,
-          !item.isSelectable && styles.bookingDisabledSubtext,
-        ]}
-      >
-        {item.detailLabel}
-      </Text>
+        <Text style={styles.bookingDateStatusText}>{item.statusLabel}</Text>
+      </View>
     </MotionPressable>
   );
 }
@@ -2041,6 +2091,8 @@ export default function Dashboard({
   onStartDeleteAccountOtp,
 }) {
   const isWeb = Platform.OS === 'web';
+  const insets = useSafeAreaInsets();
+  const bottomInset = isWeb ? 0 : insets.bottom;
   const { width: windowWidth } = useWindowDimensions();
   const isTinyPhone = !isWeb && windowWidth < 360;
   const isVeryCompactPhone = !isWeb && windowWidth < 390;
@@ -2060,11 +2112,12 @@ export default function Dashboard({
   const [bookingNotes, setBookingNotes] = useState('');
   const [bookingCreateState, setBookingCreateState] = useState(createInitialBookingCreateState);
   const [bookingHistory, setBookingHistory] = useState(createInitialBookingHistoryState);
-  const [serviceHistoryState, setServiceHistoryState] = useState(
-    createInitialCustomerServiceHistoryState,
-  );
+  const [serviceHistoryState, setServiceHistoryState] = useState(createInitialServiceHistoryState);
   const [selectedHistoryBookingId, setSelectedHistoryBookingId] = useState(null);
   const [bookingDetailState, setBookingDetailState] = useState(createInitialBookingDetailState);
+  const [bookingReservationPaymentState, setBookingReservationPaymentState] = useState(
+    createInitialBookingReservationPaymentState,
+  );
   const [notificationsFeed, setNotificationsFeed] = useState([]);
   const [notificationModuleState, setNotificationModuleState] = useState(
     createInitialNotificationModuleState,
@@ -2081,6 +2134,7 @@ export default function Dashboard({
   const [storeOrderTrackingState, setStoreOrderTrackingState] = useState(
     createInitialStoreOrderTrackingState,
   );
+  const [isStoreOrderDetailVisible, setIsStoreOrderDetailVisible] = useState(false);
   const [isNotificationsVisible, setIsNotificationsVisible] = useState(false);
   const [isProfileTooltipVisible, setIsProfileTooltipVisible] = useState(false);
   const [timelineFilter, setTimelineFilter] = useState('All');
@@ -2096,26 +2150,44 @@ export default function Dashboard({
   );
   const [loyaltyState, setLoyaltyState] = useState(createInitialLoyaltyState);
   const [isCartVisible, setIsCartVisible] = useState(false);
-  const [profileSection, setProfileSection] = useState('rewards');
-  const pendingReservationRefreshBookingIdRef = useRef(null);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deletePasswordError, setDeletePasswordError] = useState('');
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [isProfileEditing, setIsProfileEditing] = useState(false);
   const [profileForm, setProfileForm] = useState(createProfileForm(account));
+  const garageVehicleSummaries = digitalGarageState.vehicleSummaries ?? [];
+  const selectedGarageVehicle =
+    digitalGarageState.vehicles.find((vehicle) => vehicle.id === selectedGarageVehicleId) ??
+    digitalGarageState.vehicles[0] ??
+    null;
+  const selectedGarageVehicleSummary =
+    garageVehicleSummaries.find((vehicle) => vehicle.id === selectedGarageVehicle?.id) ?? null;
+  const accountPrimaryVehicle =
+    account?.primaryVehicle ??
+    account?.ownedVehicles?.find((vehicle) => vehicle.id === account?.primaryVehicleId) ??
+    account?.ownedVehicles?.[0] ??
+    null;
   const primaryVehicleLabel =
-    account?.primaryVehicle?.displayName ||
+    selectedGarageVehicleSummary?.title ||
+    buildOwnedVehicleLabel(accountPrimaryVehicle) ||
     account?.vehicleDisplayName ||
     account?.vehicleModel ||
     'No vehicle selected';
-  const primaryVehicleMetaLabel = [
-    account?.licensePlate,
-    account?.vehicleYear ? `${account.vehicleYear} Model` : null,
-  ]
-    .map((part) => String(part ?? '').trim())
-    .filter(Boolean)
-    .join(' - ') || 'Add vehicle details to personalize this card.';
+  const primaryVehicleMetaLabel =
+    selectedGarageVehicleSummary?.subtitle ||
+    [
+      accountPrimaryVehicle?.plateNumber ?? account?.licensePlate,
+      accountPrimaryVehicle?.color,
+      accountPrimaryVehicle?.vin ? `VIN ${accountPrimaryVehicle.vin}` : null,
+      accountPrimaryVehicle?.year ?? account?.vehicleYear
+        ? `${accountPrimaryVehicle?.year ?? account?.vehicleYear} Model`
+        : null,
+    ]
+      .map((part) => String(part ?? '').trim())
+      .filter(Boolean)
+      .join(' - ') ||
+    'Add vehicle details to personalize this card.';
   const loyaltyPointsBalance = loyaltyState.account?.pointsBalance ?? 0;
   const loyaltyTier = loyaltyState.tier ?? {
     key: customerLoyaltyTiers[0].key,
@@ -2127,26 +2199,18 @@ export default function Dashboard({
   const loyaltyRewards = loyaltyState.rewards ?? [];
   const loyaltyTransactions = loyaltyState.transactions ?? [];
   const featuredReward = loyaltyState.featuredReward ?? null;
-  const recentHomeServices = serviceHistoryState.items.length
-    ? serviceHistoryState.items.slice(0, 3).map((item) => ({
-        key: item.id ?? item.jobOrderId,
-        icon: 'check-decagram-outline',
-        title:
-          Array.isArray(item.completedServiceNames) && item.completedServiceNames.length
-            ? item.completedServiceNames.join(', ')
-            : item.jobOrderReference,
-        dateLabel: item.bookingDate
-          ? formatBookingDateLabel(item.bookingDate)
-          : item.finalizedAt
-            ? new Date(item.finalizedAt).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })
-            : 'Finalized service',
-        status: 'Completed',
-      }))
-    : recentServiceHistory.slice(0, 3);
+  const normalizedRecentServiceHistory = (serviceHistoryState.items ?? []).slice(0, 3).map((item) => ({
+    key: item.id ?? item.jobOrderId ?? item.jobOrderReference,
+    icon: 'check-decagram-outline',
+    title:
+      item.completedServiceNames?.filter(Boolean).join(', ') ||
+      item.vehicleLabel ||
+      item.jobOrderReference ||
+      'Completed service',
+    dateLabel: formatBookingDateLabel(item.bookingDate ?? String(item.finalizedAt ?? '').slice(0, 10)),
+    status: 'Completed',
+  }));
+  const recentHomeServices = normalizedRecentServiceHistory;
   const featuredRewardEyebrow = featuredReward
     ? featuredReward.available
       ? 'READY TO REDEEM'
@@ -2157,7 +2221,7 @@ export default function Dashboard({
     ? featuredReward.available
       ? `${featuredReward.description} Redeem now for ${featuredReward.pointsLabel}.`
       : `${featuredReward.description} ${featuredReward.remainingPoints.toLocaleString()} more points needed to unlock it.`
-    : 'Your points wallet is connected. Active rewards will appear here once staff publish the customer catalog.';
+    : 'Your points wallet is connected. New rewards will appear here as soon as eligible offers are made active for customers.';
   const featuredRewardButtonLabel =
     featuredReward && featuredReward.available ? 'Claim Reward' : 'Open Rewards';
   const lastHandledSupportJumpRef = useRef(null);
@@ -2169,6 +2233,7 @@ export default function Dashboard({
     confirmPassword: '',
   });
   const [securityErrors, setSecurityErrors] = useState({});
+  const [securitySubmitting, setSecuritySubmitting] = useState(false);
   const [passwordVisibility, setPasswordVisibility] = useState({
     currentPassword: false,
     newPassword: false,
@@ -2179,7 +2244,6 @@ export default function Dashboard({
   const cartOverlayAnim = useRef(new Animated.Value(0)).current;
   const productOverlayAnim = useRef(new Animated.Value(0)).current;
   const notificationPanelAnim = useRef(new Animated.Value(0)).current;
-  const bottomNavIndicatorAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     setProfileForm(createProfileForm(account));
@@ -2195,9 +2259,10 @@ export default function Dashboard({
     setBookingNotes('');
     setBookingCreateState(createInitialBookingCreateState());
     setBookingHistory(createInitialBookingHistoryState());
-    setServiceHistoryState(createInitialCustomerServiceHistoryState());
+    setServiceHistoryState(createInitialServiceHistoryState());
     setSelectedHistoryBookingId(null);
     setBookingDetailState(createInitialBookingDetailState());
+    setBookingReservationPaymentState(createInitialBookingReservationPaymentState());
     setNotificationsFeed([]);
     setNotificationModuleState(createInitialNotificationModuleState());
     setTimelineFilter('All');
@@ -2236,10 +2301,6 @@ export default function Dashboard({
 
     if (supportJump.menuScreen) {
       setMenuScreen(supportJump.menuScreen);
-    }
-
-    if (supportJump.profileSection) {
-      setProfileSection(supportJump.profileSection);
     }
 
     if (Object.prototype.hasOwnProperty.call(supportJump, 'selectedHistoryBookingId')) {
@@ -2313,6 +2374,7 @@ export default function Dashboard({
 
       setLoyaltyState({
         status: 'ready',
+        hasLoadedSnapshot: true,
         ...loyaltySnapshot,
         errorMessage: '',
         redeemingRewardId: null,
@@ -2325,7 +2387,7 @@ export default function Dashboard({
 
       setLoyaltyState((currentState) => ({
         ...currentState,
-        status: currentState.account ? 'ready' : 'error',
+        status: currentState.hasLoadedSnapshot ? 'ready' : 'error',
         errorMessage: nextMessage,
         redeemingRewardId: null,
       }));
@@ -2402,7 +2464,7 @@ export default function Dashboard({
   };
 
   const loadCartModuleState = async () => {
-    if (!account?.userId) {
+    if (!account?.userId || !account?.accessToken) {
       setCartState({
         ...createInitialCartState(),
         status: 'error',
@@ -2440,7 +2502,7 @@ export default function Dashboard({
   };
 
   const loadStoreOrderHistoryState = async (options = {}) => {
-    if (!account?.userId) {
+    if (!account?.userId || !account?.accessToken) {
       setStoreOrderHistoryState({
         ...createInitialStoreOrderHistoryState(),
         status: 'error',
@@ -2620,7 +2682,7 @@ export default function Dashboard({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [activeTab, menuScreen, bookingMode, profileSection, screenFadeAnim, screenTranslateAnim]);
+  }, [activeTab, menuScreen, bookingMode, screenFadeAnim, screenTranslateAnim]);
 
   useEffect(() => {
     if (isCartVisible) {
@@ -2999,6 +3061,65 @@ export default function Dashboard({
   ]);
 
   useEffect(() => {
+    if (activeTab !== 'explore') {
+      return;
+    }
+
+    if (serviceHistoryState.status !== 'idle') {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadServiceHistory = async () => {
+      setServiceHistoryState((currentState) => ({
+        ...currentState,
+        status: 'loading',
+        errorMessage: '',
+      }));
+
+      try {
+        const items = await listCustomerServiceHistory({
+          userId: account?.userId,
+          accessToken: account?.accessToken,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setServiceHistoryState({
+          status: 'ready',
+          items,
+          errorMessage: '',
+        });
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Unable to load completed service history right now.';
+        const isUnauthorized = error instanceof ApiError && [401, 403].includes(error.status);
+
+        setServiceHistoryState((currentState) => ({
+          ...currentState,
+          status: isUnauthorized ? 'unauthorized' : 'error',
+          errorMessage: message,
+        }));
+      }
+    };
+
+    void loadServiceHistory();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [account?.accessToken, account?.userId, activeTab, serviceHistoryState.status]);
+
+  useEffect(() => {
     const matchingVehicle = bookingDiscovery.vehicles.find(
       (vehicle) => vehicle.id === selectedBookingVehicleId,
     );
@@ -3134,71 +3255,13 @@ export default function Dashboard({
   ]);
 
   useEffect(() => {
-    if (activeTab !== 'explore') {
-      return;
-    }
-
-    if (serviceHistoryState.status !== 'idle') {
-      return;
-    }
-
-    let isCancelled = false;
-
-    const loadServiceHistory = async () => {
-      setServiceHistoryState((currentState) => ({
-        ...currentState,
-        status: 'loading',
-        errorMessage: '',
-      }));
-
-      try {
-        const items = await listCustomerServiceHistory({
-          userId: account?.userId,
-          accessToken: account?.accessToken,
-        });
-
-        if (isCancelled) {
-          return;
-        }
-
-        setServiceHistoryState({
-          status: 'ready',
-          items,
-          errorMessage: '',
-        });
-      } catch (error) {
-        if (isCancelled) {
-          return;
-        }
-
-        const message =
-          error instanceof Error && error.message
-            ? error.message
-            : 'Unable to load your recent services right now.';
-        const isUnauthorized = error instanceof ApiError && [401, 403].includes(error.status);
-
-        setServiceHistoryState((currentState) => ({
-          ...currentState,
-          status: isUnauthorized ? 'unauthorized' : 'error',
-          errorMessage: message,
-        }));
-      }
-    };
-
-    void loadServiceHistory();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [account?.accessToken, account?.userId, activeTab, serviceHistoryState.status]);
-
-  useEffect(() => {
     if (activeTab !== 'notifications' || bookingMode !== 'track') {
       return;
     }
 
     if (!selectedHistoryBookingId) {
       setBookingDetailState(createInitialBookingDetailState());
+      setBookingReservationPaymentState(createInitialBookingReservationPaymentState());
       return;
     }
 
@@ -3275,23 +3338,12 @@ export default function Dashboard({
     setIsProfileTooltipVisible(false);
   }, [activeTab, menuScreen]);
 
-  useEffect(() => {
-    const nextActiveIndex = tabs.findIndex((tab) => tab.key === activeTab);
-    const activeIndex = nextActiveIndex >= 0 ? nextActiveIndex : 0;
-    const slotWidth = windowWidth / tabs.length;
-    const itemInset = isTinyPhone ? 0 : isVeryCompactPhone ? 1 : isCompactPhone ? 3 : 6;
-
-    bottomNavIndicatorAnim.stopAnimation();
-    Animated.spring(bottomNavIndicatorAnim, {
-      toValue: activeIndex * slotWidth + itemInset,
-      stiffness: 220,
-      damping: 26,
-      mass: 0.8,
-      useNativeDriver: true,
-    }).start();
-  }, [activeTab, isCompactPhone, isTinyPhone, isVeryCompactPhone, windowWidth, bottomNavIndicatorAnim]);
-
   const handleTabPress = (tabKey) => {
+    if (tabKey === 'insurance') {
+      void navigateToInsuranceInquiry();
+      return;
+    }
+
     setActiveTab(tabKey);
   };
 
@@ -3438,6 +3490,7 @@ export default function Dashboard({
     activeStoreOrderRequestRef.current = order.id;
     setSelectedStoreOrderId(order.id);
     setStoreOrderTrackingState(buildStoreOrderSelectionState(order));
+    setIsStoreOrderDetailVisible(true);
   };
 
   const handleOpenStoreOrders = (order = null) => {
@@ -3448,6 +3501,102 @@ export default function Dashboard({
       activeStoreOrderRequestRef.current = order.id;
       setSelectedStoreOrderId(order.id);
       setStoreOrderTrackingState(buildStoreOrderSelectionState(order));
+      setIsStoreOrderDetailVisible(true);
+    }
+  };
+
+  const handleCloseStoreOrderDetail = () => {
+    setIsStoreOrderDetailVisible(false);
+  };
+
+  const handleStartStoreInvoicePaymongoCheckout = async () => {
+    if (!selectedStoreOrderId || !account?.accessToken) {
+      return;
+    }
+
+    const existingCheckoutUrl = storeOrderTrackingState.invoice?.onlinePaymentCheckoutUrl;
+    const existingOnlineStatus = String(
+      storeOrderTrackingState.invoice?.onlinePaymentStatus ?? '',
+    ).trim().toLowerCase();
+
+    if (
+      existingCheckoutUrl &&
+      ['pending', 'awaiting_payment', 'awaiting_payment_method'].includes(existingOnlineStatus)
+    ) {
+      try {
+        await Linking.openURL(existingCheckoutUrl);
+        return;
+      } catch (error) {
+        setStoreOrderTrackingState((currentState) => ({
+          ...currentState,
+          invoiceErrorMessage:
+            error?.message || 'We could not reopen the existing PayMongo checkout right now.',
+        }));
+      }
+    }
+
+    setStoreOrderTrackingState((currentState) => ({
+      ...currentState,
+      invoiceStatus: 'loading',
+      invoiceErrorMessage: '',
+    }));
+
+    try {
+      const invoice = await startCustomerOrderInvoicePaymongoCheckout({
+        orderId: selectedStoreOrderId,
+        accessToken: account.accessToken,
+      });
+
+      setStoreOrderTrackingState((currentState) => ({
+        ...currentState,
+        invoiceStatus: 'ready',
+        invoice,
+        invoiceErrorMessage: '',
+      }));
+
+      if (invoice?.onlinePaymentCheckoutUrl) {
+        await Linking.openURL(invoice.onlinePaymentCheckoutUrl);
+      }
+    } catch (error) {
+      setStoreOrderTrackingState((currentState) => ({
+        ...currentState,
+        invoiceStatus: 'error',
+        invoiceErrorMessage:
+          error?.message || 'We could not start PayMongo checkout for this order right now.',
+      }));
+    }
+  };
+
+  const handleRefreshStoreInvoicePayment = async () => {
+    if (!selectedStoreOrderId || !account?.accessToken) {
+      return;
+    }
+
+    setStoreOrderTrackingState((currentState) => ({
+      ...currentState,
+      invoiceStatus: 'loading',
+      invoiceErrorMessage: '',
+    }));
+
+    try {
+      const invoice = await reconcileCustomerOrderInvoicePaymongoCheckout({
+        orderId: selectedStoreOrderId,
+        accessToken: account.accessToken,
+      });
+
+      setStoreOrderTrackingState((currentState) => ({
+        ...currentState,
+        invoiceStatus: 'ready',
+        invoice,
+        invoiceErrorMessage: '',
+      }));
+    } catch (error) {
+      setStoreOrderTrackingState((currentState) => ({
+        ...currentState,
+        invoiceStatus: 'error',
+        invoiceErrorMessage:
+          error?.message || 'We could not refresh PayMongo payment state for this order right now.',
+      }));
     }
   };
 
@@ -3511,6 +3660,15 @@ export default function Dashboard({
     }
   };
 
+  const handleContinueToBilling = () => {
+    setCheckoutState((currentState) => ({
+      ...currentState,
+      stage: 'billing',
+      errorMessage: '',
+      fieldErrors: {},
+    }));
+  };
+
   const handleSubmitInvoiceCheckout = async () => {
     if (!account?.userId || checkoutState.submitting) {
       return;
@@ -3521,7 +3679,7 @@ export default function Dashboard({
     if (Object.keys(fieldErrors).length > 0) {
       setCheckoutState((currentState) => ({
         ...currentState,
-        stage: 'preview',
+        stage: 'billing',
         previewStatus: currentState.previewStatus === 'ready' ? 'ready' : currentState.previewStatus,
         fieldErrors,
         errorMessage: 'Complete the billing address details before creating the invoice checkout.',
@@ -3579,7 +3737,7 @@ export default function Dashboard({
 
       setCheckoutState((currentState) => ({
         ...currentState,
-        stage: 'preview',
+        stage: 'billing',
         previewStatus: currentState.previewStatus === 'ready' ? 'ready' : currentState.previewStatus,
         submitting: false,
         errorMessage: nextMessage,
@@ -3898,9 +4056,9 @@ export default function Dashboard({
       setBookingCreateState({
         status: 'success',
         message:
-          createdBooking.status === 'pending_payment'
-            ? 'Booking request saved. Finish the reservation fee to secure the slot and receive the QR code.'
-            : 'Booking request submitted successfully.',
+          createdBooking?.status === 'pending_payment'
+            ? 'Booking request submitted. Complete the reservation fee payment to confirm the slot and generate your check-in QR code.'
+            : 'Booking request submitted. Staff will review it next.',
         booking: createdBooking,
       });
       setBookingHistory((currentState) => ({
@@ -3956,141 +4114,120 @@ export default function Dashboard({
     }
   };
 
-  const handleOpenReservationPayment = async (booking) => {
-    const checkoutUrl = booking?.reservationPayment?.providerCheckoutUrl;
-
-    if (!checkoutUrl) {
-      Alert.alert(
-        'Payment link unavailable',
-        'This booking does not have an active checkout URL yet. Retry the reservation payment session first.',
-      );
+  const applyReservationPaymentToBookingState = (bookingId, reservationPayment) => {
+    if (!bookingId || !reservationPayment) {
       return;
     }
 
-    const canOpen = await Linking.canOpenURL(checkoutUrl);
-    if (!canOpen) {
-      Alert.alert(
-        'Unable to open payment link',
-        'This device cannot open the reservation payment checkout URL right now.',
-      );
-      return;
-    }
+    setBookingDetailState((currentState) => {
+      if (!currentState.booking || currentState.booking.id !== bookingId) {
+        return currentState;
+      }
 
-    pendingReservationRefreshBookingIdRef.current = booking.id;
-    await Linking.openURL(checkoutUrl);
+      return {
+        ...currentState,
+        booking: {
+          ...currentState.booking,
+          reservationPayment,
+        },
+      };
+    });
+
+    setBookingHistory((currentState) => ({
+      ...currentState,
+      bookings: currentState.bookings.map((booking) =>
+        booking.id === bookingId
+          ? {
+              ...booking,
+              reservationPayment,
+            }
+          : booking,
+      ),
+    }));
   };
 
-  const handleRetryReservationPayment = async (booking) => {
-    if (!booking?.id) {
+  const handleOpenBookingReservationPayment = async () => {
+    const bookingId = bookingDetailState.booking?.id ?? selectedHistoryBookingId;
+
+    if (!bookingId || !account?.accessToken) {
       return;
     }
 
-    try {
-      const updatedBooking = await retryBookingReservationPayment({
-        bookingId: booking.id,
-        accessToken: account?.accessToken,
-      });
-
-      setBookingHistory((currentState) => ({
-        status: 'ready',
-        errorMessage: '',
-        bookings: [
-          updatedBooking,
-          ...currentState.bookings.filter((item) => item.id !== updatedBooking.id),
-        ],
-      }));
-      setSelectedHistoryBookingId(updatedBooking.id);
-      setBookingDetailState({
-        status: 'ready',
-        booking: updatedBooking,
-        errorMessage: '',
-      });
-      Alert.alert(
-        'Reservation payment refreshed',
-        updatedBooking.reservationPayment?.providerCheckoutUrl
-          ? 'A fresh payment session is ready. Continue the reservation payment now.'
-          : 'The booking was refreshed, but a checkout URL is still unavailable. Counter confirmation may be required.',
-      );
-    } catch (error) {
-      Alert.alert(
-        'Unable to refresh reservation payment',
-        error instanceof Error ? error.message : 'Try again in a moment.',
-      );
-    }
-  };
-
-  const handleRefreshReservationPaymentDetail = async (booking) => {
-    if (!booking?.id) {
-      return;
-    }
+    setBookingReservationPaymentState({
+      status: 'loading',
+      errorMessage: '',
+    });
 
     try {
       const reservationPayment = await getBookingReservationPayment({
-        bookingId: booking.id,
-        accessToken: account?.accessToken,
-      });
-      const refreshedBooking = await getBookingById({
-        bookingId: booking.id,
-        accessToken: account?.accessToken,
+        bookingId,
+        accessToken: account.accessToken,
       });
 
-      const updatedBooking = {
-        ...refreshedBooking,
-        reservationPayment: refreshedBooking.reservationPayment ?? reservationPayment,
-      };
-
-      setBookingHistory((currentState) => ({
-        ...currentState,
-        bookings: currentState.bookings.map((item) =>
-          item.id === updatedBooking.id ? updatedBooking : item,
-        ),
-      }));
-      setBookingDetailState({
+      applyReservationPaymentToBookingState(bookingId, reservationPayment);
+      setBookingReservationPaymentState({
         status: 'ready',
-        booking: updatedBooking,
         errorMessage: '',
       });
-      pendingReservationRefreshBookingIdRef.current = null;
-    } catch (error) {
-      Alert.alert(
-        'Unable to refresh payment status',
-        error instanceof Error ? error.message : 'Try again in a moment.',
+
+      if (reservationPayment?.providerCheckoutUrl) {
+        await Linking.openURL(reservationPayment.providerCheckoutUrl);
+        return;
+      }
+
+      throw new Error(
+        reservationPayment?.status === 'paid'
+          ? 'This reservation fee is already marked as paid.'
+          : 'No live payment checkout URL is available for this booking yet.',
       );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'We could not open reservation payment right now.';
+      setBookingReservationPaymentState({
+        status: 'error',
+        errorMessage: message,
+      });
+      Alert.alert('Reservation Payment Unavailable', message);
     }
   };
 
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      return undefined;
+  const handleRetryBookingReservationPayment = async () => {
+    const bookingId = bookingDetailState.booking?.id ?? selectedHistoryBookingId;
+
+    if (!bookingId || !account?.accessToken) {
+      return;
     }
 
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active') {
-        return;
-      }
-
-      const bookingId = pendingReservationRefreshBookingIdRef.current;
-      if (!bookingId) {
-        return;
-      }
-
-      const pendingBooking =
-        bookingDetailState.booking?.id === bookingId
-          ? bookingDetailState.booking
-          : bookingHistory.bookings.find((item) => item.id === bookingId);
-
-      if (!pendingBooking) {
-        pendingReservationRefreshBookingIdRef.current = null;
-        return;
-      }
-
-      void handleRefreshReservationPaymentDetail(pendingBooking);
+    setBookingReservationPaymentState({
+      status: 'loading',
+      errorMessage: '',
     });
 
-    return () => {
-      subscription.remove();
-    };
-  }, [account?.accessToken, bookingDetailState.booking, bookingHistory.bookings]);
+    try {
+      const reservationPayment = await retryBookingReservationPayment({
+        bookingId,
+        accessToken: account.accessToken,
+      });
+
+      applyReservationPaymentToBookingState(bookingId, reservationPayment);
+      setBookingReservationPaymentState({
+        status: 'ready',
+        errorMessage: '',
+      });
+
+      if (reservationPayment?.providerCheckoutUrl) {
+        await Linking.openURL(reservationPayment.providerCheckoutUrl);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'We could not refresh reservation payment right now.';
+      setBookingReservationPaymentState({
+        status: 'error',
+        errorMessage: message,
+      });
+      Alert.alert('Reservation Payment Refresh Failed', message);
+    }
+  };
 
   const navigateToTimeline = () => {
     setActiveTab('messages');
@@ -4118,29 +4255,38 @@ export default function Dashboard({
   };
 
   const navigateToInsurancePage = (vehicleId = null) => {
-    if (vehicleId) {
-      setSelectedGarageVehicleId(vehicleId);
-    }
-
-    setActiveTab('insurance');
-    setIsProfileTooltipVisible(false);
+    void navigateToInsuranceInquiry(vehicleId);
   };
 
   const navigateToProfileSection = (sectionKey) => {
     setActiveTab(sectionKey === 'rewards' || sectionKey === 'insurance' ? sectionKey : 'menu');
     setMenuScreen('root');
-    setProfileSection(sectionKey);
     setIsProfileTooltipVisible(false);
   };
 
   const navigateToInsuranceInquiry = (vehicleId = null) => {
+    const loadRememberedInquiryMappings = async () => {
+      try {
+        const serializedMappings = await AsyncStorage.getItem(
+          REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
+        );
+        hydrateRememberedInquiryMappings(serializedMappings);
+      } catch {
+        // Ignore resume cache failures and fall back to the normal insurance home.
+      }
+    };
+
+    return loadRememberedInquiryMappings().then(() => {
     const selectedVehicleId =
       normalizeNavigationId(vehicleId) ??
       normalizeNavigationId(selectedGarageVehicleId) ??
       normalizeNavigationId(account?.primaryVehicleId);
+    const rememberedInquiryId = getRememberedInquiryForVehicle(selectedVehicleId);
 
     navigation.navigate('InsuranceInquiryScreen', {
       vehicleId: selectedVehicleId,
+      inquiryId: rememberedInquiryId,
+    });
     });
   };
 
@@ -4260,12 +4406,11 @@ export default function Dashboard({
   };
 
   const handleMarkAllNotificationsRead = () => {
-    setNotificationsFeed((current) =>
-      current.map((item) => ({
-        ...item,
-        unread: false,
-      }))
-    );
+    setNotificationsFeed((current) => markAllCustomerNotificationsReadLocally(current));
+    setNotificationModuleState((currentState) => ({
+      ...currentState,
+      notifications: markAllCustomerNotificationsReadLocally(currentState.notifications),
+    }));
   };
 
   const handleDismissNotification = (notificationKey) => {
@@ -4275,14 +4420,15 @@ export default function Dashboard({
   const handleOpenNotification = (item) => {
     setNotificationsFeed((current) =>
       current.map((notification) =>
-        notification.key === item.key
-          ? {
-              ...notification,
-              unread: false,
-            }
-          : notification
+        notification.key === item.key ? markCustomerNotificationReadLocally(notification) : notification
       )
     );
+    setNotificationModuleState((currentState) => ({
+      ...currentState,
+      notifications: currentState.notifications.map((notification) =>
+        notification.key === item.key ? markCustomerNotificationReadLocally(notification) : notification
+      ),
+    }));
 
     if (item.action === 'booking' || item.category === 'booking_reminder') {
       navigateToBooking('track');
@@ -4299,7 +4445,7 @@ export default function Dashboard({
 
   const handleSelectProfileImage = () => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
-      Alert.alert('Profile Photo', 'Gallery upload is available on web in the current build.');
+      Alert.alert('Profile Photo', 'Profile photo upload is currently available on web only.');
       return;
     }
 
@@ -4317,11 +4463,11 @@ export default function Dashboard({
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === 'string') {
-          onSaveProfile?.({
-            profileImage: reader.result,
-          });
           setIsProfileTooltipVisible(false);
-          Alert.alert('Profile Updated', 'Your profile picture has been updated.');
+          Alert.alert(
+            'Profile Photo',
+            'Profile photo upload is not connected to your live customer profile yet.',
+          );
         }
       };
       reader.readAsDataURL(file);
@@ -4429,7 +4575,6 @@ export default function Dashboard({
         enrollmentId: enrollment?.enrollmentId,
         otpExpiresAt: enrollment?.otpExpiresAt,
         otpPurpose: 'deleteAccount',
-        currentPassword: deletePassword,
       });
     } catch (error) {
       const message =
@@ -4466,9 +4611,8 @@ export default function Dashboard({
     }));
   };
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     const nextErrors = {};
-    const emailError = validateEmail(profileForm.email);
     const phoneError = validatePhoneNumber(profileForm.phoneNumber);
     const birthdayError = validateBirthday(profileForm.birthday);
 
@@ -4476,20 +4620,8 @@ export default function Dashboard({
       nextErrors.fullName = 'Enter your full name.';
     }
 
-    if (emailError) {
-      nextErrors.email = emailError;
-    }
-
     if (phoneError) {
       nextErrors.phoneNumber = phoneError;
-    }
-
-    if (!profileForm.city.trim()) {
-      nextErrors.city = 'Enter your city.';
-    }
-
-    if (!profileForm.gender) {
-      nextErrors.gender = 'Select your gender.';
     }
 
     if (birthdayError) {
@@ -4502,21 +4634,53 @@ export default function Dashboard({
     }
 
     const { firstName, lastName } = splitFullName(profileForm.fullName);
+    const normalizedCurrentEmail = normalizeEmail(account?.email);
+    const normalizedRequestedEmail = normalizeEmail(profileForm.email);
+    const normalizedCurrentCity = String(account?.city ?? '').trim();
+    const normalizedRequestedCity = profileForm.city.trim();
+    const normalizedCurrentGender = String(account?.gender ?? '').trim();
+    const normalizedRequestedGender = String(profileForm.gender ?? '').trim();
 
-    onSaveProfile({
-      firstName,
-      lastName,
-      email: normalizeEmail(profileForm.email),
-      phoneNumber: normalizePhoneNumber(profileForm.phoneNumber),
-      city: profileForm.city.trim(),
-      gender: profileForm.gender,
-      birthday: profileForm.birthday,
-      address: `${profileForm.city.trim()}, Metro Manila`,
-    });
+    const unsupportedChanges = [];
+    if (
+      normalizedRequestedEmail &&
+      normalizedRequestedEmail !== normalizedCurrentEmail
+    ) {
+      unsupportedChanges.push('email');
+    }
+    if (normalizedRequestedCity !== normalizedCurrentCity) {
+      unsupportedChanges.push('city');
+    }
+    if (normalizedRequestedGender !== normalizedCurrentGender) {
+      unsupportedChanges.push('gender');
+    }
 
-    Alert.alert('Profile Saved', 'Your personal information has been updated.');
-    setIsProfileEditing(false);
-    setMenuScreen('settings');
+    if (unsupportedChanges.length) {
+      Alert.alert(
+        'Profile Fields Locked',
+        `The ${unsupportedChanges.join(', ')} field${
+          unsupportedChanges.length > 1 ? 's are' : ' is'
+        } still read-only in this build. Save your supported profile changes without editing those fields.`,
+      );
+      return;
+    }
+
+    try {
+      await onSaveProfile?.({
+        firstName,
+        lastName,
+        phoneNumber: normalizePhoneNumber(profileForm.phoneNumber),
+        birthday: profileForm.birthday,
+      });
+
+      Alert.alert('Profile Saved', 'Your personal information has been updated.');
+      setIsProfileEditing(false);
+      setMenuScreen('settings');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'We could not save your profile changes right now.';
+      Alert.alert('Profile Save Failed', message);
+    }
   };
 
   const handleSecurityFieldChange = (key, value) => {
@@ -4541,47 +4705,40 @@ export default function Dashboard({
   };
 
   const handleSavePassword = async () => {
-    const nextErrors = validateChangePasswordForm({
-      ...securityForm,
-      savedPassword: '',
-    });
+    const nextErrors = validateChangePasswordForm(securityForm);
 
     if (Object.keys(nextErrors).length > 0) {
       setSecurityErrors(nextErrors);
       return;
     }
 
-    if (!account?.accessToken) {
-      setSecurityErrors((currentErrors) => ({
-        ...currentErrors,
-        currentPassword: 'Sign in again before requesting a password change code.',
-      }));
-      return;
-    }
+    setSecuritySubmitting(true);
 
     try {
       const enrollment = await requestChangePasswordOtp({
         currentPassword: securityForm.currentPassword,
-        accessToken: account.accessToken,
+        accessToken: account?.accessToken,
       });
 
       navigation.navigate('OTP', {
-        email: account?.email,
-        maskedEmail: enrollment.maskedEmail,
+        email: account?.email ?? null,
+        maskedEmail: enrollment?.maskedEmail ?? account?.email ?? null,
+        enrollmentId: enrollment?.enrollmentId ?? null,
+        otpExpiresAt: enrollment?.otpExpiresAt ?? null,
         otpPurpose: 'passwordChange',
-        enrollmentId: enrollment.enrollmentId,
         currentPassword: securityForm.currentPassword,
         pendingPassword: securityForm.newPassword,
       });
-    } catch (requestError) {
+    } catch (error) {
       const message =
-        requestError instanceof ApiError
-          ? requestError.message
-          : 'Unable to request a password change code right now.';
+        error instanceof Error ? error.message : 'We could not start password change verification right now.';
       setSecurityErrors((currentErrors) => ({
         ...currentErrors,
         currentPassword: message,
       }));
+      Alert.alert('Password Change Failed', message);
+    } finally {
+      setSecuritySubmitting(false);
     }
   };
 
@@ -4721,106 +4878,40 @@ export default function Dashboard({
         </View>
       </View>
 
-      <View style={styles.sectionTabsWrap}>
-        {profileSections.map((section) => (
-          <ProfileSectionTab
-            key={section.key}
-            item={section}
-            isActive={profileSection === section.key}
-            onPress={() => setProfileSection(section.key)}
-          />
-        ))}
-      </View>
+      <Text style={styles.sectionHeading}>Available Rewards</Text>
 
-      <Text style={styles.sectionHeading}>
-        {profileSection === 'rewards'
-          ? 'Available Rewards'
-          : profileSection === 'garage'
-            ? 'Digital Garage'
-          : profileSection === 'insurance'
-            ? 'Insurance Tools'
-            : 'Back-Jobs'}
-      </Text>
-
-      {profileSection === 'rewards' ? (
-        <>
-          {loyaltyState.status === 'loading' && !loyaltyRewards.length ? (
-            <View style={styles.infoPanel}>
+      {loyaltyState.status === 'loading' && !loyaltyRewards.length ? (
+        <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>Loading loyalty rewards</Text>
           <Text style={styles.infoPanelText}>
-                We are syncing your loyalty balance, service-earned points, and reward catalog from the live backend.
+            We are syncing your loyalty balance, service-earned points, and reward catalog from the live backend.
           </Text>
-        </View>
-          ) : null}
-
-          {loyaltyState.errorMessage ? (
-            <View style={styles.infoPanel}>
-              <Text style={styles.infoPanelTitle}>Loyalty data unavailable</Text>
-              <Text style={styles.infoPanelText}>{loyaltyState.errorMessage}</Text>
-            </View>
-          ) : null}
-
-          {loyaltyRewards.length ? (
-            loyaltyRewards.map((item) => (
-              <RewardOfferCard
-                key={item.key}
-                item={{
-                  ...item,
-                  loading: loyaltyState.redeemingRewardId === item.id,
-                }}
-                onClaim={() => handleRedeemReward(item)}
-              />
-            ))
-          ) : loyaltyState.status !== 'loading' ? (
-            <View style={styles.infoPanel}>
-              <Text style={styles.infoPanelTitle}>Reward catalog is empty</Text>
-              <Text style={styles.infoPanelText}>
-                Live loyalty points are now connected. Rewards will appear here once staff publish active catalog entries for service-earned points.
-              </Text>
-            </View>
-          ) : null}
-        </>
-      ) : null}
-
-      {profileSection === 'garage' ? (
-        <View style={styles.infoPanel}>
-          <Text style={styles.infoPanelTitle}>Digital Garage</Text>
-          <Text style={styles.infoPanelText}>
-            Open your owned vehicle list, choose the vehicle context for bookings and insurance,
-            and review lifecycle history from one customer-only surface.
-          </Text>
-          <TouchableOpacity
-            style={[styles.primaryButton, styles.editProfileButton]}
-            onPress={() => navigateToGarage()}
-            activeOpacity={0.86}
-          >
-            <Text style={styles.primaryButtonText}>Open Digital Garage</Text>
-          </TouchableOpacity>
         </View>
       ) : null}
 
-      {profileSection === 'insurance' ? (
+      {loyaltyState.errorMessage ? (
         <View style={styles.infoPanel}>
-          <Text style={styles.infoPanelTitle}>Insurance inquiry tracking</Text>
-          <Text style={styles.infoPanelText}>
-            Submit a customer insurance inquiry, keep the selected vehicle aligned with backend
-            ownership rules, and check customer-safe claim-status updates from one screen.
-          </Text>
-          <TouchableOpacity
-            style={[styles.primaryButton, styles.editProfileButton]}
-            onPress={() => navigateToInsuranceInquiry()}
-            activeOpacity={0.86}
-          >
-            <Text style={styles.primaryButtonText}>Open Insurance Inquiry</Text>
-          </TouchableOpacity>
+          <Text style={styles.infoPanelTitle}>Loyalty data unavailable</Text>
+          <Text style={styles.infoPanelText}>{loyaltyState.errorMessage}</Text>
         </View>
       ) : null}
 
-      {profileSection === 'backJobs' ? (
+      {loyaltyRewards.length ? (
+        loyaltyRewards.map((item) => (
+          <RewardOfferCard
+            key={item.key}
+            item={{
+              ...item,
+              loading: loyaltyState.redeemingRewardId === item.id,
+            }}
+            onClaim={() => handleRedeemReward(item)}
+          />
+        ))
+      ) : loyaltyState.status !== 'loading' && !loyaltyState.errorMessage ? (
         <View style={styles.infoPanel}>
-          <Text style={styles.infoPanelTitle}>Previous service back-jobs</Text>
+          <Text style={styles.infoPanelTitle}>Reward catalog is empty</Text>
           <Text style={styles.infoPanelText}>
-            Review repeat jobs, past PMS history, and service follow-ups tied to your vehicle.
+            Live loyalty points are now connected. Rewards will appear here once staff publish active catalog entries for service-earned points.
           </Text>
         </View>
       ) : null}
@@ -5085,8 +5176,16 @@ export default function Dashboard({
         }
       />
 
-      <TouchableOpacity style={styles.primaryButton} onPress={handleSavePassword}>
-        <Text style={styles.primaryButtonText}>Save Password</Text>
+      <TouchableOpacity
+        style={[styles.primaryButton, securitySubmitting && styles.primaryButtonDisabled]}
+        onPress={() => {
+          void handleSavePassword();
+        }}
+        disabled={securitySubmitting}
+      >
+        <Text style={styles.primaryButtonText}>
+          {securitySubmitting ? 'Sending verification code...' : 'Save Password'}
+        </Text>
       </TouchableOpacity>
       </>
     ));
@@ -5192,39 +5291,39 @@ export default function Dashboard({
     ));
 
   const renderStoreContent = () => {
-    const selectedStoreOrder =
-      storeOrderTrackingState.order ||
-      storeOrderHistoryState.orders.find((order) => order.id === selectedStoreOrderId) ||
-      null;
-    const selectedStoreInvoice = storeOrderTrackingState.invoice;
     const isStoreRefreshBusy =
       storeOrderHistoryState.status === 'loading' ||
       storeOrderTrackingState.status === 'loading' ||
       storeOrderTrackingState.invoiceStatus === 'loading';
+    const isStoreInvoiceActionBusy = storeOrderTrackingState.invoiceStatus === 'loading';
 
-    return renderScrollableContent(styles.scrollContent, (
+    const stickyHeader = (
+      <View
+        style={[
+          styles.storeStickyHeader,
+          isVeryCompactPhone && styles.storeStickyHeaderCompact,
+        ]}
+      >
+        <View style={[styles.sectionTabsWrap, isCompactPhone && styles.sectionTabsWrapCompact]}>
+          {storeSections.map((item) => (
+            <ProfileSectionTab
+              key={item.key}
+              item={item}
+              isActive={storeSection === item.key}
+              onPress={() => {
+                setStoreSection(item.key);
+                if (item.key !== 'orders') {
+                  setIsStoreOrderDetailVisible(false);
+                }
+              }}
+            />
+          ))}
+        </View>
+      </View>
+    );
+
+    const scrollableSection = renderScrollableContent(styles.storeScrollContent, (
       <>
-      <View style={styles.storeHeroCard}>
-        <Text style={styles.storeHeroEyebrow}>ECOMMERCE</Text>
-        <Text style={styles.storeHeroTitle}>Shop, Track, And Reconcile</Text>
-        <Text style={styles.storeHeroText}>
-          Product browse, cart mutation, invoice preview, order history, invoice aging, and payment
-          entries all stay inside the customer app while staff settlement remains a separate backend
-          truth.
-        </Text>
-      </View>
-
-      <View style={[styles.sectionTabsWrap, isCompactPhone && styles.sectionTabsWrapCompact]}>
-        {storeSections.map((item) => (
-          <ProfileSectionTab
-            key={item.key}
-            item={item}
-            isActive={storeSection === item.key}
-            onPress={() => setStoreSection(item.key)}
-          />
-        ))}
-      </View>
-
       {storeSection === 'catalog' ? (
         <>
           <ShopCatalogSection
@@ -5237,31 +5336,11 @@ export default function Dashboard({
               void handleOpenProduct(product);
             }}
             onOpenCart={handleOpenCart}
+            onOpenOrders={() => setStoreSection('orders')}
             onRefresh={() => {
               void loadCatalogModuleState();
             }}
           />
-
-          <View style={styles.infoBlock}>
-            <Text style={styles.infoTitle}>Catalog and checkout</Text>
-            <Text style={styles.infoText}>
-              Browse available items, manage your cart, and review checkout totals from the customer shop.
-            </Text>
-          </View>
-
-          <View style={styles.infoBlock}>
-            <Text style={styles.infoTitle}>Need post-checkout tracking?</Text>
-            <Text style={styles.infoText}>
-              Open the Orders tab to review submitted shop orders and invoice updates.
-            </Text>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => setStoreSection('orders')}
-              activeOpacity={0.88}
-            >
-              <Text style={styles.secondaryButtonText}>Open Orders</Text>
-            </TouchableOpacity>
-          </View>
         </>
       ) : (
         <>
@@ -5269,7 +5348,7 @@ export default function Dashboard({
             <View style={styles.storeOrdersToolbarCopy}>
               <Text style={styles.bookingSectionLabel}>Order History</Text>
               <Text style={styles.storeOrdersToolbarText}>
-                Review submitted orders and invoice updates without changing your active cart.
+                Tap an order to open a focused tracking view with invoice and fulfillment detail.
               </Text>
             </View>
 
@@ -5282,9 +5361,9 @@ export default function Dashboard({
               disabled={isStoreRefreshBusy}
             >
               {isStoreRefreshBusy ? (
-                <ActivityIndicator color={colors.primary} size="small" />
+                <ActivityIndicator color={colors.labelText} size="small" />
               ) : (
-                <MaterialCommunityIcons name="refresh" size={18} color={colors.primary} />
+                <MaterialCommunityIcons name="refresh" size={18} color={colors.labelText} />
               )}
             </TouchableOpacity>
           </View>
@@ -5302,7 +5381,7 @@ export default function Dashboard({
           {storeOrderHistoryState.status === 'error' && !storeOrderHistoryState.orders.length ? (
             <View style={styles.checkoutStateCard}>
               <MaterialCommunityIcons name="receipt-text-remove-outline" size={30} color="#FFB86B" />
-              <Text style={styles.checkoutStateTitle}>Order history failed to load</Text>
+              <Text style={styles.checkoutStateTitle}>Order history unavailable</Text>
               <Text style={styles.checkoutStateText}>
                 {storeOrderHistoryState.errorMessage || 'We could not load your order history right now.'}
               </Text>
@@ -5338,6 +5417,27 @@ export default function Dashboard({
           ) : null}
 
           {storeOrderHistoryState.orders.length ? (
+            <View style={styles.storeOrderSummaryCard}>
+              <View style={styles.storeOrderSummaryHeader}>
+                <View style={styles.storeOrderSummaryCopy}>
+                  <Text style={styles.storeOrderSummaryValue}>{storeOrderHistoryState.orders.length}</Text>
+                  <Text style={styles.storeOrderSummaryLabel}>Tracked shop orders</Text>
+                </View>
+                <View style={styles.storeOrderSummaryBadge}>
+                  <Text style={styles.storeOrderSummaryBadgeText}>
+                    {selectedStoreOrder ? '1 selected' : 'Choose one'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.storeOrderSummaryText}>
+                {selectedStoreOrder
+                  ? `Selected ${selectedStoreOrder.orderNumber}. Open the card again anytime to review its latest order and invoice snapshot.`
+                  : 'Your latest invoice-backed orders appear here. The list stays compact so tracking is easier on mobile.'}
+              </Text>
+            </View>
+          ) : null}
+
+          {storeOrderHistoryState.orders.length ? (
             <View style={styles.storeOrderList}>
               {storeOrderHistoryState.orders.map((order) => (
                 <StoreOrderCard
@@ -5366,163 +5466,23 @@ export default function Dashboard({
           selectedStoreOrderId ? (
             <View style={styles.checkoutStateCard}>
               <MaterialCommunityIcons name="alert-circle-outline" size={28} color="#FF8B8B" />
-              <Text style={styles.checkoutStateTitle}>Tracking failed to load</Text>
+              <Text style={styles.checkoutStateTitle}>Tracking unavailable</Text>
               <Text style={styles.checkoutStateText}>
                 {storeOrderTrackingState.errorMessage || 'We could not load the selected order right now.'}
               </Text>
             </View>
           ) : null}
-
-          {selectedStoreOrder ? (
-            <>
-              <View style={styles.checkoutSummaryCard}>
-                <Text style={styles.checkoutSummaryTitle}>Selected Order</Text>
-                <View style={styles.checkoutSummaryRow}>
-                  <Text style={styles.checkoutSummaryLabel}>Order</Text>
-                  <Text style={styles.checkoutSummaryValue}>{selectedStoreOrder.orderNumber}</Text>
-                </View>
-                <View style={styles.checkoutSummaryRow}>
-                  <Text style={styles.checkoutSummaryLabel}>Created</Text>
-                  <Text style={styles.checkoutSummaryValue}>
-                    {formatStoreDateTimeLabel(selectedStoreOrder.createdAt)}
-                  </Text>
-                </View>
-                <View style={styles.checkoutSummaryRow}>
-                  <Text style={styles.checkoutSummaryLabel}>Status</Text>
-                  <Text style={styles.checkoutSummaryValue}>{selectedStoreOrder.statusLabel}</Text>
-                </View>
-                <View style={styles.checkoutSummaryRow}>
-                  <Text style={styles.checkoutSummaryLabel}>Subtotal</Text>
-                  <Text style={styles.checkoutSummaryValue}>{selectedStoreOrder.subtotalLabel}</Text>
-                </View>
-                <View style={styles.checkoutSummaryRow}>
-                  <Text style={styles.checkoutSummaryLabel}>Notes</Text>
-                    <Text style={styles.checkoutSummaryValue}>
-                      {selectedStoreOrder.notes || 'No checkout notes were attached.'}
-                    </Text>
-                </View>
-
-                <Text style={styles.checkoutSummaryNote}>{selectedStoreOrder.crossServiceHint}</Text>
-              </View>
-
-              <View style={styles.checkoutFormCard}>
-                <Text style={styles.checkoutCardTitle}>Invoice Tracking</Text>
-
-                {selectedStoreInvoice ? (
-                  <>
-                    <View style={styles.checkoutSummaryRow}>
-                      <Text style={styles.checkoutSummaryLabel}>Invoice</Text>
-                      <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.invoiceNumber}</Text>
-                    </View>
-                    <View style={styles.checkoutSummaryRow}>
-                      <Text style={styles.checkoutSummaryLabel}>Status</Text>
-                      <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.statusLabel}</Text>
-                    </View>
-                    <View style={styles.checkoutSummaryRow}>
-                      <Text style={styles.checkoutSummaryLabel}>Aging</Text>
-                      <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.agingBucketLabel}</Text>
-                    </View>
-                    <View style={styles.checkoutSummaryRow}>
-                      <Text style={styles.checkoutSummaryLabel}>Amount Due</Text>
-                      <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.amountDueLabel}</Text>
-                    </View>
-                    <View style={styles.checkoutSummaryRow}>
-                      <Text style={styles.checkoutSummaryLabel}>Amount Paid</Text>
-                      <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.amountPaidLabel}</Text>
-                    </View>
-                    <View style={styles.checkoutSummaryRow}>
-                      <Text style={styles.checkoutSummaryLabel}>Issued</Text>
-                      <Text style={styles.checkoutSummaryValue}>
-                        {formatStoreDateLabel(selectedStoreInvoice.issuedAt)}
-                      </Text>
-                    </View>
-                    <View style={styles.checkoutSummaryRow}>
-                      <Text style={styles.checkoutSummaryLabel}>Due</Text>
-                      <Text style={styles.checkoutSummaryValue}>
-                        {formatStoreDateLabel(selectedStoreInvoice.dueAt)}
-                      </Text>
-                    </View>
-
-                    <Text style={styles.checkoutSummaryNote}>{selectedStoreInvoice.agingSummary}</Text>
-                    <Text style={styles.checkoutSummaryNote}>{selectedStoreInvoice.crossServiceHint}</Text>
-
-                    {selectedStoreInvoice.paymentEntries.length ? (
-                      <View style={styles.storePaymentEntryList}>
-                        {selectedStoreInvoice.paymentEntries.map((paymentEntry) => (
-                          <StorePaymentEntryRow key={paymentEntry.id} item={paymentEntry} />
-                        ))}
-                      </View>
-                    ) : (
-                      <Text style={styles.checkoutStateText}>
-                        No payment entries have been recorded yet. This screen only reflects manual backend
-                        records and never assumes gateway settlement.
-                      </Text>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.checkoutStateText}>
-                      {storeOrderTrackingState.invoiceErrorMessage ||
-                        'Invoice tracking has not been published for this order yet.'}
-                    </Text>
-                    {selectedStoreOrder.invoice ? (
-                      <Text style={styles.checkoutSummaryNote}>
-                        Summary invoice status: {selectedStoreOrder.invoice.invoiceNumber} -{' '}
-                        {selectedStoreOrder.invoice.statusLabel}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.checkoutSummaryNote}>{selectedStoreOrder.crossServiceHint}</Text>
-                  </>
-                )}
-              </View>
-
-              <View style={styles.checkoutFormCard}>
-                <Text style={styles.checkoutCardTitle}>Billing Address Snapshot</Text>
-                <Text style={styles.checkoutAddressText}>
-                  {buildCheckoutAddressLabel(
-                    selectedStoreOrder.addresses?.find((address) => address.addressType === 'billing'),
-                  ) || 'No billing address was returned in the order snapshot.'}
-                </Text>
-              </View>
-
-              <View style={styles.checkoutFormCard}>
-                <Text style={styles.checkoutCardTitle}>Ordered Items</Text>
-                {selectedStoreOrder.items.map((item) => (
-                  <View key={item.id} style={styles.checkoutPreviewItem}>
-                    <View style={styles.checkoutPreviewItemCopy}>
-                      <Text style={styles.checkoutPreviewItemTitle}>{item.productName}</Text>
-                      <Text style={styles.checkoutPreviewItemMeta}>
-                        Qty {item.quantity}
-                        {item.productSku ? ` | SKU ${item.productSku}` : ''}
-                      </Text>
-                    </View>
-                    <Text style={styles.checkoutPreviewItemValue}>{item.lineTotalLabel}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <View style={styles.checkoutFormCard}>
-                <Text style={styles.checkoutCardTitle}>Order Status Timeline</Text>
-                {selectedStoreOrder.statusHistory.length ? (
-                  selectedStoreOrder.statusHistory.map((historyEntry, index) => (
-                    <StoreOrderHistoryEntry
-                      key={historyEntry.id}
-                      item={historyEntry}
-                      isLast={index === selectedStoreOrder.statusHistory.length - 1}
-                    />
-                  ))
-                ) : (
-                  <Text style={styles.checkoutStateText}>
-                    No order status transitions have been recorded beyond the initial checkout yet.
-                  </Text>
-                )}
-              </View>
-            </>
-          ) : null}
         </>
       )}
       </>
     ));
+
+    return (
+      <View style={styles.flex}>
+        {stickyHeader}
+        {scrollableSection}
+      </View>
+    );
   };
 
   const renderBookingContent = () => {
@@ -5609,6 +5569,7 @@ export default function Dashboard({
       (booking) => booking.id === selectedHistoryBookingId,
     );
     const selectedBookingDetail = bookingDetailState.booking ?? selectedHistoryBooking ?? null;
+    const selectedReservationPayment = selectedBookingDetail?.reservationPayment ?? null;
     const trackingSteps = buildBookingTrackingSteps(selectedBookingDetail);
 
     return renderScrollableContent(styles.bookingScrollContent, (
@@ -5772,7 +5733,7 @@ export default function Dashboard({
 
               <Text style={styles.bookingSectionLabel}>Slot Definitions</Text>
               <Text style={styles.bookingDateHint}>
-                Pick the shop window that works best. Staff can accept, decline, cancel, or complete the request from the admin schedule.
+                Pick the shop window that works best. Reservation payment must be completed before staff can confirm the slot and prepare your check-in QR code.
               </Text>
               {!bookingDiscovery.timeSlots.some(isBookableTimeSlot) ? (
                 <BookingDiscoveryStatePanel
@@ -5968,7 +5929,7 @@ export default function Dashboard({
                       setBookingCreateState(createInitialBookingCreateState());
                     }
                   }}
-                  placeholder="Optional concerns for staff review..."
+                  placeholder="Optional notes for the service team..."
                   placeholderTextColor={colors.mutedText}
                   multiline
                   textAlignVertical="top"
@@ -6011,7 +5972,7 @@ export default function Dashboard({
                 </View>
 
                 <Text style={styles.bookingSummaryNote}>
-                  Submitting creates a reservation-payment hold. Complete the reservation fee first, then the slot moves into the confirmed booking flow and QR issuance.
+                  Submitting creates a pending booking request. Staff confirmation, decline, or reschedule decisions remain separate later booking states.
                 </Text>
               </View>
 
@@ -6116,7 +6077,7 @@ export default function Dashboard({
           ) : bookingHistory.status === 'error' ? (
             <BookingDiscoveryStatePanel
               icon="alert-circle-outline"
-              title="Booking history failed to load"
+              title="History unavailable"
               message={bookingHistory.errorMessage || 'Unable to load booking history right now.'}
               actionLabel="Retry"
               onAction={handleRefreshBookingHistory}
@@ -6210,94 +6171,6 @@ export default function Dashboard({
                 </View>
               </View>
 
-              {selectedBookingDetail.reservationPayment ? (
-                <View style={styles.bookingSummaryCard}>
-                  <Text style={styles.bookingSummaryTitle}>Reservation Fee</Text>
-
-                  <View style={styles.bookingSummaryRow}>
-                    <Text style={styles.bookingSummaryLabel}>Payment status</Text>
-                    <Text style={styles.bookingSummaryValue}>
-                      {getReservationPaymentStatusLabel(selectedBookingDetail.reservationPayment)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.bookingSummaryRow}>
-                    <Text style={styles.bookingSummaryLabel}>Amount</Text>
-                    <Text style={styles.bookingSummaryValue}>
-                      {formatReservationAmount(selectedBookingDetail.reservationPayment.amountCents)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.bookingSummaryRow}>
-                    <Text style={styles.bookingSummaryLabel}>Expires</Text>
-                    <Text style={styles.bookingSummaryValue}>
-                      {selectedBookingDetail.reservationPayment.expiresAt
-                        ? formatDateTime(selectedBookingDetail.reservationPayment.expiresAt)
-                        : 'No expiry recorded'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.bookingSummaryRow}>
-                    <Text style={styles.bookingSummaryLabel}>Reference</Text>
-                    <Text style={styles.bookingSummaryValue}>
-                      {selectedBookingDetail.reservationPayment.referenceNumber || 'Generated after confirmation'}
-                    </Text>
-                  </View>
-
-                  {selectedBookingDetail.reservationPayment.failureReason ? (
-                    <Text style={styles.bookingSummaryNote}>
-                      {selectedBookingDetail.reservationPayment.failureReason}
-                    </Text>
-                  ) : selectedBookingDetail.reservationPayment.status === 'paid' ? (
-                    <Text style={styles.bookingSummaryNote}>
-                      Reservation fee received. This amount will be deducted from the final service invoice.
-                    </Text>
-                  ) : selectedBookingDetail.status === 'pending_payment' ? (
-                    <Text style={styles.bookingSummaryNote}>
-                      Complete the reservation fee first. The booking stays on hold and the QR code is not issued until payment is confirmed.
-                    </Text>
-                  ) : null}
-
-                  <View style={styles.bookingPagerActions}>
-                    {selectedBookingDetail.status === 'pending_payment' ? (
-                      <>
-                        <TouchableOpacity
-                          style={styles.bookingPagerButton}
-                          onPress={() => void handleRefreshReservationPaymentDetail(selectedBookingDetail)}
-                          activeOpacity={0.86}
-                        >
-                          <MaterialCommunityIcons name="refresh" size={16} color={colors.text} />
-                          <Text style={styles.bookingPagerButtonText}>Refresh</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.bookingPagerButton,
-                            !selectedBookingDetail.reservationPayment.providerCheckoutUrl &&
-                              styles.bookingPagerButtonDisabled,
-                          ]}
-                          onPress={() => void handleOpenReservationPayment(selectedBookingDetail)}
-                          activeOpacity={
-                            selectedBookingDetail.reservationPayment.providerCheckoutUrl ? 0.86 : 1
-                          }
-                          disabled={!selectedBookingDetail.reservationPayment.providerCheckoutUrl}
-                        >
-                          <MaterialCommunityIcons name="open-in-new" size={16} color={colors.text} />
-                          <Text style={styles.bookingPagerButtonText}>Continue Payment</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.bookingPagerButton}
-                          onPress={() => void handleRetryReservationPayment(selectedBookingDetail)}
-                          activeOpacity={0.86}
-                        >
-                          <MaterialCommunityIcons name="restore" size={16} color={colors.text} />
-                          <Text style={styles.bookingPagerButtonText}>Retry Session</Text>
-                        </TouchableOpacity>
-                      </>
-                    ) : null}
-                  </View>
-                </View>
-              ) : null}
-
               <View style={styles.trackingProgressCard}>
                 <Text style={styles.bookingSectionLabel}>Booking Status</Text>
                 {trackingSteps.map((step, index) => (
@@ -6308,6 +6181,96 @@ export default function Dashboard({
                   />
                 ))}
               </View>
+
+              {selectedReservationPayment || selectedBookingDetail.status === 'pending_payment' ? (
+                <View style={styles.bookingStatusHistoryCard}>
+                  <Text style={styles.bookingSectionLabel}>Reservation Fee</Text>
+                  <View style={styles.trackingMetaGrid}>
+                    <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
+                      <Text style={styles.trackingMetaLabel}>Status</Text>
+                      <Text style={styles.trackingMetaValue}>
+                        {getReservationPaymentStatusLabel(selectedReservationPayment)}
+                      </Text>
+                    </View>
+                    <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
+                      <Text style={styles.trackingMetaLabel}>Amount</Text>
+                      <Text style={styles.trackingMetaValue}>
+                        {selectedReservationPayment?.amountCents !== undefined &&
+                        selectedReservationPayment?.amountCents !== null
+                          ? formatEcommerceCurrency(selectedReservationPayment.amountCents)
+                          : 'Awaiting payment setup'}
+                      </Text>
+                    </View>
+                    <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
+                      <Text style={styles.trackingMetaLabel}>Reference</Text>
+                      <Text style={styles.trackingMetaValue}>
+                        {selectedReservationPayment?.referenceNumber ||
+                          'Generated after payment confirmation'}
+                      </Text>
+                    </View>
+                    <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
+                      <Text style={styles.trackingMetaLabel}>Expires</Text>
+                      <Text style={styles.trackingMetaValue}>
+                        {selectedReservationPayment?.expiresAt
+                          ? formatStoreDateTimeLabel(selectedReservationPayment.expiresAt)
+                          : 'No expiry recorded'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {selectedReservationPayment?.failureReason ? (
+                    <Text style={styles.bookingReservationPaymentWarning}>
+                      {selectedReservationPayment.failureReason}
+                    </Text>
+                  ) : selectedBookingDetail.status === 'pending_payment' ? (
+                    <Text style={styles.bookingReservationPaymentHint}>
+                      Finish the reservation fee payment so staff can confirm this booking and release your QR check-in.
+                    </Text>
+                  ) : selectedReservationPayment?.status === 'paid' ? (
+                    <Text style={styles.bookingReservationPaymentHint}>
+                      Reservation fee is secured and should be deducted from your final service invoice.
+                    </Text>
+                  ) : null}
+
+                  {bookingReservationPaymentState.errorMessage ? (
+                    <Text style={styles.bookingReservationPaymentWarning}>
+                      {bookingReservationPaymentState.errorMessage}
+                    </Text>
+                  ) : null}
+
+                  {selectedBookingDetail.status === 'pending_payment' ? (
+                    <View style={styles.bookingReservationPaymentActions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.primaryButton,
+                          bookingReservationPaymentState.status === 'loading' &&
+                            styles.primaryButtonDisabled,
+                        ]}
+                        onPress={() => {
+                          void handleOpenBookingReservationPayment();
+                        }}
+                        disabled={bookingReservationPaymentState.status === 'loading'}
+                      >
+                        <Text style={styles.primaryButtonText}>
+                          {bookingReservationPaymentState.status === 'loading'
+                            ? 'Opening payment...'
+                            : 'Open Payment Checkout'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.secondaryButton}
+                        onPress={() => {
+                          void handleRetryBookingReservationPayment();
+                        }}
+                        disabled={bookingReservationPaymentState.status === 'loading'}
+                      >
+                        <Text style={styles.secondaryButtonText}>Refresh Payment Link</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
 
               {selectedBookingDetail.statusHistory?.length ? (
                 <View style={styles.bookingStatusHistoryCard}>
@@ -6391,7 +6354,7 @@ export default function Dashboard({
 
       {loyaltyState.errorMessage ? (
         <View style={styles.infoPanel}>
-          <Text style={styles.infoPanelTitle}>Rewards failed to refresh</Text>
+          <Text style={styles.infoPanelTitle}>Rewards unavailable</Text>
           <Text style={styles.infoPanelText}>{loyaltyState.errorMessage}</Text>
         </View>
       ) : null}
@@ -6407,7 +6370,7 @@ export default function Dashboard({
             onClaim={() => handleRedeemReward(item)}
           />
         ))
-      ) : loyaltyState.status !== 'loading' ? (
+      ) : loyaltyState.status !== 'loading' && !loyaltyState.errorMessage ? (
         <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>Reward catalog is empty</Text>
           <Text style={styles.infoPanelText}>
@@ -6446,12 +6409,13 @@ export default function Dashboard({
           subtitle: [vehicle.plateNumber, vehicle.color].filter(Boolean).join(' - ') || 'Vehicle details saved',
           ordinalLabel: `Vehicle ${index + 1}`,
         }));
+    const selectedInsuranceVehicle =
+      vehicles.find((vehicle) => vehicle.id === selectedGarageVehicleId) ?? null;
 
     return renderScrollableContent(styles.menuRootContent, (
       <>
       <View style={styles.profileHomeHeader}>
         <View>
-          <Text style={styles.bookingEyebrow}>INSURANCE</Text>
           <Text style={styles.profileHomeTitle}>Insurance</Text>
         </View>
         <NotificationIconButton
@@ -6459,22 +6423,7 @@ export default function Dashboard({
           onPress={handleToggleNotifications}
         />
       </View>
-
-      <View style={styles.infoPanel}>
-        <Text style={styles.infoPanelTitle}>Insurance inquiry center</Text>
-        <Text style={styles.infoPanelText}>
-          Start or continue CTPL and comprehensive insurance inquiries using a vehicle already attached to your account.
-        </Text>
-        <TouchableOpacity
-          style={[styles.primaryButton, styles.editProfileButton]}
-          onPress={() => navigateToInsuranceInquiry(selectedGarageVehicleId)}
-          activeOpacity={0.86}
-        >
-          <Text style={styles.primaryButtonText}>Open Insurance Inquiry Form</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.sectionHeading}>Choose Vehicle Context</Text>
+      <Text style={styles.sectionHeading}>Select Vehicle</Text>
       {digitalGarageState.status === 'garage_loading' && !vehicles.length ? (
         <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>Loading vehicles</Text>
@@ -6510,13 +6459,6 @@ export default function Dashboard({
                     <Text style={styles.garageVehicleMeta}>{vehicle.subtitle}</Text>
                   </View>
                 </View>
-                <TouchableOpacity
-                  style={styles.garageActionButton}
-                  onPress={() => navigateToInsuranceInquiry(vehicle.id)}
-                  activeOpacity={0.86}
-                >
-                  <Text style={styles.garageActionText}>Start Inquiry</Text>
-                </TouchableOpacity>
               </MotionPressable>
             );
           })}
@@ -6528,6 +6470,29 @@ export default function Dashboard({
             Add a vehicle first so insurance inquiries can stay tied to the correct ownership record.
           </Text>
         </View>
+      ) : null}
+
+      {vehicles.length ? (
+        <>
+        <Text style={styles.insuranceSelectionMeta}>
+          {selectedInsuranceVehicle
+            ? `Selected: ${selectedInsuranceVehicle.title}`
+            : 'Choose a vehicle to continue to insurance home.'}
+        </Text>
+        <TouchableOpacity
+          style={[
+            styles.primaryButton,
+            styles.editProfileButton,
+            styles.infoPanelPrimaryAction,
+            !selectedInsuranceVehicle && styles.insuranceLauncherDisabled,
+          ]}
+          onPress={() => selectedInsuranceVehicle && navigateToInsuranceInquiry(selectedInsuranceVehicle.id)}
+          activeOpacity={selectedInsuranceVehicle ? 0.86 : 1}
+          disabled={!selectedInsuranceVehicle}
+        >
+          <Text style={styles.primaryButtonText}>Open Insurance Home</Text>
+        </TouchableOpacity>
+        </>
       ) : null}
       </>
     ));
@@ -6554,17 +6519,26 @@ export default function Dashboard({
             latestCustomerBooking?.status === 'rescheduled'
           ? '55%'
           : latestCustomerBooking?.status === 'pending_payment'
-            ? '20%'
+            ? '15%'
           : latestCustomerBooking
             ? '25%'
             : '0%';
+    const latestCompletedService = recentHomeServices[0] ?? null;
+    const homeReminderSubtitle = latestCustomerBooking
+      ? `${getBookingServiceNames(latestCustomerBooking)} on ${formatBookingDateLabel(latestCustomerBooking.scheduledDate)} at ${getBookingTimeLabel(latestCustomerBooking)}`
+      : latestCompletedService
+        ? `Last completed service: ${latestCompletedService.title} on ${latestCompletedService.dateLabel}`
+        : 'No live service reminder is available yet.';
     const topStatus = latestCustomerBooking
       ? {
           badge: getBookingStatusLabel(latestCustomerBooking.status).toUpperCase(),
           title: getBookingServiceNames(latestCustomerBooking),
           subtitle: `${getBookingVehicleLabel(latestCustomerBooking, bookingDiscovery.vehicles)} - ${getBookingTimeLabel(latestCustomerBooking)} - ${formatBookingDateLabel(latestCustomerBooking.scheduledDate)}`,
           progressWidth: latestBookingProgress,
-          steps: ['Submitted', 'Staff Review', 'Appointment', 'Outcome'],
+          steps:
+            latestCustomerBooking.status === 'pending_payment'
+              ? ['Submitted', 'Payment', 'Staff Review', 'Outcome']
+              : ['Submitted', 'Staff Review', 'Appointment', 'Outcome'],
         }
       : {
           badge: 'NO ACTIVE SERVICE',
@@ -6578,7 +6552,7 @@ export default function Dashboard({
         key: 'book',
         label: 'Book Service',
         icon: 'wrench-outline',
-        bgColor: 'rgba(255, 122, 0, 0.14)',
+        bgColor: colors.surfaceRaised,
         iconColor: colors.primary,
         onPress: () => navigateToBooking('book'),
       },
@@ -6586,32 +6560,32 @@ export default function Dashboard({
         key: 'insurance',
         label: 'Insurance',
         icon: 'shield-outline',
-        bgColor: 'rgba(52, 127, 255, 0.14)',
-        iconColor: '#347FFF',
-        onPress: () => navigateToInsurancePage(),
+        bgColor: colors.surfaceRaised,
+        iconColor: colors.primary,
+        onPress: () => navigateToInsuranceInquiry(),
       },
       {
         key: 'rewards',
         label: 'Rewards',
         icon: 'star-outline',
-        bgColor: 'rgba(255, 197, 0, 0.14)',
-        iconColor: '#FFC500',
+        bgColor: colors.surfaceRaised,
+        iconColor: colors.primary,
         onPress: () => navigateToProfileSection('rewards'),
       },
       {
         key: 'garage',
         label: 'Garage',
         icon: 'garage-variant',
-        bgColor: 'rgba(18, 215, 100, 0.14)',
-        iconColor: '#12D764',
+        bgColor: colors.surfaceRaised,
+        iconColor: colors.primary,
         onPress: () => navigateToGarage(),
       },
       {
         key: 'support',
         label: 'Support',
         icon: 'message-processing-outline',
-        bgColor: 'rgba(157, 139, 255, 0.16)',
-        iconColor: '#9D8BFF',
+        bgColor: colors.surfaceRaised,
+        iconColor: colors.primary,
         onPress: navigateToSupport,
       },
     ];
@@ -6677,7 +6651,7 @@ export default function Dashboard({
         <Text style={styles.homeName}>
           {firstName} {lastName}
         </Text>
-        <Text style={styles.homeWave}>👋</Text>
+        <Text style={styles.homeWave}>!</Text>
       </View>
 
       <View style={[styles.homeStatusCard, !latestCustomerBooking && styles.homeStatusCardIdle]}>
@@ -6713,7 +6687,10 @@ export default function Dashboard({
         </View>
       </View>
 
-      <MotionPressable style={styles.homeVehicleCard} onPress={() => navigateToGarage(account?.primaryVehicleId)}>
+      <MotionPressable
+        style={styles.homeVehicleCard}
+        onPress={() => navigateToGarage(selectedGarageVehicle?.id ?? account?.primaryVehicleId)}
+      >
         <Image
           source={{
             uri: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1200&q=80',
@@ -6756,6 +6733,19 @@ export default function Dashboard({
         ))}
       </View>
 
+      <View style={styles.homePmsCard}>
+        <View style={styles.homePmsIconWrap}>
+          <MaterialCommunityIcons name="clock-outline" size={20} color={colors.primary} />
+        </View>
+        <View style={styles.homePmsCopy}>
+          <Text style={styles.homePmsTitle}>Service Reminder</Text>
+          <Text style={styles.homePmsSubtitle}>{homeReminderSubtitle}</Text>
+        </View>
+        <TouchableOpacity style={styles.homePmsButton} onPress={() => navigateToBooking('book')} activeOpacity={0.86}>
+          <Text style={styles.homePmsButtonText}>Book</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.homeSectionHeader}>
         <Text style={styles.homeSectionLabel}>Recent Services</Text>
         <TouchableOpacity style={styles.homeViewAllButton} onPress={navigateToTimeline} activeOpacity={0.86}>
@@ -6764,17 +6754,28 @@ export default function Dashboard({
         </TouchableOpacity>
       </View>
 
-      {recentHomeServices.length ? (
+      {serviceHistoryState.status === 'loading' && !recentHomeServices.length ? (
+        <TimelineStateCard
+          icon="history"
+          title="Loading completed services"
+          message="We are syncing your finalized workshop history for the home dashboard."
+        />
+      ) : serviceHistoryState.status === 'error' ? (
+        <TimelineStateCard
+          icon="wifi-strength-alert-outline"
+          title="Completed services unavailable"
+          message={serviceHistoryState.errorMessage || 'We could not load your finalized service history right now.'}
+        />
+      ) : recentHomeServices.length ? (
         recentHomeServices.map((item) => (
           <HomeServiceRow key={item.key} item={item} isCompact={isCompactPhone} />
         ))
       ) : (
-        <View style={styles.timelineStateCard}>
-          <Text style={styles.timelineStateTitle}>No completed service yet</Text>
-          <Text style={styles.timelineStateText}>
-            Your finalized workshop history will appear here after your first completed service.
-          </Text>
-        </View>
+        <TimelineStateCard
+          icon="history"
+          title="No completed services yet"
+          message="Completed workshop history will appear here once a finalized job order is recorded for your account."
+        />
       )}
 
       <View style={styles.homeOfferCard}>
@@ -6796,14 +6797,6 @@ export default function Dashboard({
     const visibleTimelineItems = vehicleLifecycleState.events.filter((item) =>
       timelineFilter === 'All' ? true : item.filter === timelineFilter,
     );
-    const garageVehicleSummaries = digitalGarageState.vehicleSummaries ?? [];
-    const selectedGarageVehicle =
-      digitalGarageState.vehicles.find((vehicle) => vehicle.id === selectedGarageVehicleId) ??
-      digitalGarageState.vehicles[0] ??
-      null;
-    const selectedGarageVehicleSummary =
-      garageVehicleSummaries.find((vehicle) => vehicle.id === selectedGarageVehicle?.id) ??
-      null;
 
     const renderGarageVehicleState = () => {
       if (digitalGarageState.status === 'garage_loading' && !garageVehicleSummaries.length) {
@@ -6822,7 +6815,7 @@ export default function Dashboard({
         return (
           <TimelineStateCard
             icon="lock-outline"
-            title="Garage access denied"
+            title="Digital Garage unavailable"
             message={digitalGarageState.errorMessage || 'Sign in again before opening your vehicle garage.'}
           />
         );
@@ -6928,7 +6921,7 @@ export default function Dashboard({
         return (
           <TimelineStateCard
             icon="lock-outline"
-            title="Timeline access denied"
+            title="Lifecycle history unavailable"
             message={vehicleLifecycleState.errorMessage}
           />
         );
@@ -7156,20 +7149,19 @@ export default function Dashboard({
   const cartCount = cartState.totalQuantity;
   const cartTotalLabel = cartState.subtotalLabel;
   const checkoutPreviewItems = checkoutState.preview?.items ?? [];
+  const selectedStoreOrder =
+    storeOrderTrackingState.order ||
+    storeOrderHistoryState.orders.find((order) => order.id === selectedStoreOrderId) ||
+    null;
+  const selectedStoreInvoice = storeOrderTrackingState.invoice;
   const isCatalogDetailVisible = catalogDetailState.status !== 'idle';
   const selectedCatalogProduct = catalogDetailState.product ?? catalogDetailState.previewProduct;
   const unreadNotificationCount = notificationsFeed.filter((item) => item.unread).length;
-  const activeBottomTabIndex = tabs.findIndex((tab) => tab.key === activeTab);
-  const hasActiveBottomTab = activeBottomTabIndex >= 0;
-  const bottomNavSlotWidth = windowWidth / tabs.length;
+  const notificationPanelSummary = buildCustomerNotificationPanelSummary(notificationsFeed);
   const bottomNavItemInset = isTinyPhone ? 0 : isVeryCompactPhone ? 1 : isCompactPhone ? 3 : 6;
-  const bottomNavIndicatorWidth = Math.max(
-    bottomNavSlotWidth - bottomNavItemInset * 2,
-    isTinyPhone ? 38 : isVeryCompactPhone ? 40 : isCompactPhone ? 42 : 46,
-  );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
@@ -7209,7 +7201,13 @@ export default function Dashboard({
                 <View>
                   <Text style={styles.notificationsPanelTitle}>Notifications</Text>
                   <Text style={styles.notificationsPanelSubtitle}>
-                    {unreadNotificationCount} unread
+                    {notificationPanelSummary.primaryTitle}
+                  </Text>
+                  <Text style={styles.notificationsPanelHelperText}>
+                    {notificationPanelSummary.secondaryTitle}
+                  </Text>
+                  <Text style={styles.notificationsPanelHelperText}>
+                    Read and dismiss state is currently stored for this session only.
                   </Text>
                 </View>
 
@@ -7220,7 +7218,7 @@ export default function Dashboard({
                     activeOpacity={0.82}
                   >
                     <MaterialCommunityIcons name="check-all" size={16} color={colors.labelText} />
-                    <Text style={styles.notificationsHeaderButtonText}>Mark all</Text>
+                    <Text style={styles.notificationsHeaderButtonText}>Mark all this session</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.notificationsPanelClose}
@@ -7229,6 +7227,25 @@ export default function Dashboard({
                   >
                     <MaterialCommunityIcons name="close" size={18} color={colors.mutedText} />
                   </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.notificationsSummaryRow}>
+                <View style={styles.notificationsSummaryCard}>
+                  <Text style={styles.notificationsSummaryLabel}>Unread</Text>
+                  <Text style={styles.notificationsSummaryValue}>{unreadNotificationCount}</Text>
+                </View>
+                <View style={styles.notificationsSummaryCard}>
+                  <Text style={styles.notificationsSummaryLabel}>Action needed</Text>
+                  <Text style={styles.notificationsSummaryValue}>
+                    {notificationPanelSummary.actionNeededCount}
+                  </Text>
+                </View>
+                <View style={styles.notificationsSummaryCard}>
+                  <Text style={styles.notificationsSummaryLabel}>Visibility only</Text>
+                  <Text style={styles.notificationsSummaryValueMuted}>
+                    {notificationPanelSummary.informationalCount}
+                  </Text>
                 </View>
               </View>
 
@@ -7452,6 +7469,263 @@ export default function Dashboard({
             </Animated.View>
           ) : null}
 
+          {isStoreOrderDetailVisible && selectedStoreOrder ? (
+            <Animated.View
+              style={[
+                styles.cartOverlay,
+                {
+                  opacity: 1,
+                },
+              ]}
+            >
+              <View style={styles.cartHeader}>
+                <TouchableOpacity
+                  style={styles.cartCloseButton}
+                  onPress={handleCloseStoreOrderDetail}
+                  activeOpacity={0.86}
+                >
+                  <MaterialCommunityIcons name="arrow-left" size={22} color={colors.mutedText} />
+                </TouchableOpacity>
+
+                <View style={styles.cartHeaderCopy}>
+                  <Text style={styles.cartTitle}>Order Detail</Text>
+                  <Text style={styles.cartSubtitle}>{selectedStoreOrder.orderNumber}</Text>
+                </View>
+              </View>
+
+              <ScrollView
+                style={styles.cartItemsScroll}
+                contentContainerStyle={styles.cartItemsContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {(storeOrderTrackingState.status === 'loading' ||
+                  storeOrderTrackingState.invoiceStatus === 'loading') ? (
+                  <View style={styles.checkoutStateCard}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={styles.checkoutStateTitle}>Refreshing order tracking</Text>
+                    <Text style={styles.checkoutStateText}>
+                      Pulling the selected order snapshot and invoice tracking detail now.
+                    </Text>
+                  </View>
+                ) : null}
+
+                {(storeOrderTrackingState.status === 'error' ||
+                  storeOrderTrackingState.status === 'unauthorized') ? (
+                  <View style={styles.checkoutStateCard}>
+                    <MaterialCommunityIcons name="alert-circle-outline" size={28} color="#FF8B8B" />
+                    <Text style={styles.checkoutStateTitle}>Tracking unavailable</Text>
+                    <Text style={styles.checkoutStateText}>
+                      {storeOrderTrackingState.errorMessage || 'We could not load the selected order right now.'}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.checkoutSummaryCard}>
+                  <Text style={styles.checkoutSummaryTitle}>Order Summary</Text>
+                  <View style={styles.checkoutSummaryRow}>
+                    <Text style={styles.checkoutSummaryLabel}>Order</Text>
+                    <Text style={styles.checkoutSummaryValue}>{selectedStoreOrder.orderNumber}</Text>
+                  </View>
+                  <View style={styles.checkoutSummaryRow}>
+                    <Text style={styles.checkoutSummaryLabel}>Created</Text>
+                    <Text style={styles.checkoutSummaryValue}>
+                      {formatStoreDateTimeLabel(selectedStoreOrder.createdAt)}
+                    </Text>
+                  </View>
+                  <View style={styles.checkoutSummaryRow}>
+                    <Text style={styles.checkoutSummaryLabel}>Status</Text>
+                    <Text style={styles.checkoutSummaryValue}>{selectedStoreOrder.statusLabel}</Text>
+                  </View>
+                  <View style={styles.checkoutSummaryRow}>
+                    <Text style={styles.checkoutSummaryLabel}>Subtotal</Text>
+                    <Text style={styles.checkoutSummaryValue}>{selectedStoreOrder.subtotalLabel}</Text>
+                  </View>
+                  <View style={styles.checkoutSummaryRow}>
+                    <Text style={styles.checkoutSummaryLabel}>Notes</Text>
+                    <Text style={styles.checkoutSummaryValue}>
+                      {selectedStoreOrder.notes || 'No checkout notes were attached.'}
+                    </Text>
+                  </View>
+                  <Text style={styles.checkoutSummaryNote}>{selectedStoreOrder.crossServiceHint}</Text>
+                </View>
+
+                <View style={styles.checkoutFormCard}>
+                  <Text style={styles.checkoutCardTitle}>Invoice Tracking</Text>
+
+                  {selectedStoreInvoice ? (
+                    <>
+                      <View style={styles.checkoutSummaryRow}>
+                        <Text style={styles.checkoutSummaryLabel}>Invoice</Text>
+                        <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.invoiceNumber}</Text>
+                      </View>
+                      <View style={styles.checkoutSummaryRow}>
+                        <Text style={styles.checkoutSummaryLabel}>Status</Text>
+                        <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.statusLabel}</Text>
+                      </View>
+                      <View style={styles.checkoutSummaryRow}>
+                        <Text style={styles.checkoutSummaryLabel}>Aging</Text>
+                        <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.agingBucketLabel}</Text>
+                      </View>
+                      <View style={styles.checkoutSummaryRow}>
+                        <Text style={styles.checkoutSummaryLabel}>Amount Due</Text>
+                        <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.amountDueLabel}</Text>
+                      </View>
+                        <View style={styles.checkoutSummaryRow}>
+                          <Text style={styles.checkoutSummaryLabel}>Amount Paid</Text>
+                          <Text style={styles.checkoutSummaryValue}>{selectedStoreInvoice.amountPaidLabel}</Text>
+                        </View>
+                        <View style={styles.checkoutSummaryRow}>
+                          <Text style={styles.checkoutSummaryLabel}>Settlement</Text>
+                          <Text style={styles.checkoutSummaryValue}>
+                            {selectedStoreInvoice.paymentChannel === 'online_provider'
+                              ? 'PayMongo checkout'
+                              : selectedStoreInvoice.paymentChannel === 'manual'
+                                ? 'Manual settlement'
+                                : 'Not selected yet'}
+                          </Text>
+                        </View>
+                        <View style={styles.checkoutSummaryRow}>
+                          <Text style={styles.checkoutSummaryLabel}>Online Status</Text>
+                          <Text style={styles.checkoutSummaryValue}>
+                            {selectedStoreInvoice.onlinePaymentStatus || 'No online checkout yet'}
+                          </Text>
+                        </View>
+                        <View style={styles.checkoutSummaryRow}>
+                          <Text style={styles.checkoutSummaryLabel}>Issued</Text>
+                          <Text style={styles.checkoutSummaryValue}>
+                            {formatStoreDateLabel(selectedStoreInvoice.issuedAt)}
+                          </Text>
+                      </View>
+                      <View style={styles.checkoutSummaryRow}>
+                        <Text style={styles.checkoutSummaryLabel}>Due</Text>
+                        <Text style={styles.checkoutSummaryValue}>
+                          {formatStoreDateLabel(selectedStoreInvoice.dueAt)}
+                        </Text>
+                      </View>
+
+                        <Text style={styles.checkoutSummaryNote}>{selectedStoreInvoice.agingSummary}</Text>
+                        <Text style={styles.checkoutSummaryNote}>{selectedStoreInvoice.crossServiceHint}</Text>
+                        {selectedStoreInvoice.onlinePaymentFailureReason ? (
+                          <Text style={styles.checkoutStateText}>
+                            {selectedStoreInvoice.onlinePaymentFailureReason}
+                          </Text>
+                        ) : null}
+
+                        {selectedStoreInvoice.status !== 'paid' ? (
+                          <View style={styles.storeInvoiceActionRow}>
+                            <TouchableOpacity
+                              style={[
+                                styles.cartCheckoutButton,
+                                isStoreInvoiceActionBusy && styles.primaryButtonDisabled,
+                              ]}
+                              onPress={() => {
+                                void handleStartStoreInvoicePaymongoCheckout();
+                              }}
+                              disabled={isStoreInvoiceActionBusy}
+                            >
+                              <Text style={styles.cartCheckoutText}>
+                                {isStoreInvoiceActionBusy
+                                  ? 'Opening payment...'
+                                  : selectedStoreInvoice.onlinePaymentCheckoutUrl &&
+                                      ['pending', 'awaiting_payment', 'awaiting_payment_method'].includes(
+                                        String(selectedStoreInvoice.onlinePaymentStatus ?? '')
+                                          .trim()
+                                          .toLowerCase(),
+                                      )
+                                    ? 'Open PayMongo Checkout'
+                                    : 'Pay with PayMongo'}
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[
+                                styles.secondaryActionButton,
+                                isStoreInvoiceActionBusy && styles.primaryButtonDisabled,
+                              ]}
+                              onPress={() => {
+                                void handleRefreshStoreInvoicePayment();
+                              }}
+                              disabled={isStoreInvoiceActionBusy}
+                            >
+                              <Text style={styles.secondaryActionButtonText}>Refresh Payment Status</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+
+                        {selectedStoreInvoice.paymentEntries.length ? (
+                          <View style={styles.storePaymentEntryList}>
+                            {selectedStoreInvoice.paymentEntries.map((paymentEntry) => (
+                              <StorePaymentEntryRow key={paymentEntry.id} item={paymentEntry} />
+                            ))}
+                          </View>
+                        ) : (
+                          <Text style={styles.checkoutStateText}>
+                            No payment entries have been recorded yet. Start PayMongo checkout or wait for a
+                            manual/offline settlement record.
+                          </Text>
+                        )}
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.checkoutStateText}>
+                        {storeOrderTrackingState.invoiceErrorMessage ||
+                          'Invoice tracking has not been published for this order yet.'}
+                      </Text>
+                      {selectedStoreOrder.invoice ? (
+                        <Text style={styles.checkoutSummaryNote}>
+                          Summary invoice status: {selectedStoreOrder.invoice.invoiceNumber} -{' '}
+                          {selectedStoreOrder.invoice.statusLabel}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.checkoutSummaryNote}>{selectedStoreOrder.crossServiceHint}</Text>
+                    </>
+                  )}
+                </View>
+
+                <View style={styles.checkoutFormCard}>
+                  <Text style={styles.checkoutCardTitle}>Billing Address Snapshot</Text>
+                  <Text style={styles.checkoutAddressText}>
+                    {buildCheckoutAddressLabel(
+                      selectedStoreOrder.addresses?.find((address) => address.addressType === 'billing'),
+                    ) || 'No billing address was returned in the order snapshot.'}
+                  </Text>
+                </View>
+
+                <View style={styles.checkoutFormCard}>
+                  <Text style={styles.checkoutCardTitle}>Ordered Items</Text>
+                  {selectedStoreOrder.items.map((item) => (
+                    <View key={item.id} style={styles.checkoutPreviewItem}>
+                      <View style={styles.checkoutPreviewItemCopy}>
+                        <Text style={styles.checkoutPreviewItemTitle}>{item.productName}</Text>
+                        <Text style={styles.checkoutPreviewItemMeta}>
+                          Qty {item.quantity}
+                          {item.productSku ? ` | SKU ${item.productSku}` : ''}
+                        </Text>
+                      </View>
+                      <Text style={styles.checkoutPreviewItemValue}>{item.lineTotalLabel}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.checkoutFormCard}>
+                  <Text style={styles.checkoutCardTitle}>Order Status Timeline</Text>
+                  {selectedStoreOrder.statusHistory.length ? (
+                    selectedStoreOrder.statusHistory.map((historyEntry, index) => (
+                      <StoreOrderHistoryEntry
+                        key={historyEntry.id}
+                        item={historyEntry}
+                        isLast={index === selectedStoreOrder.statusHistory.length - 1}
+                      />
+                    ))
+                  ) : (
+                    <Text style={styles.checkoutStateText}>
+                      No order status transitions have been recorded beyond the initial checkout yet.
+                    </Text>
+                  )}
+                </View>
+              </ScrollView>
+            </Animated.View>
+          ) : null}
+
           {isCartVisible ? (
             <Animated.View
               style={[
@@ -7482,14 +7756,18 @@ export default function Dashboard({
                   <Text style={styles.cartTitle}>
                     {checkoutState.stage === 'complete'
                       ? 'Checkout Complete'
-                      : checkoutState.stage === 'preview'
+                      : checkoutState.stage === 'billing'
+                        ? 'Billing Details'
+                        : checkoutState.stage === 'preview'
                         ? 'Invoice Checkout'
                         : 'Your Cart'}
                   </Text>
                   <Text style={styles.cartSubtitle}>
                     {checkoutState.stage === 'complete'
                       ? checkoutState.order?.orderNumber || 'Invoice order created'
-                      : checkoutState.stage === 'preview'
+                      : checkoutState.stage === 'billing'
+                        ? 'Add the billing snapshot that will be saved with the invoice order.'
+                        : checkoutState.stage === 'preview'
                         ? 'Review the immutable order snapshot before staff payment tracking begins.'
                         : `${cartCount} item${cartCount === 1 ? '' : 's'}`}
                   </Text>
@@ -7582,7 +7860,7 @@ export default function Dashboard({
                         }}
                         activeOpacity={0.88}
                       >
-                        <Text style={styles.secondaryButtonText}>View Order History</Text>
+                        <Text style={styles.secondaryButtonText}>View Order</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.cartCheckoutButton}
@@ -7616,7 +7894,10 @@ export default function Dashboard({
                     ) : null}
 
                     {checkoutState.errorMessage &&
-                    !(checkoutState.stage === 'preview' && checkoutState.previewStatus === 'error') ? (
+                    !(
+                      (checkoutState.stage === 'preview' || checkoutState.stage === 'billing') &&
+                      checkoutState.previewStatus === 'error'
+                    ) ? (
                       <View style={styles.checkoutInlineAlert}>
                         <MaterialCommunityIcons
                           name="alert-circle-outline"
@@ -7627,7 +7908,7 @@ export default function Dashboard({
                       </View>
                     ) : null}
 
-                    {checkoutState.stage === 'preview' ? (
+                    {checkoutState.stage === 'preview' || checkoutState.stage === 'billing' ? (
                       <>
                         {checkoutState.previewStatus === 'loading' ? (
                           <View style={styles.checkoutStateCard}>
@@ -7662,7 +7943,7 @@ export default function Dashboard({
                           </View>
                         ) : null}
 
-                        {checkoutState.previewStatus === 'ready' ? (
+                        {checkoutState.previewStatus === 'ready' && checkoutState.stage === 'preview' ? (
                           <>
                             <View style={styles.checkoutSummaryCard}>
                               <Text style={styles.checkoutSummaryTitle}>Invoice Preview</Text>
@@ -7706,6 +7987,60 @@ export default function Dashboard({
                                   </Text>
                                 </View>
                               ))}
+                            </View>
+
+                            <View style={styles.cartFooter}>
+                              <TouchableOpacity
+                                style={[styles.secondaryButton, styles.checkoutBackButton]}
+                                onPress={resetCheckoutFlow}
+                                activeOpacity={0.88}
+                              >
+                                <MaterialCommunityIcons
+                                  name="chevron-left"
+                                  size={18}
+                                  color={colors.text}
+                                />
+                                <Text style={styles.secondaryButtonText}>Back to Cart</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.cartCheckoutButton}
+                                onPress={handleContinueToBilling}
+                                activeOpacity={0.88}
+                              >
+                                <MaterialCommunityIcons
+                                  name="form-select"
+                                  size={18}
+                                  color={colors.onPrimary}
+                                />
+                                <Text style={styles.cartCheckoutText}>Continue to Billing</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </>
+                        ) : null}
+
+                        {checkoutState.previewStatus === 'ready' && checkoutState.stage === 'billing' ? (
+                          <>
+                            <View style={styles.checkoutSummaryCard}>
+                              <Text style={styles.checkoutSummaryTitle}>Order Snapshot</Text>
+                              <View style={styles.checkoutSummaryRow}>
+                                <Text style={styles.checkoutSummaryLabel}>Checkout Mode</Text>
+                                <Text style={styles.checkoutSummaryValue}>Invoice only</Text>
+                              </View>
+                              <View style={styles.checkoutSummaryRow}>
+                                <Text style={styles.checkoutSummaryLabel}>Items</Text>
+                                <Text style={styles.checkoutSummaryValue}>
+                                  {checkoutState.preview.totalQuantity}
+                                </Text>
+                              </View>
+                              <View style={styles.checkoutSummaryRow}>
+                                <Text style={styles.checkoutSummaryLabel}>Subtotal</Text>
+                                <Text style={styles.checkoutSummaryValue}>
+                                  {checkoutState.preview.subtotalLabel}
+                                </Text>
+                              </View>
+                              <Text style={styles.checkoutSummaryNote}>
+                                Your billing details below will be saved with this immutable invoice-backed order snapshot.
+                              </Text>
                             </View>
 
                             <View style={styles.checkoutFormCard}>
@@ -7788,11 +8123,23 @@ export default function Dashboard({
 
                             <View style={styles.cartFooter}>
                               <TouchableOpacity
-                                style={styles.secondaryButton}
-                                onPress={resetCheckoutFlow}
+                                style={[styles.secondaryButton, styles.checkoutBackButton]}
+                                onPress={() =>
+                                  setCheckoutState((currentState) => ({
+                                    ...currentState,
+                                    stage: 'preview',
+                                    errorMessage: '',
+                                    fieldErrors: {},
+                                  }))
+                                }
                                 activeOpacity={0.88}
                               >
-                                <Text style={styles.secondaryButtonText}>Back to Cart</Text>
+                                <MaterialCommunityIcons
+                                  name="chevron-left"
+                                  size={18}
+                                  color={colors.text}
+                                />
+                                <Text style={styles.secondaryButtonText}>Back to Preview</Text>
                               </TouchableOpacity>
                               <TouchableOpacity
                                 style={[
@@ -7808,7 +8155,11 @@ export default function Dashboard({
                                 {checkoutState.submitting ? (
                                   <ActivityIndicator size="small" color={colors.onPrimary} />
                                 ) : (
-                                  <MaterialCommunityIcons name="receipt-text-check-outline" size={18} color={colors.onPrimary} />
+                                  <MaterialCommunityIcons
+                                    name="receipt-text-check-outline"
+                                    size={18}
+                                    color={colors.onPrimary}
+                                  />
                                 )}
                                 <Text style={styles.cartCheckoutText}>
                                   {checkoutState.submitting ? 'Creating Invoice Order' : 'Create Invoice Checkout'}
@@ -7892,18 +8243,13 @@ export default function Dashboard({
             </Animated.View>
           ) : null}
 
-          <View style={[styles.bottomNav, isVeryCompactPhone && styles.bottomNavCompact]}>
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.bottomNavIndicator,
-                {
-                  width: bottomNavIndicatorWidth,
-                  opacity: hasActiveBottomTab ? 1 : 0,
-                  transform: [{ translateX: bottomNavIndicatorAnim }],
-                },
-              ]}
-            />
+          <View
+            style={[
+              styles.bottomNav,
+              isVeryCompactPhone && styles.bottomNavCompact,
+              { paddingBottom: 12 + bottomInset },
+            ]}
+          >
             {tabs.map((tab) => {
               const isActive = activeTab === tab.key;
 
@@ -7915,7 +8261,6 @@ export default function Dashboard({
                     styles.tabButton,
                     isVeryCompactPhone && styles.tabButtonCompact,
                     { marginHorizontal: bottomNavItemInset },
-                    isActive && styles.tabButtonActive,
                   ]}
                   onPress={() => handleTabPress(tab.key)}
                   scaleTo={0.94}
@@ -8030,6 +8375,22 @@ const styles = StyleSheet.create({
   webScrollContent: {
     minHeight: '100%',
     width: '100%',
+  },
+  storeStickyHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 12,
+    backgroundColor: colors.background,
+    zIndex: 2,
+  },
+  storeStickyHeaderCompact: {
+    paddingHorizontal: 14,
+  },
+  storeScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: Platform.OS === 'web' ? 88 : BOTTOM_NAV_HEIGHT + 88,
   },
   scrollContent: {
     flexGrow: 1,
@@ -8352,40 +8713,46 @@ const styles = StyleSheet.create({
   quickActionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 20,
-    paddingHorizontal: 2,
+    gap: 8,
   },
   quickActionsRowCompact: {
     flexWrap: 'wrap',
     rowGap: 14,
   },
   quickActionCardContainer: {
-    width: '22.8%',
+    flex: 1,
+    minWidth: 0,
     alignItems: 'center',
   },
   quickActionCardContainerCompact: {
-    width: '48%',
+    flexBasis: '47%',
+    flexGrow: 1,
+    flex: 0,
   },
   quickActionCard: {
     alignItems: 'center',
     width: '100%',
   },
   quickActionIconWrap: {
-    width: 74,
+    width: '100%',
     minHeight: 54,
-    borderRadius: 18,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   quickActionIconWrapCompact: {
     width: '100%',
     minHeight: 50,
   },
   quickActionIconInner: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -9479,27 +9846,24 @@ const styles = StyleSheet.create({
     width: '100%',
     flexGrow: 0,
     flexShrink: 0,
-    minHeight: 132,
-    borderRadius: 20,
+    minHeight: 64,
+    borderRadius: 14,
     backgroundColor: colors.surfaceStrong,
     borderWidth: 1,
     borderColor: colors.border,
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 12,
   },
   bookingDateCardCompact: {
-    minHeight: 116,
+    minHeight: 60,
+    paddingVertical: 8,
   },
   bookingDateCardActive: {
-    backgroundColor: colors.primary,
     borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 2,
+    borderWidth: 2,
   },
   bookingDateCardSuccess: {
     backgroundColor: colors.successSoft,
@@ -9517,30 +9881,36 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     borderColor: colors.borderSoft,
   },
-  bookingDateCardHeader: {
-    width: '100%',
+  bookingDateLeading: {
+    minWidth: 64,
+  },
+  bookingDateBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  bookingDateDayRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-    gap: 8,
+    alignItems: 'baseline',
+    gap: 4,
+    marginTop: 2,
   },
   bookingDateWeekday: {
     color: colors.labelText,
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   bookingDateDay: {
     color: colors.text,
-    fontSize: 30,
+    fontSize: 22,
     fontWeight: '800',
-    lineHeight: 30,
+    lineHeight: 24,
   },
   bookingDateMonth: {
     color: colors.labelText,
     fontSize: 13,
     fontWeight: '700',
-    marginTop: 6,
   },
   bookingDateStatusBadge: {
     flexShrink: 1,
@@ -9575,23 +9945,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 12,
     fontWeight: '700',
-    marginTop: 10,
   },
   bookingDateDetailText: {
     color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 6,
-  },
-  bookingDateTextActive: {
-    color: colors.onPrimary,
-  },
-  bookingDateClosedLabel: {
-    color: '#666D89',
-    fontSize: 10,
-    fontWeight: '800',
-    marginTop: 6,
-    textTransform: 'uppercase',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
   },
   bookingDateHint: {
     color: colors.mutedText,
@@ -11135,28 +11494,27 @@ const styles = StyleSheet.create({
   },
   sectionTabsWrap: {
     flexDirection: 'row',
-    backgroundColor: colors.surfaceStrong,
-    borderRadius: radius.medium,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 4,
     marginBottom: 16,
+    gap: 4,
   },
-  sectionTabsWrapCompact: {
-    flexWrap: 'wrap',
-    gap: 6,
-  },
+  sectionTabsWrapCompact: {},
   sectionTabContainer: {
     flex: 1,
   },
   sectionTab: {
-    flex: 1,
-    minHeight: 36,
-    borderRadius: 12,
+    minHeight: 40,
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   sectionTabActive: {
     backgroundColor: colors.primary,
@@ -11165,36 +11523,10 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 14,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   sectionTabTextActive: {
     color: colors.onPrimary,
-  },
-  storeHeroCard: {
-    backgroundColor: colors.surfaceStrong,
-    borderRadius: radius.large,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 18,
-    marginBottom: 16,
-  },
-  storeHeroEyebrow: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.8,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  storeHeroTitle: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  storeHeroText: {
-    color: colors.mutedText,
-    fontSize: 14,
-    lineHeight: 22,
   },
   storeOrdersToolbar: {
     flexDirection: 'row',
@@ -11215,6 +11547,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     marginTop: 4,
+  },
+  storeOrderSummaryCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: radius.large,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 14,
+  },
+  storeOrderSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  storeOrderSummaryCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  storeOrderSummaryValue: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  storeOrderSummaryLabel: {
+    color: colors.mutedText,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  storeOrderSummaryBadge: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  storeOrderSummaryBadgeText: {
+    color: colors.labelText,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  storeOrderSummaryText: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 12,
   },
   storeOrderList: {
     marginBottom: 16,
@@ -11367,6 +11746,12 @@ const styles = StyleSheet.create({
   storePaymentEntryList: {
     marginTop: 12,
   },
+  storeInvoiceActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
+  },
   storePaymentEntryRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -11516,6 +11901,16 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 14,
   },
+  infoPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 14,
+  },
+  infoPanelHeaderCopy: {
+    flex: 1,
+  },
   infoPanelTitle: {
     color: colors.text,
     fontSize: 16,
@@ -11526,6 +11921,96 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 14,
     lineHeight: 22,
+  },
+  infoPanelPill: {
+    minHeight: 30,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primaryGlow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoPanelPillText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  infoPanelSummaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  infoPanelSummaryCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.medium,
+    padding: 14,
+  },
+  infoPanelSummaryLabel: {
+    color: colors.labelText,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  infoPanelSummaryValue: {
+    color: colors.primary,
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  infoPanelSummaryValueMuted: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  infoPanelSummaryText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  infoPanelActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  infoPanelPrimaryAction: {
+    flexGrow: 1,
+    minWidth: 170,
+    marginTop: 0,
+  },
+  insuranceSelectionMeta: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: -2,
+    marginBottom: 10,
+  },
+  insuranceLauncherDisabled: {
+    opacity: 0.58,
+  },
+  infoPanelSecondaryAction: {
+    minHeight: 54,
+    paddingHorizontal: 16,
+    borderRadius: radius.medium,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  infoPanelSecondaryActionText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
   },
   profileSettingsList: {
     marginTop: 6,
@@ -11713,6 +12198,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 6,
   },
+  primaryButtonDisabled: {
+    opacity: 0.6,
+  },
   primaryButtonText: {
     color: colors.onPrimary,
     fontSize: 15,
@@ -11735,6 +12223,26 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: '700',
+  },
+  bookingReservationPaymentActions: {
+    marginTop: 8,
+  },
+  bookingReservationPaymentHint: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
+  },
+  bookingReservationPaymentWarning: {
+    color: '#FCA5A5',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
+  },
+  checkoutBackButton: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 0,
   },
   deleteSection: {
     marginTop: 34,
@@ -11824,6 +12332,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
   },
+  comingSoonWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  comingSoonTitle: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '800',
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  comingSoonSubtitle: {
+    color: colors.mutedText,
+    fontSize: 16,
+  },
   notificationsPanel: {
     position: 'absolute',
     top: 86,
@@ -11863,6 +12388,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 4,
   },
+  notificationsPanelHelperText: {
+    color: colors.labelText,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+    maxWidth: 220,
+  },
   notificationsPanelActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -11892,6 +12424,42 @@ const styles = StyleSheet.create({
   notificationsListContent: {
     paddingBottom: 12,
   },
+  notificationsSummaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+  },
+  notificationsSummaryCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.medium,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  notificationsSummaryLabel: {
+    color: colors.labelText,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  notificationsSummaryValue: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  notificationsSummaryValueMuted: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
   notificationRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -11915,6 +12483,8 @@ const styles = StyleSheet.create({
   notificationTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 4,
   },
   notificationUnreadDot: {
@@ -11928,6 +12498,33 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '800',
+  },
+  notificationStatusPill: {
+    minHeight: 24,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationStatusPillAction: {
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primaryGlow,
+  },
+  notificationStatusPillInformational: {
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  notificationStatusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  notificationStatusPillTextAction: {
+    color: colors.primary,
+  },
+  notificationStatusPillTextInformational: {
+    color: colors.labelText,
   },
   notificationRowMessage: {
     color: colors.mutedText,
@@ -12268,6 +12865,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderSoft,
     backgroundColor: 'transparent',
+    gap: 12,
   },
   cartTotalRow: {
     flexDirection: 'row',
@@ -12306,6 +12904,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginLeft: 8,
   },
+  secondaryActionButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  secondaryActionButtonText: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   bottomNav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -12336,16 +12949,6 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     paddingTop: 8,
   },
-  bottomNavIndicator: {
-    position: 'absolute',
-    top: 7,
-    bottom: 9,
-    left: 0,
-    borderRadius: 18,
-    backgroundColor: colors.surfaceStrong,
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-  },
   tabButtonContainer: {
     flex: 1,
     minWidth: 0,
@@ -12364,10 +12967,6 @@ const styles = StyleSheet.create({
     minHeight: 50,
     borderRadius: 15,
   },
-  tabButtonActive: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-  },
   tabLabel: {
     color: colors.mutedText,
     fontSize: 10,
@@ -12383,3 +12982,4 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
 });
+

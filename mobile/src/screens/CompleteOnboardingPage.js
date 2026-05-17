@@ -217,9 +217,8 @@ export default function CompleteOnboardingPage({
         label="Vehicle Color"
         value={form.vehicleColor}
         onChangeText={(value) => handleFieldChange('vehicleColor', value)}
-        placeholder="Silver"
+        placeholder="White"
         autoCapitalize="words"
-        error={errors.vehicleColor}
         icon="palette-outline"
         textContentType="none"
         autoComplete="off"
@@ -277,29 +276,24 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    paddingVertical: 18,
+    borderRadius: radius.md,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.34,
-    shadowRadius: 24,
-    elevation: 5,
   },
   primaryButtonDisabled: {
-    opacity: 0.72,
+    opacity: 0.7,
   },
   primaryButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

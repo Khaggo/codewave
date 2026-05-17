@@ -6,7 +6,7 @@ import { NOTIFICATIONS_QUEUE_NAME } from '@main-modules/notifications/notificati
 import { NotificationsRepository } from '@main-modules/notifications/repositories/notifications.repository';
 import { NotificationTriggerPlannerService } from '@main-modules/notifications/services/notification-trigger-planner.service';
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
-import { SmtpMailService } from '@main-modules/notifications/services/smtp-mail.service';
+import { MailDeliveryService } from '@main-modules/notifications/services/mail-delivery.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { createNotificationTrigger } from '@shared/events/contracts/notification-triggers';
 import { createCommerceEvent } from '@shared/events/contracts/commerce-events';
@@ -60,7 +60,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
       ],
     }).compile();
@@ -90,6 +90,119 @@ describe('NotificationsService', () => {
       }),
     );
     expect(result.status).toBe('queued');
+  });
+
+  it('records in-app insurance reminders as immediately sent without queueing', async () => {
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+        isActive: true,
+      }),
+    };
+
+    const notificationsRepository = {
+      findNotificationByDedupeKey: jest.fn().mockResolvedValue(null),
+      getOrCreatePreferences: jest.fn().mockResolvedValue({
+        id: 'pref-1',
+        userId: 'user-1',
+        emailEnabled: false,
+        bookingRemindersEnabled: true,
+        insuranceUpdatesEnabled: true,
+        invoiceRemindersEnabled: true,
+        serviceFollowUpEnabled: true,
+      }),
+      createNotification: jest.fn().mockResolvedValue({
+        id: 'notification-inapp-1',
+        userId: 'user-1',
+        category: 'insurance_update',
+        channel: 'in_app',
+        sourceType: 'insurance_inquiry',
+        sourceId: 'insurance-1',
+        title: 'Missing documents',
+        message: 'Please upload the required insurance documents so we can continue your request.',
+        status: 'sent',
+        dedupeKey: 'notification:insurance.reminder:insurance-1:needs_documents:2026-05-15T10:30:00.000Z',
+        scheduledFor: null,
+        deliveredAt: new Date('2026-05-15T10:30:00.000Z'),
+        attempts: [],
+      }),
+      createDeliveryAttempt: jest.fn().mockResolvedValue({ id: 'attempt-1' }),
+      findNotificationById: jest.fn().mockResolvedValue({
+        id: 'notification-inapp-1',
+        userId: 'user-1',
+        category: 'insurance_update',
+        channel: 'in_app',
+        sourceType: 'insurance_inquiry',
+        sourceId: 'insurance-1',
+        title: 'Missing documents',
+        message: 'Please upload the required insurance documents so we can continue your request.',
+        status: 'sent',
+        dedupeKey: 'notification:insurance.reminder:insurance-1:needs_documents:2026-05-15T10:30:00.000Z',
+        scheduledFor: null,
+        deliveredAt: new Date('2026-05-15T10:30:00.000Z'),
+        attempts: [
+          {
+            id: 'attempt-1',
+            notificationId: 'notification-inapp-1',
+            attemptNumber: 1,
+            status: 'sent',
+            providerMessageId: 'in_app',
+            errorMessage: null,
+            attemptedAt: new Date('2026-05-15T10:30:00.000Z'),
+          },
+        ],
+      }),
+    };
+
+    const notificationsQueue = {
+      add: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        NotificationsService,
+        NotificationTriggerPlannerService,
+        { provide: NotificationsRepository, useValue: notificationsRepository },
+        { provide: UsersService, useValue: usersService },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
+        { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(NotificationsService);
+
+    const result = await service.applyTrigger(
+      createNotificationTrigger('insurance.inquiry_status_changed', 'main-service.insurance', {
+        inquiryId: 'insurance-1',
+        userId: 'user-1',
+        status: 'needs_documents',
+        paymentStatus: 'not_required',
+        renewalStatus: 'not_applicable',
+        customerReminderState: 'needs_documents',
+        transitionedAt: '2026-05-15T10:30:00.000Z',
+        subject: 'Insurance review update',
+      }),
+    );
+
+    expect(notificationsQueue.add).not.toHaveBeenCalled();
+    expect(notificationsRepository.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'in_app',
+        category: 'insurance_update',
+        status: 'sent',
+      }),
+    );
+    expect(result.actionResults).toEqual([
+      expect.objectContaining({
+        kind: 'enqueue_notification',
+        result: expect.objectContaining({
+          channel: 'in_app',
+          status: 'sent',
+        }),
+      }),
+    ]);
   });
 
   it('marks notifications failed when the queue is unavailable instead of throwing', async () => {
@@ -146,7 +259,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
       ],
     }).compile();
@@ -198,7 +311,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: { findById: jest.fn() } },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         {
           provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME),
           useValue: { add: jest.fn() },
@@ -248,7 +361,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: { getOrCreatePreferences: jest.fn() } },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         {
           provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME),
           useValue: { add: jest.fn() },
@@ -314,7 +427,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: notificationsQueue },
       ],
     }).compile();
@@ -367,7 +480,7 @@ describe('NotificationsService', () => {
       }),
     };
 
-    const smtpMailService = {
+    const mailDeliveryService = {
       sendMail: jest.fn().mockResolvedValue({ messageId: 'mail-1' }),
     };
 
@@ -377,7 +490,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: smtpMailService },
+        { provide: MailDeliveryService, useValue: mailDeliveryService },
         {
           provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME),
           useValue: { add: jest.fn() },
@@ -389,7 +502,7 @@ describe('NotificationsService', () => {
 
     const result = await service.deliverNotification('notification-otp-1');
 
-    expect(smtpMailService.sendMail).toHaveBeenCalledWith(
+    expect(mailDeliveryService.sendMail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'customer@example.com',
         subject: 'Account verification code',
@@ -447,7 +560,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: usersService },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: { add: jest.fn() } },
       ],
     }).compile();
@@ -487,7 +600,7 @@ describe('NotificationsService', () => {
         NotificationTriggerPlannerService,
         { provide: NotificationsRepository, useValue: notificationsRepository },
         { provide: UsersService, useValue: { findById: jest.fn() } },
-        { provide: SmtpMailService, useValue: { sendMail: jest.fn() } },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
         {
           provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME),
           useValue: { add: jest.fn() },

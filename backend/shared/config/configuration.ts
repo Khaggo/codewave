@@ -33,20 +33,19 @@ export type AppConfig = {
     clientId?: string;
   };
   mail: {
-    host: string;
-    port: number;
-    secure: boolean;
-    user?: string;
-    pass?: string;
-    from: string;
-    connectionTimeoutMs: number;
-    greetingTimeoutMs: number;
-    socketTimeoutMs: number;
+    apiKey?: string;
+    fromEmail?: string;
+    fromName?: string;
+    replyTo?: string;
+    requestTimeoutMs: number;
   };
   payments: {
     paymongoPublicKey?: string;
     paymongoSecretKey?: string;
     paymongoWebhookSecret?: string;
+    paymongoBookingWebhookSecret?: string;
+    paymongoServiceInvoiceWebhookSecret?: string;
+    paymongoEcommerceWebhookSecret?: string;
     paymongoCheckoutSuccessUrl?: string;
     paymongoCheckoutCancelUrl?: string;
   };
@@ -118,7 +117,7 @@ export default (): AppConfig => {
   return {
     env,
     auth: {
-      // Temporary production safety valve while SMTP delivery is unavailable.
+      // Temporary production safety valve while email delivery is unavailable.
       bypassCustomerRegistrationOtp:
         (
           coalesceString(process.env.AUTH_BYPASS_CUSTOMER_REGISTRATION_OTP) ??
@@ -163,20 +162,23 @@ export default (): AppConfig => {
       clientId: coalesceString(process.env.GOOGLE_CLIENT_ID),
     },
     mail: {
-      host: coalesceString(process.env.SMTP_HOST) ?? 'smtp.gmail.com',
-      port: toNumber(coalesceString(process.env.SMTP_PORT), 465),
-      secure: (coalesceString(process.env.SMTP_SECURE) ?? 'true').toLowerCase() !== 'false',
-      user: coalesceString(process.env.SMTP_USER),
-      pass: coalesceString(process.env.SMTP_PASS),
-      from: coalesceString(process.env.SMTP_FROM) ?? 'AUTOCARE <no-reply@example.com>',
-      connectionTimeoutMs: toNumber(coalesceString(process.env.SMTP_CONNECTION_TIMEOUT_MS), 10000),
-      greetingTimeoutMs: toNumber(coalesceString(process.env.SMTP_GREETING_TIMEOUT_MS), 10000),
-      socketTimeoutMs: toNumber(coalesceString(process.env.SMTP_SOCKET_TIMEOUT_MS), 15000),
+      apiKey: coalesceString(process.env.RESEND_API_KEY),
+      fromEmail: coalesceString(process.env.RESEND_FROM_EMAIL),
+      fromName: coalesceString(process.env.RESEND_FROM_NAME) ?? 'AUTOCARE',
+      replyTo: coalesceString(process.env.RESEND_REPLY_TO),
+      requestTimeoutMs: toNumber(coalesceString(process.env.RESEND_REQUEST_TIMEOUT_MS), 15000),
     },
     payments: {
       paymongoPublicKey: coalesceString(process.env.PAYMONGO_PUBLIC_KEY),
       paymongoSecretKey: coalesceString(process.env.PAYMONGO_SECRET_KEY),
       paymongoWebhookSecret: coalesceString(process.env.PAYMONGO_WEBHOOK_SECRET),
+      paymongoBookingWebhookSecret: coalesceString(process.env.PAYMONGO_BOOKING_WEBHOOK_SECRET),
+      paymongoServiceInvoiceWebhookSecret: coalesceString(
+        process.env.PAYMONGO_SERVICE_INVOICE_WEBHOOK_SECRET,
+      ),
+      paymongoEcommerceWebhookSecret: coalesceString(
+        process.env.PAYMONGO_ECOMMERCE_WEBHOOK_SECRET,
+      ),
       paymongoCheckoutSuccessUrl: coalesceString(process.env.PAYMONGO_CHECKOUT_SUCCESS_URL),
       paymongoCheckoutCancelUrl: coalesceString(process.env.PAYMONGO_CHECKOUT_CANCEL_URL),
     },

@@ -19,16 +19,52 @@ export interface BookingReminderRequestedTriggerPayload {
   appointmentStartsAt: string;
 }
 
+export type InsuranceInquiryNotificationStatus =
+  | 'submitted'
+  | 'needs_documents'
+  | 'under_review'
+  | 'for_approval'
+  | 'approved'
+  | 'payment_pending'
+  | 'active'
+  | 'for_renewal'
+  | 'rejected'
+  | 'cancelled'
+  | 'closed';
+
+export type InsuranceInquiryPaymentStatus =
+  | 'not_required'
+  | 'unpaid'
+  | 'proof_submitted'
+  | 'verifying'
+  | 'paid'
+  | 'overdue';
+
+export type InsuranceInquiryRenewalStatus =
+  | 'not_applicable'
+  | 'upcoming'
+  | 'quote_preparing'
+  | 'quoted'
+  | 'awaiting_customer'
+  | 'renewed'
+  | 'expired'
+  | 'cancelled';
+
+export type InsuranceCustomerReminderState =
+  | 'needs_documents'
+  | 'payment_pending'
+  | 'payment_overdue'
+  | 'for_renewal'
+  | 'renewal_awaiting_customer';
+
 export interface InsuranceInquiryStatusChangedTriggerPayload {
   inquiryId: string;
   userId: string;
-  status:
-    | 'submitted'
-    | 'under_review'
-    | 'needs_documents'
-    | 'approved_for_record'
-    | 'rejected'
-    | 'closed';
+  status: InsuranceInquiryNotificationStatus;
+  paymentStatus: InsuranceInquiryPaymentStatus;
+  renewalStatus: InsuranceInquiryRenewalStatus;
+  customerReminderState: InsuranceCustomerReminderState;
+  transitionedAt: string;
   subject: string;
 }
 

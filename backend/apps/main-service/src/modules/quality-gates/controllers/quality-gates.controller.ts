@@ -54,8 +54,8 @@ export class QualityGatesController {
 
   @Patch('verdict')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('head_technician')
-  @ApiOperation({ summary: 'Record the head-technician QA verdict after reviewing the pre-check summary.' })
+  @Roles('head_technician', 'super_admin')
+  @ApiOperation({ summary: 'Record the QA verdict after reviewing the pre-check summary.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
     name: 'jobOrderId',
@@ -66,14 +66,14 @@ export class QualityGatesController {
     type: RecordQualityGateVerdictDto,
   })
   @ApiOkResponse({
-    description: 'The quality gate was updated with the head-technician verdict.',
+    description: 'The quality gate was updated with the recorded QA verdict.',
     type: JobOrderQualityGateResponseDto,
   })
   @ApiConflictResponse({
     description: 'The job order is not currently available for QA review.',
   })
   @ApiForbiddenResponse({
-    description: 'Only head technicians can record the final QA verdict.',
+    description: 'Only head technicians or super admins can record the final QA verdict.',
   })
   @ApiNotFoundResponse({ description: 'Job order or quality-gate actor not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })

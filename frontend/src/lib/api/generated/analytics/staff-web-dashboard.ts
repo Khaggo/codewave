@@ -121,15 +121,6 @@ export const adminAnalyticsTabs: AdminAnalyticsViewTab[] = [
     truth: 'derived-analytics-read-model',
     allowedRoles: staffAnalyticsRoles,
   },
-  {
-    key: 'summaryReview',
-    label: 'Summary Review',
-    description:
-      'Reviewed lifecycle and layman-summary verification remain visible from the same protected hub.',
-    surface: 'staff-admin-web',
-    truth: 'reviewed-lifecycle-summary',
-    allowedRoles: staffAnalyticsRoles,
-  },
 ];
 
 export const analyticsDerivedStateLabel = 'Derived analytics snapshot';

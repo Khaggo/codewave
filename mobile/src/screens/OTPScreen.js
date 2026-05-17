@@ -69,7 +69,7 @@ const getScreenCopy = (otpPurpose) => {
   };
 };
 
-export default function OTPScreen({ navigation, route, onResend, onVerified, onVerifyRegistrationOtp }) {
+export default function OTPScreen({ navigation, route, onVerified, onVerifyRegistrationOtp, onResend }) {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
@@ -274,49 +274,44 @@ export default function OTPScreen({ navigation, route, onResend, onVerified, onV
   };
 
   const handleResend = () => {
-    if (resendCountdown > 0 || submitting) {
+    if (resendCountdown > 0) {
       return;
     }
 
-    const resendVerificationCode = async () => {
-      if (!onResend) {
-        showInlineToast('Resend is not available yet for this verification flow.');
-        return;
-      }
-
-      setSubmitting(true);
-
+    const requestResend = async () => {
       try {
-        const enrollment = await onResend({
+        if (!onResend) {
+          throw new Error('This verification code cannot be resent from this screen. Go back and request a new code.');
+        }
+
+        const resendResult = await onResend({
           ...route.params,
           otpPurpose,
         });
 
-        navigation.setParams({
-          ...route.params,
-          ...enrollment,
-        });
+        if (resendResult) {
+          navigation.setParams({
+            ...route.params,
+            ...resendResult,
+          });
+        }
+
         setOtp('');
         setError('');
         setResendCountdown(RESEND_SECONDS);
         showInlineToast('A fresh verification code was sent.', 'success');
       } catch (resendError) {
         const message =
-          resendError instanceof ApiError
+          resendError instanceof Error
             ? resendError.message
-            : resendError instanceof Error && resendError.message
-              ? resendError.message
-              : 'We could not resend the verification code right now.';
-
+            : 'We could not resend the verification code right now.';
         setError(message);
         showInlineToast(message);
         Alert.alert('Resend Failed', message);
-      } finally {
-        setSubmitting(false);
       }
     };
 
-    void resendVerificationCode();
+    void requestResend();
   };
 
   return (
@@ -409,11 +404,6 @@ export default function OTPScreen({ navigation, route, onResend, onVerified, onV
           )}
         </View>
 
-        <View style={styles.demoCard}>
-          <Text style={styles.demoText}>
-            Use the live verification code sent to your email. When the countdown finishes, you can request a fresh code here if the flow supports resend.
-          </Text>
-        </View>
       </View>
     </ScreenShell>
   );
@@ -548,29 +538,24 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     marginTop: 8,
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    minHeight: 54,
+    borderRadius: radius.md,
+    minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.26,
-    shadowRadius: 24,
-    elevation: 5,
   },
   primaryButtonDisabled: {
-    opacity: 0.72,
+    opacity: 0.7,
   },
   primaryButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   resendRow: {
     flexDirection: 'row',
@@ -593,19 +578,5 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 15,
     fontWeight: '800',
-  },
-  demoCard: {
-    marginHorizontal: 24,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: '#20406A',
-    backgroundColor: '#0D1A31',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  demoText: {
-    color: '#6FB1FF',
-    fontSize: 14,
   },
 });

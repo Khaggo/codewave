@@ -42,7 +42,7 @@ class DashboardInsuranceResponseDto {
   needsDocuments!: number;
 
   @ApiProperty({ example: 1 })
-  approvedForRecord!: number;
+  approved!: number;
 
   @ApiProperty({ example: 1 })
   rejected!: number;

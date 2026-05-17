@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 
 import { ApiError } from '@/lib/authClient'
+import PageHeader from '@/components/ui/PageHeader'
 import {
   createLoyaltyEarningRule,
   createLoyaltyReward,
@@ -31,6 +32,7 @@ import {
   updateLoyaltyRewardStatus,
 } from '@/lib/loyaltyAdminClient'
 import { useUser } from '@/lib/userContext'
+import { filterLoyaltyRewards, filterLoyaltyRules } from './loyaltyManagerView.mjs'
 
 const rewardTypeOptions = [
   { value: 'service_voucher', label: 'Service Voucher' },
@@ -213,10 +215,14 @@ function StatusPill({ status }) {
 
 function InfoPanel({ title, body, tone = 'info' }) {
   const Icon = tone === 'warning' ? AlertTriangle : Database
+  const toneClassName =
+    tone === 'warning'
+      ? 'status-message status-message-warning'
+      : 'status-message status-message-success'
 
   return (
-    <div className="card p-5 flex gap-3">
-      <div className="w-10 h-10 rounded-xl bg-surface-raised border border-surface-border flex items-center justify-center flex-shrink-0">
+    <div className={`${toneClassName} flex gap-3`}>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-surface-border bg-surface-raised">
         <Icon size={18} className={tone === 'warning' ? 'text-amber-400' : 'text-ink-muted'} />
       </div>
       <div>
@@ -687,25 +693,11 @@ export default function LoyaltyManager() {
   }, [canReadLoyalty, loadLoyaltyState, user?.accessToken])
 
   const filteredRewards = useMemo(() => {
-    const query = rewardQuery.trim().toLowerCase()
-
-    return state.rewards.filter((reward) =>
-      !query ||
-      reward.name.toLowerCase().includes(query) ||
-      reward.typeLabel.toLowerCase().includes(query) ||
-      reward.statusLabel.toLowerCase().includes(query),
-    )
+    return filterLoyaltyRewards(state.rewards, rewardQuery)
   }, [rewardQuery, state.rewards])
 
   const filteredRules = useMemo(() => {
-    const query = ruleQuery.trim().toLowerCase()
-
-    return state.earningRules.filter((rule) =>
-      !query ||
-      rule.name.toLowerCase().includes(query) ||
-      rule.sourceLabel.toLowerCase().includes(query) ||
-      rule.formulaLabel.toLowerCase().includes(query),
-    )
+    return filterLoyaltyRules(state.earningRules, ruleQuery)
   }, [ruleQuery, state.earningRules])
 
   const openCreateReward = () => {
@@ -846,28 +838,34 @@ export default function LoyaltyManager() {
 
   if (!canReadLoyalty) {
     return (
-      <InfoPanel
-        tone="warning"
-        title="Loyalty management is staff/admin only"
-        body="Sign in as a service adviser or super admin to view customer loyalty administration."
-      />
+      <section className="empty-panel text-left">
+        <AlertTriangle size={24} className="text-brand-orange" />
+        <h1 className="mt-3 text-2xl font-black text-ink-primary">Loyalty management is staff/admin only</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-secondary">
+          Sign in as a service adviser or super admin to view customer loyalty administration.
+        </p>
+      </section>
     )
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">Customer Loyalty</p>
-          <h1 className="text-2xl font-extrabold text-ink-primary mt-1">Loyalty Management</h1>
-          <p className="text-sm text-ink-muted mt-1">
-            Rewards, earning rules, and usage analytics now read from the live backend.
-          </p>
-        </div>
-        <button onClick={loadLoyaltyState} className="btn-ghost self-start lg:self-auto">
-          <RefreshCcw size={14} /> Refresh Live Data
-        </button>
-      </div>
+    <div className="ops-page-shell">
+      <PageHeader
+        eyebrow="Customer Loyalty"
+        title="Loyalty Management"
+        description="Manage rewards, earning rules, and loyalty analytics."
+        actions={
+          <button onClick={loadLoyaltyState} className="btn-ghost self-start lg:self-auto">
+            <RefreshCcw size={14} /> Refresh Live Data
+          </button>
+        }
+        meta={
+          <>
+            <span className="badge badge-gray">{state.rewards.length} rewards</span>
+            <span className="badge badge-gray">{state.earningRules.length} earning rules</span>
+          </>
+        }
+      />
 
       {actionState.status === 'error' ? (
         <InfoPanel tone="warning" title="Action failed" body={actionState.message} />
@@ -932,37 +930,37 @@ export default function LoyaltyManager() {
 
           {state.errors.rewards ? <InfoPanel tone="warning" title="Reward catalog issue" body={state.errors.rewards} /> : null}
 
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[760px]">
+          <div className="table-surface">
+            <div className="table-scroll">
+              <table className="data-table min-w-[760px]">
                 <thead>
-                  <tr className="text-left text-xs text-ink-muted border-b border-surface-border bg-surface-raised">
-                    <th className="px-5 py-3.5 font-semibold">Reward</th>
-                    <th className="px-5 py-3.5 font-semibold">Type</th>
-                    <th className="px-5 py-3.5 font-semibold">Cost</th>
-                    <th className="px-5 py-3.5 font-semibold">Discount</th>
-                    <th className="px-5 py-3.5 font-semibold">Status</th>
-                    <th className="px-5 py-3.5 font-semibold">Updated</th>
-                    <th className="px-5 py-3.5 font-semibold">Actions</th>
+                  <tr>
+                    <th>Reward</th>
+                    <th>Type</th>
+                    <th>Cost</th>
+                    <th>Discount</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-surface-border">
+                <tbody>
                   {filteredRewards.length ? filteredRewards.map((reward) => (
-                    <tr key={reward.id} className="hover:bg-surface-hover transition-colors">
-                      <td className="px-5 py-3.5">
+                    <tr key={reward.id}>
+                      <td>
                         <p className="font-semibold text-ink-primary">{reward.name}</p>
                         <p className="text-xs text-ink-muted max-w-sm truncate">
                           {reward.description ?? reward.fulfillmentNote ?? 'No description yet.'}
                         </p>
                       </td>
-                      <td className="px-5 py-3.5"><span className="badge badge-blue">{reward.typeLabel}</span></td>
-                      <td className="px-5 py-3.5 font-bold tabular-nums" style={{ color: '#f07c00' }}>
+                      <td><span className="badge badge-blue">{reward.typeLabel}</span></td>
+                      <td className="font-bold tabular-nums" style={{ color: '#f07c00' }}>
                         {reward.pointsLabel}
                       </td>
-                      <td className="px-5 py-3.5 text-ink-secondary">{reward.discountLabel}</td>
-                      <td className="px-5 py-3.5"><StatusPill status={reward.status} /></td>
-                      <td className="px-5 py-3.5 text-xs text-ink-muted">{reward.updatedAtLabel}</td>
-                      <td className="px-5 py-3.5">
+                      <td>{reward.discountLabel}</td>
+                      <td><StatusPill status={reward.status} /></td>
+                      <td className="text-xs text-ink-muted">{reward.updatedAtLabel}</td>
+                      <td>
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => openEditReward(reward)}
@@ -983,7 +981,7 @@ export default function LoyaltyManager() {
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-ink-muted text-sm">
+                      <td colSpan={7} className="text-center text-ink-muted text-sm">
                         No rewards found in the live catalog.
                       </td>
                     </tr>
@@ -1016,38 +1014,38 @@ export default function LoyaltyManager() {
             <InfoPanel tone="warning" title="Earning rules unavailable" body={state.errors.earningRules} />
           ) : null}
 
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[860px]">
+          <div className="table-surface">
+            <div className="table-scroll">
+              <table className="data-table min-w-[860px]">
                 <thead>
-                  <tr className="text-left text-xs text-ink-muted border-b border-surface-border bg-surface-raised">
-                    <th className="px-5 py-3.5 font-semibold">Rule</th>
-                    <th className="px-5 py-3.5 font-semibold">Source</th>
-                    <th className="px-5 py-3.5 font-semibold">Formula</th>
-                    <th className="px-5 py-3.5 font-semibold">Minimum</th>
-                    <th className="px-5 py-3.5 font-semibold">Window</th>
-                    <th className="px-5 py-3.5 font-semibold">Status</th>
-                    <th className="px-5 py-3.5 font-semibold">Actions</th>
+                  <tr>
+                    <th>Rule</th>
+                    <th>Source</th>
+                    <th>Formula</th>
+                    <th>Minimum</th>
+                    <th>Window</th>
+                    <th>Status</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-surface-border">
+                <tbody>
                   {filteredRules.length ? filteredRules.map((rule) => (
-                    <tr key={rule.id} className="hover:bg-surface-hover transition-colors">
-                      <td className="px-5 py-3.5">
+                    <tr key={rule.id}>
+                      <td>
                         <p className="font-semibold text-ink-primary">{rule.name}</p>
                         <p className="text-xs text-ink-muted max-w-sm truncate">
                           {rule.description ?? rule.promoLabel ?? 'No description yet.'}
                         </p>
                       </td>
-                      <td className="px-5 py-3.5"><span className="badge badge-purple">{rule.sourceLabel}</span></td>
-                      <td className="px-5 py-3.5">
+                      <td><span className="badge badge-purple">{rule.sourceLabel}</span></td>
+                      <td>
                         <p className="font-bold text-ink-primary">{rule.formulaSummary}</p>
                         <p className="text-xs text-ink-muted">{rule.formulaLabel}</p>
                       </td>
-                      <td className="px-5 py-3.5 text-ink-secondary">{rule.minimumAmountLabel}</td>
-                      <td className="px-5 py-3.5 text-xs text-ink-muted max-w-[220px]">{rule.activeWindowLabel}</td>
-                      <td className="px-5 py-3.5"><StatusPill status={rule.status} /></td>
-                      <td className="px-5 py-3.5">
+                      <td>{rule.minimumAmountLabel}</td>
+                      <td className="text-xs text-ink-muted max-w-[220px]">{rule.activeWindowLabel}</td>
+                      <td><StatusPill status={rule.status} /></td>
+                      <td>
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => openEditRule(rule)}
@@ -1068,7 +1066,7 @@ export default function LoyaltyManager() {
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-ink-muted text-sm">
+                      <td colSpan={7} className="text-center text-ink-muted text-sm">
                         No live earning rules found, or your role cannot read this super-admin configuration.
                       </td>
                     </tr>
@@ -1083,14 +1081,13 @@ export default function LoyaltyManager() {
       {tab === 'customers' ? (
         <div className="space-y-4">
           <InfoPanel
-            tone="warning"
-            title="Customer account list planned"
-            body="This demo view currently shows analytics totals only. A searchable loyalty-account directory can be added later without showing placeholder rows."
+            title="Live account totals"
+            body="This tab reflects the live loyalty analytics snapshot. It stays focused on account totals until a dedicated searchable account directory is added."
           />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <StatCard label="Known Accounts" value={(state.analytics?.totals.accountCount ?? 0).toLocaleString()} />
-            <StatCard label="Total Balance" value={(state.analytics?.totals.totalPointsBalance ?? 0).toLocaleString()} helper="Across all loyalty accounts" />
-            <StatCard label="Manual Adjustment" value="Blocked" helper="Planned for a later staff control" />
+            <StatCard label="Total Balance" value={(state.analytics?.totals.totalPointsBalance ?? 0).toLocaleString()} helper="Across all loyalty accounts." />
+            <StatCard label="Manual Adjustment" value="Blocked" helper="Planned for a later staff control." />
           </div>
         </div>
       ) : null}
@@ -1098,11 +1095,10 @@ export default function LoyaltyManager() {
       {tab === 'log' ? (
         <div className="space-y-4">
           <InfoPanel
-            tone="warning"
-            title="Detailed redemption log planned"
-            body="Redemptions are summarized through analytics today. A full staff review log can be added later without inventing fake transaction rows."
+            title="Analytics-backed redemption summary"
+            body="This tab shows live redemption analytics without inventing transaction rows that the current backend does not expose yet."
           />
-          <div className="card overflow-hidden">
+          <div className="table-surface">
             <div className="px-5 py-4 border-b border-surface-border">
               <p className="font-bold text-ink-primary">Analytics-backed Top Rewards</p>
             </div>

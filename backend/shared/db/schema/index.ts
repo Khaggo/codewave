@@ -8,6 +8,7 @@ export * from '@main-modules/back-jobs/schemas/back-jobs.schema';
 export * from '@main-modules/job-orders/schemas/job-orders.schema';
 export * from '@main-modules/inspections/schemas/inspections.schema';
 export * from '@main-modules/insurance/schemas/insurance.schema';
+export * from '@main-modules/insurance/schemas/insurance-activity.schema';
 export * from '@main-modules/notifications/schemas/notifications.schema';
 export * from '@main-modules/loyalty/schemas/loyalty.schema';
 export * from '@main-modules/vehicle-lifecycle/schemas/vehicle-lifecycle.schema';

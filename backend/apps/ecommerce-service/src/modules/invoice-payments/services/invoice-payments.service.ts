@@ -5,6 +5,7 @@ import { AutocareEventBusService } from '@shared/events/autocare-event-bus.servi
 import { CreateInvoicePaymentEntryDto } from '../dto/create-invoice-payment-entry.dto';
 import { UpdateInvoiceStatusDto } from '../dto/update-invoice-status.dto';
 import { InvoicePaymentsRepository } from '../repositories/invoice-payments.repository';
+import { InvoicePaymentsPaymongoService } from './invoice-payments-paymongo.service';
 
 type ActorContext = {
   userId: string;
@@ -15,6 +16,7 @@ type ActorContext = {
 export class InvoicePaymentsService {
   constructor(
     private readonly invoicePaymentsRepository: InvoicePaymentsRepository,
+    private readonly invoicePaymentsPaymongoService: InvoicePaymentsPaymongoService,
     private readonly eventBus: AutocareEventBusService,
   ) {}
 
@@ -77,6 +79,12 @@ export class InvoicePaymentsService {
       receivedAt,
     });
 
+    await this.invoicePaymentsRepository.updateInvoice(invoiceId, (currentInvoice) => ({
+      ...currentInvoice,
+      paymentChannel: 'manual',
+      updatedAt: new Date(),
+    }));
+
     await this.recalculateInvoice(invoiceId);
     const hydratedInvoice = await this.findInvoiceById(invoiceId);
     this.eventBus.publish('invoice.payment_recorded', {
@@ -96,6 +104,117 @@ export class InvoicePaymentsService {
       productCategoryIds: hydratedInvoice.productCategoryIds,
     });
     return hydratedInvoice;
+  }
+
+  async createPaymongoCheckoutForOrder(orderId: string, actor: ActorContext) {
+    const invoice = await this.findInvoiceByOrderId(orderId, actor);
+    this.assertInvoiceReadyForOnlinePayment(invoice);
+
+    const checkoutSession = await this.invoicePaymentsPaymongoService.createCheckoutSession({
+      orderId: invoice.orderId,
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      amountCents: invoice.amountDueCents,
+      currencyCode: invoice.currencyCode,
+      customerEmail: null,
+    });
+
+    await this.invoicePaymentsRepository.updateInvoice(invoice.id, (currentInvoice) => ({
+      ...currentInvoice,
+      paymentChannel: 'online_provider',
+      onlinePaymentProvider: 'paymongo',
+      onlinePaymentStatus: checkoutSession.status,
+      onlinePaymentSessionId: checkoutSession.providerPaymentId,
+      onlinePaymentCheckoutUrl: checkoutSession.checkoutUrl,
+      onlinePaymentReference: checkoutSession.referenceNumber,
+      onlinePaymentPaidAt: checkoutSession.paidAt,
+      onlinePaymentFailureReason: checkoutSession.failureReason,
+      updatedAt: new Date(),
+    }));
+
+    if (checkoutSession.status === 'paid') {
+      return this.applyOnlinePayment(invoice.id, checkoutSession);
+    }
+
+    return this.findInvoiceById(invoice.id, actor);
+  }
+
+  async reconcilePaymongoCheckoutForOrder(orderId: string, actor: ActorContext) {
+    const invoice = await this.findInvoiceByOrderId(orderId, actor);
+    this.assertInvoiceReadyForOnlinePayment(invoice);
+
+    if (!invoice.onlinePaymentSessionId) {
+      throw new ConflictException('No PayMongo checkout session exists for this ecommerce invoice');
+    }
+
+    const checkoutSession = await this.invoicePaymentsPaymongoService.retrieveCheckoutSession(
+      invoice.onlinePaymentSessionId,
+    );
+
+    if (checkoutSession.status === 'paid') {
+      return this.applyOnlinePayment(invoice.id, checkoutSession);
+    }
+
+    await this.invoicePaymentsRepository.updateInvoice(invoice.id, (currentInvoice) => ({
+      ...currentInvoice,
+      paymentChannel: 'online_provider',
+      onlinePaymentProvider: 'paymongo',
+      onlinePaymentStatus: checkoutSession.status,
+      onlinePaymentSessionId: checkoutSession.providerPaymentId ?? currentInvoice.onlinePaymentSessionId,
+      onlinePaymentCheckoutUrl: checkoutSession.checkoutUrl ?? currentInvoice.onlinePaymentCheckoutUrl,
+      onlinePaymentReference: checkoutSession.referenceNumber ?? currentInvoice.onlinePaymentReference,
+      onlinePaymentPaidAt: checkoutSession.paidAt ?? currentInvoice.onlinePaymentPaidAt,
+      onlinePaymentFailureReason: checkoutSession.failureReason,
+      updatedAt: new Date(),
+    }));
+
+    return this.findInvoiceById(invoice.id, actor);
+  }
+
+  async handlePaymongoWebhook(rawPayload: Buffer | string, signatureHeader?: string | null) {
+    const event = this.invoicePaymentsPaymongoService.parseWebhook(rawPayload, signatureHeader);
+    if (
+      event.eventType !== 'checkout_session.payment.paid' ||
+      event.status !== 'paid' ||
+      event.metadata.sourceType !== 'ecommerce_invoice'
+    ) {
+      return {
+        received: true,
+        ignored: true,
+        eventType: event.eventType,
+      };
+    }
+
+    const metadataInvoiceId =
+      typeof event.metadata.invoiceId === 'string' ? event.metadata.invoiceId : null;
+    const invoice =
+      (metadataInvoiceId ? await this.invoicePaymentsRepository.findInvoiceById(metadataInvoiceId) : null) ??
+      (event.providerPaymentId
+        ? await this.invoicePaymentsRepository.findInvoiceByOnlinePaymentSessionId(event.providerPaymentId)
+        : null);
+
+    if (!invoice || invoice.status === 'paid') {
+      return {
+        received: true,
+        ignored: true,
+        eventType: event.eventType,
+        invoiceId: metadataInvoiceId,
+      };
+    }
+
+    await this.applyOnlinePayment(invoice.id, {
+      ...event,
+      provider: 'paymongo',
+      checkoutUrl: invoice.onlinePaymentCheckoutUrl,
+    });
+
+    return {
+      received: true,
+      ignored: false,
+      eventType: event.eventType,
+      invoiceId: invoice.id,
+      orderId: invoice.orderId,
+    };
   }
 
   async updateInvoiceStatus(invoiceId: string, payload: UpdateInvoiceStatusDto) {
@@ -166,6 +285,14 @@ export class InvoicePaymentsService {
     totalCents: number;
     amountPaidCents: number;
     amountDueCents: number;
+    paymentChannel: 'manual' | 'online_provider' | null;
+    onlinePaymentProvider: string | null;
+    onlinePaymentStatus: 'pending' | 'paid' | 'failed' | 'expired' | 'cancelled' | 'unavailable' | null;
+    onlinePaymentSessionId: string | null;
+    onlinePaymentCheckoutUrl: string | null;
+    onlinePaymentReference: string | null;
+    onlinePaymentPaidAt: Date | null;
+    onlinePaymentFailureReason: string | null;
     productIds: string[];
     productCategoryIds: string[];
     issuedAt: Date;
@@ -252,6 +379,80 @@ export class InvoicePaymentsService {
       bucket: 'overdue_31_plus' as const,
       daysPastDue,
     };
+  }
+
+  private assertInvoiceReadyForOnlinePayment(invoice: Awaited<ReturnType<InvoicePaymentsService['findInvoiceById']>>) {
+    if (invoice.status === 'cancelled') {
+      throw new ConflictException('Cancelled ecommerce invoices cannot start online payment');
+    }
+
+    if (invoice.amountDueCents <= 0) {
+      throw new ConflictException('This ecommerce invoice is already settled');
+    }
+  }
+
+  private async applyOnlinePayment(
+    invoiceId: string,
+    payment: {
+      provider: 'paymongo';
+      providerPaymentId: string | null;
+      checkoutUrl: string | null;
+      referenceNumber: string | null;
+      paidAt: Date | null;
+      failureReason: string | null;
+    },
+  ) {
+    const invoice = await this.invoicePaymentsRepository.findInvoiceById(invoiceId);
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    if (invoice.amountDueCents <= 0) {
+      return this.findInvoiceById(invoiceId);
+    }
+
+    const paidAt = payment.paidAt ?? new Date();
+    const paymentEntry = await this.invoicePaymentsRepository.createPaymentEntry(invoiceId, {
+      amountCents: invoice.amountDueCents,
+      paymentMethod: 'paymongo',
+      reference: payment.referenceNumber ?? null,
+      notes: 'Settled through PayMongo hosted checkout.',
+      receivedAt: paidAt,
+    });
+
+    await this.invoicePaymentsRepository.updateInvoice(invoiceId, (currentInvoice) => ({
+      ...currentInvoice,
+      paymentChannel: 'online_provider',
+      onlinePaymentProvider: payment.provider,
+      onlinePaymentStatus: 'paid',
+      onlinePaymentSessionId: payment.providerPaymentId ?? currentInvoice.onlinePaymentSessionId,
+      onlinePaymentCheckoutUrl: payment.checkoutUrl ?? currentInvoice.onlinePaymentCheckoutUrl,
+      onlinePaymentReference: payment.referenceNumber ?? currentInvoice.onlinePaymentReference,
+      onlinePaymentPaidAt: paidAt,
+      onlinePaymentFailureReason: payment.failureReason,
+      updatedAt: new Date(),
+    }));
+
+    await this.recalculateInvoice(invoiceId);
+    const hydratedInvoice = await this.findInvoiceById(invoiceId);
+    this.eventBus.publish('invoice.payment_recorded', {
+      invoiceId: hydratedInvoice.id,
+      orderId: hydratedInvoice.orderId,
+      customerUserId: hydratedInvoice.customerUserId,
+      invoiceNumber: hydratedInvoice.invoiceNumber,
+      paymentEntryId: paymentEntry.id,
+      amountCents: paymentEntry.amountCents,
+      paymentMethod: 'paymongo',
+      receivedAt: paymentEntry.receivedAt.toISOString(),
+      invoiceStatus: hydratedInvoice.status,
+      amountPaidCents: hydratedInvoice.amountPaidCents,
+      amountDueCents: hydratedInvoice.amountDueCents,
+      currencyCode: hydratedInvoice.currencyCode,
+      productIds: hydratedInvoice.productIds,
+      productCategoryIds: hydratedInvoice.productCategoryIds,
+    });
+
+    return hydratedInvoice;
   }
 
   private assertCustomerScope(customerUserId: string, actor: ActorContext) {

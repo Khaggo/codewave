@@ -1,8 +1,56 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-import { insuranceInquiryStatusEnum, insuranceInquiryTypeEnum } from '../schemas/insurance.schema';
+import {
+  insuranceCasePurposeEnum,
+  insuranceDocumentTypeEnum,
+  insuranceDocumentReviewStatusEnum,
+  insuranceInquiryStatusEnum,
+  insuranceInquiryTypeEnum,
+  insurancePaymentStatusEnum,
+  insuranceRenewalStatusEnum,
+} from '../schemas/insurance.schema';
 
 import { InsuranceDocumentResponseDto } from './insurance-document-response.dto';
+
+export class InsuranceActivityResponseDto {
+  @ApiProperty({
+    example: 'd9e1ab3d-a8c8-43da-b0ba-81a709f9385c',
+  })
+  id!: string;
+
+  @ApiProperty({
+    example: 'document_uploaded',
+  })
+  action!: string;
+
+  @ApiPropertyOptional({
+    enum: insuranceDocumentTypeEnum.enumValues,
+    example: 'proof_of_payment',
+  })
+  documentType?: (typeof insuranceDocumentTypeEnum.enumValues)[number] | null;
+
+  @ApiPropertyOptional({
+    example: 'd3bf3f0a-a95c-4b94-a3bd-f9f83120d017',
+  })
+  actorUserId?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Proof of payment from the customer mobile wallet transaction.',
+  })
+  notes?: string | null;
+
+  @ApiProperty({
+    example: '2026-05-14T08:00:00.000Z',
+    format: 'date-time',
+  })
+  createdAt!: string;
+
+  @ApiProperty({
+    example: '2026-05-14T08:00:00.000Z',
+    format: 'date-time',
+  })
+  updatedAt!: string;
+}
 
 export class InsuranceInquiryResponseDto {
   @ApiProperty({
@@ -25,6 +73,12 @@ export class InsuranceInquiryResponseDto {
     example: 'comprehensive',
   })
   inquiryType!: (typeof insuranceInquiryTypeEnum.enumValues)[number];
+
+  @ApiProperty({
+    enum: insuranceCasePurposeEnum.enumValues,
+    example: 'quotation',
+  })
+  purpose!: (typeof insuranceCasePurposeEnum.enumValues)[number];
 
   @ApiProperty({
     example: 'Accident repair inquiry',
@@ -57,10 +111,43 @@ export class InsuranceInquiryResponseDto {
   })
   status!: (typeof insuranceInquiryStatusEnum.enumValues)[number];
 
+  @ApiProperty({
+    enum: insuranceDocumentReviewStatusEnum.enumValues,
+    example: 'incomplete',
+  })
+  documentStatus!: (typeof insuranceDocumentReviewStatusEnum.enumValues)[number];
+
+  @ApiProperty({
+    enum: insurancePaymentStatusEnum.enumValues,
+    example: 'not_required',
+  })
+  paymentStatus!: (typeof insurancePaymentStatusEnum.enumValues)[number];
+
+  @ApiProperty({
+    enum: insuranceRenewalStatusEnum.enumValues,
+    example: 'not_applicable',
+  })
+  renewalStatus!: (typeof insuranceRenewalStatusEnum.enumValues)[number];
+
   @ApiPropertyOptional({
     example: 'Awaiting uploaded policy copy before approval.',
   })
   reviewNotes?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'd3bf3f0a-a95c-4b94-a3bd-f9f83120d099',
+  })
+  assignedStaffId?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Casey Customer',
+  })
+  customerDisplayName?: string;
+
+  @ApiPropertyOptional({
+    example: 'Toyota Vios (INS110C)',
+  })
+  vehicleLabel?: string;
 
   @ApiProperty({
     example: 'd3bf3f0a-a95c-4b94-a3bd-f9f83120d017',
@@ -78,11 +165,35 @@ export class InsuranceInquiryResponseDto {
   })
   reviewedAt?: string | null;
 
+  @ApiPropertyOptional({
+    example: '2026-05-30T00:00:00.000Z',
+    format: 'date-time',
+  })
+  paymentDueAt?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-08-15T00:00:00.000Z',
+    format: 'date-time',
+  })
+  policyExpiryAt?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-07-15T00:00:00.000Z',
+    format: 'date-time',
+  })
+  renewalDueAt?: string | null;
+
   @ApiProperty({
     type: () => InsuranceDocumentResponseDto,
     isArray: true,
   })
   documents!: InsuranceDocumentResponseDto[];
+
+  @ApiProperty({
+    type: () => InsuranceActivityResponseDto,
+    isArray: true,
+  })
+  activities!: InsuranceActivityResponseDto[];
 
   @ApiProperty({
     example: '2026-04-22T09:30:00.000Z',

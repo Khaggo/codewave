@@ -22,6 +22,7 @@
     "swagger:stop": "node -r ts-node/register -r tsconfig-paths/register scripts/swagger-stop.ts",
     "swagger:ready": "npm run swagger:up && npm run swagger:check",
     "repair:job-order-assignments": "node -r ts-node/register -r tsconfig-paths/register scripts/repair-job-order-assignments.ts",
+    "cleanup:legacy-back-job-rework": "node -r ts-node/register -r tsconfig-paths/register scripts/cleanup-legacy-back-job-rework.ts",
     "smoke:job-order-qa": "node -r ts-node/register scripts/smoke-job-order-qa-release.ts",
     "smoke:notifications": "node -r ts-node/register scripts/smoke-notifications-feed.ts",
     "seed:booking-catalog": "node -r ts-node/register scripts/seed-booking-catalog.ts"
@@ -47,7 +48,6 @@
     "class-validator": "^0.15.1",
     "drizzle-orm": "^0.45.1",
     "google-auth-library": "^10.6.2",
-    "nodemailer": "^8.0.5",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pdfkit": "^0.18.0",

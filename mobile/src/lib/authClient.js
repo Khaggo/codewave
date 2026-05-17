@@ -5,6 +5,7 @@ const LOCAL_API_BASE_URL =
 const PRODUCTION_API_BASE_URL = 'https://api.autocare-cc.com';
 const defaultApiBaseUrl = __DEV__ ? LOCAL_API_BASE_URL : PRODUCTION_API_BASE_URL;
 const REQUEST_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? 20000);
+const CUSTOMER_SESSION_EXPIRED_HANDLER_KEY = '__codewaveCustomerSessionExpiredHandler';
 
 const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_BASE_URL ??
@@ -19,6 +20,17 @@ export class ApiError extends Error {
     this.details = details;
   }
 }
+
+export const setCustomerSessionExpiredHandler = (handler) => {
+  globalThis[CUSTOMER_SESSION_EXPIRED_HANDLER_KEY] = typeof handler === 'function' ? handler : null;
+};
+
+export const notifyCustomerSessionExpired = (details = null) => {
+  const handler = globalThis[CUSTOMER_SESSION_EXPIRED_HANDLER_KEY];
+  if (typeof handler === 'function') {
+    handler(details ?? null);
+  }
+};
 
 export const isAuthSessionResponse = (value) =>
   Boolean(value?.accessToken && value?.refreshToken && value?.user?.id);
@@ -89,7 +101,7 @@ export const customerMobileGuardMessages = {
     'This customer account is deactivated. Contact support if access should be restored.',
 };
 
-export const isCustomerMobileRole = (role) => !role || role === 'customer';
+export const isCustomerMobileRole = (role) => role === 'customer';
 
 export const getCustomerMobileSessionAccessState = (account) => {
   if (!account?.accessToken || !account?.userId) {
@@ -347,6 +359,13 @@ const request = async (path, options = {}) => {
   }
 
   if (!response.ok) {
+    if (response.status === 401 && headers?.Authorization) {
+      notifyCustomerSessionExpired({
+        path,
+        source: 'authClient',
+      });
+    }
+
     const message =
       data?.message && typeof data.message === 'string'
         ? data.message
@@ -678,7 +697,7 @@ export const buildMobileAccountProfile = ({
     password: password ?? accountFallback?.password ?? '',
     profileImage: accountFallback?.profileImage ?? null,
     userId: user.id ?? accountFallback?.userId ?? null,
-    role: user.role ?? accountFallback?.role ?? 'customer',
+    role: user.role ?? accountFallback?.role ?? null,
     staffCode: user.staffCode ?? accountFallback?.staffCode ?? null,
     isActive: user.isActive ?? accountFallback?.isActive ?? true,
     accountState,

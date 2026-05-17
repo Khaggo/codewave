@@ -182,7 +182,7 @@ export default function OtpModal({
             </div>
 
             {sent && (
-              <p className="text-xs text-emerald-400 text-center mb-3">Code resent successfully!</p>
+              <p className="text-theme-success text-center mb-3 text-xs">Code resent successfully!</p>
             )}
 
             <div className="text-center mb-5">

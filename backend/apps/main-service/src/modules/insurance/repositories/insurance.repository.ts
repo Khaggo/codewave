@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -7,10 +7,16 @@ import { AppDatabase } from '@shared/db/database.types';
 
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
+import { CreateRenewalFollowUpDto } from '../dto/create-renewal-follow-up.dto';
+import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
+import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inquiry-workflow.dto';
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
+import { insuranceActivities } from '../schemas/insurance-activity.schema';
 import {
+  insuranceCasePurposeEnum,
   insuranceDocuments,
   insuranceInquiries,
+  insuranceDocumentTypeEnum,
   insuranceInquiryStatusEnum,
   insuranceInquiryTypeEnum,
   insuranceRecords,
@@ -20,12 +26,40 @@ type CreateInsuranceInquiryPersistenceInput = CreateInsuranceInquiryDto & {
   createdByUserId: string;
 };
 
+type CreateRenewalFollowUpPersistenceInput = CreateRenewalFollowUpDto & {
+  createdByUserId: string;
+};
+
 type UpdateInsuranceInquiryStatusPersistenceInput = UpdateInsuranceInquiryStatusDto & {
   reviewedByUserId: string;
   reviewedAt: Date;
 };
 
-type UpsertInsuranceRecordInput = {
+export type UpdateInsuranceInquiryWorkflowPersistenceInput = Omit<
+  UpdateInsuranceInquiryWorkflowDto,
+  'paymentDueAt' | 'policyExpiryAt' | 'renewalDueAt'
+> & {
+  paymentDueAt?: Date;
+  policyExpiryAt?: Date;
+  renewalDueAt?: Date;
+  reviewedByUserId: string;
+  reviewedAt: Date;
+};
+
+export type InsuranceActivityPersistenceInput = {
+  action: string;
+  actorUserId?: string | null;
+  documentType?: (typeof insuranceDocumentTypeEnum.enumValues)[number] | null;
+  notes?: string | null;
+};
+
+type UploadInsuranceDocumentPersistenceInput = {
+  document: AddInsuranceDocumentDto;
+  activity: InsuranceActivityPersistenceInput;
+  uploadedByUserId: string;
+};
+
+export type UpsertInsuranceRecordInput = {
   inquiryId: string;
   userId: string;
   vehicleId: string;
@@ -35,6 +69,16 @@ type UpsertInsuranceRecordInput = {
   status: (typeof insuranceInquiryStatusEnum.enumValues)[number];
 };
 
+const purposeRequiredDocumentTypes: Record<
+  (typeof insuranceCasePurposeEnum.enumValues)[number],
+  Array<(typeof insuranceDocumentTypeEnum.enumValues)[number]>
+> = {
+  renewal: ['or_cr', 'policy'],
+  new_application: ['or_cr'],
+  claim: ['or_cr'],
+  quotation: ['or_cr'],
+};
+
 @Injectable()
 export class InsuranceRepository extends BaseRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: AppDatabase) {
@@ -42,40 +86,98 @@ export class InsuranceRepository extends BaseRepository {
   }
 
   async create(payload: CreateInsuranceInquiryPersistenceInput) {
+    const values = {
+      userId: payload.userId,
+      vehicleId: payload.vehicleId,
+      inquiryType: payload.inquiryType,
+      ...(payload.purpose ? { purpose: payload.purpose } : {}),
+      subject: payload.subject,
+      description: payload.description,
+      providerName: payload.providerName ?? null,
+      policyNumber: payload.policyNumber ?? null,
+      notes: payload.notes ?? null,
+      status: 'submitted' as const,
+      createdByUserId: payload.createdByUserId,
+    };
+
     const [createdInquiry] = await this.db
       .insert(insuranceInquiries)
-      .values({
-        userId: payload.userId,
-        vehicleId: payload.vehicleId,
-        inquiryType: payload.inquiryType,
-        subject: payload.subject,
-        description: payload.description,
-        providerName: payload.providerName ?? null,
-        policyNumber: payload.policyNumber ?? null,
-        notes: payload.notes ?? null,
-        status: 'submitted',
-        createdByUserId: payload.createdByUserId,
-      })
+      .values(values)
       .returning();
 
     return this.findById(createdInquiry.id);
+  }
+
+  async createRenewalFollowUp(
+    payload: CreateRenewalFollowUpPersistenceInput,
+    activity: InsuranceActivityPersistenceInput,
+  ) {
+    return this.db.transaction(async (tx) => {
+      const [createdInquiry] = await tx
+        .insert(insuranceInquiries)
+        .values({
+          userId: payload.userId,
+          vehicleId: payload.vehicleId,
+          inquiryType: payload.inquiryType,
+          purpose: 'renewal',
+          subject: payload.subject,
+          description: payload.description,
+          providerName: payload.providerName ?? null,
+          policyNumber: payload.policyNumber ?? null,
+          notes: payload.notes ?? null,
+          status: 'for_renewal',
+          documentStatus: 'incomplete',
+          paymentStatus: 'not_required',
+          renewalStatus: 'upcoming',
+          assignedStaffId: payload.assignedStaffId ?? null,
+          policyExpiryAt: payload.policyExpiryAt ? new Date(payload.policyExpiryAt) : null,
+          renewalDueAt: new Date(payload.renewalDueAt),
+          createdByUserId: payload.createdByUserId,
+        })
+        .returning();
+
+      await tx.insert(insuranceActivities).values({
+        inquiryId: createdInquiry.id,
+        action: activity.action,
+        actorUserId: activity.actorUserId ?? null,
+        documentType: activity.documentType ?? null,
+        notes: activity.notes ?? null,
+      });
+
+      return this.findById(createdInquiry.id, tx);
+    });
   }
 
   async findById(id: string, db: AppDatabase = this.db) {
     const inquiry = await db.query.insuranceInquiries.findFirst({
       where: eq(insuranceInquiries.id, id),
       with: {
+        user: {
+          with: {
+            profile: true,
+          },
+        },
+        vehicle: true,
         documents: {
           orderBy: desc(insuranceDocuments.createdAt),
         },
       },
     });
 
-    return this.assertFound(inquiry, 'Insurance inquiry not found');
+    const resolvedInquiry = this.assertFound(inquiry, 'Insurance inquiry not found');
+    const { user, vehicle, ...inquiryWithoutRelations } = resolvedInquiry;
+    const activities = await this.listActivitiesByInquiryId(id, db);
+
+    return {
+      ...inquiryWithoutRelations,
+      customerDisplayName: this.buildCustomerDisplayName(user?.profile),
+      vehicleLabel: this.buildVehicleLabel(vehicle),
+      activities,
+    };
   }
 
   async findByUserId(userId: string) {
-    return this.db.query.insuranceInquiries.findMany({
+    const inquiries = await this.db.query.insuranceInquiries.findMany({
       where: eq(insuranceInquiries.userId, userId),
       with: {
         documents: {
@@ -84,47 +186,198 @@ export class InsuranceRepository extends BaseRepository {
       },
       orderBy: desc(insuranceInquiries.createdAt),
     });
+
+    return this.attachActivitiesToInquiries(inquiries);
   }
 
-  async updateStatus(id: string, payload: UpdateInsuranceInquiryStatusPersistenceInput) {
-    const [updatedInquiry] = await this.db
-      .update(insuranceInquiries)
-      .set({
-        status: payload.status,
-        reviewNotes: payload.reviewNotes ?? null,
-        reviewedByUserId: payload.reviewedByUserId,
-        reviewedAt: payload.reviewedAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(insuranceInquiries.id, id))
-      .returning();
+  async listForStaff(query: ListInsuranceInquiriesQueryDto) {
+    const inquiries = await this.db.query.insuranceInquiries.findMany({
+      where: and(
+        query.purpose ? eq(insuranceInquiries.purpose, query.purpose) : undefined,
+        query.status ? eq(insuranceInquiries.status, query.status) : undefined,
+        query.paymentStatus ? eq(insuranceInquiries.paymentStatus, query.paymentStatus) : undefined,
+        query.renewalStatus ? eq(insuranceInquiries.renewalStatus, query.renewalStatus) : undefined,
+      ),
+      with: {
+        user: {
+          with: {
+            profile: true,
+          },
+        },
+        vehicle: true,
+        documents: {
+          orderBy: desc(insuranceDocuments.createdAt),
+        },
+      },
+      orderBy: desc(insuranceInquiries.updatedAt),
+    });
 
-    this.assertFound(updatedInquiry, 'Insurance inquiry not found');
-    return this.findById(id);
+    const activitiesByInquiryId = await this.listActivitiesByInquiryIds(inquiries.map((inquiry) => inquiry.id));
+
+    return inquiries.map((inquiry) => ({
+      ...inquiry,
+      customerDisplayName: this.buildCustomerDisplayName(inquiry.user?.profile),
+      vehicleLabel: this.buildVehicleLabel(inquiry.vehicle),
+      activities: activitiesByInquiryId.get(inquiry.id) ?? [],
+    }));
+  }
+
+  async updateStatus(
+    id: string,
+    payload: UpdateInsuranceInquiryStatusPersistenceInput,
+    recordUpsert?: UpsertInsuranceRecordInput,
+  ) {
+    return this.db.transaction(async (tx) => {
+      const [updatedInquiry] = await tx
+        .update(insuranceInquiries)
+        .set({
+          status: payload.status,
+          reviewNotes: payload.reviewNotes ?? null,
+          reviewedByUserId: payload.reviewedByUserId,
+          reviewedAt: payload.reviewedAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(insuranceInquiries.id, id))
+        .returning();
+
+      this.assertFound(updatedInquiry, 'Insurance inquiry not found');
+
+      if (recordUpsert) {
+        await this.upsertRecordFromInquiry(recordUpsert, tx);
+      }
+
+      return this.findById(id, tx);
+    });
+  }
+
+  async updateWorkflow(
+    id: string,
+    payload: UpdateInsuranceInquiryWorkflowPersistenceInput,
+    activities: InsuranceActivityPersistenceInput[] = [],
+    recordUpsert?: UpsertInsuranceRecordInput,
+  ) {
+    const workflowPatch = {
+      status: payload.status,
+      ...(payload.documentStatus !== undefined ? { documentStatus: payload.documentStatus } : {}),
+      ...(payload.paymentStatus !== undefined ? { paymentStatus: payload.paymentStatus } : {}),
+      ...(payload.renewalStatus !== undefined ? { renewalStatus: payload.renewalStatus } : {}),
+      ...(payload.paymentDueAt !== undefined ? { paymentDueAt: payload.paymentDueAt } : {}),
+      ...(payload.policyExpiryAt !== undefined ? { policyExpiryAt: payload.policyExpiryAt } : {}),
+      ...(payload.renewalDueAt !== undefined ? { renewalDueAt: payload.renewalDueAt } : {}),
+      ...(payload.assignedStaffId !== undefined ? { assignedStaffId: payload.assignedStaffId } : {}),
+      ...(payload.reviewNotes !== undefined ? { reviewNotes: payload.reviewNotes } : {}),
+      reviewedByUserId: payload.reviewedByUserId,
+      reviewedAt: payload.reviewedAt,
+      updatedAt: new Date(),
+    };
+
+    return this.db.transaction(async (tx) => {
+      const [updatedInquiry] = await tx
+        .update(insuranceInquiries)
+        .set(workflowPatch)
+        .where(eq(insuranceInquiries.id, id))
+        .returning();
+
+      this.assertFound(updatedInquiry, 'Insurance inquiry not found');
+
+      if (activities.length) {
+        await tx.insert(insuranceActivities).values(
+          activities.map((activity) => ({
+            inquiryId: id,
+            action: activity.action,
+            actorUserId: activity.actorUserId ?? null,
+            documentType: activity.documentType ?? null,
+            notes: activity.notes ?? null,
+          })),
+        );
+      }
+
+      if (recordUpsert) {
+        await this.upsertRecordFromInquiry(recordUpsert, tx);
+      }
+
+      return this.findById(id, tx);
+    });
   }
 
   async addDocument(id: string, payload: AddInsuranceDocumentDto, uploadedByUserId: string) {
-    const inquiry = await this.findById(id);
+    return this.db.transaction(async (tx) => {
+      const inquiry = await this.findById(id, tx);
 
-    await this.db.insert(insuranceDocuments).values({
-      inquiryId: inquiry.id,
-      fileName: payload.fileName,
-      fileUrl: payload.fileUrl,
-      documentType: payload.documentType,
-      notes: payload.notes ?? null,
-      uploadedByUserId,
+      await tx.insert(insuranceDocuments).values({
+        inquiryId: inquiry.id,
+        fileName: payload.fileName,
+        fileUrl: payload.fileUrl,
+        documentType: payload.documentType,
+        notes: payload.notes ?? null,
+        uploadedByUserId,
+      });
+
+      await this.syncDocumentReviewStatus(id, inquiry, tx, payload.documentType);
+
+      return this.findById(id, tx);
     });
-
-    return this.findById(id);
   }
 
-  async upsertRecordFromInquiry(payload: UpsertInsuranceRecordInput) {
-    const existingRecord = await this.db.query.insuranceRecords.findFirst({
+  async addUploadedDocument(id: string, payload: UploadInsuranceDocumentPersistenceInput) {
+    return this.db.transaction(async (tx) => {
+      const inquiry = await this.findById(id, tx);
+
+      await tx.insert(insuranceDocuments).values({
+        inquiryId: inquiry.id,
+        fileName: payload.document.fileName,
+        fileUrl: payload.document.fileUrl,
+        documentType: payload.document.documentType,
+        notes: payload.document.notes ?? null,
+        uploadedByUserId: payload.uploadedByUserId,
+      });
+
+      await tx.insert(insuranceActivities).values({
+        inquiryId: inquiry.id,
+        action: payload.activity.action,
+        actorUserId: payload.activity.actorUserId ?? null,
+        documentType: payload.activity.documentType ?? null,
+        notes: payload.activity.notes ?? null,
+      });
+
+      await this.syncDocumentReviewStatus(id, inquiry, tx, payload.document.documentType);
+
+      return this.findById(id, tx);
+    });
+  }
+
+  async appendActivity(inquiryId: string, payload: InsuranceActivityPersistenceInput) {
+    const [activity] = await this.db
+      .insert(insuranceActivities)
+      .values({
+        inquiryId,
+        action: payload.action,
+        actorUserId: payload.actorUserId ?? null,
+        documentType: payload.documentType ?? null,
+        notes: payload.notes ?? null,
+      })
+      .returning();
+
+    return this.assertFound(activity, 'Insurance activity not found');
+  }
+
+  async listActivitiesByInquiryId(inquiryId: string, db: AppDatabase = this.db) {
+    const activities = await db
+      .select()
+      .from(insuranceActivities)
+      .where(eq(insuranceActivities.inquiryId, inquiryId))
+      .orderBy(insuranceActivities.createdAt);
+
+    return activities;
+  }
+
+  async upsertRecordFromInquiry(payload: UpsertInsuranceRecordInput, db: AppDatabase = this.db) {
+    const existingRecord = await db.query.insuranceRecords.findFirst({
       where: eq(insuranceRecords.inquiryId, payload.inquiryId),
     });
 
     if (existingRecord) {
-      const [updatedRecord] = await this.db
+      const [updatedRecord] = await db
         .update(insuranceRecords)
         .set({
           providerName: payload.providerName ?? null,
@@ -138,7 +391,7 @@ export class InsuranceRepository extends BaseRepository {
       return this.assertFound(updatedRecord, 'Insurance record not found');
     }
 
-    const [createdRecord] = await this.db
+    const [createdRecord] = await db
       .insert(insuranceRecords)
       .values({
         inquiryId: payload.inquiryId,
@@ -170,5 +423,124 @@ export class InsuranceRepository extends BaseRepository {
       },
       orderBy: [desc(insuranceInquiries.createdAt), desc(insuranceInquiries.id)],
     });
+  }
+
+  private async listActivitiesByInquiryIds(inquiryIds: string[], db: AppDatabase = this.db) {
+    if (!inquiryIds.length) {
+      return new Map<string, Awaited<ReturnType<typeof this.listActivitiesByInquiryId>>>();
+    }
+
+    const activities = await db
+      .select()
+      .from(insuranceActivities)
+      .where(inArray(insuranceActivities.inquiryId, inquiryIds))
+      .orderBy(insuranceActivities.createdAt);
+
+    const activitiesByInquiryId = new Map<string, typeof activities>();
+
+    activities.forEach((activity) => {
+      const currentActivities = activitiesByInquiryId.get(activity.inquiryId) ?? [];
+      currentActivities.push(activity);
+      activitiesByInquiryId.set(activity.inquiryId, currentActivities);
+    });
+
+    return activitiesByInquiryId;
+  }
+
+  private async attachActivitiesToInquiries<T extends { id: string }>(inquiries: T[]) {
+    const activitiesByInquiryId = await this.listActivitiesByInquiryIds(
+      inquiries.map((inquiry) => inquiry.id),
+    );
+
+    return inquiries.map((inquiry) => ({
+      ...inquiry,
+      activities: activitiesByInquiryId.get(inquiry.id) ?? [],
+    }));
+  }
+
+  private async syncDocumentReviewStatus(
+    inquiryId: string,
+    inquiry: Awaited<ReturnType<InsuranceRepository['findById']>>,
+    tx: AppDatabase,
+    nextDocumentType?: (typeof insuranceDocumentTypeEnum.enumValues)[number],
+  ) {
+    const nextDocumentStatus = this.computeDocumentReviewStatus({
+      purpose: inquiry.purpose,
+      documentTypes: [
+        ...(Array.isArray(inquiry.documents) ? inquiry.documents.map((document) => document.documentType) : []),
+        ...(nextDocumentType ? [nextDocumentType] : []),
+      ],
+    });
+
+    if (nextDocumentStatus === inquiry.documentStatus) {
+      return;
+    }
+
+    await tx
+      .update(insuranceInquiries)
+      .set({
+        documentStatus: nextDocumentStatus,
+        updatedAt: new Date(),
+      })
+      .where(eq(insuranceInquiries.id, inquiryId));
+  }
+
+  private computeDocumentReviewStatus({
+    purpose,
+    documentTypes = [],
+  }: {
+    purpose?: (typeof insuranceCasePurposeEnum.enumValues)[number] | null;
+    documentTypes?: Array<(typeof insuranceDocumentTypeEnum.enumValues)[number] | null | undefined>;
+  }) {
+    const requiredDocumentTypes =
+      purposeRequiredDocumentTypes[purpose ?? 'quotation'] ?? purposeRequiredDocumentTypes.quotation;
+    const uploadedDocumentTypes = new Set(
+      (Array.isArray(documentTypes) ? documentTypes : []).filter(
+        (documentType): documentType is (typeof insuranceDocumentTypeEnum.enumValues)[number] => Boolean(documentType),
+      ),
+    );
+
+    return requiredDocumentTypes.every((documentType) => uploadedDocumentTypes.has(documentType))
+      ? 'complete'
+      : 'incomplete';
+  }
+
+  private buildCustomerDisplayName(
+    profile:
+      | {
+          firstName: string;
+          lastName: string;
+        }
+      | {
+          firstName: string;
+          lastName: string;
+        }[]
+      | null
+      | undefined,
+  ) {
+    const resolvedProfile = Array.isArray(profile) ? profile[0] ?? null : profile;
+
+    if (!resolvedProfile) {
+      return 'Unknown customer';
+    }
+
+    return `${resolvedProfile.firstName} ${resolvedProfile.lastName}`.trim();
+  }
+
+  private buildVehicleLabel(
+    vehicle:
+      | {
+          make: string;
+          model: string;
+          plateNumber: string;
+        }
+      | null
+      | undefined,
+  ) {
+    if (!vehicle) {
+      return 'Unknown vehicle';
+    }
+
+    return `${vehicle.make} ${vehicle.model} (${vehicle.plateNumber})`;
   }
 }

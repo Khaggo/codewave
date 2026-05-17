@@ -4,18 +4,19 @@ import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { enableScreens } from 'react-native-screens';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import LandingPage from './src/screens/LandingPage';
 import RegisterPage from './src/screens/RegisterPage';
 import LoginPage from './src/screens/LoginPage';
 import OTPScreen from './src/screens/OTPScreen';
 import CompleteOnboardingPage from './src/screens/CompleteOnboardingPage';
 import Dashboard from './src/screens/Dashboard';
+import TechnicianDashboard from './src/screens/TechnicianDashboard';
 import ForgotPasswordEmail from './src/screens/ForgotPasswordEmail';
 import ForgotPasswordOTP from './src/screens/ForgotPasswordOTP';
 import ResetPassword from './src/screens/ResetPassword';
 import ManageProfile from './src/screens/ManageProfile';
 import ChangePassword from './src/screens/ChangePassword';
-import FeatureModuleScreen from './src/screens/FeatureModuleScreen';
 import InsuranceInquiryScreen from './src/screens/InsuranceInquiryScreen';
 import ChatbotScreen from './src/screens/ChatbotScreen';
 import VehicleLifecycleScreen from './src/screens/VehicleLifecycleScreen';
@@ -28,15 +29,19 @@ import {
   getCustomerMobileSessionAccessState,
   isAuthSessionResponse,
   loginAccount,
+  setCustomerSessionExpiredHandler,
   requestChangePasswordOtp,
   registerAccount,
   startDeleteAccountOtp,
   updateCustomerProfile,
+  updateCustomerVehicle,
   verifyDeleteAccountOtp,
   verifyRegistrationOtp,
 } from './src/lib/authClient';
+import { getMobileAppSessionAccessState } from './src/lib/mobileSessionAccess';
 import { cloneDate, formatVehicleDisplayName } from './src/utils/validation';
 import { colors } from './src/theme';
+import { ThemeProvider } from './src/theme/ThemeProvider';
 
 enableScreens(false);
 
@@ -146,7 +151,23 @@ function MenuScreen(props) {
     handleStartDeleteAccountOtp,
   } = useAppSessionContext();
   const currentAccount = activeAccount || registeredAccount;
-  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+  const accessState = getMobileAppSessionAccessState(currentAccount);
+
+  if (accessState === 'technician_session_active') {
+    return (
+      <TechnicianDashboard
+        {...props}
+        account={currentAccount}
+        onSignOut={() => {
+          clearCustomerSession();
+          props.navigation.reset({
+            index: 0,
+            routes: [{ name: 'Landing' }],
+          });
+        }}
+      />
+    );
+  }
 
   if (accessState !== 'customer_session_active') {
     return (
@@ -173,11 +194,12 @@ function MenuScreen(props) {
     <Dashboard
       {...props}
       account={currentAccount}
-      onSaveProfile={(profileUpdates) => {
-        syncAccount((currentAccount) => ({
-          ...currentAccount,
-          ...profileUpdates,
-        }));
+      onSaveProfile={async (profileUpdates) => {
+        const nextAccount = await persistCustomerProfile({
+          currentAccount,
+          profileUpdates,
+        });
+        syncAccount(() => nextAccount);
       }}
       onSignOut={() => {
         clearCustomerSession();
@@ -218,11 +240,12 @@ function ManageProfileScreen(props) {
     <ManageProfile
       {...props}
       account={currentAccount}
-      onSaveProfile={(profileUpdates) => {
-        syncAccount((currentAccount) => ({
-          ...currentAccount,
-          ...profileUpdates,
-        }));
+      onSaveProfile={async (profileUpdates) => {
+        const nextAccount = await persistCustomerProfile({
+          currentAccount,
+          profileUpdates,
+        });
+        syncAccount(() => nextAccount);
       }}
     />
   );
@@ -331,6 +354,81 @@ function VehicleLifecycleMobileScreen(props) {
   }
 
   return <VehicleLifecycleScreen {...props} account={currentAccount} />;
+}
+
+function BookingMobileScreen(props) {
+  const { activeAccount, clearCustomerSession, registeredAccount } = useAppSessionContext();
+  const currentAccount = activeAccount || registeredAccount;
+  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+
+  useEffect(() => {
+    if (accessState === 'customer_session_active') {
+      props.navigation.replace('Menu', {
+        supportJump: {
+          id: `booking-${Date.now()}`,
+          activeTab: 'notifications',
+          bookingMode: 'book',
+        },
+      });
+    }
+  }, [accessState, props.navigation]);
+
+  if (accessState !== 'customer_session_active') {
+    return (
+      <CustomerSurfaceStateScreen
+        navigation={props.navigation}
+        title="Customer session required"
+        message={
+          customerMobileGuardMessages[accessState] ??
+          customerMobileGuardMessages.unauthorized_session
+        }
+        primaryActionLabel="Sign In"
+        onPrimaryAction={() => {
+          clearCustomerSession();
+          props.navigation.replace('Login');
+        }}
+      />
+    );
+  }
+
+  return null;
+}
+
+function StoreMobileScreen(props) {
+  const { activeAccount, clearCustomerSession, registeredAccount } = useAppSessionContext();
+  const currentAccount = activeAccount || registeredAccount;
+  const accessState = getCustomerMobileSessionAccessState(currentAccount);
+
+  useEffect(() => {
+    if (accessState === 'customer_session_active') {
+      props.navigation.replace('Menu', {
+        supportJump: {
+          id: `store-${Date.now()}`,
+          activeTab: 'store',
+        },
+      });
+    }
+  }, [accessState, props.navigation]);
+
+  if (accessState !== 'customer_session_active') {
+    return (
+      <CustomerSurfaceStateScreen
+        navigation={props.navigation}
+        title="Customer session required"
+        message={
+          customerMobileGuardMessages[accessState] ??
+          customerMobileGuardMessages.unauthorized_session
+        }
+        primaryActionLabel="Sign In"
+        onPrimaryAction={() => {
+          clearCustomerSession();
+          props.navigation.replace('Login');
+        }}
+      />
+    );
+  }
+
+  return null;
 }
 
 const navigationTheme = {
@@ -457,6 +555,27 @@ export default function App() {
         root.style.overflow = previousStyles.rootOverflow || '';
         root.style.overflowX = previousStyles.rootOverflowX || '';
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    setCustomerSessionExpiredHandler(() => {
+      setPendingAccount(null);
+      setPendingOnboardingCompletion(null);
+      setActiveAccount(null);
+      setRegisteredAccount((currentAccount) =>
+        currentAccount
+          ? {
+              ...currentAccount,
+              accessToken: null,
+              refreshToken: null,
+            }
+          : currentAccount,
+      );
+    });
+
+    return () => {
+      setCustomerSessionExpiredHandler(null);
     };
   }, []);
 
@@ -600,7 +719,7 @@ export default function App() {
       };
     }
 
-    throw new Error('Resend is not available for this verification flow yet.');
+    throw new Error('This verification code cannot be resent from this screen. Go back and request a new code.');
   };
 
   const persistCustomerOnboarding = async ({ session, draftAccount, existingAccount, password }) => {
@@ -653,6 +772,121 @@ export default function App() {
         vehicleYear: vehicle?.year ?? draftAccount?.vehicleYear,
       },
     );
+  };
+
+  const persistCustomerProfile = async ({ currentAccount, profileUpdates }) => {
+    const userId = currentAccount?.userId;
+    const accessToken = currentAccount?.accessToken;
+
+    if (!userId || !accessToken) {
+      throw new Error('Your session is missing the credentials required to save profile changes.');
+    }
+
+    const hasUserProfileChanges = [
+      'firstName',
+      'lastName',
+      'birthday',
+      'phoneNumber',
+    ].some((key) => profileUpdates?.[key] !== undefined);
+
+    const hasVehicleChanges = [
+      'licensePlate',
+      'vehicleMake',
+      'vehicleModel',
+      'vehicleColor',
+      'vehicleYear',
+    ].some((key) => profileUpdates?.[key] !== undefined);
+
+    let updatedUser = null;
+    if (hasUserProfileChanges) {
+      updatedUser = await updateCustomerProfile({
+        userId,
+        firstName: profileUpdates?.firstName ?? currentAccount?.firstName,
+        lastName: profileUpdates?.lastName ?? currentAccount?.lastName,
+        birthday: profileUpdates?.birthday ?? currentAccount?.birthday,
+        phoneNumber: profileUpdates?.phoneNumber ?? currentAccount?.phoneNumber,
+        accessToken,
+      });
+    }
+
+    let savedVehicle = null;
+    if (hasVehicleChanges) {
+      const ownedVehicles = Array.isArray(currentAccount?.ownedVehicles)
+        ? currentAccount.ownedVehicles.filter(Boolean)
+        : [];
+      const vehicleId =
+        currentAccount?.primaryVehicleId ??
+        (ownedVehicles.length === 1 ? ownedVehicles[0]?.id ?? null : null);
+      const vehiclePayload = {
+        plateNumber: profileUpdates?.licensePlate ?? currentAccount?.licensePlate,
+        make: profileUpdates?.vehicleMake ?? currentAccount?.vehicleMake,
+        model: profileUpdates?.vehicleModel ?? currentAccount?.vehicleModel,
+        year: profileUpdates?.vehicleYear ?? currentAccount?.vehicleYear,
+        color: profileUpdates?.vehicleColor ?? currentAccount?.vehicleColor,
+      };
+
+      if (vehicleId) {
+        savedVehicle = await updateCustomerVehicle({
+          vehicleId,
+          vehicle: vehiclePayload,
+          accessToken,
+        });
+      } else if (ownedVehicles.length > 1) {
+        throw new Error(
+          'Choose a primary vehicle before editing vehicle details so we do not update the wrong record.',
+        );
+      } else if (
+        vehiclePayload.plateNumber ||
+        vehiclePayload.make ||
+        vehiclePayload.model ||
+        vehiclePayload.year ||
+        vehiclePayload.color
+      ) {
+        savedVehicle = await createCustomerVehicle({
+          userId,
+          licensePlate: vehiclePayload.plateNumber,
+          vehicleMake: vehiclePayload.make,
+          vehicleModel: vehiclePayload.model,
+          vehicleYear: vehiclePayload.year,
+          color: vehiclePayload.color,
+          accessToken,
+        });
+      }
+    }
+
+    const nextAccount = {
+      ...currentAccount,
+    };
+
+    if (updatedUser) {
+      nextAccount.firstName = updatedUser?.firstName ?? nextAccount.firstName;
+      nextAccount.lastName = updatedUser?.lastName ?? nextAccount.lastName;
+      nextAccount.email = updatedUser?.email ?? nextAccount.email;
+      nextAccount.phoneNumber = updatedUser?.phone ?? nextAccount.phoneNumber;
+      nextAccount.birthday = updatedUser?.birthday ?? nextAccount.birthday;
+      nextAccount.username = updatedUser?.username ?? nextAccount.username;
+    }
+
+    if (savedVehicle) {
+      const existingVehicles = Array.isArray(currentAccount?.ownedVehicles)
+        ? currentAccount.ownedVehicles.filter((vehicle) => vehicle?.id !== savedVehicle.id)
+        : [];
+      nextAccount.ownedVehicles = [savedVehicle, ...existingVehicles];
+      nextAccount.primaryVehicleId = savedVehicle.id ?? nextAccount.primaryVehicleId ?? null;
+      nextAccount.licensePlate = savedVehicle.plateNumber ?? nextAccount.licensePlate;
+      nextAccount.vehicleMake = savedVehicle.make ?? nextAccount.vehicleMake;
+      nextAccount.vehicleModel = savedVehicle.model ?? nextAccount.vehicleModel;
+      nextAccount.vehicleColor = savedVehicle.color ?? nextAccount.vehicleColor;
+      nextAccount.vehicleYear = savedVehicle.year ?? nextAccount.vehicleYear;
+      nextAccount.vehicleDisplayName =
+        formatVehicleDisplayName({
+          vehicleMake: savedVehicle.make,
+          vehicleModel: savedVehicle.model,
+          vehicleYear: savedVehicle.year,
+        }) || nextAccount.vehicleDisplayName;
+    }
+
+    return nextAccount;
   };
 
   const handleRegisterRequest = async (draftAccount) => {
@@ -835,7 +1069,7 @@ export default function App() {
       user: {
         id: activeAccount?.userId ?? registeredAccount?.userId,
         email: activeAccount?.email ?? registeredAccount?.email,
-        role: activeAccount?.role ?? registeredAccount?.role ?? 'customer',
+        role: activeAccount?.role ?? registeredAccount?.role ?? null,
         staffCode: activeAccount?.staffCode ?? registeredAccount?.staffCode ?? null,
         isActive: activeAccount?.isActive ?? registeredAccount?.isActive ?? true,
         profile: {
@@ -990,10 +1224,12 @@ export default function App() {
   };
 
   return (
-    <View style={styles.appRoot}>
-      <StatusBar style="light" backgroundColor={colors.background} translucent={false} />
-      <AppSessionContext.Provider value={appSessionContextValue}>
-        <NavigationContainer theme={navigationTheme}>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <View style={styles.appRoot}>
+          <StatusBar style="light" backgroundColor={colors.background} translucent={false} />
+          <AppSessionContext.Provider value={appSessionContextValue}>
+            <NavigationContainer theme={navigationTheme}>
           <Stack.Navigator
             initialRouteName="Landing"
             detachInactiveScreens={false}
@@ -1053,20 +1289,7 @@ export default function App() {
             <Stack.Screen name="ManageProfile" component={ManageProfileScreen} />
             <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
 
-            <Stack.Screen name="BookingScreen">
-            {(props) => (
-              <FeatureModuleScreen
-                {...props}
-                title="Service Booking"
-                subtitle="Schedule appointments and monitor real-time status."
-                bullets={[
-                  'Book preventive maintenance and inspections.',
-                  'Track service progress from drop-off to release.',
-                  'Review appointment details in one place.',
-                ]}
-              />
-            )}
-            </Stack.Screen>
+            <Stack.Screen name="BookingScreen" component={BookingMobileScreen} />
 
             <Stack.Screen
               name="VehicleLifecycleScreen"
@@ -1078,20 +1301,7 @@ export default function App() {
                 subtitle="View your vehicle’s complete service and insurance timeline."
 
             */}
-            <Stack.Screen name="StoreScreen">
-            {(props) => (
-              <FeatureModuleScreen
-                {...props}
-                title="E-commerce Store"
-                subtitle="Browse and order genuine automotive parts and products."
-                bullets={[
-                  'Explore curated parts, fluids, and accessories.',
-                  'Preview product categories for future orders.',
-                  'Track shopping and fulfillment status in later phases.',
-                ]}
-              />
-            )}
-            </Stack.Screen>
+            <Stack.Screen name="StoreScreen" component={StoreMobileScreen} />
 
             <Stack.Screen
               name="InsuranceInquiryScreen"
@@ -1104,10 +1314,12 @@ export default function App() {
               component={ChatbotMobileScreen}
               options={{ headerShown: false }}
             />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </AppSessionContext.Provider>
-    </View>
+              </Stack.Navigator>
+            </NavigationContainer>
+          </AppSessionContext.Provider>
+        </View>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 

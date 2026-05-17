@@ -409,6 +409,112 @@ describe('QualityGatesService', () => {
     );
   });
 
+  it('does not flag missing inspection evidence when uploaded workshop photos already support the QA context', async () => {
+    const qualityGatesRepository = {
+      findOptionalByJobOrderId: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'pending',
+      }),
+      updateAuditJob: jest.fn().mockResolvedValue(undefined),
+      completeAudit: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'passed',
+        riskScore: 10,
+        findings: [
+          {
+            gate: 'gate_1',
+            code: 'semantic_resolution_supported',
+          },
+        ],
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        QualityGatesService,
+        QualityGateDiscrepancyEngineService,
+        QualityGateSemanticAuditorService,
+        { provide: QualityGatesRepository, useValue: qualityGatesRepository },
+        {
+          provide: JobOrdersRepository,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'job-order-1',
+              sourceType: 'booking',
+              sourceId: 'booking-1',
+              status: 'ready_for_qa',
+              vehicleId: 'vehicle-1',
+              items: [
+                {
+                  id: 'item-1',
+                  name: 'Preventive Maintenance',
+                  description: 'Performed oil and filter replacement.',
+                  isCompleted: true,
+                },
+              ],
+              progressEntries: [
+                {
+                  message: 'Completed preventive maintenance and attached evidence for QA.',
+                },
+              ],
+              assignments: [],
+              photos: [
+                {
+                  id: 'photo-1',
+                  linkedEntityType: 'job_order',
+                  linkedEntityId: null,
+                  caption: 'Completed maintenance evidence',
+                  deletedAt: null,
+                  createdAt: new Date('2026-06-10T08:30:00.000Z'),
+                },
+              ],
+              notes: 'Customer concern resolved during preventive maintenance.',
+            }),
+          },
+        },
+        {
+          provide: BookingsRepository,
+          useValue: {
+            findOptionalById: jest.fn().mockResolvedValue({
+              id: 'booking-1',
+              notes: 'Preventive maintenance visit.',
+              requestedServices: [
+                {
+                  service: {
+                    name: 'Preventive Maintenance',
+                  },
+                },
+              ],
+            }),
+          },
+        },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn().mockResolvedValue([]) } },
+        { provide: UsersService, useValue: { findById: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(QualityGatesService);
+
+    await service.runQualityGateAudit('job-order-1');
+
+    expect(qualityGatesRepository.completeAudit).toHaveBeenCalledWith(
+      'job-order-1',
+      expect.objectContaining({
+        findings: expect.not.arrayContaining([
+          expect.objectContaining({
+            code: 'inspection_evidence_missing',
+          }),
+        ]),
+        blockingReason: null,
+      }),
+    );
+  });
+
   it('blocks the quality gate when a verified high-severity completion finding is not reflected in the completed work record', async () => {
     const qualityGatesRepository = {
       findOptionalByJobOrderId: jest.fn().mockResolvedValue({
@@ -530,6 +636,110 @@ describe('QualityGatesService', () => {
         ]),
       }),
     );
+  });
+
+  it('scopes back-job Gate 2 to the rework-era completion inspection instead of an older unrelated return inspection', async () => {
+    const qualityGatesRepository = {
+      findOptionalByJobOrderId: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'pending',
+      }),
+      updateAuditJob: jest.fn().mockResolvedValue(undefined),
+      completeAudit: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'passed',
+        riskScore: 0,
+        findings: [],
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        QualityGatesService,
+        QualityGateDiscrepancyEngineService,
+        QualityGateSemanticAuditorService,
+        { provide: QualityGatesRepository, useValue: qualityGatesRepository },
+        {
+          provide: JobOrdersRepository,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'job-order-1',
+              sourceType: 'back_job',
+              sourceId: 'back-job-1',
+              vehicleId: 'vehicle-1',
+              status: 'ready_for_qa',
+              createdAt: new Date('2026-05-17T06:00:00.000Z'),
+              items: [{ id: 'item-1', name: 'Warranty rework', description: null, isCompleted: true }],
+              progressEntries: [],
+              assignments: [],
+              photos: [],
+              notes: 'Warranty rework complete and ready for QA.',
+            }),
+          },
+        },
+        { provide: BookingsRepository, useValue: { findOptionalById: jest.fn() } },
+        {
+          provide: BackJobsRepository,
+          useValue: {
+            findOptionalById: jest.fn().mockResolvedValue({
+              id: 'back-job-1',
+              complaint: 'test test test',
+              findings: [],
+              returnInspectionId: 'inspection-return-legacy',
+            }),
+          },
+        },
+        {
+          provide: InspectionsRepository,
+          useValue: {
+            findByVehicleId: jest.fn().mockResolvedValue([
+              {
+                id: 'inspection-return-legacy',
+                bookingId: null,
+                inspectionType: 'return',
+                status: 'needs_followup',
+                notes: 'Legacy return inspection before the stricter workflow.',
+                createdAt: new Date('2026-05-03T22:31:58.113Z'),
+                findings: [],
+              },
+              {
+                id: 'inspection-intake-current',
+                bookingId: null,
+                inspectionType: 'intake',
+                status: 'completed',
+                notes: 'Fresh intake inspection for the rework cycle.',
+                createdAt: new Date('2026-05-17T05:48:51.713Z'),
+                findings: [],
+              },
+              {
+                id: 'inspection-completion-current',
+                bookingId: null,
+                inspectionType: 'completion',
+                status: 'completed',
+                notes: 'Post-rework completion inspection.',
+                createdAt: new Date('2026-05-17T07:15:00.000Z'),
+                findings: [],
+              },
+            ]),
+          },
+        },
+        { provide: UsersService, useValue: { findById: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(QualityGatesService);
+
+    await service.runQualityGateAudit('job-order-1');
+
+    const auditPayload = qualityGatesRepository.completeAudit.mock.calls[0][1];
+    const findingCodes = auditPayload.findings.map((finding: { code: string }) => finding.code);
+
+    expect(findingCodes).not.toContain('inspection_requires_followup');
+    expect(findingCodes).not.toContain('inspection_history_gap');
   });
 
   it('prevents release when the quality gate remains blocked', async () => {
@@ -761,6 +971,80 @@ describe('QualityGatesService', () => {
       reason: 'Supervisor reviewed the evidence and approved release.',
     });
     expect(result.status).toBe('overridden');
+  });
+
+  it('allows a super admin to record a QA pass verdict', async () => {
+    const qualityGatesRepository = {
+      findOptionalByJobOrderId: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'pending_review',
+      }),
+      recordReviewerVerdict: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'passed',
+        reviewerVerdict: 'passed',
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        QualityGatesService,
+        QualityGateDiscrepancyEngineService,
+        QualityGateSemanticAuditorService,
+        { provide: QualityGatesRepository, useValue: qualityGatesRepository },
+        {
+          provide: JobOrdersRepository,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'job-order-1',
+              status: 'ready_for_qa',
+              assignments: [],
+            }),
+            updateStatus: jest.fn(),
+          },
+        },
+        { provide: BookingsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'admin-1',
+              role: 'super_admin',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(QualityGatesService);
+
+    const result = await service.recordReviewerVerdict(
+      'job-order-1',
+      {
+        verdict: 'passed',
+        note: 'Super admin final QA sign-off.',
+      },
+      {
+        userId: 'admin-1',
+        role: 'super_admin',
+      },
+    );
+
+    expect(qualityGatesRepository.recordReviewerVerdict).toHaveBeenCalledWith(
+      'job-order-1',
+      expect.objectContaining({
+        reviewerUserId: 'admin-1',
+        reviewerVerdict: 'passed',
+      }),
+    );
+    expect(result.status).toBe('passed');
   });
 
   it('rejects manual override attempts from non-super-admin staff', async () => {

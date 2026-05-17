@@ -1,6 +1,3 @@
-import { ApiError, getApiBaseUrl } from './authClient';
-
-const API_BASE_URL = getApiBaseUrl();
 const NOTIFICATION_REQUEST_TIMEOUT_MS = 8000;
 
 const categoryVisualMap = {
@@ -74,7 +71,22 @@ const categorySyncMetadataMap = {
   },
 };
 
+const categoryChannelMap = {
+  back_job_update: 'email',
+  booking_reminder: 'email',
+  insurance_update: 'in_app',
+  invoice_aging: 'email',
+  service_follow_up: 'email',
+};
+
+const sourceTypeChannelMap = {
+  back_job: 'email',
+  booking: 'email',
+  insurance_inquiry: 'in_app',
+};
+
 const notificationUnreadStatuses = new Set(['queued', 'sent', 'failed']);
+const notificationActionableStatuses = new Set(['queued', 'sent', 'failed']);
 
 const notificationDisplayStateByStatus = {
   cancelled: 'cancelled_hidden',
@@ -82,6 +94,14 @@ const notificationDisplayStateByStatus = {
   queued: 'pending_delivery',
   sent: 'delivered_unread',
   skipped: 'skipped_by_preference',
+};
+
+const getLocalNotificationDisplayState = ({ status, locallyRead = false }) => {
+  if (status === 'sent') {
+    return locallyRead ? 'delivered_local_read' : 'delivered_unread';
+  }
+
+  return notificationDisplayStateByStatus[status] ?? 'pending_delivery';
 };
 
 const buildAuthHeaders = (accessToken) =>
@@ -98,6 +118,26 @@ const trimOrNull = (value) => {
   return normalizedValue ? normalizedValue : null;
 };
 
+let authClientModulePromise = null;
+
+const loadAuthClientModule = async () => {
+  if (!authClientModulePromise) {
+    authClientModulePromise = import('./authClient.js');
+  }
+
+  return authClientModulePromise;
+};
+
+const createApiError = async (message, status, details) => {
+  const { ApiError } = await loadAuthClientModule();
+  return new ApiError(message, status, details);
+};
+
+const getNotificationApiBaseUrl = async () => {
+  const { getApiBaseUrl } = await loadAuthClientModule();
+  return getApiBaseUrl();
+};
+
 const request = async (path, options = {}) => {
   const {
     body,
@@ -105,6 +145,9 @@ const request = async (path, options = {}) => {
     timeoutMs = NOTIFICATION_REQUEST_TIMEOUT_MS,
     ...rest
   } = options;
+  const { ApiError } = await loadAuthClientModule();
+  const API_BASE_URL = await getNotificationApiBaseUrl();
+  const buildApiError = (message, status, details) => new ApiError(message, status, details);
   const abortController =
     typeof AbortController === 'function' &&
     Number.isFinite(timeoutMs) &&
@@ -142,7 +185,7 @@ const request = async (path, options = {}) => {
             ? data.message
             : `Request failed with status ${response.status}`;
 
-        throw new ApiError(message, response.status, data);
+        throw buildApiError(message, response.status, data);
       }
 
       return data;
@@ -154,7 +197,7 @@ const request = async (path, options = {}) => {
             timeoutId = setTimeout(() => {
               abortController?.abort();
               reject(
-                new ApiError(
+                buildApiError(
                   `Timed out reaching ${API_BASE_URL}${path} after ${timeoutMs}ms. Check EXPO_PUBLIC_API_BASE_URL for the current device.`,
                   0,
                   {
@@ -182,7 +225,7 @@ const request = async (path, options = {}) => {
         ? error.message
         : 'Unable to reach the API server.';
 
-    throw new ApiError(
+    throw await createApiError(
       `Unable to reach ${API_BASE_URL}${path}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
       0,
       {
@@ -283,6 +326,38 @@ const normalizeNotificationSyncMetadata = (notification) => {
   };
 };
 
+const normalizeNotificationChannel = (notification) => {
+  if (notification?.channel) {
+    return notification.channel;
+  }
+
+  if (notification?.category && categoryChannelMap[notification.category]) {
+    return categoryChannelMap[notification.category];
+  }
+
+  if (notification?.sourceType && sourceTypeChannelMap[notification.sourceType]) {
+    return sourceTypeChannelMap[notification.sourceType];
+  }
+
+  return 'email';
+};
+
+const isCustomerNotificationActionable = ({ category, sourceType, channel, status }) => {
+  if (!notificationActionableStatuses.has(status)) {
+    return false;
+  }
+
+  if (channel === 'in_app') {
+    return true;
+  }
+
+  if (category === 'insurance_update' || sourceType === 'insurance_inquiry') {
+    return true;
+  }
+
+  return false;
+};
+
 export const normalizeCustomerNotificationPreferences = (preferences) => {
   if (!preferences || typeof preferences !== 'object') {
     return null;
@@ -309,17 +384,25 @@ export const normalizeCustomerNotification = (notification) => {
   const visual = normalizeNotificationVisual(notification);
   const syncMetadata = normalizeNotificationSyncMetadata(notification);
   const timestamp = pickNotificationTimestamp(notification);
+  const status = notification.status ?? 'queued';
+  const channel = normalizeNotificationChannel(notification);
+  const requiresAction = isCustomerNotificationActionable({
+    category: notification.category ?? null,
+    sourceType: notification.sourceType ?? null,
+    channel,
+    status,
+  });
 
   return {
     id: notification.id ?? notification.dedupeKey ?? null,
     key: notification.id ?? notification.dedupeKey ?? `notification-${notification.sourceId ?? 'unknown'}`,
     category: notification.category ?? null,
-    channel: notification.channel ?? 'email',
+    channel,
     sourceType: notification.sourceType ?? null,
     sourceId: notification.sourceId ?? null,
     title: trimOrNull(notification.title) ?? 'Customer notification',
     message: trimOrNull(notification.message) ?? 'A customer notification was recorded.',
-    status: notification.status ?? 'queued',
+    status,
     dedupeKey: trimOrNull(notification.dedupeKey),
     createdAt: notification.createdAt ?? null,
     updatedAt: notification.updatedAt ?? null,
@@ -332,14 +415,69 @@ export const normalizeCustomerNotification = (notification) => {
     bgColor: visual.bgColor,
     action: visual.action,
     timeLabel: formatRelativeTime(timestamp),
-    displayState: notificationDisplayStateByStatus[notification.status] ?? 'pending_delivery',
+    displayState: getLocalNotificationDisplayState({ status }),
     readStateSource: 'local-session-only',
     canPersistReadState: false,
-    unread: notificationUnreadStatuses.has(notification.status),
+    unread: notificationUnreadStatuses.has(status),
+    requiresAction,
     consistencyModel: syncMetadata.consistencyModel,
     ownerDomain: syncMetadata.ownerDomain,
     sourceDomain: syncMetadata.sourceDomain,
     crossServiceHint: syncMetadata.crossServiceHint,
+  };
+};
+
+export const markCustomerNotificationReadLocally = (notification) => {
+  if (!notification || typeof notification !== 'object') {
+    return notification;
+  }
+
+  const status = notification.status ?? 'queued';
+
+  return {
+    ...notification,
+    displayState: getLocalNotificationDisplayState({
+      status,
+      locallyRead: status === 'sent',
+    }),
+    unread: false,
+    readStateSource: 'local-session-only',
+    canPersistReadState: false,
+  };
+};
+
+export const markAllCustomerNotificationsReadLocally = (notifications) =>
+  asArray(notifications).map(markCustomerNotificationReadLocally);
+
+export const buildCustomerNotificationPanelSummary = (notifications) => {
+  const normalizedNotifications = asArray(notifications).filter(Boolean);
+  const unreadCount = normalizedNotifications.filter((notification) => notification.unread).length;
+  const actionNeededCount = normalizedNotifications.filter((notification) => notification.requiresAction).length;
+  const informationalCount = Math.max(normalizedNotifications.length - actionNeededCount, 0);
+
+  const reminderLabel =
+    actionNeededCount === 1
+      ? '1 reminder still needs follow-up'
+      : `${actionNeededCount} reminders still need follow-up`;
+  const updateLabel =
+    informationalCount === 1
+      ? '1 update is for visibility only'
+      : `${informationalCount} updates are for visibility only`;
+
+  return {
+    unreadCount,
+    actionNeededCount,
+    informationalCount,
+    primaryTitle:
+      actionNeededCount > 0
+        ? reminderLabel
+        : normalizedNotifications.length > 0
+          ? 'No active follow-up reminders in view'
+          : 'No reminders in view yet',
+    secondaryTitle:
+      normalizedNotifications.length > 0
+        ? updateLabel
+        : 'Fresh booking, insurance, and service updates will appear here after sync.',
   };
 };
 
@@ -350,7 +488,7 @@ export const createEmptyCustomerNotificationSnapshot = () => ({
 
 export const loadCustomerNotificationSnapshot = async ({ userId, accessToken }) => {
   if (!userId) {
-    throw new ApiError(
+    throw await createApiError(
       'You need an active customer session before notification state can load.',
       401,
       {
@@ -384,7 +522,7 @@ export const updateCustomerNotificationPreferences = async ({
   preferences,
 }) => {
   if (!userId) {
-    throw new ApiError(
+    throw await createApiError(
       'You need an active customer session before notification preferences can update.',
       401,
       {

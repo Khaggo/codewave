@@ -99,6 +99,17 @@ export class UsersRepository extends BaseRepository {
     });
   }
 
+  async countActiveByRole(role: 'technician' | 'head_technician' | 'service_adviser' | 'super_admin') {
+    const activeUsers = await this.db.query.users.findMany({
+      where: and(eq(users.role, role), eq(users.isActive, true), isNull(users.deletedAt)),
+      columns: {
+        id: true,
+      },
+    });
+
+    return activeUsers.length;
+  }
+
   async listCustomersWithVehicles() {
     const customerRows = await this.db.query.users.findMany({
       where: and(eq(users.role, 'customer'), isNull(users.deletedAt)),

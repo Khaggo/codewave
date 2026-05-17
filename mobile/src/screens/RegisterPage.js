@@ -28,6 +28,7 @@ export default function RegisterPage({ navigation, onRegister }) {
     licensePlate: '',
     vehicleMake: '',
     vehicleModel: '',
+    vehicleColor: '',
     vehicleYear: '',
     password: '',
     confirmPassword: '',
@@ -83,6 +84,7 @@ export default function RegisterPage({ navigation, onRegister }) {
       licensePlate: form.licensePlate.trim().toUpperCase(),
       vehicleMake: form.vehicleMake.trim(),
       vehicleModel: form.vehicleModel.trim(),
+      vehicleColor: form.vehicleColor.trim(),
       vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),
       vehicleDisplayName: formatVehicleDisplayName({
         vehicleMake: form.vehicleMake,
@@ -97,17 +99,7 @@ export default function RegisterPage({ navigation, onRegister }) {
       setFormError('');
 
       try {
-        const registrationResult = await onRegister(trimmedAccount);
-
-        if (registrationResult?.mode === 'session') {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: registrationResult.nextRoute || 'Menu' }],
-          });
-          return;
-        }
-
-        const enrollment = registrationResult?.enrollment ?? registrationResult;
+        const enrollment = await onRegister(trimmedAccount);
 
         navigation.replace('OTP', {
           email: trimmedAccount.email,
@@ -279,6 +271,18 @@ export default function RegisterPage({ navigation, onRegister }) {
         icon="car-side"
       />
 
+      <FormField
+        label="Vehicle Color"
+        value={form.vehicleColor}
+        onChangeText={(value) => handleFieldChange('vehicleColor', value)}
+        placeholder="White"
+        autoCapitalize="words"
+        textContentType="none"
+        autoComplete="off"
+        importantForAutofill="no"
+        icon="palette-outline"
+      />
+
       <Text style={styles.infoText}>
         Your account will be verified first, then the app will save your birthday and first vehicle automatically.
       </Text>
@@ -310,11 +314,27 @@ export default function RegisterPage({ navigation, onRegister }) {
 
       <Text style={styles.footerText}>
         By registering, you agree to our{' '}
-        <Text style={styles.footerLink} onPress={() => Alert.alert('Terms of Service', 'Prototype link opened.')}>
+        <Text
+          style={styles.footerLink}
+          onPress={() =>
+            Alert.alert(
+              'Terms of Service',
+              'The Terms of Service viewer is not connected in this local build yet.',
+            )
+          }
+        >
           Terms of Service
         </Text>{' '}
         and{' '}
-        <Text style={styles.footerLink} onPress={() => Alert.alert('Privacy Policy', 'Prototype link opened.')}>
+        <Text
+          style={styles.footerLink}
+          onPress={() =>
+            Alert.alert(
+              'Privacy Policy',
+              'The Privacy Policy viewer is not connected in this local build yet.',
+            )
+          }
+        >
           Privacy Policy
         </Text>
         .
@@ -388,29 +408,24 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    paddingVertical: 18,
+    borderRadius: radius.md,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.34,
-    shadowRadius: 24,
-    elevation: 5,
   },
   primaryButtonDisabled: {
-    opacity: 0.72,
+    opacity: 0.7,
   },
   primaryButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   signInRow: {
     marginTop: 20,
@@ -420,18 +435,18 @@ const styles = StyleSheet.create({
   },
   signInText: {
     color: colors.mutedText,
-    fontSize: 15,
+    fontSize: 14,
   },
   signInLink: {
     color: colors.primary,
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   formErrorText: {
     color: colors.danger,
     fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 19,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
 });

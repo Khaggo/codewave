@@ -14,22 +14,22 @@ const ICONS = {
 
 const STYLES = {
   success: {
-    border: 'rgba(16,185,129,0.25)',
-    bg:     'rgba(16,185,129,0.08)',
-    icon:   '#34d399',
-    text:   '#a7f3d0',
+    border: 'rgb(var(--tone-success-border) / 0.28)',
+    bg:     'rgb(var(--tone-success-bg) / 0.12)',
+    icon:   'rgb(var(--tone-success-border))',
+    text:   'rgb(var(--tone-success-ink))',
   },
   error: {
-    border: 'rgba(239,68,68,0.25)',
-    bg:     'rgba(239,68,68,0.08)',
-    icon:   '#f87171',
-    text:   '#fca5a5',
+    border: 'rgb(var(--tone-danger-border) / 0.28)',
+    bg:     'rgb(var(--tone-danger-bg) / 0.12)',
+    icon:   'rgb(var(--tone-danger-border))',
+    text:   'rgb(var(--tone-danger-ink))',
   },
   info: {
-    border: 'rgba(240,124,0,0.25)',
-    bg:     'rgba(240,124,0,0.08)',
-    icon:   '#f07c00',
-    text:   '#ffd39f',
+    border: 'rgb(var(--tone-info-border) / 0.28)',
+    bg:     'rgb(var(--tone-info-bg) / 0.12)',
+    icon:   'rgb(var(--brand-orange))',
+    text:   'rgb(var(--tone-info-ink))',
   },
 }
 
@@ -75,15 +75,20 @@ export function ToastProvider({ children }) {
                 animate={{ opacity: 1, x: 0, scale: 1 }}
                 exit={{ opacity: 0, x: 60, scale: 0.95 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                className="pointer-events-auto rounded-xl px-4 py-3.5 flex items-start gap-3"
+                className="pointer-events-auto flex items-start gap-3 rounded-xl px-4 py-3.5 shadow-card"
                 style={{
-                  background: s.bg,
+                  background: `linear-gradient(180deg, rgb(var(--surface-card) / 0.98), rgb(var(--surface-card) / 0.94))`,
                   border: `1px solid ${s.border}`,
                   backdropFilter: 'blur(12px)',
-                  backgroundColor: 'rgba(17,17,19,0.92)',
+                  boxShadow: `0 18px 40px rgb(0 0 0 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.02)`,
                 }}
               >
-                <Icon size={18} style={{ color: s.icon }} className="flex-shrink-0 mt-0.5" />
+                <div
+                  className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
+                  style={{ background: s.bg }}
+                >
+                  <Icon size={18} style={{ color: s.icon }} />
+                </div>
                 <div className="flex-1 min-w-0">
                   {t.title && (
                     <p className="text-sm font-bold text-ink-primary">{t.title}</p>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FolderPlus, RefreshCw, ShieldAlert, Wrench } from 'lucide-react'
 
+import PageHeader from '@/components/ui/PageHeader'
 import { ApiError } from '@/lib/authClient'
 import {
   createBookingService,
@@ -11,6 +12,7 @@ import {
   listBookingServices,
 } from '@/lib/bookingServiceAdminClient'
 import { useUser } from '@/lib/userContext'
+import { groupBookingServices } from './bookingServiceAdminView.mjs'
 
 const EMPTY_CATEGORY_FORM = {
   name: '',
@@ -62,13 +64,13 @@ function Notice({ tone = 'neutral', message }) {
 
   const toneClassName =
     tone === 'error'
-      ? 'border-red-500/25 bg-red-500/10 text-red-300'
+      ? 'status-message status-message-danger'
       : tone === 'success'
-        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
-        : 'border-surface-border bg-surface-raised text-ink-muted'
+        ? 'status-message status-message-success'
+        : 'status-message status-message-warning'
 
   return (
-    <div className={`rounded-xl border px-4 py-3 text-xs ${toneClassName}`}>
+    <div className={toneClassName}>
       {message}
     </div>
   )
@@ -140,20 +142,10 @@ export default function BookingServiceAdmin() {
     void loadDirectory()
   }, [loadDirectory])
 
-  const groupedServices = useMemo(() => {
-    const categoryMap = new Map(categoriesState.items.map((category) => [category.id, category.name]))
-    const groups = new Map()
-
-    servicesState.items.forEach((service) => {
-      const groupKey = service.categoryId || 'uncategorized'
-      const groupLabel = service.categoryId ? categoryMap.get(service.categoryId) || 'Unknown category' : 'Uncategorized'
-      const nextGroup = groups.get(groupKey) ?? { key: groupKey, label: groupLabel, services: [] }
-      nextGroup.services.push(service)
-      groups.set(groupKey, nextGroup)
-    })
-
-    return [...groups.values()].sort((left, right) => left.label.localeCompare(right.label))
-  }, [categoriesState.items, servicesState.items])
+  const groupedServices = useMemo(
+    () => groupBookingServices(categoriesState.items, servicesState.items),
+    [categoriesState.items, servicesState.items],
+  )
 
   const handleCreateCategory = async (event) => {
     event.preventDefault()
@@ -208,7 +200,7 @@ export default function BookingServiceAdmin() {
 
   if (!canManageServices) {
     return (
-      <section className="card p-6">
+      <section className="empty-panel text-left">
         <ShieldAlert size={24} className="text-brand-orange" />
         <h1 className="mt-3 text-2xl font-black text-ink-primary">Booking Services</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-secondary">
@@ -219,33 +211,34 @@ export default function BookingServiceAdmin() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="ops-page-header">
-        <div className="space-y-2">
-          <p className="ops-page-kicker">Service Operations</p>
-          <h1 className="ops-page-title">Booking Service Creation</h1>
-          <p className="ops-page-copy">
-            Create booking service categories and publish service offerings from the live main-service catalog. Category-linked
-            fields stay on dropdowns so the service payload always uses valid backend IDs.
-          </p>
-        </div>
-      </section>
+    <div className="ops-page-shell">
+      <PageHeader
+        eyebrow="Service Operations"
+        title="Booking Service Creation"
+        description="Create booking categories and publish live booking services."
+        actions={
+          <button type="button" onClick={loadDirectory} className="btn-ghost min-w-[148px]">
+            <RefreshCw size={14} />
+            Refresh
+          </button>
+        }
+        meta={
+          <>
+            <span className="badge badge-gray">{categoriesState.items.length} categories</span>
+            <span className="badge badge-gray">{servicesState.items.length} services</span>
+          </>
+        }
+      />
 
       <section className="ops-summary-grid">
         <SummaryTile label="Service Categories" value={categoriesState.items.length} sub="Live booking taxonomy" icon={FolderPlus} />
-        <SummaryTile label="Booking Services" value={servicesState.items.length} sub="Selectable in booking discovery" icon={Wrench} />
+        <SummaryTile label="Booking Services" value={servicesState.items.length} sub="Ready for booking discovery" icon={Wrench} />
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <SectionShell
           title="Create Service Category"
-          description="Create the category first so service creation can use a real dropdown instead of a typed category id."
-          action={
-            <button type="button" onClick={loadDirectory} className="ops-action-secondary min-w-[148px]">
-              <RefreshCw size={14} />
-              Refresh
-            </button>
-          }
+          description="Create a category before publishing services."
         >
           <Notice
             tone={categoriesState.status === 'error' ? 'error' : 'neutral'}
@@ -284,7 +277,7 @@ export default function BookingServiceAdmin() {
 
         <SectionShell
           title="Create Booking Service"
-          description="Only valid service-category records appear in the dropdown so the backend receives the exact category id it expects."
+          description="Publish services with valid category records only."
         >
           <Notice
             tone={servicesState.status === 'error' ? 'error' : 'neutral'}
@@ -365,42 +358,61 @@ export default function BookingServiceAdmin() {
 
       <SectionShell
         title="Live Booking Services"
-        description="These service offerings come from the live booking catalog in main-service."
+        description="Review live services from the booking catalog."
       >
         {groupedServices.length ? (
           <div className="space-y-4">
-            {groupedServices.map((group) => (
-              <div key={group.key} className="rounded-2xl border border-surface-border bg-surface-raised p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-bold text-ink-primary">{group.label}</p>
-                    <p className="mt-1 text-xs text-ink-muted">{group.services.length} service{group.services.length === 1 ? '' : 's'}</p>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {group.services.map((service) => (
-                    <article key={service.id} className="rounded-xl border border-surface-border bg-surface-card p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-ink-primary">{service.name}</p>
-                          <p className="mt-1 text-xs text-ink-muted">{service.durationMinutes} minutes</p>
-                        </div>
-                        <span className={`badge ${service.isActive ? 'badge-green' : 'badge-gray'}`}>
-                          {service.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <p className="mt-3 text-xs leading-5 text-ink-secondary">
-                        {service.description || 'No description saved yet.'}
-                      </p>
-                      <p className="mt-3 break-all text-[11px] text-ink-muted">{service.id}</p>
-                    </article>
-                  ))}
-                </div>
+            <div className="flex flex-wrap gap-2">
+              {groupedServices.map((group) => (
+                <span key={group.key} className="badge badge-gray">
+                  {group.label}: {group.services.length}
+                </span>
+              ))}
+            </div>
+            <div className="table-surface">
+              <div className="table-scroll">
+                <table className="data-table" aria-label="Live booking services">
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th>Category</th>
+                      <th>Duration</th>
+                      <th>Status</th>
+                      <th>Service ID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupedServices.flatMap((group) =>
+                      group.services.map((service) => (
+                        <tr key={service.id}>
+                          <td>
+                            <p className="font-semibold text-ink-primary">{service.name}</p>
+                            <p className="mt-1 text-xs text-ink-muted">
+                              {service.description || 'No description saved yet.'}
+                            </p>
+                          </td>
+                          <td>{group.label}</td>
+                          <td>{service.durationMinutes} minutes</td>
+                          <td>
+                            <span className={`badge ${service.isActive ? 'badge-green' : 'badge-gray'}`}>
+                              {service.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="break-all text-xs text-ink-muted">{service.id}</span>
+                          </td>
+                        </tr>
+                      )),
+                    )}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            </div>
           </div>
         ) : (
-          <p className="text-sm text-ink-muted">No booking services are available yet.</p>
+          <div className="empty-panel">
+            No booking services are available yet.
+          </div>
         )}
       </SectionShell>
     </div>

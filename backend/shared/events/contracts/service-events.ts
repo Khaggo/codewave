@@ -33,14 +33,14 @@ export interface ServicePaymentRecordedEventPayload {
   vehicleId: string;
   serviceAdviserUserId: string;
   serviceAdviserCode: string;
-  recordedByUserId: string;
+  recordedByUserId: string | null;
   sourceType: 'booking' | 'back_job';
   sourceId: string;
   amountPaidCents: number;
   currencyCode: 'PHP';
   paidAt: string;
   settlementStatus: 'paid';
-  paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'other';
+  paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'other' | 'paymongo';
   paymentReference?: string | null;
   serviceTypeCode?: string | null;
   serviceCategoryCode?: string | null;

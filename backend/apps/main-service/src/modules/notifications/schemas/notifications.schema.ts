@@ -13,7 +13,7 @@ import {
 
 import { users } from '@main-modules/users/schemas/users.schema';
 
-export const notificationChannelEnum = pgEnum('notification_channel', ['email']);
+export const notificationChannelEnum = pgEnum('notification_channel', ['email', 'in_app']);
 
 export const notificationCategoryEnum = pgEnum('notification_category', [
   'booking_reminder',

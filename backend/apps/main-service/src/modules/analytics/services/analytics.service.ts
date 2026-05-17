@@ -336,9 +336,7 @@ export class AnalyticsService {
         needsDocuments: sourceState.insuranceInquiries.filter(
           (inquiry) => inquiry.status === 'needs_documents',
         ).length,
-        approvedForRecord: sourceState.insuranceInquiries.filter(
-          (inquiry) => inquiry.status === 'approved_for_record',
-        ).length,
+        approved: sourceState.insuranceInquiries.filter((inquiry) => inquiry.status === 'approved').length,
         rejected: sourceState.insuranceInquiries.filter((inquiry) => inquiry.status === 'rejected').length,
       },
       serviceDemandPreview: this.buildServiceDemand(sourceState.bookings).slice(0, 5),

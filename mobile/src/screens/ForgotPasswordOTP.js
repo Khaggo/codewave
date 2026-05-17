@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import OtpInputGroup from '../components/OtpInputGroup';
 import ScreenShell from '../components/ScreenShell';
-import { ApiError, requestForgotPasswordOtp } from '../lib/authClient';
+import { requestForgotPasswordOtp } from '../lib/authClient';
 import { colors, radius } from '../theme';
 
 const RESEND_SECONDS = 17;
@@ -14,8 +14,6 @@ export default function ForgotPasswordOTP({ navigation, route }) {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
   const [resendCountdown, setResendCountdown] = useState(RESEND_SECONDS);
-  const [submitting, setSubmitting] = useState(false);
-  const [enrollmentId, setEnrollmentId] = useState(route.params?.enrollmentId ?? null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTranslateY = useRef(new Animated.Value(-8)).current;
 
@@ -85,12 +83,6 @@ export default function ForgotPasswordOTP({ navigation, route }) {
       return;
     }
 
-    if (!enrollmentId) {
-      setError('The password reset session expired. Request a new code and try again.');
-      showInlineToast('Password reset session expired.');
-      return;
-    }
-
     showInlineToast('OTP verified. Proceed to password reset.', 'success');
     Alert.alert(
       'OTP Verified',
@@ -101,7 +93,7 @@ export default function ForgotPasswordOTP({ navigation, route }) {
           onPress: () =>
             navigation.navigate('ResetPassword', {
               email: route.params?.email,
-              enrollmentId,
+              enrollmentId: route.params?.enrollmentId ?? null,
               otp,
             }),
         },
@@ -114,27 +106,30 @@ export default function ForgotPasswordOTP({ navigation, route }) {
       return;
     }
 
-    setSubmitting(true);
-
     try {
+      const normalizedEmail = route.params?.email;
       const enrollment = await requestForgotPasswordOtp({
-        email: route.params?.email,
+        email: normalizedEmail,
       });
 
-      setEnrollmentId(enrollment.enrollmentId);
+      navigation.setParams({
+        email: normalizedEmail,
+        maskedEmail: enrollment?.maskedEmail ?? normalizedEmail,
+        enrollmentId: enrollment?.enrollmentId ?? route.params?.enrollmentId ?? null,
+        otpExpiresAt: enrollment?.otpExpiresAt ?? null,
+      });
       setOtp('');
       setError('');
       setResendCountdown(RESEND_SECONDS);
       showInlineToast('A fresh verification code was sent.', 'success');
-    } catch (requestError) {
+    } catch (resendError) {
       const message =
-        requestError instanceof ApiError
-          ? requestError.message
-          : 'We could not resend the verification code right now.';
+        resendError instanceof Error
+          ? resendError.message
+          : 'We could not resend the password reset code right now.';
       setError(message);
       showInlineToast(message);
-    } finally {
-      setSubmitting(false);
+      Alert.alert('Resend Failed', message);
     }
   };
 
@@ -142,13 +137,13 @@ export default function ForgotPasswordOTP({ navigation, route }) {
     <ScreenShell contentContainerStyle={styles.content}>
       <View style={styles.page}>
         <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="arrow-left" size={18} color={colors.mutedText} />
+          <Feather name="arrow-left" size={18} color={colors.mutedText} />
           <Text style={styles.backLinkText}>Back</Text>
         </TouchableOpacity>
 
         <View style={styles.headerRow}>
           <View style={styles.headerIconWrap}>
-            <MaterialCommunityIcons name="email-outline" size={22} color={colors.primary} />
+            <Feather name="mail" size={20} color={colors.primary} />
           </View>
           <Text style={styles.title}>Verify Your Email</Text>
         </View>
@@ -195,17 +190,13 @@ export default function ForgotPasswordOTP({ navigation, route }) {
         />
 
         <TouchableOpacity
-          style={[
-            styles.primaryButton,
-            (otp.length !== 6 || submitting || !enrollmentId) && styles.primaryButtonDisabled,
-          ]}
+          style={[styles.primaryButton, otp.length !== 6 && styles.primaryButtonDisabled]}
           onPress={handleVerifyOtp}
           activeOpacity={0.88}
-          disabled={otp.length !== 6 || submitting || !enrollmentId}
         >
           <View style={styles.primaryButtonContent}>
-            <MaterialCommunityIcons name="shield-check-outline" size={18} color={colors.onPrimary} />
-            <Text style={styles.primaryButtonText}>Verify & Change Password</Text>
+            <Feather name="shield" size={16} color={colors.onPrimary} />
+            <Text style={styles.primaryButtonText}>Verify & change password</Text>
           </View>
         </TouchableOpacity>
 
@@ -214,8 +205,13 @@ export default function ForgotPasswordOTP({ navigation, route }) {
           {resendCountdown > 0 ? (
             <Text style={styles.resendCountdown}>Resend in {resendCountdown}s</Text>
           ) : (
-            <Text style={styles.resendAction} onPress={() => void handleResend()}>
-              {submitting ? 'Sending...' : 'Resend now'}
+            <Text
+              style={styles.resendAction}
+              onPress={() => {
+                void handleResend();
+              }}
+            >
+              Resend now
             </Text>
           )}
         </View>
@@ -353,29 +349,24 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     marginTop: 8,
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    minHeight: 54,
+    borderRadius: radius.md,
+    minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.26,
-    shadowRadius: 24,
-    elevation: 5,
   },
   primaryButtonDisabled: {
-    opacity: 0.72,
+    opacity: 0.7,
   },
   primaryButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   resendRow: {
     flexDirection: 'row',

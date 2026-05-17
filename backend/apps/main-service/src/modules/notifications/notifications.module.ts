@@ -10,7 +10,7 @@ import { NotificationsProcessor } from './notifications.processor';
 import { NotificationsRepository } from './repositories/notifications.repository';
 import { NotificationTriggerPlannerService } from './services/notification-trigger-planner.service';
 import { NotificationsService } from './services/notifications.service';
-import { SmtpMailService } from './services/smtp-mail.service';
+import { MailDeliveryService } from './services/mail-delivery.service';
 
 @Module({
   imports: [
@@ -24,8 +24,8 @@ import { SmtpMailService } from './services/smtp-mail.service';
     NotificationTriggerPlannerService,
     NotificationsService,
     NotificationsProcessor,
-    SmtpMailService,
+    MailDeliveryService,
   ],
-  exports: [NotificationsRepository, NotificationsService, SmtpMailService],
+  exports: [NotificationsRepository, NotificationsService, MailDeliveryService],
 })
 export class NotificationsModule {}

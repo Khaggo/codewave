@@ -304,7 +304,10 @@ export class BookingsService {
     return this.bookingsRepository.archiveTimeSlot(id);
   }
 
-  async create(createBookingDto: CreateBookingDto) {
+  async create(createBookingDto: CreateBookingDto, actor?: { userId: string; role: string }) {
+    if (actor) {
+      this.assertBookingActorCanAccessUser(createBookingDto.userId, actor);
+    }
     const user = await this.assertUserExists(createBookingDto.userId);
     await this.assertVehicleOwnership(createBookingDto.userId, createBookingDto.vehicleId);
     await this.assertServicesExist(createBookingDto.serviceIds);
@@ -317,15 +320,37 @@ export class BookingsService {
         customerName: this.getCustomerDisplayName(user),
         customerEmail: user.email,
       });
-    } catch {
-      // Keep the booking visible to customers/staff even when reservation-payment follow-up fails.
+    } catch (error) {
+      const paymentPolicy = await this.bookingsRepository.getOrCreatePaymentPolicy();
+      const failureReason =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Reservation payment checkout could not be started automatically.';
+
+      await this.bookingsRepository.createOrReplaceReservationPayment({
+        bookingId: booking.id,
+        provider: 'paymongo',
+        status: 'failed',
+        amountCents: paymentPolicy.reservationFeeAmountCents,
+        currencyCode: paymentPolicy.currencyCode,
+        providerPaymentId: null,
+        providerCheckoutUrl: null,
+        referenceNumber: null,
+        failureReason,
+        expiresAt: null,
+        refundStatus: 'not_required',
+        auditMetadata: `Payment startup exception at ${this.getCurrentDate().toISOString()}: ${failureReason}`,
+      });
     }
 
     return this.toBookingView(await this.bookingsRepository.findById(booking.id));
   }
 
-  async findById(id: string) {
+  async findById(id: string, actor?: { userId: string; role: string }) {
     const booking = await this.bookingsRepository.findById(id);
+    if (actor) {
+      this.assertBookingActorCanAccessUser(booking.userId, actor);
+    }
     return this.toBookingView(booking);
   }
 
@@ -629,13 +654,19 @@ export class BookingsService {
     return this.bookingsRepository.updatePaymentPolicy(payload);
   }
 
-  async getReservationPayment(bookingId: string) {
+  async getReservationPayment(bookingId: string, actor?: { userId: string; role: string }) {
     const booking = await this.assertFreshBookingState(bookingId);
+    if (actor) {
+      this.assertBookingActorCanAccessUser(booking.userId, actor);
+    }
     return booking.reservationPayment ?? null;
   }
 
-  async retryReservationPayment(bookingId: string) {
+  async retryReservationPayment(bookingId: string, actor?: { userId: string; role: string }) {
     const booking = await this.assertFreshBookingState(bookingId);
+    if (actor) {
+      this.assertBookingActorCanAccessUser(booking.userId, actor);
+    }
     if (booking.status !== 'pending_payment') {
       throw new ConflictException('Reservation payment retry is only available while the booking is awaiting payment');
     }
@@ -821,6 +852,16 @@ export class BookingsService {
     }
 
     return user;
+  }
+
+  private assertBookingActorCanAccessUser(userId: string, actor: { userId: string; role: string }) {
+    if (!['customer', 'service_adviser', 'super_admin'].includes(actor.role)) {
+      throw new ForbiddenException('Only customers, service advisers, or super admins can access bookings');
+    }
+
+    if (actor.role === 'customer' && actor.userId !== userId) {
+      throw new ForbiddenException('Customers can only access their own bookings');
+    }
   }
 
   private async issueOrRefreshReservationPayment(

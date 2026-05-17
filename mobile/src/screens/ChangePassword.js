@@ -3,7 +3,7 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PasswordChecklist from '../components/PasswordChecklist';
 import PasswordField from '../components/PasswordField';
 import ScreenShell from '../components/ScreenShell';
-import { ApiError, requestChangePasswordOtp } from '../lib/authClient';
+import { requestChangePasswordOtp } from '../lib/authClient';
 import { colors, radius } from '../theme';
 import { validateChangePasswordForm } from '../utils/validation';
 
@@ -45,21 +45,10 @@ export default function ChangePassword({ navigation, account }) {
   };
 
   const handleSubmit = async () => {
-    const nextErrors = validateChangePasswordForm({
-      ...form,
-      savedPassword: '',
-    });
+    const nextErrors = validateChangePasswordForm(form);
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
-      return;
-    }
-
-    if (!account?.accessToken) {
-      Alert.alert(
-        'Session Expired',
-        'Sign in again before requesting a password change code.',
-      );
       return;
     }
 
@@ -68,22 +57,21 @@ export default function ChangePassword({ navigation, account }) {
     try {
       const enrollment = await requestChangePasswordOtp({
         currentPassword: form.currentPassword,
-        accessToken: account.accessToken,
+        accessToken: account?.accessToken,
       });
 
       navigation.navigate('OTP', {
-        email: account?.email,
-        maskedEmail: enrollment.maskedEmail,
         otpPurpose: 'passwordChange',
-        enrollmentId: enrollment.enrollmentId,
+        email: account?.email ?? null,
+        maskedEmail: enrollment?.maskedEmail ?? account?.email ?? null,
+        enrollmentId: enrollment?.enrollmentId ?? null,
+        otpExpiresAt: enrollment?.otpExpiresAt ?? null,
         currentPassword: form.currentPassword,
         pendingPassword: form.newPassword,
       });
-    } catch (requestError) {
+    } catch (error) {
       const message =
-        requestError instanceof ApiError
-          ? requestError.message
-          : 'Unable to request a password change code right now.';
+        error instanceof Error ? error.message : 'We could not start password change verification right now.';
       setErrors((currentErrors) => ({
         ...currentErrors,
         currentPassword: message,
@@ -145,11 +133,13 @@ export default function ChangePassword({ navigation, account }) {
 
       <TouchableOpacity
         style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]}
-        onPress={() => void handleSubmit()}
+        onPress={() => {
+          void handleSubmit();
+        }}
         disabled={submitting}
       >
         <Text style={styles.primaryButtonText}>
-          {submitting ? 'Sending Code...' : 'Send Verification Code'}
+          {submitting ? 'Sending verification code...' : 'Continue'}
         </Text>
       </TouchableOpacity>
     </ScreenShell>
@@ -173,29 +163,28 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 6,
   },
   subtitle: {
     color: colors.mutedText,
     fontSize: 14,
-    lineHeight: 22,
-    marginBottom: 24,
+    lineHeight: 21,
+    marginBottom: 22,
   },
   primaryButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.medium,
-    paddingVertical: 16,
+    borderRadius: radius.md,
+    paddingVertical: 14,
     alignItems: 'center',
   },
   primaryButtonDisabled: {
-    opacity: 0.7,
+    opacity: 0.72,
   },
   primaryButtonText: {
     color: colors.onPrimary,
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
