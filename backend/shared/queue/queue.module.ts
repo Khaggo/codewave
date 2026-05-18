@@ -23,9 +23,11 @@ const queueImports = hasRedisRuntimeConfig()
     ]
   : [];
 
+const queueExports = hasRedisRuntimeConfig() ? [BullModule] : [];
+
 @Global()
 @Module({
   imports: queueImports,
-  exports: [BullModule],
+  exports: queueExports,
 })
 export class QueueModule {}
