@@ -660,7 +660,7 @@ export default function StaffProvisioningPanel() {
                                     onClick={() => handleSelectStatusAccount(account.id)}
                                     className="ops-action-secondary"
                                   >
-                                    Select in Form
+                                    Load In Editor
                                   </button>
                                   <button
                                     type="button"

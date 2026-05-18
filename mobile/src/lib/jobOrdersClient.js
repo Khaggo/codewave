@@ -17,6 +17,7 @@ const request = async (path, options = {}) => {
     timeoutMs = JOB_ORDERS_REQUEST_TIMEOUT_MS,
     ...rest
   } = options;
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
   const abortController =
     typeof AbortController === 'function' &&
     Number.isFinite(timeoutMs) &&
@@ -30,11 +31,15 @@ const request = async (path, options = {}) => {
       const response = await fetch(`${API_BASE_URL}${path}`, {
         ...rest,
         signal: abortController?.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(headers ?? {}),
-        },
-        body: body ? JSON.stringify(body) : undefined,
+        headers: isFormData
+          ? {
+              ...(headers ?? {}),
+            }
+          : {
+              'Content-Type': 'application/json',
+              ...(headers ?? {}),
+            },
+        body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
       });
 
       const rawText = await response.text();
@@ -170,6 +175,7 @@ export const updateJobOrderStatus = async ({
   jobOrderId,
   status,
   reason,
+  expectedUpdatedAt,
   accessToken,
 }) =>
   request(`/api/job-orders/${jobOrderId}/status`, {
@@ -178,6 +184,7 @@ export const updateJobOrderStatus = async ({
     body: {
       status,
       reason: reason ? String(reason).trim() : undefined,
+      expectedUpdatedAt: expectedUpdatedAt ? String(expectedUpdatedAt).trim() : undefined,
     },
   });
 
@@ -186,6 +193,7 @@ export const addJobOrderProgress = async ({
   entryType,
   message,
   completedItemIds,
+  expectedUpdatedAt,
   accessToken,
 }) =>
   request(`/api/job-orders/${jobOrderId}/progress`, {
@@ -197,5 +205,57 @@ export const addJobOrderProgress = async ({
       completedItemIds: Array.isArray(completedItemIds) && completedItemIds.length
         ? completedItemIds
         : undefined,
+      expectedUpdatedAt: expectedUpdatedAt ? String(expectedUpdatedAt).trim() : undefined,
     },
   });
+
+export const addJobOrderPhotoEvidence = async ({
+  jobOrderId,
+  file,
+  caption,
+  linkedEntityType,
+  linkedEntityId,
+  expectedUpdatedAt,
+  accessToken,
+}) => {
+  if (!jobOrderId) {
+    throw new ApiError('Load a job order before uploading photo evidence.', 400, {
+      path: '/api/job-orders/:id/photos/upload',
+    });
+  }
+
+  if (!file?.uri) {
+    throw new ApiError('Choose an image before uploading photo evidence.', 400, {
+      path: '/api/job-orders/:id/photos/upload',
+    });
+  }
+
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name ?? `job-order-${jobOrderId}.jpg`,
+    type: file.mimeType ?? file.type ?? 'image/jpeg',
+  });
+
+  if (caption ? String(caption).trim() : '') {
+    formData.append('caption', String(caption).trim());
+  }
+
+  if (linkedEntityType ? String(linkedEntityType).trim() : '') {
+    formData.append('linkedEntityType', String(linkedEntityType).trim());
+  }
+
+  if (linkedEntityId ? String(linkedEntityId).trim() : '') {
+    formData.append('linkedEntityId', String(linkedEntityId).trim());
+  }
+
+  if (expectedUpdatedAt ? String(expectedUpdatedAt).trim() : '') {
+    formData.append('expectedUpdatedAt', String(expectedUpdatedAt).trim());
+  }
+
+  return request(`/api/job-orders/${jobOrderId}/photos/upload`, {
+    method: 'POST',
+    headers: buildAuthHeaders(accessToken),
+    body: formData,
+  });
+};

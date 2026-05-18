@@ -1,5 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { desc, eq } from 'drizzle-orm';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { and, desc, eq } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -124,11 +124,20 @@ export class BackJobsRepository extends BaseRepository {
       nextValues.resolutionNotes = payload.resolutionNotes;
     }
 
+    const filters = [eq(backJobs.id, id)];
+    if (payload.expectedUpdatedAt) {
+      filters.push(eq(backJobs.updatedAt, new Date(payload.expectedUpdatedAt)));
+    }
+
     const [updatedBackJob] = await this.db
       .update(backJobs)
       .set(nextValues)
-      .where(eq(backJobs.id, id))
+      .where(and(...filters))
       .returning();
+
+    if (!updatedBackJob && payload.expectedUpdatedAt) {
+      throw new ConflictException('Another staff member already updated this back-job case. Reload and try again.');
+    }
 
     this.assertFound(updatedBackJob, 'Back job not found');
     return this.findById(id);

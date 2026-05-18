@@ -508,6 +508,35 @@ export class BookingsRepository extends BaseRepository {
     return this.findById(id);
   }
 
+  async findPastDueOpenBookings(beforeDate: string, statuses: BookingStatus[]) {
+    if (!statuses.length) {
+      return [];
+    }
+
+    return this.db.query.bookings.findMany({
+      where: and(lte(bookings.scheduledDate, beforeDate), inArray(bookings.status, statuses)),
+      with: {
+        user: {
+          with: {
+            profile: true,
+          },
+        },
+        vehicle: true,
+        timeSlot: true,
+        requestedServices: {
+          with: {
+            service: true,
+          },
+        },
+        reservationPayment: true,
+        statusHistory: {
+          orderBy: desc(bookingStatusHistory.changedAt),
+        },
+      },
+      orderBy: [asc(bookings.scheduledDate), asc(bookings.createdAt)],
+    });
+  }
+
   async getOrCreatePaymentPolicy() {
     const existingPolicy = await this.db.query.bookingPaymentPolicies.findFirst({
       orderBy: desc(bookingPaymentPolicies.updatedAt),

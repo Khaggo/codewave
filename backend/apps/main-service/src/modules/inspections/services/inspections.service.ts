@@ -95,9 +95,9 @@ export class InspectionsService {
   }
 
   private assertInspectionActor(actor: InspectionActor) {
-    if (!['technician', 'service_adviser', 'super_admin'].includes(actor.role)) {
+    if (!['technician', 'head_technician', 'service_adviser', 'super_admin'].includes(actor.role)) {
       throw new ForbiddenException(
-        'Only technicians, service advisers, or super admins can access inspection records',
+        'Only technicians, head technicians, service advisers, or super admins can access inspection records',
       );
     }
   }

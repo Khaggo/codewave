@@ -97,11 +97,13 @@ export interface UpdateInsuranceInquiryWorkflowRequest {
   renewalDueAt?: string;
   assignedStaffId?: string;
   reviewNotes?: string;
+  expectedUpdatedAt?: string;
 }
 
 export interface UpdateInsuranceInquiryStatusRequest {
   status: InsuranceInquiryStatus;
   reviewNotes?: string;
+  expectedUpdatedAt?: string;
 }
 
 export interface UploadInsuranceDocumentRequest {

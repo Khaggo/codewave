@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
@@ -44,6 +44,7 @@ type ReplaceJobOrderAssignmentsPersistenceInput = {
   assignedTechnicianIds: ReplaceJobOrderAssignmentsDto['assignedTechnicianIds'];
   status?: UpdateJobOrderStatusDto['status'];
   notes?: string | null;
+  expectedUpdatedAt?: string;
 };
 type FinalizeJobOrderPersistenceInput = FinalizeJobOrderDto & {
   finalizedByUserId: string;
@@ -270,14 +271,23 @@ export class JobOrdersRepository extends BaseRepository {
   }
 
   async updateStatus(id: string, payload: UpdateJobOrderStatusPersistenceInput) {
+    const filters = [eq(jobOrders.id, id)];
+    if (payload.expectedUpdatedAt) {
+      filters.push(eq(jobOrders.updatedAt, new Date(payload.expectedUpdatedAt)));
+    }
+
     const [updatedJobOrder] = await this.db
       .update(jobOrders)
       .set({
         status: payload.status,
         updatedAt: new Date(),
       })
-      .where(eq(jobOrders.id, id))
+      .where(and(...filters))
       .returning();
+
+    if (!updatedJobOrder && payload.expectedUpdatedAt) {
+      throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
+    }
 
     this.assertFound(updatedJobOrder, 'Job order not found');
     return this.findById(id);
@@ -288,7 +298,15 @@ export class JobOrdersRepository extends BaseRepository {
       const existingJobOrder = await tx.query.jobOrders.findFirst({
         where: eq(jobOrders.id, id),
       });
-      this.assertFound(existingJobOrder, 'Job order not found');
+      if (!existingJobOrder) {
+        throw new NotFoundException('Job order not found');
+      }
+      if (
+        payload.expectedUpdatedAt &&
+        existingJobOrder.updatedAt.toISOString() !== new Date(payload.expectedUpdatedAt).toISOString()
+      ) {
+        throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
+      }
 
       await tx.delete(jobOrderAssignments).where(eq(jobOrderAssignments.jobOrderId, id));
 
@@ -380,9 +398,32 @@ export class JobOrdersRepository extends BaseRepository {
 
   async addProgressEntry(
     id: string,
-    payload: AddJobOrderProgressDto & { attachedPhotoIds?: string[] },
+    payload: AddJobOrderProgressDto & {
+      attachedPhotoIds?: string[];
+      nextStatus?: 'in_progress';
+    },
     technicianUserId: string,
   ) {
+    const filters = [eq(jobOrders.id, id)];
+    if (payload.expectedUpdatedAt) {
+      filters.push(eq(jobOrders.updatedAt, new Date(payload.expectedUpdatedAt)));
+    }
+
+    const [touchedJobOrder] = await this.db
+      .update(jobOrders)
+      .set({
+        updatedAt: new Date(),
+        ...(payload.nextStatus ? { status: payload.nextStatus } : {}),
+      })
+      .where(and(...filters))
+      .returning();
+
+    if (!touchedJobOrder && payload.expectedUpdatedAt) {
+      throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
+    }
+
+    this.assertFound(touchedJobOrder, 'Job order not found');
+
     if (payload.completedItemIds?.length) {
       await this.db
         .update(jobOrderItems)
@@ -417,6 +458,25 @@ export class JobOrdersRepository extends BaseRepository {
     },
     takenByUserId: string,
   ) {
+    const filters = [eq(jobOrders.id, id)];
+    if (payload.expectedUpdatedAt) {
+      filters.push(eq(jobOrders.updatedAt, new Date(payload.expectedUpdatedAt)));
+    }
+
+    const [touchedJobOrder] = await this.db
+      .update(jobOrders)
+      .set({
+        updatedAt: new Date(),
+      })
+      .where(and(...filters))
+      .returning();
+
+    if (!touchedJobOrder && payload.expectedUpdatedAt) {
+      throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
+    }
+
+    this.assertFound(touchedJobOrder, 'Job order not found');
+
     const photoId = payload.id ?? randomUUID();
     await this.db.insert(jobOrderPhotos).values({
       id: photoId,
@@ -437,6 +497,12 @@ export class JobOrdersRepository extends BaseRepository {
 
   async finalize(id: string, payload: FinalizeJobOrderPersistenceInput) {
     const jobOrder = await this.findById(id);
+    if (
+      payload.expectedUpdatedAt &&
+      jobOrder.updatedAt.toISOString() !== new Date(payload.expectedUpdatedAt).toISOString()
+    ) {
+      throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
+    }
 
     await this.db.insert(jobOrderInvoiceRecords).values({
       jobOrderId: id,
@@ -515,6 +581,12 @@ export class JobOrdersRepository extends BaseRepository {
 
   async recordInvoicePayment(id: string, payload: RecordJobOrderInvoicePaymentPersistenceInput) {
     const jobOrder = await this.findById(id);
+    if (
+      payload.expectedUpdatedAt &&
+      jobOrder.updatedAt.toISOString() !== new Date(payload.expectedUpdatedAt).toISOString()
+    ) {
+      throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
+    }
     const invoiceRecord = this.assertFound(jobOrder.invoiceRecord, 'Job order invoice record not found');
 
     const [updatedInvoiceRecord] = await this.db
@@ -535,6 +607,12 @@ export class JobOrdersRepository extends BaseRepository {
       .returning();
 
     this.assertFound(updatedInvoiceRecord, 'Job order invoice record not found');
+    await this.db
+      .update(jobOrders)
+      .set({
+        updatedAt: new Date(),
+      })
+      .where(eq(jobOrders.id, id));
     return this.findById(id);
   }
 }

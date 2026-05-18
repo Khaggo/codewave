@@ -130,6 +130,13 @@ export class ChatbotRepository extends BaseRepository {
     return this.assertFound(conversation, 'Chatbot conversation not found');
   }
 
+  async findIntentByKey(intentKey: string) {
+    await this.ensureDefaultCatalog();
+    return this.db.query.chatbotIntents.findFirst({
+      where: eq(chatbotIntents.intentKey, intentKey),
+    });
+  }
+
   async createEscalation(payload: {
     userId: string;
     intentId?: string | null;

@@ -41,37 +41,49 @@ describe('QualityGatesController integration', () => {
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const customerResponse = await request(app.getHttpServer()).post('/api/users').send({
+      const customer = await seedAuthUser({
         email: 'quality.customer@example.com',
+        password: 'password123',
         firstName: 'Jamie',
         lastName: 'Customer',
       });
-      expect(customerResponse.status).toBe(201);
-
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerResponse.body.id,
-        plateNumber: 'QAGATE1',
-        make: 'Toyota',
-        model: 'Vios',
-        year: 2022,
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
       });
+      expect(customerLogin.status).toBe(200);
+
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          plateNumber: 'QAGATE1',
+          make: 'Toyota',
+          model: 'Vios',
+          year: 2022,
+        });
       expect(vehicleResponse.status).toBe(201);
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerResponse.body.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-06-10',
-        serviceIds: [servicesResponse.body[0].id],
-        notes: 'Engine rattling noise during cold start.',
-      });
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-06-10',
+          serviceIds: [servicesResponse.body[0].id],
+          notes: 'Engine rattling noise during cold start.',
+        });
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-QA-0001',
         });
       expect(confirmBookingResponse.status).toBe(200);
 
@@ -81,7 +93,7 @@ describe('QualityGatesController integration', () => {
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
-          customerUserId: customerResponse.body.id,
+          customerUserId: customer.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode,
@@ -111,7 +123,7 @@ describe('QualityGatesController integration', () => {
         .get(`/api/job-orders/${createJobOrderResponse.body.id}/qa`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
       expect(firstQaResponse.status).toBe(200);
-      expect(firstQaResponse.body.status).toBe('blocked');
+      expect(firstQaResponse.body.status).toBe('pending_review');
       expect(firstQaResponse.body.findings).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -136,6 +148,18 @@ describe('QualityGatesController integration', () => {
         });
       expect(returnToProgressResponse.status).toBe(200);
 
+      const evidencePhotoResponse = await request(app.getHttpServer())
+        .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
+        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .send({
+          fileName: 'qa-gate-1-evidence.jpg',
+          fileUrl: 'https://files.example.com/job-orders/qa-gate-1-evidence.jpg',
+          caption: 'Work-item evidence before re-entering QA.',
+          linkedEntityType: 'work_item',
+          linkedEntityId: createJobOrderResponse.body.items[0].id,
+        });
+      expect(evidencePhotoResponse.status).toBe(200);
+
       const addProgressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
@@ -158,7 +182,7 @@ describe('QualityGatesController integration', () => {
         .get(`/api/job-orders/${createJobOrderResponse.body.id}/qa`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
       expect(secondQaResponse.status).toBe(200);
-      expect(secondQaResponse.body.status).toBe('passed');
+      expect(secondQaResponse.body.status).toBe('pending_review');
       expect(secondQaResponse.body.blockingReason).toBeNull();
       expect(secondQaResponse.body.findings).toEqual(
         expect.arrayContaining([
@@ -233,37 +257,49 @@ describe('QualityGatesController integration', () => {
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const customerResponse = await request(app.getHttpServer()).post('/api/users').send({
+      const customer = await seedAuthUser({
         email: 'gate2.customer@example.com',
+        password: 'password123',
         firstName: 'Jordan',
         lastName: 'Customer',
       });
-      expect(customerResponse.status).toBe(201);
-
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerResponse.body.id,
-        plateNumber: 'QAGATE2',
-        make: 'Honda',
-        model: 'Civic',
-        year: 2021,
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
       });
+      expect(customerLogin.status).toBe(200);
+
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          plateNumber: 'QAGATE2',
+          make: 'Honda',
+          model: 'Civic',
+          year: 2021,
+        });
       expect(vehicleResponse.status).toBe(201);
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerResponse.body.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-06-11',
-        serviceIds: [servicesResponse.body[0].id],
-        notes: 'Engine rattling noise during cold start.',
-      });
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-06-11',
+          serviceIds: [servicesResponse.body[0].id],
+          notes: 'Engine rattling noise during cold start.',
+        });
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-QA-0002',
         });
       expect(confirmBookingResponse.status).toBe(200);
 
@@ -273,7 +309,7 @@ describe('QualityGatesController integration', () => {
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
-          customerUserId: customerResponse.body.id,
+          customerUserId: customer.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode,
@@ -297,6 +333,18 @@ describe('QualityGatesController integration', () => {
       expect(inProgressResponse.status).toBe(200);
 
       const addProgressResponse = await request(app.getHttpServer())
+        .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
+        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .send({
+          fileName: 'qa-gate-2-evidence.jpg',
+          fileUrl: 'https://files.example.com/job-orders/qa-gate-2-evidence.jpg',
+          caption: 'Initial repair evidence before QA.',
+          linkedEntityType: 'work_item',
+          linkedEntityId: createJobOrderResponse.body.items[0].id,
+        });
+      expect(addProgressResponse.status).toBe(200);
+
+      const progressEntryResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
         .send({
@@ -304,10 +352,11 @@ describe('QualityGatesController integration', () => {
           message: 'Engine rattle inspection completed and ready for QA.',
           completedItemIds: [createJobOrderResponse.body.items[0].id],
         });
-      expect(addProgressResponse.status).toBe(200);
+      expect(progressEntryResponse.status).toBe(200);
 
       const completionInspectionResponse = await request(app.getHttpServer())
         .post(`/api/vehicles/${vehicleResponse.body.id}/inspections`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           bookingId: bookingResponse.body.id,
           inspectionType: 'completion',
@@ -337,7 +386,7 @@ describe('QualityGatesController integration', () => {
         .get(`/api/job-orders/${createJobOrderResponse.body.id}/qa`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
       expect(qaResponse.status).toBe(200);
-      expect(qaResponse.body.status).toBe('blocked');
+      expect(qaResponse.body.status).toBe('pending_review');
       expect(qaResponse.body.riskScore).toBe(75);
       expect(qaResponse.body.blockingReason).toContain('Brake fluid leak at front line');
       expect(qaResponse.body.findings).toEqual(
@@ -372,6 +421,16 @@ describe('QualityGatesController integration', () => {
           reason: 'Service adviser is trying to override blocked QA.',
         });
       expect(forbiddenOverrideResponse.status).toBe(403);
+
+      const blockedVerdictResponse = await request(app.getHttpServer())
+        .patch(`/api/job-orders/${createJobOrderResponse.body.id}/qa/verdict`)
+        .set('Authorization', `Bearer ${superAdminLogin.body.accessToken}`)
+        .send({
+          verdict: 'blocked',
+          note: 'Supervisor confirmed the unresolved completion inspection should block release before override.',
+        });
+      expect(blockedVerdictResponse.status).toBe(200);
+      expect(blockedVerdictResponse.body.status).toBe('blocked');
 
       const overrideResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/qa/override`)
@@ -495,37 +554,49 @@ describe('QualityGatesController integration', () => {
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const customerResponse = await request(app.getHttpServer()).post('/api/users').send({
+      const customer = await seedAuthUser({
         email: 'override.owner.customer@example.com',
+        password: 'password123',
         firstName: 'Jordan',
         lastName: 'Customer',
       });
-      expect(customerResponse.status).toBe(201);
-
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerResponse.body.id,
-        plateNumber: 'QAOWN1',
-        make: 'Toyota',
-        model: 'Hilux',
-        year: 2023,
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
       });
+      expect(customerLogin.status).toBe(200);
+
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          plateNumber: 'QAOWN1',
+          make: 'Toyota',
+          model: 'Hilux',
+          year: 2023,
+        });
       expect(vehicleResponse.status).toBe(201);
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerResponse.body.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-06-12',
-        serviceIds: [servicesResponse.body[0].id],
-        notes: 'Engine vibration remains noticeable during cold start.',
-      });
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-06-12',
+          serviceIds: [servicesResponse.body[0].id],
+          notes: 'Engine vibration remains noticeable during cold start.',
+        });
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${ownerAdviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-QA-0003',
         });
       expect(confirmBookingResponse.status).toBe(200);
 
@@ -535,7 +606,7 @@ describe('QualityGatesController integration', () => {
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
-          customerUserId: customerResponse.body.id,
+          customerUserId: customer.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: ownerAdviser.id,
           serviceAdviserCode: ownerAdviser.staffCode,
@@ -558,6 +629,18 @@ describe('QualityGatesController integration', () => {
         });
       expect(inProgressResponse.status).toBe(200);
 
+      const evidencePhotoResponse = await request(app.getHttpServer())
+        .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
+        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .send({
+          fileName: 'qa-override-evidence.jpg',
+          fileUrl: 'https://files.example.com/job-orders/qa-override-evidence.jpg',
+          caption: 'Initial repair evidence before override review.',
+          linkedEntityType: 'work_item',
+          linkedEntityId: createJobOrderResponse.body.items[0].id,
+        });
+      expect(evidencePhotoResponse.status).toBe(200);
+
       const addProgressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
@@ -570,6 +653,7 @@ describe('QualityGatesController integration', () => {
 
       const completionInspectionResponse = await request(app.getHttpServer())
         .post(`/api/vehicles/${vehicleResponse.body.id}/inspections`)
+        .set('Authorization', `Bearer ${ownerAdviserLogin.body.accessToken}`)
         .send({
           bookingId: bookingResponse.body.id,
           inspectionType: 'completion',
@@ -599,7 +683,7 @@ describe('QualityGatesController integration', () => {
         .get(`/api/job-orders/${createJobOrderResponse.body.id}/qa`)
         .set('Authorization', `Bearer ${ownerAdviserLogin.body.accessToken}`);
       expect(qaResponse.status).toBe(200);
-      expect(qaResponse.body.status).toBe('blocked');
+      expect(qaResponse.body.status).toBe('pending_review');
       expect(qaResponse.body.findings).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -613,13 +697,23 @@ describe('QualityGatesController integration', () => {
       );
 
       const overrideResponse = await request(app.getHttpServer())
+        .patch(`/api/job-orders/${createJobOrderResponse.body.id}/qa/verdict`)
+        .set('Authorization', `Bearer ${superAdminLogin.body.accessToken}`)
+        .send({
+          verdict: 'blocked',
+          note: 'Super admin recorded a blocked QA verdict before the manual override.',
+        });
+      expect(overrideResponse.status).toBe(200);
+      expect(overrideResponse.body.status).toBe('blocked');
+
+      const manualOverrideResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/qa/override`)
         .set('Authorization', `Bearer ${superAdminLogin.body.accessToken}`)
         .send({
           reason: 'Super admin approved a one-time release exception after documented review.',
         });
-      expect(overrideResponse.status).toBe(200);
-      expect(overrideResponse.body.status).toBe('overridden');
+      expect(manualOverrideResponse.status).toBe(200);
+      expect(manualOverrideResponse.body.status).toBe('overridden');
 
       const secondOverrideResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/qa/override`)

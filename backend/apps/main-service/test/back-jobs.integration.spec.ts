@@ -25,6 +25,15 @@ describe('BackJobsController integration', () => {
         staffCode: 'TECH-4002',
       });
 
+      const qaReviewer = await seedAuthUser({
+        email: 'superadmin.backjobs@example.com',
+        password: 'password123',
+        firstName: 'Sage',
+        lastName: 'Admin',
+        role: 'super_admin',
+        staffCode: 'SA-ADMIN-4003',
+      });
+
       const customer = await seedAuthUser({
         email: 'customer.backjobs@example.com',
         password: 'password123',
@@ -40,6 +49,10 @@ describe('BackJobsController integration', () => {
         email: technician.email,
         password: 'password123',
       });
+      const qaReviewerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: qaReviewer.email,
+        password: 'password123',
+      });
       const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
         email: customer.email,
         password: 'password123',
@@ -48,29 +61,36 @@ describe('BackJobsController integration', () => {
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customer.id,
-        plateNumber: 'BJ109A',
-        make: 'Toyota',
-        model: 'Hilux',
-        year: 2024,
-      });
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          plateNumber: 'BJ109A',
+          make: 'Toyota',
+          model: 'Hilux',
+          year: 2024,
+        });
       expect(vehicleResponse.status).toBe(201);
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customer.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-05-12',
-        serviceIds: [servicesResponse.body[0].id],
-      });
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-05-12',
+          serviceIds: [servicesResponse.body[0].id],
+        });
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-BJ-0001',
         });
       expect(confirmBookingResponse.status).toBe(200);
 
@@ -97,6 +117,26 @@ describe('BackJobsController integration', () => {
         });
       expect(inProgressResponse.status).toBe(200);
 
+      const readyForQaResponse = await request(app.getHttpServer())
+        .patch(`/api/job-orders/${originalJobOrderResponse.body.id}/status`)
+        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .send({
+          status: 'ready_for_qa',
+        });
+      expect(readyForQaResponse.status).toBe(200);
+
+      const evidencePhotoResponse = await request(app.getHttpServer())
+        .post(`/api/job-orders/${originalJobOrderResponse.body.id}/photos`)
+        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .send({
+          fileName: 'original-repair-check.jpg',
+          fileUrl: 'https://files.example.com/job-orders/original-repair-check.jpg',
+          caption: 'Evidence linked to the original completed work item.',
+          linkedEntityType: 'work_item',
+          linkedEntityId: originalJobOrderResponse.body.items[0].id,
+        });
+      expect(evidencePhotoResponse.status).toBe(200);
+
       const progressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${originalJobOrderResponse.body.id}/progress`)
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
@@ -107,13 +147,14 @@ describe('BackJobsController integration', () => {
         });
       expect(progressResponse.status).toBe(200);
 
-      const readyForQaResponse = await request(app.getHttpServer())
-        .patch(`/api/job-orders/${originalJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+      const qaVerdictResponse = await request(app.getHttpServer())
+        .patch(`/api/job-orders/${originalJobOrderResponse.body.id}/qa/verdict`)
+        .set('Authorization', `Bearer ${qaReviewerLogin.body.accessToken}`)
         .send({
-          status: 'ready_for_qa',
+          verdict: 'passed',
+          note: 'Original service record is complete enough for invoice generation before return review.',
         });
-      expect(readyForQaResponse.status).toBe(200);
+      expect(qaVerdictResponse.status).toBe(200);
 
       const finalizeResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${originalJobOrderResponse.body.id}/finalize`)
@@ -125,6 +166,7 @@ describe('BackJobsController integration', () => {
 
       const returnInspectionResponse = await request(app.getHttpServer())
         .post(`/api/vehicles/${vehicleResponse.body.id}/inspections`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           inspectionType: 'return',
           status: 'completed',
@@ -272,34 +314,49 @@ describe('BackJobsController integration', () => {
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const vehicleOneResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerOne.id,
-        plateNumber: 'BJ109B',
-        make: 'Honda',
-        model: 'City',
-        year: 2023,
-      });
-      const vehicleTwoResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerTwo.id,
-        plateNumber: 'BJ109C',
-        make: 'Mitsubishi',
-        model: 'Montero',
-        year: 2022,
+      const customerOneLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customerOne.email,
+        password: 'password123',
       });
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerOne.id,
-        vehicleId: vehicleOneResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-05-13',
-        serviceIds: [servicesResponse.body[0].id],
-      });
+      const vehicleOneResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerOneLogin.body.accessToken}`)
+        .send({
+          userId: customerOne.id,
+          plateNumber: 'BJ109B',
+          make: 'Honda',
+          model: 'City',
+          year: 2023,
+        });
+      const vehicleTwoResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerTwoLogin.body.accessToken}`)
+        .send({
+          userId: customerTwo.id,
+          plateNumber: 'BJ109C',
+          make: 'Mitsubishi',
+          model: 'Montero',
+          year: 2022,
+        });
+
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerOneLogin.body.accessToken}`)
+        .send({
+          userId: customerOne.id,
+          vehicleId: vehicleOneResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-05-13',
+          serviceIds: [servicesResponse.body[0].id],
+        });
 
       await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-BJ-0002',
         });
 
       const originalJobOrderResponse = await request(app.getHttpServer())

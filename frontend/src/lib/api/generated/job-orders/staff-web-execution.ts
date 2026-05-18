@@ -2,7 +2,10 @@ import type { StaffPortalRole } from '../auth/staff-web-session';
 import { jobOrdersRoutes, type JobOrderStatus } from './requests';
 import type { JobOrderResponse } from './responses';
 
-export type StaffJobOrderExecutionRole = Extract<StaffPortalRole, 'technician' | 'service_adviser' | 'super_admin'>;
+export type StaffJobOrderExecutionRole = Extract<
+  StaffPortalRole,
+  'technician' | 'head_technician' | 'service_adviser' | 'super_admin'
+>;
 export type StaffJobOrderReviewerRole = Extract<StaffPortalRole, 'service_adviser' | 'super_admin'>;
 
 export type StaffJobOrderProgressState =
@@ -54,6 +57,7 @@ export interface StaffJobOrderExecutionRule<TState extends string, TRouteKey ext
 
 export const staffJobOrderExecutionRoles: StaffJobOrderExecutionRole[] = [
   'technician',
+  'head_technician',
   'service_adviser',
   'super_admin',
 ];
@@ -72,23 +76,23 @@ export const staffJobOrderProgressRules: StaffJobOrderExecutionRule<
     surface: 'staff-admin-web',
     truth: 'client-guard',
     routeKey: 'addJobOrderProgress',
-    allowedRoles: ['technician', 'super_admin'],
-    description: 'An assigned technician or super admin can append structured progress to a loaded job order.',
+    allowedRoles: ['technician', 'head_technician', 'super_admin'],
+    description: 'An assigned technician, head technician, or super admin can append structured progress to a loaded job order.',
   },
   {
     state: 'progress_not_assigned',
     surface: 'staff-admin-web',
     truth: 'client-guard',
     routeKey: 'addJobOrderProgress',
-    allowedRoles: ['technician'],
-    description: 'The current technician is not assigned to this job order, so progress entry submission should stay blocked.',
+    allowedRoles: ['technician', 'head_technician'],
+    description: 'The current workshop assignee is not assigned to this job order, so progress entry submission should stay blocked.',
   },
   {
     state: 'progress_saved',
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'addJobOrderProgress',
-    allowedRoles: ['technician', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'super_admin'],
     description: 'The backend accepted the progress entry and returned the updated job order.',
   },
   {
@@ -96,7 +100,7 @@ export const staffJobOrderProgressRules: StaffJobOrderExecutionRule<
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'addJobOrderProgress',
-    allowedRoles: ['technician', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'super_admin'],
     description: 'The job order cannot accept the progress evidence in its current state.',
   },
   {
@@ -104,7 +108,7 @@ export const staffJobOrderProgressRules: StaffJobOrderExecutionRule<
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'addJobOrderProgress',
-    allowedRoles: ['technician', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'super_admin'],
     description: 'A non-classified API or network failure blocked progress submission.',
   },
 ];
@@ -119,7 +123,7 @@ export const staffJobOrderPhotoRules: StaffJobOrderExecutionRule<
     truth: 'client-guard',
     routeKey: 'addJobOrderPhoto',
     allowedRoles: staffJobOrderExecutionRoles,
-    description: 'Assigned technicians, service advisers, and super admins can attach work evidence photos.',
+    description: 'Assigned technicians, head technicians, service advisers, and super admins can attach work evidence photos.',
   },
   {
     state: 'photo_saved',
@@ -224,7 +228,7 @@ export const canStaffCreateEvidencePhoto = ({
   }
 
   return Boolean(
-    role === 'technician' &&
+    ['technician', 'head_technician'].includes(role ?? '') &&
     userId &&
     jobOrder?.assignments?.some((assignment) => assignment.technicianUserId === userId),
   );
@@ -244,7 +248,7 @@ export const canStaffAppendProgress = ({
   }
 
   return Boolean(
-    role === 'technician' &&
+    ['technician', 'head_technician'].includes(role ?? '') &&
     userId &&
     jobOrder?.assignments?.some((assignment) => assignment.technicianUserId === userId),
   );

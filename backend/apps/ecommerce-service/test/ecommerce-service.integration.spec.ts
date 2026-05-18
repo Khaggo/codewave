@@ -3,6 +3,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
+import { JwtAuthGuard } from '@ecommerce-modules/auth/guards/jwt-auth.guard';
+import { RolesGuard } from '@ecommerce-modules/auth/guards/roles.guard';
 import { CartModule } from '@ecommerce-modules/cart/cart.module';
 import { CatalogModule } from '@ecommerce-modules/catalog/catalog.module';
 import { InvoicePaymentsModule } from '@ecommerce-modules/invoice-payments/invoice-payments.module';
@@ -25,7 +27,25 @@ describe('EcommerceService bootstrap integration', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [CatalogModule, CartModule, InvoicePaymentsModule, OrdersModule],
       controllers: [HealthController],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({
+        canActivate: (context: any) => {
+          const request = context.switchToHttp().getRequest();
+          request.user = {
+            userId:
+              request.query?.customerUserId
+              ?? request.body?.customerUserId
+              ?? request.body?.userId
+              ?? '00000000-0000-4000-8000-000000000001',
+            role: 'super_admin',
+          };
+          return true;
+        },
+      })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api');

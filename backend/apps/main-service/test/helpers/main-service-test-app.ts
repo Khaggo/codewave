@@ -161,7 +161,7 @@ import {
 import { AiWorkerJobMetadata } from '../../../../shared/queue/ai-worker.types';
 import { setupSwagger } from '../../src/swagger';
 
-type UserRole = 'customer' | 'technician' | 'service_adviser' | 'super_admin';
+type UserRole = 'customer' | 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
 
 type UserProfileRecord = {
   id: string;
@@ -453,6 +453,8 @@ type JobOrderPhotoRecord = {
   id: string;
   jobOrderId: string;
   takenByUserId: string;
+  linkedEntityType: 'job_order' | 'progress_entry' | 'work_item' | 'qa_review';
+  linkedEntityId: string | null;
   fileName: string;
   fileUrl: string;
   caption: string | null;
@@ -527,6 +529,10 @@ type QualityGateRecord = {
   status: QualityGateStatus;
   riskScore: number;
   blockingReason: string | null;
+  headTechnicianUserId: string | null;
+  reviewerVerdict: 'passed' | 'blocked' | null;
+  reviewerNote: string | null;
+  reviewedAt: Date | null;
   auditJob: AiWorkerJobMetadata | null;
   lastAuditRequestedAt: Date;
   lastAuditCompletedAt: Date | null;
@@ -549,7 +555,7 @@ type QualityGateOverrideRecord = {
   id: string;
   qualityGateId: string;
   actorUserId: string;
-  actorRole: UserRole;
+  actorRole: 'technician' | 'service_adviser' | 'super_admin';
   reason: string;
   createdAt: Date;
 };
@@ -738,12 +744,16 @@ type InsuranceInquiryRecord = {
   userId: string;
   vehicleId: string;
   inquiryType: InsuranceInquiryType;
+  purpose?: 'quotation' | 'claim' | 'renewal' | 'new_application';
   subject: string;
   description: string;
   providerName: string | null;
   policyNumber: string | null;
   notes: string | null;
   status: InsuranceInquiryStatus;
+  documentStatus?: 'incomplete' | 'complete';
+  paymentStatus?: 'not_required' | 'unpaid' | 'proof_submitted' | 'verifying' | 'paid' | 'overdue';
+  renewalStatus?: 'not_applicable' | 'upcoming' | 'processing' | 'completed';
   reviewNotes: string | null;
   createdByUserId: string;
   reviewedByUserId: string | null;
@@ -2357,6 +2367,8 @@ class InMemoryJobOrdersRepository {
       id: randomUUID(),
       jobOrderId: id,
       takenByUserId,
+      linkedEntityType: payload.linkedEntityType ?? 'job_order',
+      linkedEntityId: payload.linkedEntityId ?? null,
       fileName: payload.fileName,
       fileUrl: payload.fileUrl,
       caption: payload.caption ?? null,
@@ -2472,6 +2484,9 @@ class InMemoryQualityGatesRepository {
         status: 'pending_review',
         riskScore: 0,
         blockingReason: null,
+        reviewerVerdict: null,
+        reviewerNote: null,
+        reviewedAt: null,
         auditJob: { ...auditJob },
         lastAuditRequestedAt: now,
         lastAuditCompletedAt: null,
@@ -2494,6 +2509,10 @@ class InMemoryQualityGatesRepository {
       status: 'pending_review',
       riskScore: 0,
       blockingReason: null,
+      headTechnicianUserId: null,
+      reviewerVerdict: null,
+      reviewerNote: null,
+      reviewedAt: null,
       auditJob: { ...auditJob },
       lastAuditRequestedAt: now,
       lastAuditCompletedAt: null,
@@ -2609,6 +2628,48 @@ class InMemoryQualityGatesRepository {
     this.qualityGates.set(gate.id, {
       ...gate,
       status: 'overridden',
+      updatedAt: now,
+    });
+
+    return this.findByJobOrderId(jobOrderId);
+  }
+
+  async assignHeadTechnician(jobOrderId: string, headTechnicianUserId: string | null) {
+    const gate = Array.from(this.qualityGates.values()).find((entry) => entry.jobOrderId === jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    this.qualityGates.set(gate.id, {
+      ...gate,
+      headTechnicianUserId,
+      updatedAt: new Date(),
+    });
+
+    return this.findByJobOrderId(jobOrderId);
+  }
+
+  async recordReviewerVerdict(
+    jobOrderId: string,
+    payload: {
+      reviewerUserId: string;
+      reviewerVerdict: 'passed' | 'blocked';
+      reviewerNote?: string | null;
+    },
+  ) {
+    const gate = Array.from(this.qualityGates.values()).find((entry) => entry.jobOrderId === jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    const now = new Date();
+    this.qualityGates.set(gate.id, {
+      ...gate,
+      status: payload.reviewerVerdict === 'passed' ? 'passed' : 'blocked',
+      headTechnicianUserId: payload.reviewerUserId,
+      reviewerVerdict: payload.reviewerVerdict,
+      reviewerNote: payload.reviewerNote ?? null,
+      reviewedAt: now,
       updatedAt: now,
     });
 
@@ -3042,6 +3103,43 @@ class InMemoryInsuranceRepository {
   private readonly records = new Map<string, InsuranceRecordRecord>();
   failNextUploadedDocumentPersistence = false;
 
+  private getRequiredDocumentTypes(purpose?: string | null): InsuranceDocumentType[] {
+    switch (purpose ?? 'quotation') {
+      case 'renewal':
+        return ['or_cr', 'policy'];
+      case 'claim':
+      case 'new_application':
+      case 'quotation':
+      default:
+        return ['or_cr'];
+    }
+  }
+
+  private syncDocumentReviewStatus(inquiryId: string, nextDocumentType?: InsuranceDocumentType | null) {
+    const inquiry = this.inquiries.get(inquiryId);
+    if (!inquiry) {
+      throw new NotFoundException('Insurance inquiry not found');
+    }
+
+    const uploadedDocumentTypes = new Set<InsuranceDocumentType>(
+      this.documents
+        .filter((document) => document.inquiryId === inquiryId)
+        .map((document) => document.documentType as InsuranceDocumentType)
+        .concat(nextDocumentType ? [nextDocumentType] : []),
+    );
+    const documentStatus = this.getRequiredDocumentTypes(inquiry.purpose).every((documentType) =>
+      uploadedDocumentTypes.has(documentType),
+    )
+      ? 'complete'
+      : 'incomplete';
+
+    this.inquiries.set(inquiryId, {
+      ...inquiry,
+      documentStatus,
+      updatedAt: new Date(),
+    });
+  }
+
   async create(payload: CreateInsuranceInquiryDto & { createdByUserId: string }) {
     const now = new Date();
     const inquiry: InsuranceInquiryRecord = {
@@ -3049,12 +3147,16 @@ class InMemoryInsuranceRepository {
       userId: payload.userId,
       vehicleId: payload.vehicleId,
       inquiryType: payload.inquiryType,
+      purpose: payload.purpose ?? 'quotation',
       subject: payload.subject,
       description: payload.description,
       providerName: payload.providerName ?? null,
       policyNumber: payload.policyNumber ?? null,
       notes: payload.notes ?? null,
       status: 'submitted',
+      documentStatus: 'incomplete',
+      paymentStatus: 'not_required',
+      renewalStatus: 'not_applicable',
       reviewNotes: null,
       createdByUserId: payload.createdByUserId,
       reviewedByUserId: null,
@@ -3116,6 +3218,8 @@ class InMemoryInsuranceRepository {
       updatedAt: new Date(),
     });
 
+    this.syncDocumentReviewStatus(id, payload.documentType);
+
     return this.findById(id);
   }
 
@@ -3154,6 +3258,8 @@ class InMemoryInsuranceRepository {
       createdAt: now,
       updatedAt: now,
     });
+
+    this.syncDocumentReviewStatus(id, payload.document.documentType);
 
     this.activities.push({
       id: randomUUID(),
@@ -4411,6 +4517,29 @@ class InMemoryNotificationsRepository {
 
     this.attempts.push(attempt);
     return { ...attempt };
+  }
+
+  async updateNotificationStatus(
+    id: string,
+    payload: {
+      status: NotificationStatus;
+      deliveredAt?: Date | null;
+    },
+  ) {
+    const notification = this.notifications.get(id);
+    if (!notification) {
+      throw new NotFoundException('Notification not found');
+    }
+
+    const updatedNotification: NotificationRecord = {
+      ...notification,
+      status: payload.status,
+      deliveredAt: payload.deliveredAt ?? null,
+      updatedAt: new Date(),
+    };
+
+    this.notifications.set(updatedNotification.id, updatedNotification);
+    return this.findNotificationById(updatedNotification.id);
   }
 
   async findReminderRuleByDedupeKey(dedupeKey: string) {

@@ -1091,6 +1091,7 @@ export default function InsuranceContent() {
         inquiryId: requestInquiryId,
         status: updateDraft.status,
         reviewNotes: updateDraft.reviewNotes,
+        expectedUpdatedAt: selectedInquiryRef.current?.updatedAt,
         accessToken: user.accessToken,
       })
       const refreshedNextStatuses = getAllowedInsuranceStatusTargets(updatedInquiry.status)
@@ -1127,7 +1128,35 @@ export default function InsuranceContent() {
       } else if (error instanceof ApiError && error.status === 403) {
         setUpdateState('forbidden_role')
       } else if (error instanceof ApiError && error.status === 409) {
-        setUpdateState('invalid_transition')
+        const isConcurrencyConflict = String(error?.message ?? '').toLowerCase().includes('already updated')
+        if (isConcurrencyConflict && requestInquiryId && user?.accessToken) {
+          try {
+            const refreshedInquiry = await getInsuranceInquiryById({
+              inquiryId: requestInquiryId,
+              accessToken: user.accessToken,
+            })
+            setInquiries((currentInquiries) =>
+              currentInquiries.map((inquiry) => (inquiry.id === refreshedInquiry.id ? refreshedInquiry : inquiry)),
+            )
+            if (
+              shouldApplyInsuranceAsyncResult({
+                requestInquiryId,
+                selectedInquiryId: selectedInquiryIdRef.current,
+              })
+            ) {
+              const refreshedNextStatuses = getAllowedInsuranceStatusTargets(refreshedInquiry.status)
+              setUpdateDraft({
+                status: refreshedNextStatuses[0] ?? refreshedInquiry.status,
+                reviewNotes: refreshedInquiry.reviewNotes ?? '',
+              })
+              setUpdateState('update_conflict')
+              setUpdateMessage('Another staff member already updated this insurance case. The latest record was reloaded.')
+              return
+            }
+          } catch {}
+        }
+
+        setUpdateState(isConcurrencyConflict ? 'update_conflict' : 'invalid_transition')
       } else {
         setUpdateState('update_failed')
       }

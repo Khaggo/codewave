@@ -34,6 +34,7 @@ export const authOtpPurposeEnum = pgEnum('auth_otp_purpose', [
   'account_delete',
   'forgot_password',
   'change_password',
+  'staff_phone_change',
 ]);
 
 export const authGoogleIdentities = pgTable('auth_google_identities', {

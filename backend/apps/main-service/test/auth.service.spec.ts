@@ -12,19 +12,9 @@ import { NotificationsService } from '@main-modules/notifications/services/notif
 import { UsersService } from '@main-modules/users/services/users.service';
 
 describe('AuthService', () => {
-  it('registers a customer and immediately issues a session token', async () => {
+  it('registers a customer into OTP-gated pending activation', async () => {
   const usersService = {
     findByEmail: jest.fn().mockResolvedValue(null),
-    findById: jest.fn().mockResolvedValue({
-      id: 'user-1',
-      email: 'customer@example.com',
-      role: 'customer',
-      isActive: true,
-      profile: {
-        firstName: 'Jane',
-        lastName: 'Doe',
-      },
-    }),
     create: jest.fn().mockResolvedValue({
       id: 'user-1',
       email: 'customer@example.com',
@@ -39,15 +29,12 @@ describe('AuthService', () => {
 
   const authRepository = {
     createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
-    updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: true }),
-    storeRefreshToken: jest.fn().mockResolvedValue(undefined),
+    updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: false }),
+    createOtpChallenge: jest.fn().mockResolvedValue({ id: 'challenge-1' }),
   };
-
-  const jwtService = {
-    signAsync: jest
-      .fn()
-      .mockResolvedValueOnce('access-token')
-      .mockResolvedValueOnce('refresh-token'),
+  const notificationsService = {
+    enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'queued' }),
+    deliverNotification: jest.fn().mockResolvedValue({ id: 'notification-1', status: 'sent' }),
   };
 
   const configService = {
@@ -66,13 +53,10 @@ describe('AuthService', () => {
       AuthService,
       { provide: UsersService, useValue: usersService },
       { provide: AuthRepository, useValue: authRepository },
-      {
-        provide: NotificationsService,
-        useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() },
-      },
+      { provide: NotificationsService, useValue: notificationsService },
       { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
       { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
-      { provide: JwtService, useValue: jwtService },
+      { provide: JwtService, useValue: {} },
       { provide: ConfigService, useValue: configService },
     ],
   }).compile();
@@ -88,18 +72,18 @@ describe('AuthService', () => {
 
   expect(usersService.create).toHaveBeenCalled();
   expect(authRepository.createAccount).toHaveBeenCalled();
-  expect(usersService.setActivationStatus).toHaveBeenCalledWith('user-1', true);
-  expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('user-1', true);
-  expect(authRepository.storeRefreshToken).toHaveBeenCalled();
+  expect(usersService.setActivationStatus).toHaveBeenCalledWith('user-1', false);
+  expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('user-1', false);
+  expect(authRepository.createOtpChallenge).toHaveBeenCalled();
+  expect(notificationsService.enqueueAuthOtpDelivery).toHaveBeenCalled();
+  expect(notificationsService.deliverNotification).toHaveBeenCalledWith('notification-1');
   expect(result).toEqual(
     expect.objectContaining({
-      accessToken: 'access-token',
-      refreshToken: 'refresh-token',
-      user: expect.objectContaining({
-        id: 'user-1',
-        email: 'customer@example.com',
-        role: 'customer',
-      }),
+      enrollmentId: 'challenge-1',
+      userId: 'user-1',
+      maskedEmail: 'cu***@example.com',
+      status: 'pending_activation',
+      otpExpiresAt: expect.any(String),
     }),
   );
 });
@@ -819,7 +803,7 @@ describe('AuthService', () => {
     });
   });
 
-  it('does not attempt OTP delivery during customer registration', async () => {
+  it('queues and delivers OTP during customer registration before returning pending activation', async () => {
     const usersService = {
       findByEmail: jest.fn().mockResolvedValue(null),
       findById: jest.fn().mockResolvedValue({
@@ -847,19 +831,12 @@ describe('AuthService', () => {
     const authRepository = {
       createAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
       updateAccountStatus: jest.fn().mockResolvedValue({ id: 'account-1', isActive: true }),
-      storeRefreshToken: jest.fn().mockResolvedValue(undefined),
+      createOtpChallenge: jest.fn().mockResolvedValue({ id: 'challenge-otp-1' }),
     };
 
     const notificationsService = {
-      enqueueAuthOtpDelivery: jest.fn(),
-      deliverNotification: jest.fn(),
-    };
-
-    const jwtService = {
-      signAsync: jest
-        .fn()
-        .mockResolvedValueOnce('access-token')
-        .mockResolvedValueOnce('refresh-token'),
+      enqueueAuthOtpDelivery: jest.fn().mockResolvedValue({ id: 'notification-otp-1', status: 'queued' }),
+      deliverNotification: jest.fn().mockResolvedValue({ id: 'notification-otp-1', status: 'sent' }),
     };
 
     const configService = {
@@ -881,7 +858,7 @@ describe('AuthService', () => {
         { provide: NotificationsService, useValue: notificationsService },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
         { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
-        { provide: JwtService, useValue: jwtService },
+        { provide: JwtService, useValue: {} },
         { provide: ConfigService, useValue: configService },
       ],
     }).compile();
@@ -895,12 +872,12 @@ describe('AuthService', () => {
       lastName: 'Doe',
     });
 
-    expect(notificationsService.enqueueAuthOtpDelivery).not.toHaveBeenCalled();
-    expect(notificationsService.deliverNotification).not.toHaveBeenCalled();
+    expect(notificationsService.enqueueAuthOtpDelivery).toHaveBeenCalled();
+    expect(notificationsService.deliverNotification).toHaveBeenCalledWith('notification-otp-1');
     expect(result).toEqual(
       expect.objectContaining({
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
+        enrollmentId: 'challenge-otp-1',
+        status: 'pending_activation',
       }),
     );
   });

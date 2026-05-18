@@ -30,6 +30,15 @@ describe('JobOrdersController integration', () => {
         staffCode: 'TECH-2001',
       });
 
+      const qaReviewer = await seedAuthUser({
+        email: 'superadmin.joborders@example.com',
+        password: 'password123',
+        firstName: 'Sage',
+        lastName: 'Admin',
+        role: 'super_admin',
+        staffCode: 'SA-ADMIN-2002',
+      });
+
       const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
         email: adviser.email,
         password: 'password123',
@@ -42,39 +51,57 @@ describe('JobOrdersController integration', () => {
       });
       expect(technicianLogin.status).toBe(200);
 
+      const qaReviewerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: qaReviewer.email,
+        password: 'password123',
+      });
+      expect(qaReviewerLogin.status).toBe(200);
+
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const customerResponse = await request(app.getHttpServer()).post('/api/users').send({
+      const customer = await seedAuthUser({
         email: 'joborder.customer@example.com',
+        password: 'password123',
         firstName: 'Jamie',
         lastName: 'Customer',
       });
-      expect(customerResponse.status).toBe(201);
-
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerResponse.body.id,
-        plateNumber: 'JOB106',
-        make: 'Toyota',
-        model: 'Fortuner',
-        year: 2023,
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
       });
+      expect(customerLogin.status).toBe(200);
+
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          plateNumber: 'JOB106',
+          make: 'Toyota',
+          model: 'Fortuner',
+          year: 2023,
+        });
       expect(vehicleResponse.status).toBe(201);
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerResponse.body.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-05-05',
-        serviceIds: [servicesResponse.body[0].id],
-      });
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-05-05',
+          serviceIds: [servicesResponse.body[0].id],
+        });
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-JO-0001',
         });
       expect(confirmBookingResponse.status).toBe(200);
 
@@ -84,7 +111,7 @@ describe('JobOrdersController integration', () => {
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
-          customerUserId: customerResponse.body.id,
+          customerUserId: customer.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode,
@@ -140,6 +167,24 @@ describe('JobOrdersController integration', () => {
       expect(readyForQaResponse.status).toBe(200);
       expect(readyForQaResponse.body.status).toBe('ready_for_qa');
 
+      const addPhotoResponse = await request(app.getHttpServer())
+        .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
+        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .send({
+          fileName: 'diagnostics-overview.jpg',
+          fileUrl: 'https://files.example.com/job-orders/diagnostics-overview.jpg',
+          caption: 'Overview photo before QA handoff.',
+          linkedEntityType: 'work_item',
+          linkedEntityId: createJobOrderResponse.body.items[0].id,
+        });
+      expect(addPhotoResponse.status).toBe(200);
+      expect(addPhotoResponse.body.photos[0]).toEqual(
+        expect.objectContaining({
+          takenByUserId: technician.id,
+          fileName: 'diagnostics-overview.jpg',
+        }),
+      );
+
       const addProgressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
@@ -157,21 +202,14 @@ describe('JobOrdersController integration', () => {
       );
       expect(addProgressResponse.body.items[0].isCompleted).toBe(true);
 
-      const addPhotoResponse = await request(app.getHttpServer())
-        .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
-        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+      const qaVerdictResponse = await request(app.getHttpServer())
+        .patch(`/api/job-orders/${createJobOrderResponse.body.id}/qa/verdict`)
+        .set('Authorization', `Bearer ${qaReviewerLogin.body.accessToken}`)
         .send({
-          fileName: 'diagnostics-overview.jpg',
-          fileUrl: 'https://files.example.com/job-orders/diagnostics-overview.jpg',
-          caption: 'Overview photo before QA handoff.',
+          verdict: 'passed',
+          note: 'QA reviewer cleared this job order for invoice generation.',
         });
-      expect(addPhotoResponse.status).toBe(200);
-      expect(addPhotoResponse.body.photos[0]).toEqual(
-        expect.objectContaining({
-          takenByUserId: adviser.id,
-          fileName: 'diagnostics-overview.jpg',
-        }),
-      );
+      expect(qaVerdictResponse.status).toBe(200);
 
       const finalizeResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/finalize`)
@@ -198,7 +236,7 @@ describe('JobOrdersController integration', () => {
               jobOrderId: createJobOrderResponse.body.id,
               invoiceRecordId: finalizeResponse.body.invoiceRecord.id,
               invoiceReference: finalizeResponse.body.invoiceRecord.invoiceReference,
-              customerUserId: customerResponse.body.id,
+              customerUserId: customer.id,
               vehicleId: vehicleResponse.body.id,
               serviceAdviserUserId: adviser.id,
             }),
@@ -234,7 +272,7 @@ describe('JobOrdersController integration', () => {
               jobOrderId: createJobOrderResponse.body.id,
               invoiceRecordId: finalizeResponse.body.invoiceRecord.id,
               invoiceReference: finalizeResponse.body.invoiceRecord.invoiceReference,
-              customerUserId: customerResponse.body.id,
+              customerUserId: customer.id,
               amountPaidCents: 159900,
               settlementStatus: 'paid',
               paymentMethod: 'cash',
@@ -282,36 +320,48 @@ describe('JobOrdersController integration', () => {
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const customerResponse = await request(app.getHttpServer()).post('/api/users').send({
+      const customer = await seedAuthUser({
         email: 'handoff.customer@example.com',
+        password: 'password123',
         firstName: 'Cora',
         lastName: 'Confirmed',
       });
-      expect(customerResponse.status).toBe(201);
-
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerResponse.body.id,
-        plateNumber: 'HND123',
-        make: 'Honda',
-        model: 'City',
-        year: 2024,
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
       });
+      expect(customerLogin.status).toBe(200);
+
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          plateNumber: 'HND123',
+          make: 'Honda',
+          model: 'City',
+          year: 2024,
+        });
       expect(vehicleResponse.status).toBe(201);
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerResponse.body.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-05-07',
-        serviceIds: [servicesResponse.body[0].id],
-      });
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-05-07',
+          serviceIds: [servicesResponse.body[0].id],
+        });
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-HANDOFF-0001',
         });
       expect(confirmBookingResponse.status).toBe(200);
 
@@ -343,7 +393,7 @@ describe('JobOrdersController integration', () => {
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
-          customerUserId: customerResponse.body.id,
+          customerUserId: customer.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode,
@@ -418,36 +468,48 @@ describe('JobOrdersController integration', () => {
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const customerResponse = await request(app.getHttpServer()).post('/api/users').send({
+      const customer = await seedAuthUser({
         email: 'joborder.reassign.customer@example.com',
+        password: 'password123',
         firstName: 'Robin',
         lastName: 'Customer',
       });
-      expect(customerResponse.status).toBe(201);
-
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerResponse.body.id,
-        plateNumber: 'JOB207',
-        make: 'Honda',
-        model: 'Civic',
-        year: 2024,
+      const customerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: customer.email,
+        password: 'password123',
       });
+      expect(customerLogin.status).toBe(200);
+
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          plateNumber: 'JOB207',
+          make: 'Honda',
+          model: 'Civic',
+          year: 2024,
+        });
       expect(vehicleResponse.status).toBe(201);
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerResponse.body.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-05-08',
-        serviceIds: [servicesResponse.body[0].id],
-      });
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-05-08',
+          serviceIds: [servicesResponse.body[0].id],
+        });
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-REASSIGN-0001',
         });
       expect(confirmBookingResponse.status).toBe(200);
 
@@ -457,7 +519,7 @@ describe('JobOrdersController integration', () => {
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
-          customerUserId: customerResponse.body.id,
+          customerUserId: customer.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode,
@@ -553,27 +615,34 @@ describe('JobOrdersController integration', () => {
       });
       expect(customerLogin.status).toBe(200);
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerUser.id,
-        plateNumber: 'JOBDUP',
-        make: 'Honda',
-        model: 'Civic',
-        year: 2022,
-      });
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customerUser.id,
+          plateNumber: 'JOBDUP',
+          make: 'Honda',
+          model: 'Civic',
+          year: 2022,
+        });
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerUser.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-05-06',
-        serviceIds: [servicesResponse.body[0].id],
-      });
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customerUser.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-05-06',
+          serviceIds: [servicesResponse.body[0].id],
+        });
 
       await request(app.getHttpServer())
-        .patch(`/api/bookings/${bookingResponse.body.id}/status`)
+        .patch(`/api/bookings/${bookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-DUP-0001',
         });
 
       const createJobOrderResponse = await request(app.getHttpServer())

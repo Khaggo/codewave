@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class UploadJobOrderPhotoDto {
   @ApiPropertyOptional({
@@ -24,4 +24,12 @@ export class UploadJobOrderPhotoDto {
   @IsOptional()
   @IsUUID()
   linkedEntityId?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-05-18T08:30:00.000Z',
+    description: 'Optimistic concurrency token from the latest loaded job-order detail.',
+  })
+  @IsOptional()
+  @IsDateString()
+  expectedUpdatedAt?: string;
 }

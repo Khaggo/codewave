@@ -33,6 +33,7 @@ export interface UpdateBackJobStatusRequest {
   returnInspectionId?: string;
   reviewNotes?: string;
   resolutionNotes?: string;
+  expectedUpdatedAt?: string;
 }
 
 export const backJobsRoutes: Record<string, RouteContract> = {

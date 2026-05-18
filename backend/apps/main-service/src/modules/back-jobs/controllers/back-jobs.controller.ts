@@ -30,7 +30,7 @@ export class BackJobsController {
 
   @Post('back-jobs')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('service_adviser', 'super_admin')
+  @Roles('head_technician', 'service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Create a reviewed back-job case tied to previous service history.' })
   @ApiBearerAuth('access-token')
   @ApiCreatedResponse({
@@ -39,7 +39,7 @@ export class BackJobsController {
   })
   @ApiBadRequestResponse({ description: 'The back-job payload is invalid.' })
   @ApiConflictResponse({ description: 'The submitted lineage, vehicle ownership, or review evidence is invalid.' })
-  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can open back-job cases.' })
+  @ApiForbiddenResponse({ description: 'Only head technicians, service advisers, or super admins can open back-job cases.' })
   @ApiNotFoundResponse({ description: 'Customer, vehicle, original job order, or inspection not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   create(@Body() payload: CreateBackJobDto, @Req() request: Request) {
@@ -48,7 +48,7 @@ export class BackJobsController {
 
   @Get('back-jobs/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('customer', 'service_adviser', 'super_admin')
+  @Roles('customer', 'head_technician', 'service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Get a back-job case by id.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
@@ -70,7 +70,7 @@ export class BackJobsController {
   @Patch('back-jobs/:id/status')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('service_adviser', 'super_admin')
+  @Roles('head_technician', 'service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Advance back-job review and rework statuses with explicit evidence checks.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
@@ -84,7 +84,7 @@ export class BackJobsController {
   })
   @ApiBadRequestResponse({ description: 'The back-job status payload is invalid.' })
   @ApiConflictResponse({ description: 'The requested back-job transition or evidence linkage is not allowed.' })
-  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can review back-job status.' })
+  @ApiForbiddenResponse({ description: 'Only head technicians, service advisers, or super admins can review back-job status.' })
   @ApiNotFoundResponse({ description: 'Back job or related inspection not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   updateStatus(@Param('id') id: string, @Body() payload: UpdateBackJobStatusDto, @Req() request: Request) {
@@ -93,7 +93,7 @@ export class BackJobsController {
 
   @Get('vehicles/:id/back-jobs')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('customer', 'service_adviser', 'super_admin')
+  @Roles('customer', 'head_technician', 'service_adviser', 'super_admin')
   @ApiOperation({ summary: 'List back-job cases for a vehicle.' })
   @ApiBearerAuth('access-token')
   @ApiParam({

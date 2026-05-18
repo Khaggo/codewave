@@ -288,7 +288,9 @@ export default function BackJobsContent() {
           account.isActive &&
           (account.accountType === 'mechanic' ||
             account.accountType === 'technician' ||
-            account.role === 'technician'),
+            account.accountType === 'head_technician' ||
+            account.role === 'technician' ||
+            account.role === 'head_technician'),
       ),
     [staffAccounts],
   )
@@ -344,7 +346,7 @@ export default function BackJobsContent() {
     if (!canManage) {
       stateSetter({
         status: failedStatus,
-        message: 'Only service advisers and super admins can manage back-job review and rework.',
+        message: 'Only head technicians, service advisers, and super admins can manage back-job review and rework.',
       })
       return false
     }
@@ -539,6 +541,7 @@ export default function BackJobsContent() {
         returnInspectionId: statusDraft.returnInspectionId,
         reviewNotes: statusDraft.reviewNotes,
         resolutionNotes: statusDraft.resolutionNotes,
+        expectedUpdatedAt: activeBackJob.updatedAt,
         accessToken: user.accessToken,
       })
       syncActiveBackJob(updatedBackJob)
@@ -551,9 +554,27 @@ export default function BackJobsContent() {
       const message = String(error?.message ?? '').toLowerCase()
       if (error instanceof ApiError && error.status === 403) nextState = 'status_forbidden_role'
       if (error instanceof ApiError && error.status === 409) {
-        nextState = message.includes('inspection') || message.includes('evidence')
-          ? 'status_evidence_required'
-          : 'status_invalid_transition'
+        const isConcurrencyConflict = message.includes('already updated')
+        if (isConcurrencyConflict) {
+          try {
+            const refreshedBackJob = await getBackJobById({
+              backJobId: activeBackJob.id,
+              accessToken: user.accessToken,
+            })
+            syncActiveBackJob(refreshedBackJob)
+            setStatusState({
+              status: 'status_conflict',
+              message: 'Another staff member already updated this back-job. The latest record was reloaded.',
+            })
+            return
+          } catch {}
+        }
+
+        nextState = isConcurrencyConflict
+          ? 'status_conflict'
+          : message.includes('inspection') || message.includes('evidence')
+            ? 'status_evidence_required'
+            : 'status_invalid_transition'
       }
       setStatusState({
         status: nextState,
@@ -648,7 +669,7 @@ export default function BackJobsContent() {
           <div>
             <p className="text-lg font-bold text-ink-primary">Back-job review is staff-restricted</p>
             <p className="mt-1 text-sm text-ink-secondary">
-              Only service advisers and super admins can open, review, and resolve back-job cases.
+              Only head technicians, service advisers, and super admins can open, review, and resolve back-job cases.
             </p>
           </div>
         </div>

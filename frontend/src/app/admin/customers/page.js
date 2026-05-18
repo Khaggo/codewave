@@ -1,14 +1,24 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CarFront, MapPin, RefreshCw, ShieldAlert, UserRound } from 'lucide-react'
+import {
+  CarFront,
+  ChevronRight,
+  MapPin,
+  MoreHorizontal,
+  RefreshCw,
+  ShieldAlert,
+  UserRound,
+} from 'lucide-react'
 
+import PageHeader from '@/components/ui/PageHeader'
+import PortalLink from '@/components/PortalLink'
 import { ApiError, listAdminCustomers, updateAdminCustomerStatus } from '@/lib/authClient'
 import { useUser } from '@/lib/userContext'
-import PageHeader from '@/components/ui/PageHeader'
 
 import {
   buildAddressLabel,
+  buildVehicleDirectorySummary,
   buildVehicleLabel,
   filterCustomers,
   summarizeCustomers,
@@ -24,6 +34,27 @@ function MetricCard({ label, value, hint }) {
   )
 }
 
+function RowActionMenu({ customer, isUpdating, onToggleStatus }) {
+  return (
+    <details className="relative" onClick={(event) => event.stopPropagation()}>
+      <summary className="btn-ghost min-h-9 w-9 cursor-pointer list-none justify-center px-0">
+        <MoreHorizontal size={14} />
+      </summary>
+      <div className="absolute right-0 z-20 mt-2 min-w-[176px] rounded-2xl border border-surface-border bg-surface-card p-2 shadow-2xl">
+        <button
+          type="button"
+          onClick={() => onToggleStatus(customer)}
+          disabled={isUpdating}
+          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs text-ink-primary hover:bg-surface-raised disabled:opacity-60"
+        >
+          <RefreshCw size={13} className={isUpdating ? 'animate-spin' : ''} />
+          {customer.isActive ? 'Deactivate account' : 'Activate account'}
+        </button>
+      </div>
+    </details>
+  )
+}
+
 export default function AdminCustomersPage() {
   const user = useUser()
   const canReadCustomers = ['service_adviser', 'super_admin'].includes(user?.role)
@@ -31,6 +62,7 @@ export default function AdminCustomersPage() {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [vehicleFilter, setVehicleFilter] = useState('all')
+  const [selectedCustomerId, setSelectedCustomerId] = useState('')
   const [actionState, setActionState] = useState({ status: 'idle', customerId: '', message: '' })
 
   const loadCustomers = useCallback(async () => {
@@ -110,6 +142,25 @@ export default function AdminCustomersPage() {
     [query, state.customers, statusFilter, vehicleFilter],
   )
   const summary = useMemo(() => summarizeCustomers(state.customers), [state.customers])
+  const selectedCustomer = useMemo(
+    () => filteredCustomers.find((customer) => customer.id === selectedCustomerId) ?? filteredCustomers[0] ?? null,
+    [filteredCustomers, selectedCustomerId],
+  )
+
+  useEffect(() => {
+    if (!filteredCustomers.length) {
+      setSelectedCustomerId('')
+      return
+    }
+
+    setSelectedCustomerId((current) => {
+      if (current && filteredCustomers.some((customer) => customer.id === current)) {
+        return current
+      }
+
+      return filteredCustomers[0]?.id ?? ''
+    })
+  }, [filteredCustomers])
 
   if (!canReadCustomers) {
     return (
@@ -227,7 +278,7 @@ export default function AdminCustomersPage() {
             </p>
           </div>
           <div className="table-scroll">
-            <table className="data-table min-w-[1080px]">
+            <table className="data-table min-w-[960px]">
               <thead>
                 <tr>
                   <th>Customer</th>
@@ -243,61 +294,58 @@ export default function AdminCustomersPage() {
                   const profile = customer.profile ?? {}
                   const vehicles = customer.vehicles ?? []
                   const address = customer.defaultAddress ?? customer.addresses?.[0] ?? null
+                  const vehicleSummary = buildVehicleDirectorySummary(vehicles)
                   const isUpdating =
                     actionState.status === 'loading' && actionState.customerId === customer.id
+                  const isSelected = selectedCustomer?.id === customer.id
 
                   return (
-                    <tr key={customer.id}>
+                    <tr
+                      key={customer.id}
+                      onClick={() => setSelectedCustomerId(customer.id)}
+                      className={isSelected ? 'bg-brand-orange/5' : ''}
+                    >
                       <td>
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
-                            <UserRound size={18} />
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCustomerId(customer.id)}
+                          className="flex w-full items-start gap-3 text-left"
+                        >
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
+                            <UserRound size={15} />
                           </div>
                           <div className="min-w-0">
                             <p className="font-semibold text-ink-primary">{customer.displayName}</p>
-                            <p className="mt-1 text-xs text-ink-secondary">{customer.email}</p>
+                            <p className="mt-0.5 truncate text-xs text-ink-secondary">{customer.email}</p>
                           </div>
-                        </div>
+                          <ChevronRight size={14} className="ml-auto mt-1 shrink-0 text-ink-muted" />
+                        </button>
                       </td>
                       <td className="text-xs text-ink-secondary">
-                        <p>{profile.phone || 'No phone number saved'}</p>
-                        <p className="mt-1 text-ink-muted">
-                          Birthday: {profile.birthday || 'Not provided'}
+                        <p>{profile.phone || 'No phone'}</p>
+                        <p className="mt-0.5 text-ink-muted">
+                          Birthday: {profile.birthday || 'No birthday'}
                         </p>
                       </td>
                       <td>
-                        <div className="max-w-[240px]">
-                          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-ink-secondary">
+                        <div className="max-w-[220px]">
+                          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
                             <MapPin size={13} className="text-brand-orange" />
                             Primary address
                           </div>
-                          <p className="text-xs leading-6 text-ink-secondary">{buildAddressLabel(address)}</p>
+                          <p className="text-xs leading-5 text-ink-secondary">{buildAddressLabel(address)}</p>
                         </div>
                       </td>
                       <td>
-                        {vehicles.length ? (
-                          <div className="space-y-2">
-                            {vehicles.slice(0, 2).map((vehicle) => (
-                              <div key={vehicle.id} className="rounded-xl border border-surface-border bg-surface-raised/70 px-3 py-2.5">
-                                <div className="flex items-center gap-2 text-xs font-semibold text-ink-primary">
-                                  <CarFront size={13} className="text-brand-orange" />
-                                  <span>{buildVehicleLabel(vehicle)}</span>
-                                </div>
-                                <p className="mt-1 text-[11px] text-ink-muted">
-                                  Plate: {vehicle.plateNumber || 'Not provided'}
-                                  {vehicle.color ? ` • ${vehicle.color}` : ''}
-                                </p>
-                              </div>
-                            ))}
-                            {vehicles.length > 2 ? (
-                              <p className="text-[11px] text-ink-muted">
-                                +{vehicles.length - 2} more vehicle{vehicles.length - 2 === 1 ? '' : 's'}
-                              </p>
-                            ) : null}
+                        <div className="max-w-[220px] rounded-xl border border-surface-border bg-surface-raised/70 px-3 py-2.5">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-ink-primary">
+                            <CarFront size={13} className="text-brand-orange" />
+                            <span>{vehicleSummary.primary}</span>
                           </div>
-                        ) : (
-                          <p className="text-xs text-ink-muted">No linked vehicles yet</p>
-                        )}
+                          {vehicleSummary.secondary ? (
+                            <p className="mt-1 text-[11px] text-ink-muted">{vehicleSummary.secondary}</p>
+                          ) : null}
+                        </div>
                       </td>
                       <td>
                         <span className={`badge ${customer.isActive ? 'badge-green' : 'badge-gray'}`}>
@@ -305,15 +353,20 @@ export default function AdminCustomersPage() {
                         </span>
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          onClick={() => onToggleStatus(customer)}
-                          disabled={isUpdating}
-                          className="btn-ghost min-h-10 min-w-[152px] justify-center px-4 text-xs"
-                        >
-                          <RefreshCw size={13} className={isUpdating ? 'animate-spin' : ''} />
-                          {customer.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCustomerId(customer.id)}
+                            className="btn-ghost min-h-9 px-3 text-xs"
+                          >
+                            Review
+                          </button>
+                          <RowActionMenu
+                            customer={customer}
+                            isUpdating={isUpdating}
+                            onToggleStatus={handleToggleStatus}
+                          />
+                        </div>
                       </td>
                     </tr>
                   )
@@ -330,6 +383,81 @@ export default function AdminCustomersPage() {
             Adjust the filters or search terms to find a different customer, or wait for new registrations and vehicle onboarding to appear.
           </p>
         </div>
+      ) : null}
+
+      {selectedCustomer ? (
+        <section className="ops-panel">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="card-title">Selected Customer</p>
+              <p className="mt-1 text-sm leading-6 text-ink-secondary">
+                Review the customer record first, then use secondary actions only when account access really needs to change.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <PortalLink href="/vehicles" className="btn-ghost">
+                <CarFront size={14} />
+                Open Vehicle View
+              </PortalLink>
+              <span className={`badge ${selectedCustomer.isActive ? 'badge-green' : 'badge-gray'}`}>
+                {selectedCustomer.isActive ? 'Account Active' : 'Account Inactive'}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Customer</p>
+                <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedCustomer.displayName}</p>
+                <p className="mt-1 text-xs text-ink-secondary">{selectedCustomer.email}</p>
+              </div>
+              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Contact</p>
+                <p className="mt-2 text-sm font-semibold text-ink-primary">{selectedCustomer.profile?.phone || 'No phone'}</p>
+                <p className="mt-1 text-xs text-ink-secondary">Birthday: {selectedCustomer.profile?.birthday || 'No birthday'}</p>
+              </div>
+              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3 md:col-span-2">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Primary Address</p>
+                <p className="mt-2 text-sm text-ink-primary">{buildAddressLabel(selectedCustomer.defaultAddress ?? selectedCustomer.addresses?.[0] ?? null)}</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+              <p className="text-sm font-bold text-ink-primary">Linked Vehicles</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                Vehicle details stay flatter here so service staff can scan the directory quickly.
+              </p>
+              <div className="mt-3 grid gap-2">
+                {(selectedCustomer.vehicles ?? []).length ? (
+                  selectedCustomer.vehicles.map((vehicle) => (
+                    <div
+                      key={vehicle.id}
+                      className="rounded-xl border border-surface-border bg-surface-raised px-3 py-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-ink-primary">{buildVehicleLabel(vehicle)}</p>
+                          <p className="mt-1 text-xs text-ink-secondary">
+                            {vehicle.plateNumber ? `Plate ${vehicle.plateNumber}` : 'No plate'}
+                            {vehicle.color ? ` • ${vehicle.color}` : ''}
+                          </p>
+                        </div>
+                        <span className={`badge ${vehicle.isActive ? 'badge-green' : 'badge-gray'}`}>
+                          {vehicle.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-dashed border-surface-border bg-surface-raised px-4 py-4 text-sm text-ink-secondary">
+                    No vehicle linked yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
       ) : null}
     </div>
   )

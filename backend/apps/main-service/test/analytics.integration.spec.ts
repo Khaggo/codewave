@@ -40,45 +40,62 @@ describe('AnalyticsController integration', () => {
         staffCode: 'ADMIN-7001',
       });
 
-      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
-        email: adviser.email,
+      const customer = await seedAuthUser({
+        email: 'analytics.customer@example.com',
         password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
       });
-      expect(adviserLogin.status).toBe(200);
 
-      const technicianLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
-        email: 'analytics.tech@example.com',
-        password: 'password123',
-      });
+      const [adviserLogin, technicianLogin, superAdminLogin, customerLogin] = await Promise.all([
+        request(app.getHttpServer()).post('/api/auth/login').send({
+          email: adviser.email,
+          password: 'password123',
+        }),
+        request(app.getHttpServer()).post('/api/auth/login').send({
+          email: technician.email,
+          password: 'password123',
+        }),
+        request(app.getHttpServer()).post('/api/auth/login').send({
+          email: superAdmin.email,
+          password: 'password123',
+        }),
+        request(app.getHttpServer()).post('/api/auth/login').send({
+          email: customer.email,
+          password: 'password123',
+        }),
+      ]);
+      expect(adviserLogin.status).toBe(200);
       expect(technicianLogin.status).toBe(200);
+      expect(superAdminLogin.status).toBe(200);
+      expect(customerLogin.status).toBe(200);
 
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const customerResponse = await request(app.getHttpServer()).post('/api/users').send({
-        email: 'analytics.customer@example.com',
-        firstName: 'Casey',
-        lastName: 'Customer',
-      });
-      expect(customerResponse.status).toBe(201);
-
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerResponse.body.id,
-        plateNumber: 'ANL113',
-        make: 'Toyota',
-        model: 'Vios',
-        year: 2023,
-      });
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          plateNumber: 'ANL113',
+          make: 'Toyota',
+          model: 'Vios',
+          year: 2023,
+        });
       expect(vehicleResponse.status).toBe(201);
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerResponse.body.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-07-14',
-        serviceIds: [servicesResponse.body[0].id],
-        notes: 'Engine rattle and oil-change follow-up.',
-      });
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-07-14',
+          serviceIds: [servicesResponse.body[0].id],
+          notes: 'Engine rattle and oil-change follow-up.',
+        });
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
@@ -96,7 +113,7 @@ describe('AnalyticsController integration', () => {
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
-          customerUserId: customerResponse.body.id,
+          customerUserId: customer.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode,
@@ -119,6 +136,18 @@ describe('AnalyticsController integration', () => {
         });
       expect(inProgressResponse.status).toBe(200);
 
+      const evidencePhotoResponse = await request(app.getHttpServer())
+        .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
+        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .send({
+          fileName: 'analytics-work-item.jpg',
+          fileUrl: 'https://files.example.com/job-orders/analytics-work-item.jpg',
+          caption: 'Evidence linked to the completed work item.',
+          linkedEntityType: 'work_item',
+          linkedEntityId: createJobOrderResponse.body.items[0].id,
+        });
+      expect(evidencePhotoResponse.status).toBe(200);
+
       const progressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
@@ -137,6 +166,15 @@ describe('AnalyticsController integration', () => {
         });
       expect(readyForQaResponse.status).toBe(200);
 
+      const qaVerdictResponse = await request(app.getHttpServer())
+        .patch(`/api/job-orders/${createJobOrderResponse.body.id}/qa/verdict`)
+        .set('Authorization', `Bearer ${superAdminLogin.body.accessToken}`)
+        .send({
+          verdict: 'passed',
+          note: 'Supervisor cleared the completed service for analytics reporting.',
+        });
+      expect(qaVerdictResponse.status).toBe(200);
+
       const finalizeResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/finalize`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
@@ -148,7 +186,7 @@ describe('AnalyticsController integration', () => {
       const insuranceService = app.get(InsuranceService);
       const insuranceInquiry = await insuranceService.create(
         {
-          userId: customerResponse.body.id,
+          userId: customer.id,
           vehicleId: vehicleResponse.body.id,
           inquiryType: 'comprehensive',
           subject: 'Windshield crack follow-up',
@@ -174,7 +212,7 @@ describe('AnalyticsController integration', () => {
       const backJobsService = app.get(BackJobsService);
       await backJobsService.create(
         {
-          customerUserId: customerResponse.body.id,
+          customerUserId: customer.id,
           vehicleId: vehicleResponse.body.id,
           originalBookingId: bookingResponse.body.id,
           originalJobOrderId: createJobOrderResponse.body.id,
@@ -215,7 +253,7 @@ describe('AnalyticsController integration', () => {
           jobOrderId: createJobOrderResponse.body.id,
           invoiceRecordId: finalizeResponse.body.invoiceRecord.id,
           invoiceReference: finalizeResponse.body.invoiceRecord.invoiceReference,
-          customerUserId: customerResponse.body.id,
+          customerUserId: customer.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode!,
@@ -244,7 +282,7 @@ describe('AnalyticsController integration', () => {
       );
       await loyaltyService.redeemReward(
         {
-          userId: customerResponse.body.id,
+          userId: customer.id,
           rewardId: reward.id,
           note: 'Analytics redemption seed.',
         },
@@ -256,7 +294,7 @@ describe('AnalyticsController integration', () => {
 
       const notificationsService = app.get(NotificationsService);
       await notificationsService.scheduleReminder({
-        userId: customerResponse.body.id,
+        userId: customer.id,
         reminderType: 'invoice_aging',
         channel: 'email',
         sourceType: 'invoice_payment',
@@ -391,7 +429,14 @@ describe('AnalyticsController integration', () => {
         staffCode: 'ADMIN-7101',
       });
 
-      const [adviserLogin, technicianLogin, superAdminLogin] = await Promise.all([
+      const customer = await seedAuthUser({
+        email: 'audittrail.customer@example.com',
+        password: 'password123',
+        firstName: 'Casey',
+        lastName: 'Customer',
+      });
+
+      const [adviserLogin, technicianLogin, superAdminLogin, customerLogin] = await Promise.all([
         request(app.getHttpServer()).post('/api/auth/login').send({
           email: adviser.email,
           password: 'password123',
@@ -404,10 +449,15 @@ describe('AnalyticsController integration', () => {
           email: superAdmin.email,
           password: 'password123',
         }),
+        request(app.getHttpServer()).post('/api/auth/login').send({
+          email: customer.email,
+          password: 'password123',
+        }),
       ]);
       expect(adviserLogin.status).toBe(200);
       expect(technicianLogin.status).toBe(200);
       expect(superAdminLogin.status).toBe(200);
+      expect(customerLogin.status).toBe(200);
 
       const createStaffResponse = await request(app.getHttpServer())
         .post('/api/admin/staff-accounts')
@@ -425,30 +475,29 @@ describe('AnalyticsController integration', () => {
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const customerResponse = await request(app.getHttpServer()).post('/api/users').send({
-        email: 'audittrail.customer@example.com',
-        firstName: 'Casey',
-        lastName: 'Customer',
-      });
-      expect(customerResponse.status).toBe(201);
-
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: customerResponse.body.id,
-        plateNumber: 'AUD408',
-        make: 'Toyota',
-        model: 'Hilux',
-        year: 2024,
-      });
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          plateNumber: 'AUD408',
+          make: 'Toyota',
+          model: 'Hilux',
+          year: 2024,
+        });
       expect(vehicleResponse.status).toBe(201);
 
-      const bookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: customerResponse.body.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-07-15',
-        serviceIds: [servicesResponse.body[0].id],
-        notes: 'Brake line leak concern before customer release.',
-      });
+      const bookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-07-15',
+          serviceIds: [servicesResponse.body[0].id],
+          notes: 'Brake line leak concern before customer release.',
+        });
       expect(bookingResponse.status).toBe(201);
 
       const confirmBookingResponse = await request(app.getHttpServer())
@@ -466,7 +515,7 @@ describe('AnalyticsController integration', () => {
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
-          customerUserId: customerResponse.body.id,
+          customerUserId: customer.id,
           vehicleId: vehicleResponse.body.id,
           serviceAdviserUserId: adviser.id,
           serviceAdviserCode: adviser.staffCode,
@@ -481,14 +530,27 @@ describe('AnalyticsController integration', () => {
         });
       expect(createJobOrderResponse.status).toBe(201);
 
-      await request(app.getHttpServer())
+      const inProgressResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
         .send({
           status: 'in_progress',
         });
+      expect(inProgressResponse.status).toBe(200);
 
-      await request(app.getHttpServer())
+      const evidencePhotoResponse = await request(app.getHttpServer())
+        .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
+        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .send({
+          fileName: 'audit-trail-work-item.jpg',
+          fileUrl: 'https://files.example.com/job-orders/audit-trail-work-item.jpg',
+          caption: 'Evidence attached before QA review.',
+          linkedEntityType: 'work_item',
+          linkedEntityId: createJobOrderResponse.body.items[0].id,
+        });
+      expect(evidencePhotoResponse.status).toBe(200);
+
+      const progressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
         .send({
@@ -496,9 +558,11 @@ describe('AnalyticsController integration', () => {
           message: 'Startup vibration check completed and sent to QA.',
           completedItemIds: [createJobOrderResponse.body.items[0].id],
         });
+      expect(progressResponse.status).toBe(200);
 
       const completionInspectionResponse = await request(app.getHttpServer())
         .post(`/api/vehicles/${vehicleResponse.body.id}/inspections`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           bookingId: bookingResponse.body.id,
           inspectionType: 'completion',
@@ -516,18 +580,29 @@ describe('AnalyticsController integration', () => {
         });
       expect(completionInspectionResponse.status).toBe(201);
 
-      await request(app.getHttpServer())
+      const readyForQaResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
         .send({
           status: 'ready_for_qa',
         });
+      expect(readyForQaResponse.status).toBe(200);
 
       const qaResponse = await request(app.getHttpServer())
         .get(`/api/job-orders/${createJobOrderResponse.body.id}/qa`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
       expect(qaResponse.status).toBe(200);
-      expect(qaResponse.body.status).toBe('blocked');
+      expect(qaResponse.body.status).toBe('pending_review');
+
+      const blockedVerdictResponse = await request(app.getHttpServer())
+        .patch(`/api/job-orders/${createJobOrderResponse.body.id}/qa/verdict`)
+        .set('Authorization', `Bearer ${superAdminLogin.body.accessToken}`)
+        .send({
+          verdict: 'blocked',
+          note: 'Supervisor confirmed the unresolved completion inspection before override.',
+        });
+      expect(blockedVerdictResponse.status).toBe(200);
+      expect(blockedVerdictResponse.body.status).toBe('blocked');
 
       const overrideResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/qa/override`)

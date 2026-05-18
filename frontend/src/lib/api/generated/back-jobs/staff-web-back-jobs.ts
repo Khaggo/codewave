@@ -1,7 +1,7 @@
 import type { BackJobStatus } from './requests';
 import type { BackJobResponse } from './responses';
 
-export type StaffBackJobReviewRole = 'service_adviser' | 'super_admin';
+export type StaffBackJobReviewRole = 'head_technician' | 'service_adviser' | 'super_admin';
 
 export type StaffBackJobLoadState =
   | 'back_jobs_ready'
@@ -50,6 +50,7 @@ export interface StaffBackJobRule<TState extends string> {
 }
 
 export const staffBackJobReviewRoles: StaffBackJobReviewRole[] = [
+  'head_technician',
   'service_adviser',
   'super_admin',
 ];

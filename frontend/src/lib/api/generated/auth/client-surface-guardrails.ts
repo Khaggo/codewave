@@ -14,6 +14,7 @@ import {
 export type CanonicalClientRole =
   | 'customer'
   | 'technician'
+  | 'head_technician'
   | 'service_adviser'
   | 'super_admin';
 
@@ -152,6 +153,24 @@ export const clientSurfaceNavigationMatrix: ClientSurfaceNavigationMatrixEntry[]
     navigationTargets: [],
     notes:
       'Technician identities must not open customer-owned mobile account surfaces.',
+  },
+  {
+    role: 'head_technician',
+    surface: 'staff-admin-web',
+    access: 'allowed',
+    navigationTargets: getStaffPortalNavigationForRole('head_technician').map(
+      (entry) => entry.href,
+    ),
+    notes:
+      'Head technicians may use technician workspaces plus QA review routes inside the staff web portal.',
+  },
+  {
+    role: 'head_technician',
+    surface: 'customer-mobile',
+    access: 'blocked',
+    navigationTargets: [],
+    notes:
+      'Head-technician identities must not open customer-mobile protected routes.',
   },
   {
     role: 'service_adviser',

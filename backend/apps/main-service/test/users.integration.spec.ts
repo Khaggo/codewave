@@ -4,9 +4,23 @@ import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
 describe('UsersController integration', () => {
   it('creates, reads, and updates a user', async () => {
-    const { app } = await createMainServiceTestApp();
+    const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
+      await seedAuthUser({
+        email: 'adviser@example.com',
+        password: 'password123',
+        firstName: 'Ava',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-1001',
+      });
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: 'adviser@example.com',
+        password: 'password123',
+      });
+      const adviserAuthHeader = { Authorization: `Bearer ${adviserLogin.body.accessToken}` };
+
       const createResponse = await request(app.getHttpServer()).post('/api/users').send({
         email: 'customer@example.com',
         firstName: 'Jane',
@@ -23,12 +37,15 @@ describe('UsersController integration', () => {
         }),
       );
 
-      const readResponse = await request(app.getHttpServer()).get(`/api/users/${createResponse.body.id}`);
+      const readResponse = await request(app.getHttpServer())
+        .get(`/api/users/${createResponse.body.id}`)
+        .set(adviserAuthHeader);
       expect(readResponse.status).toBe(200);
       expect(readResponse.body.email).toBe('customer@example.com');
 
       const updateResponse = await request(app.getHttpServer())
         .patch(`/api/users/${createResponse.body.id}`)
+        .set(adviserAuthHeader)
         .send({
           firstName: 'Janet',
           birthday: '1998-04-12',
@@ -44,9 +61,23 @@ describe('UsersController integration', () => {
   });
 
   it('rejects duplicate users, blocks public role escalation, returns not found for missing reads and wrong-address ownership, and switches default addresses', async () => {
-    const { app } = await createMainServiceTestApp();
+    const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
+      await seedAuthUser({
+        email: 'adviser@example.com',
+        password: 'password123',
+        firstName: 'Ava',
+        lastName: 'Adviser',
+        role: 'service_adviser',
+        staffCode: 'SA-1001',
+      });
+      const adviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: 'adviser@example.com',
+        password: 'password123',
+      });
+      const adviserAuthHeader = { Authorization: `Bearer ${adviserLogin.body.accessToken}` };
+
       const firstUser = await request(app.getHttpServer()).post('/api/users').send({
         email: 'customer@example.com',
         firstName: 'Jane',
@@ -73,11 +104,14 @@ describe('UsersController integration', () => {
       });
       expect(roleEscalationAttempt.status).toBe(400);
 
-      const missingUser = await request(app.getHttpServer()).get('/api/users/missing-user-id');
+      const missingUser = await request(app.getHttpServer())
+        .get('/api/users/missing-user-id')
+        .set(adviserAuthHeader);
       expect(missingUser.status).toBe(404);
 
       const firstAddress = await request(app.getHttpServer())
         .post(`/api/users/${firstUser.body.id}/addresses`)
+        .set(adviserAuthHeader)
         .send({
           label: 'Home',
           addressLine1: '123 AutoCare Street',
@@ -90,6 +124,7 @@ describe('UsersController integration', () => {
 
       const secondAddress = await request(app.getHttpServer())
         .post(`/api/users/${firstUser.body.id}/addresses`)
+        .set(adviserAuthHeader)
         .send({
           label: 'Office',
           addressLine1: '456 Service Road',
@@ -100,7 +135,9 @@ describe('UsersController integration', () => {
       expect(secondAddress.status).toBe(201);
       expect(secondAddress.body.isDefault).toBe(true);
 
-      const addressList = await request(app.getHttpServer()).get(`/api/users/${firstUser.body.id}/addresses`);
+      const addressList = await request(app.getHttpServer())
+        .get(`/api/users/${firstUser.body.id}/addresses`)
+        .set(adviserAuthHeader);
       expect(addressList.status).toBe(200);
       expect(addressList.body).toEqual(
         expect.arrayContaining([
@@ -117,6 +154,7 @@ describe('UsersController integration', () => {
 
       const wrongOwnerUpdate = await request(app.getHttpServer())
         .patch(`/api/users/${secondUser.body.id}/addresses/${firstAddress.body.id}`)
+        .set(adviserAuthHeader)
         .send({
           city: 'Pasig',
         });
@@ -124,6 +162,7 @@ describe('UsersController integration', () => {
 
       const forbiddenActivePatch = await request(app.getHttpServer())
         .patch(`/api/users/${firstUser.body.id}`)
+        .set(adviserAuthHeader)
         .send({
           isActive: false,
         });

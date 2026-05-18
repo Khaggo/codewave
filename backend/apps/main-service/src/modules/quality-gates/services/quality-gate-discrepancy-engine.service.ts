@@ -236,8 +236,18 @@ export class QualityGateDiscrepancyEngineService {
     finding: QualityGateInspectionFindingInput,
     completedWorkTokens: string[],
   ) {
-    const findingTokens = tokenize([finding.category, finding.label, finding.notes ?? ''].join(' '));
-    return findingTokens.some((token) => completedWorkTokens.includes(token));
+    const completedWorkTokenSet = new Set(completedWorkTokens);
+    const findingTokens = Array.from(
+      new Set(tokenize([finding.category, finding.label, finding.notes ?? ''].join(' '))),
+    ).filter((token) => token.length >= 4);
+
+    if (findingTokens.length === 0) {
+      return false;
+    }
+
+    const overlapCount = findingTokens.filter((token) => completedWorkTokenSet.has(token)).length;
+    const requiredOverlap = Math.min(2, findingTokens.length);
+    return overlapCount >= requiredOverlap;
   }
 
   private createFinding(input: {

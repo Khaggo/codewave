@@ -187,7 +187,8 @@ export default function Dashboard() {
   const user = useUser()
   const [state, setState] = useState(createInitialState)
   const firstName = user?.name?.split(' ')[0] ?? 'Staff'
-  const isTechnician = user?.role === 'technician'
+  const isTechnician = ['technician', 'head_technician'].includes(user?.role)
+  const isHeadTechnician = user?.role === 'head_technician'
 
   const visibleAdminShortcuts = useMemo(
     () => adminShortcuts.filter((item) => !item.superAdminOnly || user?.role === 'super_admin'),
@@ -209,13 +210,28 @@ export default function Dashboard() {
     setState((currentState) => ({ ...currentState, status: 'loading', errorMessage: '' }))
 
     try {
+      const workbenchPromise = listJobOrderWorkbenchSummaries({
+        accessToken: user.accessToken,
+        month: getCurrentMonthKey(),
+      })
+
+      if (isTechnician) {
+        const workbenchSummaries = await workbenchPromise
+
+        setState({
+          status: 'ready',
+          dashboardAnalytics: null,
+          operationsAnalytics: null,
+          workbenchSummaries,
+          errorMessage: '',
+        })
+        return
+      }
+
       const [dashboardAnalytics, operationsAnalytics, workbenchSummaries] = await Promise.all([
         getDashboardAnalytics(user.accessToken),
         getOperationsAnalytics(user.accessToken),
-        listJobOrderWorkbenchSummaries({
-          accessToken: user.accessToken,
-          month: getCurrentMonthKey(),
-        }),
+        workbenchPromise,
       ])
 
       setState({
@@ -241,7 +257,7 @@ export default function Dashboard() {
         errorMessage: message,
       })
     }
-  }, [user?.accessToken])
+  }, [isTechnician, user?.accessToken])
 
   useEffect(() => {
     void loadDashboard()
@@ -283,7 +299,7 @@ export default function Dashboard() {
     return (
       <div className="ops-page-shell">
         <PageHeader
-          eyebrow="Technician Workspace"
+          eyebrow={isHeadTechnician ? 'Head Technician Workspace' : 'Technician Workspace'}
           title={`${getGreeting()}, ${firstName}`}
           description="Review assigned work and keep repair progress current."
           actions={
@@ -298,7 +314,7 @@ export default function Dashboard() {
         />
 
         <section className="ops-summary-grid">
-          <StatCard label="Assigned job orders" value={technicianQueue.length} description="Live work currently in your technician queue." />
+          <StatCard label="Assigned job orders" value={technicianQueue.length} description="Live work currently in your workshop queue." />
           <StatCard label="In progress" value={activeRepairs} description="Repairs awaiting progress or completion updates." />
           <StatCard label="Ready to start" value={readyToStartCount} description="Confirmed work ready for workshop execution." />
           <StatCard label="Blocked" value={blockedCount} description="Work waiting on parts, approval, or QA resolution." />
@@ -306,7 +322,7 @@ export default function Dashboard() {
 
         {state.status === 'error' ? (
           <EmptyPanel
-            title="Unable to load technician work"
+            title="Unable to load workshop assignments"
             body={state.errorMessage}
             action={
               <button type="button" onClick={() => void loadDashboard()} className="btn-primary">

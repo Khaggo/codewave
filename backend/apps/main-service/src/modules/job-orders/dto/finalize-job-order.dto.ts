@@ -43,4 +43,12 @@ export class FinalizeJobOrderDto {
   @IsOptional()
   @IsDateString()
   receivedAt?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-05-18T08:30:00.000Z',
+    description: 'Optimistic concurrency token from the latest loaded job-order detail.',
+  })
+  @IsOptional()
+  @IsDateString()
+  expectedUpdatedAt?: string;
 }

@@ -29,8 +29,8 @@ export class ChatbotController {
 
   @Post('chatbot/messages')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('customer', 'technician', 'service_adviser', 'super_admin')
-  @ApiOperation({ summary: 'Route a chatbot prompt through deterministic FAQ and lookup rules.' })
+  @Roles('customer')
+  @ApiOperation({ summary: 'Route a customer mobile support prompt through the live assistant with grounded account context.' })
   @ApiBearerAuth('access-token')
   @ApiCreatedResponse({
     description: 'The chatbot message was processed and recorded.',
@@ -60,7 +60,7 @@ export class ChatbotController {
 
   @Post('chatbot/escalations')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('customer', 'technician', 'service_adviser', 'super_admin')
+  @Roles('customer')
   @ApiOperation({ summary: 'Open a manual chatbot escalation for a prompt that needs staff follow-up.' })
   @ApiBearerAuth('access-token')
   @ApiCreatedResponse({

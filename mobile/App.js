@@ -38,7 +38,10 @@ import {
   verifyDeleteAccountOtp,
   verifyRegistrationOtp,
 } from './src/lib/authClient';
-import { getMobileAppSessionAccessState } from './src/lib/mobileSessionAccess';
+import {
+  assertMobileAppSessionAllowed,
+  getMobileAppSessionAccessState,
+} from './src/lib/mobileSessionAccess';
 import { cloneDate, formatVehicleDisplayName } from './src/utils/validation';
 import { colors } from './src/theme';
 import { ThemeProvider } from './src/theme/ThemeProvider';
@@ -1040,19 +1043,7 @@ export default function App() {
       password,
       existingAccount: registeredAccount,
     });
-    const accessState = getCustomerMobileSessionAccessState(nextAccount);
-
-    if (accessState !== 'customer_session_active') {
-      throw new ApiError(
-        customerMobileGuardMessages[accessState] ??
-          customerMobileGuardMessages.staff_session_blocked,
-        accessState === 'unauthorized_session' ? 401 : 403,
-        {
-          reason: accessState,
-          surface: 'customer-mobile',
-        },
-      );
-    }
+    const accessState = assertMobileAppSessionAllowed(nextAccount);
 
     rememberKnownAccount(nextAccount);
     setActiveAccount(nextAccount);

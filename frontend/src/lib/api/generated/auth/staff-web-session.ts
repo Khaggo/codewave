@@ -317,7 +317,12 @@ export const staffPortalStateRules: StaffPortalStateRule[] = [
 export const staffPortalStateMessages: Record<
   Exclude<
     StaffPortalAccessState,
-    'login_submitting' | 'session_restoring' | 'technician_session_active' | 'service_adviser_session_active' | 'super_admin_session_active'
+    | 'login_submitting'
+    | 'session_restoring'
+    | 'technician_session_active'
+    | 'head_technician_session_active'
+    | 'service_adviser_session_active'
+    | 'super_admin_session_active'
   >,
   string
 > = {
@@ -368,7 +373,7 @@ export const staffPortalBlockedStateErrors: Record<
 };
 
 export const isStaffPortalRole = (role?: string | null): role is StaffPortalRole =>
-  role === 'technician' || role === 'service_adviser' || role === 'super_admin';
+  role === 'technician' || role === 'head_technician' || role === 'service_adviser' || role === 'super_admin';
 
 export const getStaffPortalAccessState = (sessionUser?: { role?: string | null; isActive?: boolean | null } | null): StaffPortalAccessState => {
   if (!sessionUser?.role) {
@@ -387,6 +392,10 @@ export const getStaffPortalAccessState = (sessionUser?: { role?: string | null; 
     return 'technician_session_active';
   }
 
+  if (sessionUser.role === 'head_technician') {
+    return 'head_technician_session_active';
+  }
+
   if (sessionUser.role === 'service_adviser') {
     return 'service_adviser_session_active';
   }
@@ -398,9 +407,13 @@ export const isActiveStaffPortalState = (
   state: StaffPortalAccessState,
 ): state is Extract<
   StaffPortalAccessState,
-  'technician_session_active' | 'service_adviser_session_active' | 'super_admin_session_active'
+  | 'technician_session_active'
+  | 'head_technician_session_active'
+  | 'service_adviser_session_active'
+  | 'super_admin_session_active'
 > =>
   state === 'technician_session_active' ||
+  state === 'head_technician_session_active' ||
   state === 'service_adviser_session_active' ||
   state === 'super_admin_session_active';
 

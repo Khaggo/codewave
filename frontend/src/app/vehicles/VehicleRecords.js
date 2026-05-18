@@ -40,7 +40,7 @@ export default function VehicleRecords() {
       <PageHeader
         eyebrow="Vehicle Records"
         title="Vehicle Directory"
-        description="Review owner-linked vehicle records, confirm active registration entries, and hand off directly to the customer directory when account details need attention."
+        description="Use this as the vehicle-first operations view, then jump to Customers & Vehicles when account access or broader profile detail needs attention."
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className="btn-ghost" onClick={() => reload()} disabled={loading}>

@@ -43,7 +43,7 @@ export class InspectionsController {
   constructor(private readonly inspectionsService: InspectionsService) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'service_adviser', 'super_admin')
+  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
   @Post('vehicles/:id/inspections')
   @ApiOperation({ summary: 'Create an inspection record for a vehicle.' })
   @ApiParam({
@@ -67,7 +67,7 @@ export class InspectionsController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'service_adviser', 'super_admin')
+  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
   @Post('vehicles/:id/inspections/photos/upload')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
@@ -115,7 +115,7 @@ export class InspectionsController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'service_adviser', 'super_admin')
+  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
   @Get('vehicles/:id/inspections')
   @ApiOperation({ summary: 'List inspections recorded for a vehicle.' })
   @ApiParam({

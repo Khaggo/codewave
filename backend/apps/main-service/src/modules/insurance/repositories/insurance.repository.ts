@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
@@ -237,8 +237,19 @@ export class InsuranceRepository extends BaseRepository {
           reviewedAt: payload.reviewedAt,
           updatedAt: new Date(),
         })
-        .where(eq(insuranceInquiries.id, id))
+        .where(
+          and(
+            eq(insuranceInquiries.id, id),
+            ...(payload.expectedUpdatedAt
+              ? [eq(insuranceInquiries.updatedAt, new Date(payload.expectedUpdatedAt))]
+              : []),
+          ),
+        )
         .returning();
+
+      if (!updatedInquiry && payload.expectedUpdatedAt) {
+        throw new ConflictException('Another staff member already updated this insurance case. Reload and try again.');
+      }
 
       this.assertFound(updatedInquiry, 'Insurance inquiry not found');
 
@@ -275,8 +286,19 @@ export class InsuranceRepository extends BaseRepository {
       const [updatedInquiry] = await tx
         .update(insuranceInquiries)
         .set(workflowPatch)
-        .where(eq(insuranceInquiries.id, id))
+        .where(
+          and(
+            eq(insuranceInquiries.id, id),
+            ...(payload.expectedUpdatedAt
+              ? [eq(insuranceInquiries.updatedAt, new Date(payload.expectedUpdatedAt))]
+              : []),
+          ),
+        )
         .returning();
+
+      if (!updatedInquiry && payload.expectedUpdatedAt) {
+        throw new ConflictException('Another staff member already updated this insurance case. Reload and try again.');
+      }
 
       this.assertFound(updatedInquiry, 'Insurance inquiry not found');
 

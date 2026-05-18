@@ -32,6 +32,14 @@ export type AppConfig = {
   google: {
     clientId?: string;
   };
+  openrouter: {
+    apiKey?: string;
+    model?: string;
+    baseUrl: string;
+    appName: string;
+    referer?: string;
+    requestTimeoutMs: number;
+  };
   mail: {
     apiKey?: string;
     fromEmail?: string;
@@ -160,6 +168,14 @@ export default (): AppConfig => {
     },
     google: {
       clientId: coalesceString(process.env.GOOGLE_CLIENT_ID),
+    },
+    openrouter: {
+      apiKey: coalesceString(process.env.OPENROUTER_API_KEY),
+      model: coalesceString(process.env.OPENROUTER_MODEL),
+      baseUrl: coalesceString(process.env.OPENROUTER_BASE_URL) ?? 'https://openrouter.ai/api/v1',
+      appName: coalesceString(process.env.OPENROUTER_APP_NAME) ?? 'AUTOCARE Codewave',
+      referer: coalesceString(process.env.OPENROUTER_REFERER),
+      requestTimeoutMs: toNumber(coalesceString(process.env.OPENROUTER_REQUEST_TIMEOUT_MS), 15000),
     },
     mail: {
       apiKey: coalesceString(process.env.RESEND_API_KEY),

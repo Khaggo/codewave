@@ -182,7 +182,7 @@ export default function Login({ onAuthenticated, initialError }) {
             </span>
           </h1>
           <p className="mt-5 text-base font-medium leading-relaxed max-w-md" style={{ color: 'rgba(255,255,255,0.60)' }}>
-            This web portal is for service advisers, technicians, and super admins. Customer accounts should use the mobile app instead.
+            This web portal is for technicians, head technicians, service advisers, and super admins. Customer accounts should use the mobile app instead.
           </p>
         </div>
 
@@ -217,7 +217,7 @@ export default function Login({ onAuthenticated, initialError }) {
       >
         <div className="w-full max-w-[390px]">
           <p className="text-xs font-bold uppercase tracking-[0.2em] mb-3" style={{ color: '#f07c00' }}>
-            Admin Access Portal
+            Staff & Admin Access Portal
           </p>
           <h2 className="text-3xl font-black text-white leading-tight">Login</h2>
 

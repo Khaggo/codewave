@@ -154,6 +154,7 @@ export const updateBackJobStatus = async ({
   returnInspectionId,
   reviewNotes,
   resolutionNotes,
+  expectedUpdatedAt,
 }) => {
   const normalizedBackJobId = trimOrUndefined(backJobId);
 
@@ -172,6 +173,7 @@ export const updateBackJobStatus = async ({
         returnInspectionId: trimOrUndefined(returnInspectionId),
         reviewNotes: trimOrUndefined(reviewNotes),
         resolutionNotes: trimOrUndefined(resolutionNotes),
+        expectedUpdatedAt: trimOrUndefined(expectedUpdatedAt),
       },
     }),
   );

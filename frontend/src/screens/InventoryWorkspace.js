@@ -157,7 +157,7 @@ export default function InventoryWorkspace() {
       <PageHeader
         eyebrow="Stock operations"
         title="Inventory"
-        description="Review the live ecommerce product directory and its current publication visibility."
+        description="Review catalog visibility against the current inventory-backed product set and spot records that still need stronger publish readiness."
         actions={refreshAction}
         meta={<span className="badge badge-gray">{loadState.replace('inventory_', '').replace(/_/g, ' ')}</span>}
       />

@@ -125,7 +125,7 @@ describe('ChatbotController integration', () => {
           responseType: 'lookup',
           lookup: expect.objectContaining({
             lookupType: 'booking_status',
-            status: 'pending',
+            status: 'pending_payment',
           }),
         }),
       );

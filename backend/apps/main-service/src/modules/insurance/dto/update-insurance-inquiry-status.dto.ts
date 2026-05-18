@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 import { insuranceInquiryStatusEnum } from '../schemas/insurance.schema';
 
@@ -19,4 +19,12 @@ export class UpdateInsuranceInquiryStatusDto {
   @IsString()
   @MaxLength(1000)
   reviewNotes?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-05-18T08:30:00.000Z',
+    description: 'Optimistic concurrency token from the latest loaded insurance inquiry detail.',
+  })
+  @IsOptional()
+  @IsDateString()
+  expectedUpdatedAt?: string;
 }

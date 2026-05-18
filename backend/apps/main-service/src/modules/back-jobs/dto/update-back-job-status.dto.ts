@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 import { backJobStatusEnum } from '../schemas/back-jobs.schema';
 
@@ -38,4 +38,12 @@ export class UpdateBackJobStatusDto {
   @IsString()
   @MaxLength(1000)
   resolutionNotes?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-05-18T08:30:00.000Z',
+    description: 'Optimistic concurrency token from the latest loaded back-job detail.',
+  })
+  @IsOptional()
+  @IsDateString()
+  expectedUpdatedAt?: string;
 }
