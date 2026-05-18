@@ -268,7 +268,6 @@ export const updateStaffPortalProfile = async ({
   accessToken,
   firstName,
   lastName,
-  phoneNumber,
 }) =>
   normalizeSessionUser(
     await request(`/api/users/${userId}`, {
@@ -279,7 +278,40 @@ export const updateStaffPortalProfile = async ({
       body: {
         firstName: String(firstName ?? '').trim() || undefined,
         lastName: String(lastName ?? '').trim() || undefined,
-        phone: normalizePhoneNumber(phoneNumber) || undefined,
+      },
+    }),
+  );
+
+export const requestStaffPhoneChangeOtp = async ({
+  accessToken,
+  phoneNumber,
+}) =>
+  request('/api/auth/staff/profile/phone/change/request', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: {
+      phone: normalizePhoneNumber(phoneNumber),
+    },
+  });
+
+export const confirmStaffPhoneChangeOtp = async ({
+  accessToken,
+  enrollmentId,
+  otp,
+  phoneNumber,
+}) =>
+  normalizeSessionUser(
+    await request('/api/auth/staff/profile/phone/change/confirm', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: {
+        enrollmentId,
+        otp: String(otp ?? '').trim(),
+        phone: normalizePhoneNumber(phoneNumber),
       },
     }),
   );

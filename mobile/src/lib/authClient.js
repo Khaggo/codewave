@@ -96,7 +96,7 @@ export const customerMobileGuardMessages = {
   unauthorized_session:
     'Sign in with a customer account before opening that mobile workspace.',
   staff_session_blocked:
-    'This mobile app is for customer accounts only. Staff roles should use the web portal.',
+    'This mobile app supports customer and workshop sessions. Other staff roles should use the web portal.',
   deactivated_customer_blocked:
     'This customer account is deactivated. Contact support if access should be restored.',
 };

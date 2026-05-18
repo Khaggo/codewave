@@ -16,6 +16,7 @@ import {
 
 import { Roles } from '../decorators/roles.decorator';
 import { ConfirmChangePasswordWithOtpDto } from '../dto/confirm-change-password-with-otp.dto';
+import { ConfirmStaffPhoneChangeWithOtpDto } from '../dto/confirm-staff-phone-change-with-otp.dto';
 import { CreateStaffAccountDto } from '../dto/create-staff-account.dto';
 import { DeleteAccountDto } from '../dto/delete-account.dto';
 import { DeleteAccountStartResponseDto } from '../dto/delete-account-start-response.dto';
@@ -29,6 +30,7 @@ import { GoogleSignupStartResponseDto } from '../dto/google-signup-start-respons
 import { LoginDto } from '../dto/login.dto';
 import { RequestChangePasswordOtpDto } from '../dto/request-change-password-otp.dto';
 import { RequestPasswordResetOtpDto } from '../dto/request-password-reset-otp.dto';
+import { RequestStaffPhoneChangeOtpDto } from '../dto/request-staff-phone-change-otp.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
 import { ResetPasswordWithOtpDto } from '../dto/reset-password-with-otp.dto';
@@ -207,6 +209,47 @@ export class AuthController {
     @Req() request: Request,
   ) {
     return this.authService.confirmChangePasswordWithOtp(
+      payload,
+      request.user as { userId: string; email: string; role: string },
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Post('auth/staff/profile/phone/change/request')
+  @ApiOperation({ summary: 'Send an email OTP before saving a new staff phone number.' })
+  @ApiBearerAuth('access-token')
+  @ApiCreatedResponse({
+    description: 'The phone-change OTP was sent successfully.',
+    type: GoogleSignupStartResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The phone-change payload is invalid.' })
+  @ApiUnauthorizedResponse({ description: 'Missing bearer token or the staff account is invalid.' })
+  requestStaffPhoneChangeOtp(@Body() payload: RequestStaffPhoneChangeOtpDto, @Req() request: Request) {
+    return this.authService.requestStaffPhoneChangeOtp(
+      payload,
+      request.user as { userId: string; email: string; role: string },
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Post('auth/staff/profile/phone/change/confirm')
+  @ApiOperation({ summary: 'Verify the phone-change OTP and save the new staff phone number.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'The staff profile was updated successfully.',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The phone-change OTP payload is invalid or expired.' })
+  @ApiConflictResponse({ description: 'The OTP has already been used.' })
+  @ApiUnauthorizedResponse({ description: 'Missing bearer token or the OTP does not belong to the authenticated staff account.' })
+  @HttpCode(HttpStatus.OK)
+  confirmStaffPhoneChangeWithOtp(
+    @Body() payload: ConfirmStaffPhoneChangeWithOtpDto,
+    @Req() request: Request,
+  ) {
+    return this.authService.confirmStaffPhoneChangeWithOtp(
       payload,
       request.user as { userId: string; email: string; role: string },
     );

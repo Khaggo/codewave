@@ -16,7 +16,7 @@ const buildSearchHaystack = (customer) =>
     .toLowerCase()
 
 export const buildAddressLabel = (address) => {
-  if (!address) return 'No address saved'
+  if (!address) return 'No address'
 
   return [address.addressLine1, address.addressLine2, address.city, address.province, address.postalCode]
     .map((part) => String(part ?? '').trim())
@@ -29,6 +29,24 @@ export const buildVehicleLabel = (vehicle) =>
     .map((part) => String(part ?? '').trim())
     .filter(Boolean)
     .join(' ') || vehicle?.plateNumber || 'Vehicle details pending'
+
+export const buildVehicleDirectorySummary = (vehicles = []) => {
+  if (!vehicles.length) {
+    return {
+      primary: 'No vehicle',
+      secondary: '',
+    }
+  }
+
+  const [firstVehicle] = vehicles
+  const baseLabel = buildVehicleLabel(firstVehicle)
+  const plateLabel = String(firstVehicle?.plateNumber ?? '').trim()
+
+  return {
+    primary: vehicles.length > 1 ? `${baseLabel} +${vehicles.length - 1}` : baseLabel,
+    secondary: plateLabel ? `Plate ${plateLabel}` : vehicles.length > 1 ? `${vehicles.length} vehicles linked` : '',
+  }
+}
 
 export const filterCustomers = (customers, { query = '', statusFilter = 'all', vehicleFilter = 'all' } = {}) => {
   const normalizedQuery = query.trim().toLowerCase()

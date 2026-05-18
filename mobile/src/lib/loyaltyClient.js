@@ -27,23 +27,23 @@ const transactionSourceMetadataMap = {
     crossServiceHint: 'This ledger row was added directly inside the loyalty system.',
   },
   purchase_payment: {
-    sourceLabel: 'Legacy ecommerce-linked entry',
+    sourceLabel: 'Paid ecommerce order',
     crossServiceHint:
-      'This is a historical or legacy loyalty-ledger row. Current customer loyalty meaning remains service-earned first, not ecommerce-order truth.',
+      'Ecommerce-earned points appear after the paid order reaches the loyalty ledger.',
   },
   purchase_reversal: {
-    sourceLabel: 'Legacy ecommerce-linked reversal',
+    sourceLabel: 'Ecommerce reversal',
     crossServiceHint:
-      'This is a legacy correction row and should not be treated as the current loyalty earning policy for customer mobile.',
+      'Ecommerce reversals are loyalty-ledger corrections and may post separately from store-order updates.',
   },
   reward_redemption: {
     sourceLabel: 'Reward redemption',
     crossServiceHint: 'Reward redemption is recorded directly in the loyalty ledger.',
   },
   service_invoice: {
-    sourceLabel: 'Legacy invoice-linked service entry',
+    sourceLabel: 'Service invoice entry',
     crossServiceHint:
-      'Current customer loyalty policy is paid-service first. Older invoice-linked loyalty rows should be treated as legacy ledger history.',
+      'Service-earned points appear after the paid service invoice reaches the loyalty ledger.',
   },
   service_payment: {
     sourceLabel: 'Paid service work',

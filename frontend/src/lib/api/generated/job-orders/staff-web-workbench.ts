@@ -4,7 +4,11 @@ import type { BookingResponse } from '../bookings/responses';
 import { jobOrdersRoutes, type CreateJobOrderItemRequest, type CreateJobOrderRequest, type JobOrderStatus } from './requests';
 import type { JobOrderResponse } from './responses';
 
-export type StaffJobOrderWorkbenchRole = Extract<StaffPortalRole, 'service_adviser' | 'super_admin'>;
+export type StaffJobOrderWorkbenchRole = Extract<
+  StaffPortalRole,
+  'technician' | 'head_technician' | 'service_adviser' | 'super_admin'
+>;
+export type StaffJobOrderCreateRole = Extract<StaffPortalRole, 'service_adviser' | 'super_admin'>;
 
 export type StaffJobOrderHandoffState =
   | 'handoff_loaded'
@@ -50,7 +54,7 @@ export interface StaffJobOrderCreateRule {
   surface: 'staff-admin-web';
   truth: 'synchronous-job-order-record' | 'client-guard';
   routeKey: 'createJobOrder';
-  allowedRoles: StaffJobOrderWorkbenchRole[];
+  allowedRoles: StaffJobOrderCreateRole[];
   description: string;
 }
 
@@ -100,6 +104,13 @@ export interface StaffJobOrderCreateDraft {
 }
 
 export const staffJobOrderWorkbenchRoles: StaffJobOrderWorkbenchRole[] = [
+  'technician',
+  'head_technician',
+  'service_adviser',
+  'super_admin',
+];
+
+export const staffJobOrderCreateRoles: StaffJobOrderCreateRole[] = [
   'service_adviser',
   'super_admin',
 ];
@@ -137,14 +148,14 @@ export const staffJobOrderHandoffRules: StaffJobOrderWorkbenchHandoffRule[] = [
     truth: 'client-guard',
     routeKey: 'getDailySchedule',
     allowedRoles: [],
-    description: 'Only service advisers and super admins may open the job-order workbench in the current web portal.',
+    description: 'Only staff portal workshop roles may open the job-order workbench in the current web portal.',
   },
   {
     state: 'handoff_load_failed',
     surface: 'staff-admin-web',
     truth: 'derived-booking-read-model',
     routeKey: 'getDailySchedule',
-    allowedRoles: staffJobOrderWorkbenchRoles,
+    allowedRoles: staffJobOrderCreateRoles,
     description: 'A non-classified API or network failure blocked booking handoff loading.',
   },
 ];
@@ -155,7 +166,7 @@ export const staffJobOrderCreateRules: StaffJobOrderCreateRule[] = [
     surface: 'staff-admin-web',
     truth: 'client-guard',
     routeKey: 'createJobOrder',
-    allowedRoles: staffJobOrderWorkbenchRoles,
+    allowedRoles: staffJobOrderCreateRoles,
     description: 'A confirmed or workshop-handoff booking is selected and the draft is ready for job-order creation.',
   },
   {
@@ -163,7 +174,7 @@ export const staffJobOrderCreateRules: StaffJobOrderCreateRule[] = [
     surface: 'staff-admin-web',
     truth: 'client-guard',
     routeKey: 'createJobOrder',
-    allowedRoles: staffJobOrderWorkbenchRoles,
+    allowedRoles: staffJobOrderCreateRoles,
     description: 'The create job-order request is in flight and duplicate submit should be blocked.',
   },
   {
@@ -171,7 +182,7 @@ export const staffJobOrderCreateRules: StaffJobOrderCreateRule[] = [
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'createJobOrder',
-    allowedRoles: staffJobOrderWorkbenchRoles,
+    allowedRoles: staffJobOrderCreateRoles,
     description: 'The backend accepted the booking handoff and returned the new job order.',
   },
   {
@@ -203,7 +214,7 @@ export const staffJobOrderCreateRules: StaffJobOrderCreateRule[] = [
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'createJobOrder',
-    allowedRoles: staffJobOrderWorkbenchRoles,
+    allowedRoles: staffJobOrderCreateRoles,
     description: 'A non-classified API or network failure blocked job-order creation.',
   },
 ];
@@ -214,7 +225,7 @@ export const staffJobOrderReadRules: StaffJobOrderReadRule[] = [
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'getJobOrderById',
-    allowedRoles: ['technician', 'service_adviser', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
     description: 'A job order was loaded for detail review from the live backend route.',
   },
   {
@@ -230,7 +241,7 @@ export const staffJobOrderReadRules: StaffJobOrderReadRule[] = [
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'getJobOrderById',
-    allowedRoles: ['technician', 'service_adviser', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
     description: 'The requested job order could not be found.',
   },
   {
@@ -238,7 +249,7 @@ export const staffJobOrderReadRules: StaffJobOrderReadRule[] = [
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'getJobOrderById',
-    allowedRoles: ['technician', 'service_adviser', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
     description: 'A non-classified API or network failure blocked job-order detail loading.',
   },
 ];
@@ -249,7 +260,7 @@ export const staffJobOrderStatusUpdateRules: StaffJobOrderStatusUpdateRule[] = [
     surface: 'staff-admin-web',
     truth: 'client-guard',
     routeKey: 'updateJobOrderStatus',
-    allowedRoles: ['technician', 'service_adviser', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
     description: 'A loaded job order is ready for a valid status transition.',
   },
   {
@@ -257,7 +268,7 @@ export const staffJobOrderStatusUpdateRules: StaffJobOrderStatusUpdateRule[] = [
     surface: 'staff-admin-web',
     truth: 'client-guard',
     routeKey: 'updateJobOrderStatus',
-    allowedRoles: ['technician', 'service_adviser', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
     description: 'The job-order status update is in flight and duplicate submit should be blocked.',
   },
   {
@@ -265,7 +276,7 @@ export const staffJobOrderStatusUpdateRules: StaffJobOrderStatusUpdateRule[] = [
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'updateJobOrderStatus',
-    allowedRoles: ['technician', 'service_adviser', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
     description: 'The backend accepted the job-order status transition and returned the updated record.',
   },
   {
@@ -281,7 +292,7 @@ export const staffJobOrderStatusUpdateRules: StaffJobOrderStatusUpdateRule[] = [
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'updateJobOrderStatus',
-    allowedRoles: ['technician', 'service_adviser', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
     description: 'The selected job order no longer exists.',
   },
   {
@@ -289,7 +300,7 @@ export const staffJobOrderStatusUpdateRules: StaffJobOrderStatusUpdateRule[] = [
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'updateJobOrderStatus',
-    allowedRoles: ['technician', 'service_adviser', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
     description: 'The requested job-order status transition is not allowed.',
   },
   {
@@ -297,7 +308,7 @@ export const staffJobOrderStatusUpdateRules: StaffJobOrderStatusUpdateRule[] = [
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'updateJobOrderStatus',
-    allowedRoles: ['technician', 'service_adviser', 'super_admin'],
+    allowedRoles: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
     description: 'A non-classified API or network failure blocked the job-order status update.',
   },
 ];

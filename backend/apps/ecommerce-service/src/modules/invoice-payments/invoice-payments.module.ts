@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 
 import { CommerceEventsModule } from '@shared/events/commerce-events.module';
 
@@ -8,7 +9,7 @@ import { InvoicePaymentsPaymongoService } from './services/invoice-payments-paym
 import { InvoicePaymentsService } from './services/invoice-payments.service';
 
 @Module({
-  imports: [CommerceEventsModule],
+  imports: [ConfigModule, CommerceEventsModule],
   controllers: [InvoicePaymentsController],
   providers: [InvoicePaymentsRepository, InvoicePaymentsPaymongoService, InvoicePaymentsService],
   exports: [InvoicePaymentsRepository, InvoicePaymentsService],

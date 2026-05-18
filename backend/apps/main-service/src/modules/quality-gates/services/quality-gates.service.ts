@@ -306,6 +306,13 @@ export class QualityGatesService {
       reason: payload.reason,
     });
 
+    if (jobOrder.status === 'in_progress' && gate.reviewerVerdict === 'blocked') {
+      await this.jobOrdersRepository.updateStatus(jobOrderId, {
+        status: 'ready_for_qa',
+        reason: payload.reason,
+      });
+    }
+
     const latestOverride = overriddenGate.overrides[0];
     if (latestOverride) {
       this.eventBus.publish('quality_gate.overridden', {

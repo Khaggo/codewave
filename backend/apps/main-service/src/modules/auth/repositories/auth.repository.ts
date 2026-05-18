@@ -148,7 +148,8 @@ export class AuthRepository extends BaseRepository {
       | 'staff_activation'
       | 'account_delete'
       | 'forgot_password'
-      | 'change_password';
+      | 'change_password'
+      | 'staff_phone_change';
     email: string;
     otpHash: string;
     expiresAt: Date;

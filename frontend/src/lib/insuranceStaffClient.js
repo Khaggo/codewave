@@ -371,6 +371,7 @@ export const updateInsuranceInquiryStatus = async ({
   inquiryId,
   status,
   reviewNotes,
+  expectedUpdatedAt,
   accessToken,
 }) => {
   if (!inquiryId) {
@@ -386,6 +387,7 @@ export const updateInsuranceInquiryStatus = async ({
       body: {
         status,
         reviewNotes: trimOrNull(reviewNotes) ?? undefined,
+        expectedUpdatedAt: trimOrNull(expectedUpdatedAt) ?? undefined,
       },
     }),
   );
@@ -443,6 +445,7 @@ export const updateInsuranceInquiryWorkflow = async ({
   renewalDueAt,
   assignedStaffId,
   reviewNotes,
+  expectedUpdatedAt,
   accessToken,
 }) => {
   if (!inquiryId) {
@@ -470,6 +473,7 @@ export const updateInsuranceInquiryWorkflow = async ({
         ...(normalizedRenewalDueAt !== undefined ? { renewalDueAt: normalizedRenewalDueAt } : {}),
         ...(normalizedAssignedStaffId !== undefined ? { assignedStaffId: normalizedAssignedStaffId } : {}),
         reviewNotes: trimOrNull(reviewNotes) ?? undefined,
+        expectedUpdatedAt: trimOrNull(expectedUpdatedAt) ?? undefined,
       },
     }),
   );

@@ -198,7 +198,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110A',
         make: 'Toyota',
@@ -339,7 +342,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleOneResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleOneResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerOneLogin.body.accessToken}`)
+        .send({
         userId: customerOne.id,
         plateNumber: 'INS110B',
         make: 'Honda',
@@ -431,7 +437,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110C',
         make: 'Toyota',
@@ -535,7 +544,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110C',
         make: 'Toyota',
@@ -622,7 +634,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110CA',
         make: 'Toyota',
@@ -695,7 +710,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110CD',
         make: 'Toyota',
@@ -755,7 +773,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110F',
         make: 'Toyota',
@@ -843,7 +864,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110F3',
         make: 'Toyota',
@@ -918,7 +942,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110F2',
         make: 'Toyota',
@@ -1000,7 +1027,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS4B01',
         make: 'Toyota',
@@ -1093,7 +1123,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110G',
         make: 'Toyota',
@@ -1180,7 +1213,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS4B02',
         make: 'Toyota',
@@ -1400,7 +1436,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110I',
         make: 'Toyota',
@@ -1497,7 +1536,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110J',
         make: 'Toyota',
@@ -1591,7 +1633,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110H',
         make: 'Toyota',
@@ -1663,7 +1708,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110D',
         make: 'Toyota',
@@ -1752,7 +1800,10 @@ describe('InsuranceController integration', () => {
         password: 'password123',
       });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
         userId: customer.id,
         plateNumber: 'INS110E',
         make: 'Toyota',

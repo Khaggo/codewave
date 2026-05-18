@@ -185,6 +185,7 @@ function PaymentEntries({ entries }) {
 export default function InvoiceOrderManagementWorkspace() {
   const user = useUser()
   const canRead = canStaffReadInvoiceOrderManagement(user)
+  const [activeMode, setActiveMode] = useState('service')
   const [jobOrderId, setJobOrderId] = useState('')
   const [jobOrderOptions, setJobOrderOptions] = useState([])
   const [customerOptions, setCustomerOptions] = useState([])
@@ -439,6 +440,7 @@ export default function InvoiceOrderManagementWorkspace() {
       serviceInvoice,
     ],
   )
+  const hasLookupData = activeMode === 'service' ? Boolean(jobOrderState.jobOrder) : Boolean(ecommerceOrder || ecommerceInvoice)
 
   if (!user?.accessToken) {
     return (
@@ -482,81 +484,112 @@ export default function InvoiceOrderManagementWorkspace() {
       />
 
       <section className="ops-control-strip">
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1fr)_auto]">
-          <label>
-            <span className="label">Service record</span>
-            <select
-              value={jobOrderId}
-              onChange={(event) => setJobOrderId(event.target.value)}
-              className="select"
+        <div className="space-y-4">
+          <div>
+            <p className="card-title">Lookup</p>
+            <p className="mt-1 text-sm leading-6 text-ink-muted">
+              Choose a billing mode first, then load one record at a time.
+            </p>
+          </div>
+
+          <div className="booking-segmented-control w-full max-w-[420px]">
+            <button
+              type="button"
+              onClick={() => setActiveMode('service')}
+              className={`booking-tab-button ${activeMode === 'service' ? 'booking-tab-button-active' : ''}`}
             >
-              <option value="">Choose a finalized job order</option>
-              {jobOrderOptions.map((jobOrder) => (
-                <option key={jobOrder.id} value={jobOrder.id}>
-                  JO-{jobOrder.id.slice(0, 8).toUpperCase()} / {formatLabel(jobOrder.status)} / {jobOrder.workDate ?? 'No date'}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={handleLoadServiceInvoice}
-            disabled={jobOrderState.status === 'invoice_order_loading'}
-            className="ops-action-primary xl:min-w-[148px] xl:self-end"
-          >
-            {jobOrderState.status === 'invoice_order_loading' ? (
-              <LoaderCircle size={14} className="animate-spin" />
-            ) : (
-              <Search size={14} />
-            )}
-            Load Service
-          </button>
-          <label>
-            <span className="label">Customer</span>
-            <select
-              value={selectedCustomerUserId}
-              onChange={(event) => {
-                setSelectedCustomerUserId(event.target.value)
-                setEcommerceOrderId('')
-              }}
-              className="select"
+              Service Invoices
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMode('order')}
+              className={`booking-tab-button ${activeMode === 'order' ? 'booking-tab-button-active' : ''}`}
             >
-              <option value="">Choose customer for order lookup</option>
-              {customerOptions.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.displayName} / {customer.email}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span className="label">Order record</span>
-            <select
-              value={ecommerceOrderId}
-              onChange={(event) => setEcommerceOrderId(event.target.value)}
-              className="select"
-            >
-              <option value="">{selectedCustomerUserId ? 'Choose ecommerce order' : 'Choose customer first'}</option>
-              {ecommerceOrderOptions.map((order) => (
-                <option key={order.id} value={order.id}>
-                  {order.orderNumber} / {formatLabel(order.status)} / {order.invoice?.statusLabel ?? 'No invoice'}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={handleLoadEcommerceOrder}
-            disabled={ecommerceState.status === 'invoice_order_loading'}
-            className="ops-action-primary xl:min-w-[148px] xl:self-end"
-          >
-            {ecommerceState.status === 'invoice_order_loading' ? (
-              <LoaderCircle size={14} className="animate-spin" />
-            ) : (
-              <Search size={14} />
-            )}
-            Load Order
-          </button>
+              Order Invoices
+            </button>
+          </div>
+
+          {activeMode === 'service' ? (
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+              <label>
+                <span className="label">Service record</span>
+                <select
+                  value={jobOrderId}
+                  onChange={(event) => setJobOrderId(event.target.value)}
+                  className="select"
+                >
+                  <option value="">Choose a finalized job order</option>
+                  {jobOrderOptions.map((jobOrder) => (
+                    <option key={jobOrder.id} value={jobOrder.id}>
+                      JO-{jobOrder.id.slice(0, 8).toUpperCase()} / {formatLabel(jobOrder.status)} / {jobOrder.workDate ?? 'No date'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={handleLoadServiceInvoice}
+                disabled={jobOrderState.status === 'invoice_order_loading'}
+                className="ops-action-primary xl:min-w-[148px] xl:self-end"
+              >
+                {jobOrderState.status === 'invoice_order_loading' ? (
+                  <LoaderCircle size={14} className="animate-spin" />
+                ) : (
+                  <Search size={14} />
+                )}
+                Load Service
+              </button>
+            </div>
+          ) : (
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_auto]">
+              <label>
+                <span className="label">Customer</span>
+                <select
+                  value={selectedCustomerUserId}
+                  onChange={(event) => {
+                    setSelectedCustomerUserId(event.target.value)
+                    setEcommerceOrderId('')
+                  }}
+                  className="select"
+                >
+                  <option value="">Choose customer for order lookup</option>
+                  {customerOptions.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.displayName} / {customer.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="label">Order record</span>
+                <select
+                  value={ecommerceOrderId}
+                  onChange={(event) => setEcommerceOrderId(event.target.value)}
+                  className="select"
+                >
+                  <option value="">{selectedCustomerUserId ? 'Choose ecommerce order' : 'Choose customer first'}</option>
+                  {ecommerceOrderOptions.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      {order.orderNumber} / {formatLabel(order.status)} / {order.invoice?.statusLabel ?? 'No invoice'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={handleLoadEcommerceOrder}
+                disabled={ecommerceState.status === 'invoice_order_loading'}
+                className="ops-action-primary xl:min-w-[148px] xl:self-end"
+              >
+                {ecommerceState.status === 'invoice_order_loading' ? (
+                  <LoaderCircle size={14} className="animate-spin" />
+                ) : (
+                  <Search size={14} />
+                )}
+                Load Order
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -564,42 +597,52 @@ export default function InvoiceOrderManagementWorkspace() {
         <div className="ops-panel">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="card-title">Invoice & Order Queue</p>
+              <p className="card-title">Lookup State</p>
               <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Focus on records that are ready for payment or invoice follow-through.
+                Keep one live summary in view while you work through invoice detail and payment history.
               </p>
             </div>
             <span className="badge badge-gray">{agingLoadLabel}</span>
           </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-3">
-            {queueCards.map((card) => {
-              const Icon = card.icon
+          {hasLookupData ? (
+            <div className="mt-4 grid gap-4 xl:grid-cols-3">
+              {queueCards.map((card) => {
+                const Icon = card.icon
 
-              return (
-                <div key={card.key} className="rounded-2xl border border-surface-border bg-surface-card p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">{card.label}</p>
-                      <p className="mt-2 text-sm font-semibold text-ink-primary">{card.status}</p>
+                return (
+                  <div key={card.key} className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">{card.label}</p>
+                        <p className="mt-2 text-sm font-semibold text-ink-primary">{card.status}</p>
+                      </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
+                        <Icon size={18} />
+                      </div>
                     </div>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
-                      <Icon size={18} />
-                    </div>
+                    <p className="mt-3 text-sm leading-6 text-ink-secondary">{card.body}</p>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-ink-secondary">{card.body}</p>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {queueCards.map((card) => (
+                <span key={card.key} className="badge badge-gray">
+                  {card.label}: {card.status}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="ops-panel">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="card-title">Invoice</p>
+              <p className="card-title">Invoice Detail</p>
               <p className="mt-1 text-sm leading-6 text-ink-muted">
-                Review the current invoice snapshot without leaving the completion queue.
+                Review the selected invoice snapshot without leaving this billing workspace.
               </p>
             </div>
             <span className="badge badge-gray">
@@ -693,7 +736,7 @@ export default function InvoiceOrderManagementWorkspace() {
         <div className="ops-panel">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="card-title">History</p>
+              <p className="card-title">Aging & Reminder History</p>
               <p className="mt-1 text-sm leading-6 text-ink-muted">
                 Review aging and reminder history.
               </p>

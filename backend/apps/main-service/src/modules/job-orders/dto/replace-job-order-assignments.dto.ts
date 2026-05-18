@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { ArrayUnique, IsArray, IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ArrayUnique, IsArray, IsDateString, IsOptional, IsUUID } from 'class-validator';
 
 export class ReplaceJobOrderAssignmentsDto {
   @ApiProperty({
@@ -11,4 +11,12 @@ export class ReplaceJobOrderAssignmentsDto {
   @ArrayUnique()
   @IsUUID(undefined, { each: true })
   assignedTechnicianIds!: string[];
+
+  @ApiPropertyOptional({
+    example: '2026-05-18T08:30:00.000Z',
+    description: 'Optimistic concurrency token from the latest loaded job-order detail.',
+  })
+  @IsOptional()
+  @IsDateString()
+  expectedUpdatedAt?: string;
 }

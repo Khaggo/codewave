@@ -127,8 +127,8 @@ export class JobOrdersService {
   async listAssignedToTechnician(actor: JobOrderActor) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
 
-    if (resolvedActor.role !== 'technician') {
-      throw new ForbiddenException('Only technicians can list their assigned job orders');
+    if (!['technician', 'head_technician'].includes(resolvedActor.role)) {
+      throw new ForbiddenException('Only technicians or head technicians can list their assigned job orders');
     }
 
     return this.jobOrdersRepository.findAssignedToTechnician(resolvedActor.id);
@@ -137,7 +137,7 @@ export class JobOrdersService {
   async listWorkbenchSummaries(actor: JobOrderActor, query: ListJobOrderWorkbenchQueryDto) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
     const summaries =
-      resolvedActor.role === 'technician'
+      ['technician', 'head_technician'].includes(resolvedActor.role)
         ? await this.jobOrdersRepository.findAssignedSummaries(resolvedActor.id)
         : await this.jobOrdersRepository.findAllSummaries();
     const allowedStatuses = this.resolveWorkbenchStatuses(query.scope);
@@ -183,6 +183,7 @@ export class JobOrdersService {
   }
 
   async listWorkbenchCalendar(actor: JobOrderActor, query: ListJobOrderWorkbenchQueryDto) {
+    await this.normalizePastDueOpenBookings();
     const summaries = await this.listWorkbenchSummaries(actor, query);
     const month = query.month;
 
@@ -220,8 +221,8 @@ export class JobOrdersService {
 
   async findByVehicleId(vehicleId: string, actor: JobOrderActor) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
-    if (!['service_adviser', 'super_admin'].includes(resolvedActor.role)) {
-      throw new ForbiddenException('Only service advisers or super admins can list vehicle job orders');
+    if (!['head_technician', 'service_adviser', 'super_admin'].includes(resolvedActor.role)) {
+      throw new ForbiddenException('Only head technicians, service advisers, or super admins can list vehicle job orders');
     }
 
     return this.jobOrdersRepository.findByVehicleId(vehicleId);
@@ -344,9 +345,9 @@ export class JobOrdersService {
       throw new ConflictException('Assigned technicians are required before operational status changes');
     }
 
-    if (actorInfo.role === 'technician') {
+    if (['technician', 'head_technician'].includes(actorInfo.role)) {
       if (!technicianAllowedStatuses.includes(payload.status)) {
-        throw new ForbiddenException('Technicians can only manage in-progress, blocked, or ready-for-QA states');
+        throw new ForbiddenException('Workshop roles can only manage in-progress, blocked, or ready-for-QA states');
       }
 
       const isAssignedTechnician = assignments.some(
@@ -441,7 +442,7 @@ export class JobOrdersService {
     this.assertViewerCanAccess(jobOrder, actorInfo);
     this.assertJobOrderCanAcceptEvidence(jobOrder.status);
 
-    if (actorInfo.role === 'technician') {
+    if (['technician', 'head_technician'].includes(actorInfo.role)) {
       const isAssignedTechnician = assignments.some(
         (assignment) => assignment.technicianUserId === actorInfo.userId,
       );
@@ -485,7 +486,14 @@ export class JobOrdersService {
       }
     }
 
-    const updatedJobOrder = await this.jobOrdersRepository.addProgressEntry(id, payload, actorInfo.userId);
+    const updatedJobOrder = await this.jobOrdersRepository.addProgressEntry(
+      id,
+      {
+        ...payload,
+        nextStatus: jobOrder.status === 'assigned' ? 'in_progress' : undefined,
+      },
+      actorInfo.userId,
+    );
 
     if (updatedJobOrder.status === 'ready_for_qa') {
       await this.qualityGatesService.beginQualityGate(id);
@@ -931,6 +939,7 @@ export class JobOrdersService {
   }
 
   private async assertSource(payload: CreateJobOrderDto) {
+    await this.normalizePastDueOpenBookings();
     if (payload.sourceType === 'back_job') {
       const backJob = await this.backJobsRepository.findOptionalById(payload.sourceId);
       if (!backJob) {
@@ -1047,8 +1056,8 @@ export class JobOrdersService {
         throw new NotFoundException('Assigned technician not found');
       }
 
-      if (technician.role !== 'technician') {
-        throw new BadRequestException('Assigned staff must be technician accounts');
+      if (!['technician', 'head_technician'].includes(technician.role)) {
+        throw new BadRequestException('Assigned staff must be technician or head-technician accounts');
       }
     }
   }
@@ -1117,12 +1126,47 @@ export class JobOrdersService {
 
     for (const technicianUserId of normalizedTechnicianIds) {
       const technician = await this.usersService.findById(technicianUserId);
-      if (technician?.isActive && technician.role === 'technician') {
+      if (technician?.isActive && ['technician', 'head_technician'].includes(technician.role)) {
         validTechnicianIds.push(technicianUserId);
       }
     }
 
     return validTechnicianIds;
+  }
+
+  private async normalizePastDueOpenBookings() {
+    const now = new Date();
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const staleThrough = [
+      yesterday.getFullYear(),
+      String(yesterday.getMonth() + 1).padStart(2, '0'),
+      String(yesterday.getDate()).padStart(2, '0'),
+    ].join('-');
+
+    const findPastDueOpenBookings =
+      typeof this.bookingsRepository.findPastDueOpenBookings === 'function'
+        ? this.bookingsRepository.findPastDueOpenBookings.bind(this.bookingsRepository)
+        : null;
+
+    if (!findPastDueOpenBookings) {
+      return;
+    }
+
+    const staleBookings = await findPastDueOpenBookings(staleThrough, [
+      'pending',
+      'pending_payment',
+      'confirmed',
+      'rescheduled',
+    ]);
+
+    for (const booking of staleBookings) {
+      await this.bookingsRepository.updateStatus(booking.id, {
+        status: 'cancelled',
+        reason:
+          'System auto-cancelled this booking after the scheduled date passed without completion or active workshop handoff.',
+        changedByUserId: null,
+      });
+    }
   }
 
   private appendAssignmentRepairNote(existingNotes?: string | null) {

@@ -56,6 +56,7 @@ export interface StaffInspectionCaptureSubmission {
 
 export const inspectionStaffRoles: StaffPortalRole[] = [
   'technician',
+  'head_technician',
   'service_adviser',
   'super_admin',
 ];

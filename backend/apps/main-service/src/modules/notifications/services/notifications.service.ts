@@ -70,7 +70,8 @@ type EnqueueAuthOtpDeliveryInput = {
     | 'staff_activation'
     | 'account_delete'
     | 'forgot_password'
-    | 'change_password';
+    | 'change_password'
+    | 'staff_phone_change';
   dedupeKey: string;
   sourceId: string;
   scheduledFor?: Date;
@@ -237,6 +238,11 @@ export class NotificationsService {
                   title: 'Change password code',
                   message: `Your AUTOCARE change password code is ${payload.otp}. It expires soon.`,
                 }
+              : payload.activationContext === 'staff_phone_change'
+                ? {
+                    title: 'Change phone number code',
+                    message: `Your AUTOCARE phone change code is ${payload.otp}. Verify it to save your new staff phone number.`,
+                  }
           : {
               title: 'Account verification code',
               message: `Your AUTOCARE verification code is ${payload.otp}. It expires soon.`,

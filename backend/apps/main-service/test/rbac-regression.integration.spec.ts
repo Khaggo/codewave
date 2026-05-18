@@ -43,22 +43,26 @@ describe('RBAC regression matrix', () => {
   }
 
   async function createConfirmedBooking(scheduledDate: string, timeSlotId: string, serviceId: string) {
-    const createBookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-      userId: ownerCustomer.id,
-      vehicleId,
-      timeSlotId,
-      scheduledDate,
-      serviceIds: [serviceId],
-      notes: `RBAC booking for ${scheduledDate}`,
-    });
+    const createBookingResponse = await request(app.getHttpServer())
+      .post('/api/bookings')
+      .set('Authorization', `Bearer ${ownerCustomer.accessToken}`)
+      .send({
+        userId: ownerCustomer.id,
+        vehicleId,
+        timeSlotId,
+        scheduledDate,
+        serviceIds: [serviceId],
+        notes: `RBAC booking for ${scheduledDate}`,
+      });
 
     expect(createBookingResponse.status).toBe(201);
 
     const confirmBookingResponse = await request(app.getHttpServer())
-      .patch(`/api/bookings/${createBookingResponse.body.id}/status`)
+      .patch(`/api/bookings/${createBookingResponse.body.id}/reservation-payment/confirm`)
       .set('Authorization', `Bearer ${serviceAdviser.accessToken}`)
       .send({
-        status: 'confirmed',
+        provider: 'manual_counter',
+        referenceNumber: `COUNTER-RBAC-${scheduledDate}`,
       });
 
     expect(confirmBookingResponse.status).toBe(200);
@@ -170,13 +174,16 @@ describe('RBAC regression matrix', () => {
     const serviceId = servicesResponse.body[0].id as string;
     const timeSlotId = timeSlotsResponse.body[0].id as string;
 
-    const createVehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-      userId: ownerCustomer.id,
-      plateNumber: 'RBAC-001',
-      make: 'Toyota',
-      model: 'Fortuner',
-      year: 2024,
-    });
+    const createVehicleResponse = await request(app.getHttpServer())
+      .post('/api/vehicles')
+      .set('Authorization', `Bearer ${ownerCustomer.accessToken}`)
+      .send({
+        userId: ownerCustomer.id,
+        plateNumber: 'RBAC-001',
+        make: 'Toyota',
+        model: 'Fortuner',
+        year: 2024,
+      });
     expect(createVehicleResponse.status).toBe(201);
     vehicleId = createVehicleResponse.body.id as string;
 
@@ -236,7 +243,17 @@ describe('RBAC regression matrix', () => {
       .get(`/api/job-orders/${blockedQaJobOrderId}/qa`)
       .set('Authorization', `Bearer ${serviceAdviser.accessToken}`);
     expect(blockedQaResponse.status).toBe(200);
-    expect(blockedQaResponse.body.status).toBe('blocked');
+    expect(blockedQaResponse.body.status).toBe('pending_review');
+
+    const blockedQaVerdictResponse = await request(app.getHttpServer())
+      .patch(`/api/job-orders/${blockedQaJobOrderId}/qa/verdict`)
+      .set('Authorization', `Bearer ${superAdmin.accessToken}`)
+      .send({
+        verdict: 'blocked',
+        note: 'Pre-blocked QA state for RBAC override regression coverage.',
+      });
+    expect(blockedQaVerdictResponse.status).toBe(200);
+    expect(blockedQaVerdictResponse.body.status).toBe('blocked');
   });
 
   afterAll(async () => {
@@ -398,7 +415,7 @@ describe('RBAC regression matrix', () => {
       expect(response.status).toBe(expectation.expectedStatus);
     }
 
-    const progressDeniedActors = [ownerCustomer, unassignedTechnician, serviceAdviser, superAdmin] as const;
+    const progressDeniedActors = [ownerCustomer, unassignedTechnician] as const;
 
     for (const actor of progressDeniedActors) {
       const deniedResponse = await request(app.getHttpServer())
@@ -410,6 +427,20 @@ describe('RBAC regression matrix', () => {
         });
 
       expect(deniedResponse.status).toBe(403);
+    }
+
+    const privilegedProgressActors = [serviceAdviser, superAdmin] as const;
+
+    for (const actor of privilegedProgressActors) {
+      const allowedResponse = await request(app.getHttpServer())
+        .post(`/api/job-orders/${assignedJobOrderId}/progress`)
+        .set('Authorization', `Bearer ${actor.accessToken}`)
+        .send({
+          entryType: 'work_started',
+          message: 'Privileged staff can append progress when coordinating active work.',
+        });
+
+      expect(allowedResponse.status).toBe(200);
     }
 
     const addProgressResponse = await request(app.getHttpServer())

@@ -1,4 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
@@ -6,6 +7,10 @@ import { ChatbotRepository } from '@main-modules/chatbot/repositories/chatbot.re
 import { ChatbotService } from '@main-modules/chatbot/services/chatbot.service';
 import { InsuranceRepository } from '@main-modules/insurance/repositories/insurance.repository';
 import { UsersService } from '@main-modules/users/services/users.service';
+
+const configServiceStub = {
+  get: jest.fn((key, fallback) => fallback),
+};
 
 describe('ChatbotService', () => {
   it('blocks customers from listing chatbot intents', async () => {
@@ -30,6 +35,7 @@ describe('ChatbotService', () => {
         },
         { provide: BookingsRepository, useValue: { findByUserId: jest.fn() } },
         { provide: InsuranceRepository, useValue: { findByUserId: jest.fn() } },
+        { provide: ConfigService, useValue: configServiceStub },
       ],
     }).compile();
 
@@ -92,6 +98,7 @@ describe('ChatbotService', () => {
         },
         { provide: BookingsRepository, useValue: { findByUserId: jest.fn() } },
         { provide: InsuranceRepository, useValue: { findByUserId: jest.fn() } },
+        { provide: ConfigService, useValue: configServiceStub },
       ],
     }).compile();
 
@@ -183,6 +190,7 @@ describe('ChatbotService', () => {
             ]),
           },
         },
+        { provide: ConfigService, useValue: configServiceStub },
       ],
     }).compile();
 
@@ -261,6 +269,7 @@ describe('ChatbotService', () => {
         },
         { provide: BookingsRepository, useValue: { findByUserId: jest.fn() } },
         { provide: InsuranceRepository, useValue: { findByUserId: jest.fn() } },
+        { provide: ConfigService, useValue: configServiceStub },
       ],
     }).compile();
 

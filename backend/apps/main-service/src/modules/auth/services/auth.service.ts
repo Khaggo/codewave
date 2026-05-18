@@ -17,11 +17,13 @@ import { NotificationsService } from '@main-modules/notifications/services/notif
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 
 import { GoogleSignupStartDto } from '../dto/google-signup-start.dto';
+import { ConfirmStaffPhoneChangeWithOtpDto } from '../dto/confirm-staff-phone-change-with-otp.dto';
 import { DeleteAccountDto } from '../dto/delete-account.dto';
 import { ConfirmChangePasswordWithOtpDto } from '../dto/confirm-change-password-with-otp.dto';
 import { LoginDto } from '../dto/login.dto';
 import { RequestChangePasswordOtpDto } from '../dto/request-change-password-otp.dto';
 import { RequestPasswordResetOtpDto } from '../dto/request-password-reset-otp.dto';
+import { RequestStaffPhoneChangeOtpDto } from '../dto/request-staff-phone-change-otp.dto';
 import { CreateStaffAccountDto } from '../dto/create-staff-account.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
@@ -297,15 +299,16 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(registerDto.password, 10);
     await this.authRepository.createAccount(user.id, passwordHash);
-    await this.usersService.setActivationStatus(user.id, true);
-    await this.authRepository.updateAccountStatus(user.id, true);
+    await this.usersService.setActivationStatus(user.id, false);
+    await this.authRepository.updateAccountStatus(user.id, false);
 
-    const activatedUser = await this.usersService.findById(user.id);
-    if (!activatedUser) {
-      throw new NotFoundException('User not found');
-    }
-
-    return this.issueTokens(activatedUser);
+    return this.createOtpEnrollment({
+      userId: user.id,
+      email: user.email,
+      purpose: 'customer_signup',
+      activationContext: 'customer_signup',
+      status: 'pending_activation',
+    });
   }
 
   async login(loginDto: LoginDto, ipAddress?: string) {
@@ -532,6 +535,58 @@ export class AuthService {
       activationContext: 'account_delete',
       status: 'pending_delete_verification',
     });
+  }
+
+  async requestStaffPhoneChangeOtp(
+    payload: RequestStaffPhoneChangeOtpDto,
+    actor: { userId: string; email: string; role: string },
+  ) {
+    const user = await this.usersService.findById(actor.userId);
+    if (!user || !user.isActive) {
+      throw new NotFoundException('User not found');
+    }
+
+    this.assertStaffProfileActor(user.role);
+
+    const normalizedPhone = this.normalizePhilippineMobile(payload.phone);
+    const profile = Array.isArray(user.profile) ? user.profile[0] ?? null : user.profile;
+    if (String(profile?.phone ?? '').trim() === normalizedPhone) {
+      throw new BadRequestException('That phone number is already saved on your staff profile');
+    }
+
+    return this.createOtpEnrollment({
+      userId: user.id,
+      email: user.email,
+      purpose: 'staff_phone_change',
+      activationContext: 'staff_phone_change',
+      status: 'pending_change_verification',
+    });
+  }
+
+  async confirmStaffPhoneChangeWithOtp(
+    payload: ConfirmStaffPhoneChangeWithOtpDto,
+    actor: { userId: string; email: string; role: string },
+  ) {
+    const challenge = await this.verifyOtpChallenge(payload.enrollmentId, payload.otp, 'staff_phone_change');
+    if (challenge.userId !== actor.userId) {
+      throw new UnauthorizedException('Phone change verification does not belong to the authenticated staff user');
+    }
+
+    const user = await this.usersService.findById(actor.userId);
+    if (!user || !user.isActive) {
+      throw new NotFoundException('User not found');
+    }
+
+    this.assertStaffProfileActor(user.role);
+
+    const normalizedPhone = this.normalizePhilippineMobile(payload.phone);
+    return this.usersService.update(
+      user.id,
+      {
+        phone: normalizedPhone,
+      },
+      actor,
+    );
   }
 
   async provisionStaffAccount(
@@ -871,7 +926,8 @@ export class AuthService {
       | 'staff_activation'
       | 'account_delete'
       | 'forgot_password'
-      | 'change_password',
+      | 'change_password'
+      | 'staff_phone_change',
   ) {
     const challenge = await this.authRepository.findOtpChallengeById(enrollmentId);
     if (!challenge) {
@@ -949,13 +1005,15 @@ export class AuthService {
       | 'staff_activation'
       | 'account_delete'
       | 'forgot_password'
-      | 'change_password';
+      | 'change_password'
+      | 'staff_phone_change';
     activationContext:
       | 'customer_signup'
       | 'staff_activation'
       | 'account_delete'
       | 'forgot_password'
-      | 'change_password';
+      | 'change_password'
+      | 'staff_phone_change';
     status:
       | 'pending_activation'
       | 'pending_delete_verification'
@@ -1010,6 +1068,21 @@ export class AuthService {
 
   private generateOtp() {
     return `${Math.floor(100000 + Math.random() * 900000)}`;
+  }
+
+  private normalizePhilippineMobile(value: string) {
+    const normalized = String(value ?? '').replace(/\D/g, '').slice(0, 11);
+    if (!/^09\d{9}$/.test(normalized)) {
+      throw new BadRequestException('Phone number must be an 11-digit PH mobile number starting with 09');
+    }
+
+    return normalized;
+  }
+
+  private assertStaffProfileActor(role: string) {
+    if (!['technician', 'head_technician', 'service_adviser', 'super_admin'].includes(role)) {
+      throw new BadRequestException('Only staff accounts can change phone numbers through this flow');
+    }
   }
 
   private maskEmail(email: string) {

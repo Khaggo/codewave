@@ -4884,7 +4884,7 @@ export default function Dashboard({
         <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>Loading loyalty rewards</Text>
           <Text style={styles.infoPanelText}>
-            We are syncing your loyalty balance, service-earned points, and reward catalog from the live backend.
+            We are syncing your loyalty balance, paid service points, paid ecommerce points, and reward catalog from the live backend.
           </Text>
         </View>
       ) : null}
@@ -4911,7 +4911,7 @@ export default function Dashboard({
         <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>Reward catalog is empty</Text>
           <Text style={styles.infoPanelText}>
-            Live loyalty points are now connected. Rewards will appear here once staff publish active catalog entries for service-earned points.
+            Live loyalty points are now connected. Rewards will appear here once staff publish active catalog entries for paid service and ecommerce earning.
           </Text>
         </View>
       ) : null}
@@ -5216,7 +5216,7 @@ export default function Dashboard({
         <View style={styles.infoBlock}>
           <Text style={styles.infoTitle}>No loyalty activity yet</Text>
           <Text style={styles.infoText}>
-            Earn points from completed paid service work, then come back here to track your loyalty ledger.
+            Earn points after paid service invoices and paid ecommerce orders, then come back here to track your loyalty ledger.
           </Text>
         </View>
       )}

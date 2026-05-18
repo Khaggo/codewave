@@ -30,26 +30,31 @@ export interface CreateJobOrderRequest {
 export interface UpdateJobOrderStatusRequest {
   status: JobOrderStatus;
   reason?: string;
+  expectedUpdatedAt?: string;
 }
 
 export interface ReplaceJobOrderAssignmentsRequest {
   assignedTechnicianIds: string[];
+  expectedUpdatedAt?: string;
 }
 
 export interface AddJobOrderProgressRequest {
   entryType: 'note' | 'work_started' | 'work_completed' | 'issue_found';
   message: string;
   completedItemIds?: string[];
+  expectedUpdatedAt?: string;
 }
 
 export interface AddJobOrderPhotoRequest {
   fileName: string;
   fileUrl: string;
   caption?: string;
+  expectedUpdatedAt?: string;
 }
 
 export interface FinalizeJobOrderRequest {
   summary?: string;
+  expectedUpdatedAt?: string;
 }
 
 export type JobOrderInvoicePaymentMethod = 'cash' | 'bank_transfer' | 'check' | 'other';
@@ -59,6 +64,7 @@ export interface RecordJobOrderInvoicePaymentRequest {
   paymentMethod: JobOrderInvoicePaymentMethod;
   reference?: string;
   receivedAt?: string;
+  expectedUpdatedAt?: string;
 }
 
 export const jobOrdersRoutes: Record<string, RouteContract> = {

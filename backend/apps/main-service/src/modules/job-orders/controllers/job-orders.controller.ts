@@ -78,15 +78,15 @@ export class JobOrdersController {
 
   @Get('assigned')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician')
-  @ApiOperation({ summary: 'List job orders assigned to the current technician.' })
+  @Roles('technician', 'head_technician')
+  @ApiOperation({ summary: 'List job orders assigned to the current technician or head technician.' })
   @ApiBearerAuth('access-token')
   @ApiOkResponse({
     description: 'Job orders assigned to the current technician, most recently updated first.',
     type: JobOrderResponseDto,
     isArray: true,
   })
-  @ApiForbiddenResponse({ description: 'Only technicians can list their assigned job orders.' })
+  @ApiForbiddenResponse({ description: 'Only technicians or head technicians can list their assigned job orders.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   listAssigned(@Req() request: Request) {
     return this.jobOrdersService.listAssignedToTechnician(
@@ -209,7 +209,7 @@ export class JobOrdersController {
   @Patch(':id/assignments')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('service_adviser', 'super_admin')
+  @Roles('head_technician', 'service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Replace the saved technician assignment set for one job order.' })
   @ApiBearerAuth('access-token')
   @ApiParam({

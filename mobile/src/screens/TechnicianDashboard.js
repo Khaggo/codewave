@@ -14,13 +14,16 @@ import {
   View,
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import * as DocumentPicker from 'expo-document-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '../lib/authClient';
 import {
   TECHNICIAN_TARGET_STATUSES,
+  addJobOrderPhotoEvidence,
   addJobOrderProgress,
   formatJobOrderStatusLabel,
+  getJobOrderById,
   listAssignedJobOrders,
   updateJobOrderStatus,
 } from '../lib/jobOrdersClient';
@@ -123,12 +126,16 @@ function JobOrderDetailModal({ jobOrder, accessToken, visible, onClose, onChange
   const [actionStatus, setActionStatus] = useState({ kind: 'idle' });
   const [progressMessage, setProgressMessage] = useState('');
   const [progressEntryType, setProgressEntryType] = useState('note');
+  const [selectedEvidenceFile, setSelectedEvidenceFile] = useState(null);
+  const [evidenceCaption, setEvidenceCaption] = useState('');
 
   useEffect(() => {
     if (!visible) {
       setActionStatus({ kind: 'idle' });
       setProgressMessage('');
       setProgressEntryType('note');
+      setSelectedEvidenceFile(null);
+      setEvidenceCaption('');
     }
   }, [visible]);
 
@@ -136,17 +143,33 @@ function JobOrderDetailModal({ jobOrder, accessToken, visible, onClose, onChange
     return null;
   }
 
+  const reloadLatestJobOrder = async (conflictMessage) => {
+    const fresh = await getJobOrderById({
+      jobOrderId: jobOrder.id,
+      accessToken,
+    });
+    onChanged?.(fresh);
+    setActionStatus({ kind: 'error', message: conflictMessage });
+  };
+
   const handleStatusChange = async (nextStatus) => {
     setActionStatus({ kind: 'submitting' });
     try {
       const updated = await updateJobOrderStatus({
         jobOrderId: jobOrder.id,
         status: nextStatus,
+        expectedUpdatedAt: jobOrder.updatedAt,
         accessToken,
       });
       setActionStatus({ kind: 'idle' });
       onChanged?.(updated);
     } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        await reloadLatestJobOrder(
+          'Another staff member already updated this job order. The latest record was reloaded.',
+        );
+        return;
+      }
       const message =
         error instanceof ApiError ? error.message : 'Could not update job order status.';
       setActionStatus({ kind: 'error', message });
@@ -164,6 +187,7 @@ function JobOrderDetailModal({ jobOrder, accessToken, visible, onClose, onChange
         jobOrderId: jobOrder.id,
         entryType: progressEntryType,
         message: progressMessage,
+        expectedUpdatedAt: jobOrder.updatedAt,
         accessToken,
       });
       setProgressMessage('');
@@ -171,8 +195,65 @@ function JobOrderDetailModal({ jobOrder, accessToken, visible, onClose, onChange
       setActionStatus({ kind: 'idle' });
       onChanged?.(updated);
     } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        await reloadLatestJobOrder(
+          'Another staff member already updated this job order. The latest record was reloaded.',
+        );
+        return;
+      }
       const message =
         error instanceof ApiError ? error.message : 'Could not append progress entry.';
+      setActionStatus({ kind: 'error', message });
+    }
+  };
+
+  const handlePickEvidence = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'image/*',
+      multiple: false,
+      copyToCacheDirectory: true,
+    });
+
+    if (result.canceled) {
+      return;
+    }
+
+    const asset = result.assets?.[0] ?? null;
+    if (asset) {
+      setSelectedEvidenceFile(asset);
+    }
+  };
+
+  const handleSubmitEvidence = async () => {
+    if (!selectedEvidenceFile) {
+      setActionStatus({ kind: 'error', message: 'Choose an image before uploading evidence.' });
+      return;
+    }
+
+    setActionStatus({ kind: 'submitting' });
+    try {
+      const updated = await addJobOrderPhotoEvidence({
+        jobOrderId: jobOrder.id,
+        file: selectedEvidenceFile,
+        caption: evidenceCaption,
+        linkedEntityType: 'job_order',
+        linkedEntityId: jobOrder.id,
+        expectedUpdatedAt: jobOrder.updatedAt,
+        accessToken,
+      });
+      setSelectedEvidenceFile(null);
+      setEvidenceCaption('');
+      setActionStatus({ kind: 'idle' });
+      onChanged?.(updated);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        await reloadLatestJobOrder(
+          'Another staff member already updated this job order. The latest record was reloaded.',
+        );
+        return;
+      }
+      const message =
+        error instanceof ApiError ? error.message : 'Could not upload photo evidence.';
       setActionStatus({ kind: 'error', message });
     }
   };
@@ -302,7 +383,48 @@ function JobOrderDetailModal({ jobOrder, accessToken, visible, onClose, onChange
               {actionStatus.kind === 'submitting' ? (
                 <ActivityIndicator color={colors.onPrimary} size="small" />
               ) : (
-                <Text style={styles.primaryButtonText}>Save progress</Text>
+              <Text style={styles.primaryButtonText}>Save progress</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.detailBlock}>
+            <Text style={styles.detailBlockLabel}>Photo evidence</Text>
+            <Text style={styles.detailHelperText}>
+              Capture field proof directly from your phone so the next handoff sees reviewable evidence.
+            </Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={handlePickEvidence}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {selectedEvidenceFile?.name ?? 'Choose image'}
+              </Text>
+            </TouchableOpacity>
+            <TextInput
+              style={styles.progressInput}
+              placeholder="What this photo proves..."
+              placeholderTextColor={colors.mutedText}
+              value={evidenceCaption}
+              onChangeText={setEvidenceCaption}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                actionStatus.kind === 'submitting' && styles.primaryButtonDisabled,
+              ]}
+              onPress={handleSubmitEvidence}
+              disabled={actionStatus.kind === 'submitting'}
+              activeOpacity={0.85}
+            >
+              {actionStatus.kind === 'submitting' ? (
+                <ActivityIndicator color={colors.onPrimary} size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Upload evidence</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -342,7 +464,7 @@ function HomeTab({ account, jobOrders, isLoading }) {
   const readyForQaCount = jobOrders.filter((order) => order.status === 'ready_for_qa').length;
   const blockedCount = jobOrders.filter((order) => order.status === 'blocked').length;
 
-  const greetingName = account?.firstName || account?.email?.split('@')?.[0] || 'Technician';
+  const greetingName = account?.firstName || account?.email?.split('@')?.[0] || 'Workshop';
 
   return (
     <View style={styles.tabContent}>
@@ -350,7 +472,9 @@ function HomeTab({ account, jobOrders, isLoading }) {
         <Text style={styles.heroEyebrow}>Welcome back</Text>
         <Text style={styles.heroTitle}>{greetingName}</Text>
         <Text style={styles.heroSubtitle}>
-          Track your assigned job orders and keep service advisers in the loop.
+          {account?.role === 'head_technician'
+            ? 'Lead field execution, keep the workshop record current, and hand clean evidence forward.'
+            : 'Track your assigned job orders and keep service advisers in the loop.'}
         </Text>
       </View>
 
@@ -377,6 +501,8 @@ function HomeTab({ account, jobOrders, isLoading }) {
 }
 
 function MoreTab({ account, onSignOut }) {
+  const roleLabel = account?.role === 'head_technician' ? 'Head Technician' : 'Technician';
+
   return (
     <View style={styles.tabContent}>
       <View style={styles.profileCard}>
@@ -387,7 +513,7 @@ function MoreTab({ account, onSignOut }) {
         </View>
         <View style={styles.profileText}>
           <Text style={styles.profileName}>
-            {account?.firstName ? `${account.firstName} ${account.lastName ?? ''}`.trim() : 'Technician'}
+            {account?.firstName ? `${account.firstName} ${account.lastName ?? ''}`.trim() : roleLabel}
           </Text>
           <Text style={styles.profileEmail}>{account?.email ?? '—'}</Text>
           {account?.staffCode ? (
@@ -401,7 +527,7 @@ function MoreTab({ account, onSignOut }) {
         onPress={() =>
           Alert.alert(
             'Notifications',
-            'Technician notifications are not connected on this screen yet. Use the active work queues for current job updates.',
+            'Workshop notifications are not connected on this screen yet. Use the active work queues for current job updates.',
           )
         }
         activeOpacity={0.85}
@@ -547,11 +673,13 @@ export default function TechnicianDashboard({ account, onSignOut }) {
     return 'More';
   }, [activeTab]);
 
+  const appBarEyebrow = account?.role === 'head_technician' ? 'Head Technician' : 'Technician';
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={styles.appBar}>
         <View>
-          <Text style={styles.appBarEyebrow}>Technician</Text>
+          <Text style={styles.appBarEyebrow}>{appBarEyebrow}</Text>
           <Text style={styles.appBarTitle}>{headerTitle}</Text>
         </View>
         <TouchableOpacity

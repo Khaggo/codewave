@@ -61,6 +61,7 @@ const allowedStatusTransitions: Record<BookingStatus, BookingStatus[]> = {
 
 const activeScheduleStatuses: BookingStatus[] = ['pending', 'pending_payment', 'confirmed', 'in_service', 'rescheduled'];
 const historyScheduleStatuses: BookingStatus[] = ['completed', 'declined', 'cancelled'];
+const staleOpenBookingStatuses: BookingStatus[] = ['pending', 'pending_payment', 'confirmed', 'rescheduled'];
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -347,6 +348,7 @@ export class BookingsService {
   }
 
   async findById(id: string, actor?: { userId: string; role: string }) {
+    await this.normalizePastDueOpenBookings();
     const booking = await this.bookingsRepository.findById(id);
     if (actor) {
       this.assertBookingActorCanAccessUser(booking.userId, actor);
@@ -366,6 +368,7 @@ export class BookingsService {
       throw new ForbiddenException('Only customers, service advisers, or super admins can access bookings');
     }
 
+    await this.normalizePastDueOpenBookings();
     const bookings = await this.bookingsRepository.findByUserId(userId);
     return bookings.map((booking) => this.toBookingView(booking));
   }
@@ -420,6 +423,7 @@ export class BookingsService {
   }
 
   async getDailySchedule(query: DailyScheduleQueryDto) {
+    await this.normalizePastDueOpenBookings();
     const statuses = this.resolveDailyScheduleStatuses(query.status, query.scope);
     const [slots, scheduleBookings] = await Promise.all([
       this.bookingsRepository.listTimeSlots(),
@@ -455,6 +459,7 @@ export class BookingsService {
   }
 
   async getQueueCurrent(query: QueueCurrentQueryDto) {
+    await this.normalizePastDueOpenBookings();
     const scheduledDate = query.scheduledDate ?? formatDateOnly(toDateOnly(this.getCurrentDate()));
     const queueBookings = await this.bookingsRepository.findByScheduledDate(scheduledDate, {
       timeSlotId: query.timeSlotId,
@@ -619,6 +624,7 @@ export class BookingsService {
   }
 
   private async assertFreshBookingState(bookingId: string) {
+    await this.normalizePastDueOpenBookings();
     let booking = await this.bookingsRepository.findById(bookingId);
     const reservationPayment = booking.reservationPayment;
 
@@ -774,6 +780,29 @@ export class BookingsService {
     }
 
     return activeScheduleStatuses;
+  }
+
+  private async normalizePastDueOpenBookings() {
+    const yesterday = formatDateOnly(addDays(toDateOnly(this.getCurrentDate()), -1));
+    const findPastDueOpenBookings =
+      typeof this.bookingsRepository.findPastDueOpenBookings === 'function'
+        ? this.bookingsRepository.findPastDueOpenBookings.bind(this.bookingsRepository)
+        : null;
+
+    if (!findPastDueOpenBookings) {
+      return;
+    }
+
+    const staleBookings = await findPastDueOpenBookings(yesterday, staleOpenBookingStatuses);
+
+    for (const booking of staleBookings) {
+      await this.bookingsRepository.updateStatus(booking.id, {
+        status: 'cancelled',
+        reason:
+          'System auto-cancelled this booking after the scheduled date passed without completion or active workshop handoff.',
+        changedByUserId: null,
+      });
+    }
   }
 
   private async scheduleBookingReminderFromWorkflow(booking: any) {

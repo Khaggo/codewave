@@ -58,5 +58,14 @@ export const validateEnv = (config: EnvRecord): EnvRecord => {
     );
   }
 
+  const openRouterKeys = ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL'] as const;
+  const hasAnyOpenRouterValue = openRouterKeys.some((key) => Boolean(config[key]));
+  const missingOpenRouterKeys = openRouterKeys.filter((key) => !config[key]);
+  if (hasAnyOpenRouterValue && missingOpenRouterKeys.length > 0) {
+    throw new Error(
+      `Missing required OpenRouter environment variables: ${missingOpenRouterKeys.join(', ')}`,
+    );
+  }
+
   return config;
 };

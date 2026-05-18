@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AUTOCARE · Job order control center prototype</title>
+    <style>
+      :root,
+      [data-theme='dark'] {
+        --brand-orange: 240 124 0;
+        --brand-gold: 201 149 26;
+        --surface-bg: 9 9 11;
+        --surface-card: 17 17 19;
+        --surface-raised: 24 24 27;
+        --surface-input: 20 20 22;
+        --surface-hover: 28 28 31;
+        --surface-border: 39 39 42;
+        --ink-primary: 244 244 245;
+        --ink-secondary: 161 161 170;
+        --ink-muted: 113 113 122;
+        --ink-dim: 63 63 70;
+        --tone-success-bg: 16 185 129;
+        --tone-success-border: 16 185 129;
+        --tone-success-ink: 110 231 183;
+        --tone-info-bg: 14 165 233;
+        --tone-info-border: 14 165 233;
+        --tone-info-ink: 125 211 252;
+        --tone-danger-bg: 239 68 68;
+        --tone-danger-border: 239 68 68;
+        --tone-danger-ink: 252 165 165;
+        color-scheme: dark;
+      }
+
+      [data-theme='light'] {
+        --brand-orange: 214 97 20;
+        --brand-gold: 174 125 31;
+        --surface-bg: 244 246 249;
+        --surface-card: 255 255 255;
+        --surface-raised: 247 249 252;
+        --surface-input: 255 255 255;
+        --surface-hover: 237 241 245;
+        --surface-border: 214 221 229;
+        --ink-primary: 24 28 35;
+        --ink-secondary: 77 88 101;
+        --ink-muted: 109 119 131;
+        --ink-dim: 150 159 170;
+        --tone-success-bg: 214 250 226;
+        --tone-success-border: 22 163 74;
+        --tone-success-ink: 22 101 52;
+        --tone-info-bg: 219 234 254;
+        --tone-info-border: 37 99 235;
+        --tone-info-ink: 30 64 175;
+        --tone-danger-bg: 254 226 226;
+        --tone-danger-border: 248 113 113;
+        --tone-danger-ink: 153 27 27;
+        color-scheme: light;
+      }
+
+      [data-theme='professional-blue'] {
+        --brand-orange: 55 114 231;
+        --brand-gold: 64 160 255;
+        --surface-bg: 10 20 40;
+        --surface-card: 16 31 58;
+        --surface-raised: 23 41 75;
+        --surface-input: 14 28 54;
+        --surface-hover: 29 51 92;
+        --surface-border: 52 82 124;
+        --ink-primary: 240 246 255;
+        --ink-secondary: 186 206 234;
+        --ink-muted: 129 154 190;
+        --ink-dim: 82 107 144;
+        --tone-success-bg: 16 185 129;
+        --tone-success-border: 16 185 129;
+        --tone-success-ink: 167 243 208;
+        --tone-info-bg: 14 165 233;
+        --tone-info-border: 14 165 233;
+        --tone-info-ink: 186 230 253;
+        --tone-danger-bg: 239 68 68;
+        --tone-danger-border: 239 68 68;
+        --tone-danger-ink: 254 202 202;
+        color-scheme: dark;
+      }
+
+      [data-theme='automotive-red'] {
+        --brand-orange: 214 69 45;
+        --brand-gold: 238 122 102;
+        --surface-bg: 20 10 10;
+        --surface-card: 32 16 16;
+        --surface-raised: 44 22 22;
+        --surface-input: 37 18 18;
+        --surface-hover: 55 27 27;
+        --surface-border: 86 42 42;
+        --ink-primary: 255 245 244;
+        --ink-secondary: 232 191 187;
+        --ink-muted: 174 119 113;
+        --ink-dim: 123 77 72;
+        --tone-success-bg: 16 185 129;
+        --tone-success-border: 16 185 129;
+        --tone-success-ink: 167 243 208;
+        --tone-info-bg: 14 165 233;
+        --tone-info-border: 14 165 233;
+        --tone-info-ink: 186 230 253;
+        --tone-danger-bg: 239 68 68;
+        --tone-danger-border: 239 68 68;
+        --tone-danger-ink: 254 202 202;
+        color-scheme: dark;
+      }
+
+      [data-theme='minimal-gray'] {
+        --brand-orange: 91 99 110;
+        --brand-gold: 128 137 149;
+        --surface-bg: 242 244 247;
+        --surface-card: 255 255 255;
+        --surface-raised: 247 248 250;
+        --surface-input: 255 255 255;
+        --surface-hover: 233 236 240;
+        --surface-border: 212 217 224;
+        --ink-primary: 24 32 44;
+        --ink-secondary: 84 95 110;
+        --ink-muted: 117 128 141;
+        --ink-dim: 159 167 177;
+        --tone-success-bg: 214 250 226;
+        --tone-success-border: 22 163 74;
+        --tone-success-ink: 22 101 52;
+        --tone-info-bg: 219 234 254;
+        --tone-info-border: 37 99 235;
+        --tone-info-ink: 30 64 175;
+        --tone-danger-bg: 254 226 226;
+        --tone-danger-border: 248 113 113;
+        --tone-danger-ink: 153 27 27;
+        color-scheme: light;
+      }
+
+      [data-theme='premium-black'] {
+        --brand-orange: 233 149 34;
+        --brand-gold: 205 160 49;
+        --surface-bg: 7 8 10;
+        --surface-card: 14 16 19;
+        --surface-raised: 20 23 27;
+        --surface-input: 12 14 17;
+        --surface-hover: 25 29 35;
+        --surface-border: 49 57 66;
+        --ink-primary: 249 250 251;
+        --ink-secondary: 212 216 222;
+        --ink-muted: 143 149 158;
+        --ink-dim: 87 92 101;
+        --tone-success-bg: 16 185 129;
+        --tone-success-border: 16 185 129;
+        --tone-success-ink: 167 243 208;
+        --tone-info-bg: 14 165 233;
+        --tone-info-border: 14 165 233;
+        --tone-info-ink: 186 230 253;
+        --tone-danger-bg: 239 68 68;
+        --tone-danger-border: 239 68 68;
+        --tone-danger-ink: 254 202 202;
+        color-scheme: dark;
+      }
+
+      :root {
+        --bg: rgb(var(--surface-bg));
+        --surface: rgb(var(--surface-card));
+        --surface-raised-color: rgb(var(--surface-raised));
+        --surface-muted: rgb(var(--surface-hover));
+        --border: rgb(var(--surface-border) / 0.82);
+        --border-strong: rgb(var(--surface-border));
+        --text: rgb(var(--ink-primary));
+        --text-muted: rgb(var(--ink-secondary));
+        --text-soft: rgb(var(--ink-muted));
+        --blue: rgb(var(--tone-info-border));
+        --teal: rgb(var(--tone-success-border));
+        --red: rgb(var(--tone-danger-border));
+        --amber: rgb(var(--brand-orange));
+        --green: rgb(var(--tone-success-border));
+        --coral: #fb7185;
+        --purple: #8b5cf6;
+        --chip: rgb(var(--surface-hover) / 0.72);
+        --header-height: 78px;
+        --stepper-height: 92px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+      }
+
+      body {
+        padding: 16px;
+        background-color: rgb(var(--surface-bg));
+        background-image:
+          radial-gradient(circle at top right, rgb(var(--brand-orange) / 0.06), transparent 28%),
+          radial-gradient(circle at left top, rgb(255 255 255 / 0.03), transparent 20%);
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+
+      .app-shell {
+        max-width: 1440px;
+        margin: 0 auto;
+      }
+
+      .queue-strip {
+        position: sticky;
+        top: 0;
+        z-index: 60;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 40px;
+        padding: 8px 12px;
+        border: 0.5px solid var(--border);
+        border-radius: 8px;
+        background: rgb(var(--surface-card) / 0.95);
+        backdrop-filter: blur(8px);
+        box-shadow:
+          0 10px 24px rgb(0 0 0 / 0.14),
+          inset 0 1px 0 rgb(255 255 255 / 0.02);
+      }
+
+      .queue-strip__meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .queue-pill {
+        padding: 5px 8px;
+        border-radius: 999px;
+        border: 0.5px solid var(--border);
+        background: var(--chip);
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
+
+      .queue-strip__title {
+        font-size: 12px;
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
+
+      .queue-strip__title strong {
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      .queue-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 34px;
+        padding: 0 12px;
+        border: 0.5px solid var(--border-strong);
+        border-radius: 12px;
+        background: rgb(var(--surface-card) / 0.72);
+        cursor: pointer;
+        color: rgb(var(--ink-secondary));
+        transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+      }
+
+      .queue-action:hover {
+        background: rgb(var(--surface-hover) / 0.9);
+        color: rgb(var(--ink-primary));
+        transform: translateY(-1px);
+      }
+
+      .workspace {
+        margin-top: 12px;
+      }
+
+      .zone-a {
+        position: sticky;
+        top: 52px;
+        z-index: 50;
+        border: 0.5px solid var(--border);
+        border-radius: 24px;
+        background: rgb(var(--surface-card) / 0.98);
+        backdrop-filter: blur(10px);
+        box-shadow:
+          0 18px 40px rgb(0 0 0 / 0.16),
+          inset 0 1px 0 rgb(255 255 255 / 0.02);
+      }
+
+      .job-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto;
+        gap: 12px;
+        min-height: var(--header-height);
+        padding: 14px 18px;
+        align-items: center;
+      }
+
+      .job-header__left {
+        min-width: 0;
+      }
+
+      .job-id-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+
+      .job-id {
+        font-size: 22px;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+      }
+
+      .status-badge,
+      .type-badge,
+      .role-badge,
+      .mini-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 26px;
+        padding: 0 8px;
+        border-radius: 999px;
+        border: 0.5px solid transparent;
+        font-size: 11px;
+        color: var(--text);
+        white-space: nowrap;
+      }
+
+      .status-assigned {
+        background: rgb(var(--tone-info-bg) / 0.32);
+        border-color: rgb(var(--tone-info-border) / 0.28);
+        color: rgb(var(--tone-info-ink));
+      }
+
+      .status-warning {
+        background: rgb(var(--brand-orange) / 0.12);
+        border-color: rgb(var(--brand-orange) / 0.32);
+        color: rgb(var(--brand-orange));
+      }
+
+      .type-normal {
+        background: rgb(var(--tone-success-bg) / 0.2);
+        border-color: rgb(var(--tone-success-border) / 0.26);
+        color: rgb(var(--tone-success-ink));
+      }
+
+      .type-rework {
+        background: rgba(251, 113, 133, 0.15);
+        border-color: rgba(251, 113, 133, 0.32);
+        color: #fecdd3;
+      }
+
+      .role-adviser {
+        background: rgb(var(--tone-info-bg) / 0.2);
+        color: rgb(var(--tone-info-ink));
+      }
+
+      .role-workshop {
+        background: rgb(var(--tone-success-bg) / 0.2);
+        color: rgb(var(--tone-success-ink));
+      }
+
+      .role-qa {
+        background: rgba(139, 92, 246, 0.18);
+        color: #ddd6fe;
+      }
+
+      .role-admin {
+        background: rgba(251, 113, 133, 0.16);
+        color: #fecdd3;
+      }
+
+      .job-subtext {
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .job-header__grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .meta-cell {
+        min-width: 0;
+      }
+
+      .meta-label {
+        font-size: 10px;
+        color: var(--text-soft);
+        margin-bottom: 4px;
+      }
+
+      .meta-value {
+        font-size: 12px;
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .job-header__actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .header-button,
+      .cta-primary,
+      .cta-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 38px;
+        padding: 0 14px;
+        border-radius: 14px;
+        border: 0.5px solid var(--border-strong);
+        background: transparent;
+        cursor: pointer;
+        color: var(--text);
+        transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease, color 140ms ease;
+      }
+
+      .header-button:hover,
+      .cta-secondary:hover {
+        background: rgb(var(--surface-hover) / 0.9);
+        color: rgb(var(--ink-primary));
+        transform: translateY(-1px);
+      }
+
+      .cta-primary {
+        background: rgb(var(--brand-orange));
+        border-color: rgb(var(--brand-orange));
+        color: #fff;
+        box-shadow: 0 10px 24px rgb(var(--brand-orange) / 0.18);
+      }
+
+      .cta-primary:hover {
+        filter: brightness(1.04);
+        transform: translateY(-1px);
+      }
+
+      .zone-b {
+        position: sticky;
+        top: calc(52px + var(--header-height) + 8px);
+        z-index: 40;
+        margin-top: 12px;
+        border: 0.5px solid var(--border);
+        border-radius: 24px;
+        background: rgb(var(--surface-card) / 0.98);
+        backdrop-filter: blur(10px);
+        padding: 14px 18px 18px;
+        box-shadow:
+          0 12px 30px rgb(0 0 0 / 0.18),
+          inset 0 1px 0 rgb(255 255 255 / 0.02);
+      }
+
+      .stepper {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        gap: 10px;
+        align-items: start;
+        padding-bottom: 4px;
+      }
+
+      .step {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto auto;
+        justify-items: center;
+        gap: 8px;
+        min-width: 0;
+        background: transparent;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .step:before {
+        content: "";
+        position: absolute;
+        top: 12px;
+        left: calc(50% + 18px);
+        width: calc(100% - 36px);
+        height: 1px;
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .step:last-child:before {
+        display: none;
+      }
+
+      .step.done:before {
+        background: rgba(34, 197, 94, 0.55);
+      }
+
+      .step-circle {
+        position: relative;
+        z-index: 2;
+        width: 26px;
+        height: 26px;
+        border-radius: 999px;
+        border: 0.5px solid rgba(255, 255, 255, 0.14);
+        display: grid;
+        place-items: center;
+        background: var(--surface-raised-color);
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+
+      .step-label {
+        max-width: 100%;
+        font-size: 11px;
+        text-align: center;
+        color: var(--text-muted);
+        line-height: 1.3;
+        text-wrap: balance;
+      }
+
+      .step.done .step-circle {
+        background: rgba(34, 197, 94, 0.18);
+        border-color: rgba(34, 197, 94, 0.36);
+        color: #86efac;
+      }
+
+      .step.done .step-label {
+        color: #86efac;
+      }
+
+      .step.active .step-circle {
+        background: rgb(var(--brand-orange) / 0.16);
+        border-color: rgb(var(--brand-orange) / 0.36);
+        color: rgb(var(--ink-primary));
+      }
+
+      .step.active .step-label {
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      .step.action-needed .step-circle {
+        background: rgb(var(--brand-orange) / 0.18);
+        border-color: rgb(var(--brand-orange) / 0.4);
+        color: rgb(var(--brand-orange));
+      }
+
+      .step.action-needed .step-label {
+        color: rgb(var(--brand-orange));
+        font-weight: 500;
+      }
+
+      .step.locked {
+        cursor: not-allowed;
+      }
+
+      .step.locked .step-circle,
+      .step.locked .step-label {
+        color: var(--text-soft);
+      }
+
+      .step.blocked .step-circle {
+        background: rgba(239, 68, 68, 0.16);
+        border-color: rgba(239, 68, 68, 0.4);
+        color: #fca5a5;
+      }
+
+      .step.blocked .step-label {
+        color: #fca5a5;
+      }
+
+      .next-action {
+        margin-top: 12px;
+        border-radius: 20px;
+        border: 0.5px solid rgb(var(--brand-orange) / 0.35);
+        background: rgb(var(--brand-orange) / 0.14);
+        padding: 16px 18px;
+        box-shadow:
+          inset 0 1px 0 rgb(255 255 255 / 0.03),
+          0 12px 24px rgb(var(--brand-orange) / 0.08);
+      }
+
+      .next-action__label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: rgb(var(--brand-gold));
+      }
+
+      .next-action__title {
+        margin-top: 10px;
+        font-size: 22px;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+      }
+
+      .next-action__copy {
+        margin-top: 8px;
+        font-size: 12px;
+        color: rgb(var(--ink-primary));
+        max-width: 780px;
+        line-height: 1.6;
+      }
+
+      .next-action__footer {
+        margin-top: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .next-action__buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .zone-c {
+        margin-top: 16px;
+        border: 0.5px solid var(--border);
+        border-radius: 24px;
+        background: var(--surface);
+        padding: 18px;
+        min-height: 720px;
+        box-shadow:
+          0 12px 30px rgb(0 0 0 / 0.18),
+          inset 0 1px 0 rgb(255 255 255 / 0.02);
+      }
+
+      .columns {
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr);
+        gap: 12px;
+      }
+
+      .panel,
+      .side-card {
+        border: 0.5px solid var(--border);
+        border-radius: 20px;
+        background: var(--surface-raised-color);
+        padding: 16px;
+        box-shadow:
+          0 10px 24px rgb(0 0 0 / 0.14),
+          inset 0 1px 0 rgb(255 255 255 / 0.02);
+      }
+
+      .panel-heading,
+      .side-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .panel-title,
+      .side-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .panel-copy {
+        margin: 0 0 14px;
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.6;
+      }
+
+      .assignment-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .field-group {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+
+      .field-help {
+        font-size: 10px;
+        color: var(--text-soft);
+      }
+
+      .input,
+      .select,
+      .textarea {
+        width: 100%;
+        border: 0.5px solid var(--border-strong);
+        border-radius: 12px;
+        background: rgb(var(--surface-input));
+        padding: 10px 11px;
+        color: var(--text);
+      }
+
+      .textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .team-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .team-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px;
+        border-radius: 16px;
+        background: rgb(var(--surface-card) / 0.92);
+        border: 0.5px solid var(--border);
+      }
+
+      .team-name {
+        font-size: 12px;
+        color: var(--text);
+      }
+
+      .team-meta {
+        margin-top: 4px;
+        font-size: 10px;
+        color: var(--text-soft);
+      }
+
+      .inline-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .section-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 14px 0;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .summary-item {
+        border: 0.5px solid var(--border);
+        border-radius: 16px;
+        background: rgb(var(--surface-card) / 0.92);
+        padding: 10px;
+      }
+
+      .summary-item__label {
+        font-size: 10px;
+        color: var(--text-soft);
+      }
+
+      .summary-item__value {
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--text);
+      }
+
+      .checklist {
+        display: grid;
+        gap: 8px;
+      }
+
+      .checklist-row {
+        display: grid;
+        grid-template-columns: 18px minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: start;
+        padding: 9px 10px;
+        border: 0.5px solid var(--border);
+        border-radius: 16px;
+        background: rgb(var(--surface-card) / 0.92);
+      }
+
+      .checklist-row.done {
+        border-color: rgb(var(--tone-success-border) / 0.3);
+      }
+
+      .checklist-row.pending {
+        border-color: rgb(var(--brand-orange) / 0.28);
+      }
+
+      .checklist-row.locked {
+        opacity: 0.78;
+      }
+
+      .checklist-step {
+        font-size: 12px;
+        color: var(--text);
+      }
+
+      .checklist-note {
+        font-size: 10px;
+        color: var(--text-muted);
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      .blocker-card {
+        border-left: 3px solid rgb(var(--brand-orange));
+        background: rgb(var(--brand-orange) / 0.08);
+      }
+
+      .blocker-card ol {
+        margin: 10px 0 0 18px;
+        padding: 0;
+        color: var(--text-muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .blocker-card a {
+        color: rgb(var(--brand-orange));
+      }
+
+      .status-note {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        background: rgb(var(--brand-orange) / 0.14);
+        color: rgb(var(--brand-orange));
+      }
+
+      .read-only-panel {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        width: min(360px, calc(100vw - 32px));
+        border: 0.5px solid var(--border-strong);
+        border-radius: 20px;
+        background: rgb(var(--surface-card) / 0.98);
+        padding: 14px;
+        display: none;
+        z-index: 80;
+        box-shadow:
+          0 18px 40px rgb(0 0 0 / 0.18),
+          inset 0 1px 0 rgb(255 255 255 / 0.02);
+      }
+
+      .read-only-panel.active {
+        display: block;
+      }
+
+      .tooltip {
+        position: fixed;
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 0.5px solid var(--border-strong);
+        background: rgb(var(--surface-card) / 0.98);
+        color: var(--text);
+        font-size: 11px;
+        pointer-events: none;
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 120ms ease, transform 120ms ease;
+        z-index: 90;
+      }
+
+      .tooltip.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .queue-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(4, 6, 9, 0.8);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        z-index: 75;
+      }
+
+      .queue-overlay.active {
+        display: flex;
+      }
+
+      .queue-modal {
+        width: min(960px, 100%);
+        max-height: 80vh;
+        overflow: auto;
+        border-radius: 24px;
+        border: 0.5px solid var(--border-strong);
+        background: var(--surface);
+        padding: 16px;
+        box-shadow:
+          0 18px 40px rgb(0 0 0 / 0.18),
+          inset 0 1px 0 rgb(255 255 255 / 0.02);
+      }
+
+      .queue-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .queue-item {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) auto;
+        gap: 10px;
+        align-items: center;
+        padding: 10px;
+        border-radius: 18px;
+        border: 0.5px solid var(--border);
+        background: var(--surface-raised-color);
+        transition: border-color 140ms ease, transform 140ms ease, background-color 140ms ease;
+      }
+
+      .queue-item:hover {
+        border-color: rgb(var(--brand-orange) / 0.22);
+        background: rgb(var(--surface-hover) / 0.6);
+        transform: translateY(-1px);
+      }
+
+      .queue-item strong {
+        display: block;
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      .queue-item span {
+        font-size: 10px;
+        color: var(--text-muted);
+      }
+
+      .icon {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: 0 0 auto;
+      }
+
+      .icon-lg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .icon-xl {
+        width: 24px;
+        height: 24px;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+      }
+
+      @media (max-width: 1279px) {
+        .step-label {
+          font-size: 10px;
+        }
+      }
+
+      @media (max-width: 1160px) {
+        .job-header {
+          grid-template-columns: 1fr;
+        }
+
+        .job-header__grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 1024px) {
+        .columns {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="queue-strip" id="queueStrip">
+        <div class="queue-strip__meta">
+          <span class="queue-pill">Queue collapsed</span>
+          <span class="queue-strip__title"><strong>JO-A1504708</strong> is active · Step 3 of 8 · Assignments pending</span>
+        </div>
+        <button class="queue-action" type="button" id="openQueueButton">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6h16"></path>
+            <path d="M4 12h16"></path>
+            <path d="M4 18h16"></path>
+          </svg>
+          Return to queue
+        </button>
+      </div>
+
+      <div class="workspace">
+        <section class="zone-a">
+          <div class="job-header">
+            <div class="job-header__left">
+              <div class="job-id-row">
+                <div class="job-id">JO-A1504708</div>
+                <span class="status-badge status-assigned">Assigned</span>
+                <span class="type-badge type-normal">Normal job</span>
+              </div>
+              <div class="job-subtext">Customer · Merwen Casio · Vehicle · 2003 Toyota Vios · Plate · BK-638A7E49</div>
+            </div>
+
+            <div class="job-header__grid">
+              <div class="meta-cell">
+                <div class="meta-label">Source booking</div>
+                <div class="meta-value">BK-638A7E49</div>
+              </div>
+              <div class="meta-cell">
+                <div class="meta-label">Service adviser</div>
+                <div class="meta-value">Merwen · Super admin</div>
+              </div>
+              <div class="meta-cell">
+                <div class="meta-label">Current blocker</div>
+                <div class="meta-value">Assignments must be confirmed</div>
+              </div>
+            </div>
+
+            <div class="job-header__actions">
+              <button class="header-button" type="button" id="headerQueueButton">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 6h16"></path>
+                  <path d="M4 12h16"></path>
+                  <path d="M4 18h16"></path>
+                </svg>
+                Queue
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="zone-b">
+          <div class="stepper" id="stepper">
+            <button class="step done" data-step="1" data-mode="done" type="button">
+              <span class="step-circle">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 12l5 5l9 -9"></path>
+                </svg>
+              </span>
+              <span class="step-label">Intake</span>
+            </button>
+            <button class="step done" data-step="2" data-mode="done" type="button">
+              <span class="step-circle">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 12l5 5l9 -9"></path>
+                </svg>
+              </span>
+              <span class="step-label">Job order</span>
+            </button>
+            <button class="step action-needed active" data-step="3" data-mode="active" type="button">
+              <span class="step-circle">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 9v4"></path>
+                  <path d="M12 17h.01"></path>
+                  <path d="M10.29 3.86l-7.55 13.09A1 1 0 0 0 3.62 18h16.76a1 1 0 0 0 .87-1.5L13.71 3.86a1 1 0 0 0-1.74 0z"></path>
+                </svg>
+              </span>
+              <span class="step-label">Assignments</span>
+            </button>
+            <button class="step locked" data-step="4" data-mode="locked" type="button">
+              <span class="step-circle">4</span>
+              <span class="step-label">Progress</span>
+            </button>
+            <button class="step locked" data-step="5" data-mode="locked" type="button">
+              <span class="step-circle">5</span>
+              <span class="step-label">Evidence</span>
+            </button>
+            <button class="step locked" data-step="6" data-mode="locked" type="button">
+              <span class="step-circle">6</span>
+              <span class="step-label">QA audit</span>
+            </button>
+            <button class="step locked" data-step="7" data-mode="locked" type="button">
+              <span class="step-circle">7</span>
+              <span class="step-label">Finalize</span>
+            </button>
+            <button class="step locked" data-step="8" data-mode="locked" type="button">
+              <span class="step-circle">8</span>
+              <span class="step-label">Payment</span>
+            </button>
+          </div>
+
+          <div class="next-action">
+            <div class="next-action__label">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 9v4"></path>
+                <path d="M12 17h.01"></path>
+                <path d="M10.29 3.86l-7.55 13.09A1 1 0 0 0 3.62 18h16.76a1 1 0 0 0 .87-1.5L13.71 3.86a1 1 0 0 0-1.74 0z"></path>
+              </svg>
+              Next action · step 3 of 8
+            </div>
+            <div class="next-action__title">Save technician assignments to unlock workshop execution</div>
+            <div class="next-action__copy">
+              At least one technician is drafted, but the workshop cannot move into progress until the assignment set is confirmed on this job order.
+            </div>
+            <div class="next-action__footer">
+              <span class="role-badge role-adviser">Service adviser / admin</span>
+              <div class="next-action__buttons">
+                <button class="cta-primary" type="button" id="gotoAssignments">
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9 6l6 6l-6 6"></path>
+                  </svg>
+                  Go to assignments
+                </button>
+                <button class="cta-secondary" type="button" id="openOverview">
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 12h14"></path>
+                    <path d="M12 5l7 7l-7 7"></path>
+                  </svg>
+                  View job overview
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="zone-c" id="assignmentsPanel">
+          <div class="columns">
+            <div class="stack">
+              <article class="panel">
+                <div class="panel-heading">
+                  <div class="panel-title">
+                    <svg class="icon icon-lg" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M8 7a4 4 0 1 0 0 -8a4 4 0 0 0 0 8z" transform="translate(4 5)"></path>
+                      <path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"></path>
+                    </svg>
+                    Assignments
+                  </div>
+                  <span class="role-badge role-adviser">Service adviser / admin</span>
+                </div>
+                <p class="panel-copy">
+                  Choose who owns this work order before the workshop can begin. Head technicians can support planning, but adviser or admin must save the assignment set.
+                </p>
+
+                <div class="assignment-grid">
+                  <div class="field-group">
+                    <div class="field-label">
+                      <span>Primary technician</span>
+                      <span class="field-help">Required</span>
+                    </div>
+                    <select class="select">
+                      <option>Houston Deleon · HTC</option>
+                      <option>James Ruben · TEC</option>
+                      <option>Test Test · TEC</option>
+                    </select>
+                  </div>
+                  <div class="field-group">
+                    <div class="field-label">
+                      <span>Support technician</span>
+                      <span class="field-help">Optional</span>
+                    </div>
+                    <select class="select">
+                      <option>None selected</option>
+                      <option>James Ruben · TEC</option>
+                      <option>Test Test · TEC</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="section-divider"></div>
+
+                <div class="panel-heading" style="margin-bottom: 8px;">
+                  <div class="panel-title">Assigned team</div>
+                  <span class="status-note">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 9v4"></path>
+                      <path d="M12 17h.01"></path>
+                      <path d="M10.29 3.86l-7.55 13.09A1 1 0 0 0 3.62 18h16.76a1 1 0 0 0 .87-1.5L13.71 3.86a1 1 0 0 0-1.74 0z"></path>
+                    </svg>
+                    Pending confirmation
+                  </span>
+                </div>
+
+                <div class="team-list">
+                  <div class="team-card">
+                    <div>
+                      <div class="team-name">Houston Deleon</div>
+                      <div class="team-meta">Head technician · HTC · field-ready workshop lead</div>
+                    </div>
+                    <span class="mini-badge role-workshop">Lead technician</span>
+                  </div>
+                </div>
+
+                <div class="section-divider"></div>
+
+                <div class="field-group">
+                  <div class="field-label">
+                    <span>Assignment note</span>
+                    <span class="field-help">Visible to workshop</span>
+                  </div>
+                  <textarea class="textarea" placeholder="Describe any special instructions before the vehicle moves into workshop execution.">Confirm the preventive maintenance bay slot and keep the head technician assigned until the initial workshop checks are complete.</textarea>
+                </div>
+
+                <div class="inline-actions" style="margin-top: 14px;">
+                  <button class="cta-primary" type="button">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M5 12l5 5l9 -9"></path>
+                    </svg>
+                    Save assignments · adviser/admin
+                  </button>
+                  <button class="cta-secondary" type="button">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 12h16"></path>
+                      <path d="M12 4v16"></path>
+                    </svg>
+                    Add another technician · adviser/admin
+                  </button>
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-heading">
+                  <div class="panel-title">
+                    <svg class="icon icon-lg" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M8 12h8"></path>
+                      <path d="M12 8v8"></path>
+                      <path d="M4 5a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v14l-4 -3l-4 3l-4 -3l-4 3z"></path>
+                    </svg>
+                    Assignment decision summary
+                  </div>
+                  <span class="role-badge role-workshop">Technician / head tech</span>
+                </div>
+                <p class="panel-copy">
+                  This section is read-only for workshop staff until the adviser saves the team. Once confirmed, the next step unlocks automatically and the workbench moves into Progress.
+                </p>
+                <div class="summary-grid">
+                  <div class="summary-item">
+                    <div class="summary-item__label">Work items</div>
+                    <div class="summary-item__value">Preventive maintenance · 2 hr estimate</div>
+                  </div>
+                  <div class="summary-item">
+                    <div class="summary-item__label">Ready to unlock</div>
+                    <div class="summary-item__value">Progress step after assignments are saved</div>
+                  </div>
+                  <div class="summary-item">
+                    <div class="summary-item__label">Workshop owner</div>
+                    <div class="summary-item__value">Houston Deleon · HTC</div>
+                  </div>
+                  <div class="summary-item">
+                    <div class="summary-item__label">Current risk</div>
+                    <div class="summary-item__value">No confirmed assignment saved yet</div>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <aside class="stack">
+              <article class="side-card">
+                <div class="side-heading">
+                  <div class="side-title">Completion checklist</div>
+                  <span class="mini-badge status-warning">Assignments pending</span>
+                </div>
+                <div class="checklist">
+                  <div class="checklist-row done">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--green);">
+                      <path d="M5 12l5 5l9 -9"></path>
+                    </svg>
+                    <div class="checklist-step">Intake captured and handoff approved</div>
+                    <div class="checklist-note">Done</div>
+                  </div>
+                  <div class="checklist-row done">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--green);">
+                      <path d="M5 12l5 5l9 -9"></path>
+                    </svg>
+                    <div class="checklist-step">Job order record created with adviser snapshot</div>
+                    <div class="checklist-note">Done</div>
+                  </div>
+                  <div class="checklist-row pending">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--amber);">
+                      <circle cx="12" cy="12" r="8"></circle>
+                      <path d="M12 8v4"></path>
+                      <path d="M12 16h.01"></path>
+                    </svg>
+                    <div class="checklist-step">Technician assignments confirmed</div>
+                    <div class="checklist-note">1 drafted</div>
+                  </div>
+                  <div class="checklist-row locked">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--text-soft);">
+                      <path d="M8 11v-3a4 4 0 1 1 8 0v3"></path>
+                      <rect x="6" y="11" width="12" height="9" rx="2"></rect>
+                    </svg>
+                    <div class="checklist-step">Progress entries saved and work moved into execution</div>
+                    <div class="checklist-note">Locked</div>
+                  </div>
+                  <div class="checklist-row locked">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--text-soft);">
+                      <path d="M8 11v-3a4 4 0 1 1 8 0v3"></path>
+                      <rect x="6" y="11" width="12" height="9" rx="2"></rect>
+                    </svg>
+                    <div class="checklist-step">Photo evidence uploaded for QA review</div>
+                    <div class="checklist-note">Locked</div>
+                  </div>
+                  <div class="checklist-row locked">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--text-soft);">
+                      <path d="M8 11v-3a4 4 0 1 1 8 0v3"></path>
+                      <rect x="6" y="11" width="12" height="9" rx="2"></rect>
+                    </svg>
+                    <div class="checklist-step">QA audit passed and release allowed</div>
+                    <div class="checklist-note">Locked</div>
+                  </div>
+                  <div class="checklist-row locked">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--text-soft);">
+                      <path d="M8 11v-3a4 4 0 1 1 8 0v3"></path>
+                      <rect x="6" y="11" width="12" height="9" rx="2"></rect>
+                    </svg>
+                    <div class="checklist-step">Invoice-ready record generated</div>
+                    <div class="checklist-note">Locked</div>
+                  </div>
+                  <div class="checklist-row locked">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--text-soft);">
+                      <path d="M8 11v-3a4 4 0 1 1 8 0v3"></path>
+                      <rect x="6" y="11" width="12" height="9" rx="2"></rect>
+                    </svg>
+                    <div class="checklist-step">Payment recorded and job order closed</div>
+                    <div class="checklist-note">Locked</div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="side-card">
+                <div class="side-heading">
+                  <div class="side-title">Job snapshot</div>
+                  <span class="mini-badge type-normal">Normal job</span>
+                </div>
+                <div class="summary-grid">
+                  <div class="summary-item">
+                    <div class="summary-item__label">Work items</div>
+                    <div class="summary-item__value">Preventive maintenance</div>
+                  </div>
+                  <div class="summary-item">
+                    <div class="summary-item__label">Assigned team</div>
+                    <div class="summary-item__value">1 technician drafted</div>
+                  </div>
+                  <div class="summary-item">
+                    <div class="summary-item__label">Latest progress</div>
+                    <div class="summary-item__value">None yet</div>
+                  </div>
+                  <div class="summary-item">
+                    <div class="summary-item__label">Evidence</div>
+                    <div class="summary-item__value">0 photos attached</div>
+                  </div>
+                  <div class="summary-item">
+                    <div class="summary-item__label">Current step</div>
+                    <div class="summary-item__value">Assignments · step 3 of 8</div>
+                  </div>
+                  <div class="summary-item">
+                    <div class="summary-item__label">QA release</div>
+                    <div class="summary-item__value">Release unavailable</div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="side-card blocker-card">
+                <div class="side-heading">
+                  <div class="side-title">Why can't this move forward yet?</div>
+                  <span class="role-badge role-adviser">Service adviser / admin</span>
+                </div>
+                <p class="panel-copy">
+                  The pipeline is intentionally gated. This job order cannot enter workshop progress until the assignment step is complete.
+                </p>
+                <ol>
+                  <li><a href="#assignmentsPanel">At least one technician must be saved on the live job order record.</a></li>
+                  <li><a href="#assignmentsPanel">The assignment note should clarify workshop ownership before execution begins.</a></li>
+                  <li>Steps 4 through 8 stay locked until the assignment save succeeds.</li>
+                </ol>
+              </article>
+            </aside>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <aside class="read-only-panel" id="readOnlyPanel" aria-live="polite">
+      <div class="panel-heading" style="margin-bottom: 8px;">
+        <div class="panel-title" id="readOnlyTitle">Read-only step detail</div>
+        <button class="header-button" type="button" id="closeReadOnly">Close</button>
+      </div>
+      <p class="panel-copy" id="readOnlyCopy">
+        Completed steps open as read-only summaries so staff can verify prior work without confusing editable controls.
+      </p>
+    </aside>
+
+    <div class="queue-overlay" id="queueOverlay" aria-hidden="true">
+      <div class="queue-modal">
+        <div class="panel-heading">
+          <div class="panel-title">Active queue</div>
+          <button class="header-button" type="button" id="closeQueueButton">Close</button>
+        </div>
+        <p class="panel-copy">
+          The queue collapses once one job order is selected. Staff can return here any time without losing the active workspace.
+        </p>
+        <div class="queue-list">
+          <div class="queue-item">
+            <div>
+              <strong>JO-A1504708 · Merwen Casio</strong>
+              <span>2003 Toyota Vios · Step 3 of 8 · Assignments pending</span>
+            </div>
+            <span class="status-badge status-assigned">Assigned</span>
+            <span class="mini-badge type-normal">Normal job</span>
+            <span>14 min in current step</span>
+            <button class="queue-action" type="button">Open workspace</button>
+          </div>
+          <div class="queue-item">
+            <div>
+              <strong>JO-FC96C858 · James Ruben</strong>
+              <span>2019 Toyota Hilux · Step 6 of 8 · QA blocked</span>
+            </div>
+            <span class="status-badge status-warning" style="background: rgba(239,68,68,0.14); border-color: rgba(239,68,68,0.28); color: #fca5a5;">Blocked</span>
+            <span class="mini-badge type-rework">Back-job rework</span>
+            <span>42 min in current step</span>
+            <button class="queue-action" type="button">Open workspace</button>
+          </div>
+          <div class="queue-item">
+            <div>
+              <strong>JO-877A7321 · Test Test</strong>
+              <span>2017 Honda City · Step 7 of 8 · Awaiting finalization</span>
+            </div>
+            <span class="status-badge" style="background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.28); color: #fde68a;">Ready for QA</span>
+            <span class="mini-badge type-normal">Normal job</span>
+            <span>8 min in current step</span>
+            <button class="queue-action" type="button">Open workspace</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+
+    <script>
+      (() => {
+        try {
+          const storedTheme = localStorage.getItem('cc_portal_theme') || 'dark';
+          document.documentElement.dataset.theme = storedTheme;
+        } catch (error) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+
+      const queueOverlay = document.getElementById('queueOverlay');
+      const openQueueButtons = [document.getElementById('openQueueButton'), document.getElementById('headerQueueButton')];
+      const closeQueueButton = document.getElementById('closeQueueButton');
+      const gotoAssignments = document.getElementById('gotoAssignments');
+      const openOverview = document.getElementById('openOverview');
+      const assignmentsPanel = document.getElementById('assignmentsPanel');
+      const readOnlyPanel = document.getElementById('readOnlyPanel');
+      const readOnlyTitle = document.getElementById('readOnlyTitle');
+      const readOnlyCopy = document.getElementById('readOnlyCopy');
+      const closeReadOnly = document.getElementById('closeReadOnly');
+      const tooltip = document.getElementById('tooltip');
+
+      const readOnlyContent = {
+        1: {
+          title: 'Intake summary',
+          copy: 'Customer, vehicle, concern, and handoff requirements were already completed at intake. This step is done and remains read-only here.',
+        },
+        2: {
+          title: 'Job order summary',
+          copy: 'The job order record exists with adviser snapshot, work items, source booking linkage, and a live assigned status. No edits are needed in this step.',
+        },
+      };
+
+      function toggleQueue(open) {
+        queueOverlay.classList.toggle('active', open);
+        queueOverlay.setAttribute('aria-hidden', open ? 'false' : 'true');
+      }
+
+      openQueueButtons.forEach((button) => {
+        button.addEventListener('click', () => toggleQueue(true));
+      });
+
+      closeQueueButton.addEventListener('click', () => toggleQueue(false));
+      queueOverlay.addEventListener('click', (event) => {
+        if (event.target === queueOverlay) {
+          toggleQueue(false);
+        }
+      });
+
+      gotoAssignments.addEventListener('click', () => {
+        assignmentsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+
+      openOverview.addEventListener('click', () => {
+        readOnlyTitle.textContent = 'Job overview';
+        readOnlyCopy.textContent = 'This shortcut would open the overview panel in the live product. In this prototype it shows how read-only completed or summary states should appear without turning them back into editable tabs.';
+        readOnlyPanel.classList.add('active');
+      });
+
+      closeReadOnly.addEventListener('click', () => {
+        readOnlyPanel.classList.remove('active');
+      });
+
+      function showTooltip(message, target) {
+        tooltip.textContent = message;
+        const rect = target.getBoundingClientRect();
+        tooltip.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
+        tooltip.style.top = `${rect.bottom + 8}px`;
+        tooltip.classList.add('visible');
+        clearTimeout(showTooltip._timeout);
+        showTooltip._timeout = setTimeout(() => {
+          tooltip.classList.remove('visible');
+        }, 2200);
+      }
+
+      document.querySelectorAll('.step').forEach((step) => {
+        step.addEventListener('click', () => {
+          const mode = step.dataset.mode;
+          const stepNumber = step.dataset.step;
+
+          if (mode === 'done') {
+            const content = readOnlyContent[stepNumber];
+            readOnlyTitle.textContent = content.title;
+            readOnlyCopy.textContent = content.copy;
+            readOnlyPanel.classList.add('active');
+            return;
+          }
+
+          if (mode === 'active') {
+            assignmentsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+          }
+
+          if (mode === 'locked') {
+            showTooltip(`Complete step ${Number(stepNumber) - 1} first to unlock this step.`, step);
+            return;
+          }
+
+          if (mode === 'blocked') {
+            document.querySelector('.blocker-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

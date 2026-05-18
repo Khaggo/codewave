@@ -200,6 +200,24 @@ export default function AppShell({ children }) {
       throw new Error('Sign in again before saving profile changes.')
     }
 
+    if (profileUpdates?.profileSnapshot) {
+      const nextSession = {
+        ...session,
+        user: {
+          ...session.user,
+          profile: profileUpdates.profileSnapshot,
+          name: [profileUpdates.profileSnapshot?.firstName, profileUpdates.profileSnapshot?.lastName]
+            .filter(Boolean)
+            .join(' ')
+            .trim() || session.user.name,
+        },
+      }
+
+      setSession(nextSession)
+      saveStoredSession(nextSession)
+      return nextSession.user
+    }
+
     const updatedUser = await updateStaffPortalProfile({
       userId: session.user.id,
       accessToken: session.accessToken,

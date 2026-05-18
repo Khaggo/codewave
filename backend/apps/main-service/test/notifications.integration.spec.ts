@@ -143,7 +143,7 @@ describe('NotificationsController integration', () => {
         make: 'Toyota',
         model: 'Vios',
         year: 2024,
-      });
+      }).set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
       expect(vehicleResponse.status).toBe(201);
 
       const createInquiryResponse = await request(app.getHttpServer())

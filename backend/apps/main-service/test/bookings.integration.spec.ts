@@ -22,6 +22,19 @@ describe('BookingsController integration', () => {
       });
       expect(adviserLogin.status).toBe(200);
 
+      const bookingOwner = await seedAuthUser({
+        email: 'booking-owner@example.com',
+        password: 'password123',
+        firstName: 'Jamie',
+        lastName: 'Driver',
+      });
+      const ownerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: 'booking-owner@example.com',
+        password: 'password123',
+      });
+      expect(ownerLogin.status).toBe(200);
+      const ownerAuthHeader = { Authorization: `Bearer ${ownerLogin.body.accessToken}` };
+
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       expect(servicesResponse.status).toBe(200);
       expect(servicesResponse.body.length).toBeGreaterThan(0);
@@ -112,57 +125,63 @@ describe('BookingsController integration', () => {
         ]),
       );
 
-      const userResponse = await request(app.getHttpServer()).post('/api/users').send({
-        email: 'booking-owner@example.com',
-        firstName: 'Jamie',
-        lastName: 'Driver',
-      });
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set(ownerAuthHeader)
+        .send({
+          userId: bookingOwner.id,
+          plateNumber: 'BKG1234',
+          make: 'Toyota',
+          model: 'Vios',
+          year: 2022,
+        });
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: userResponse.body.id,
-        plateNumber: 'BKG1234',
-        make: 'Toyota',
-        model: 'Vios',
-        year: 2022,
-      });
-
-      const createBookingResponse = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: userResponse.body.id,
-        vehicleId: vehicleResponse.body.id,
-        timeSlotId: timeSlotsResponse.body[0].id,
-        scheduledDate: '2026-04-20',
-        serviceIds: [servicesResponse.body[0].id],
-        notes: 'Please inspect the brakes.',
-      });
+      const createBookingResponse = await request(app.getHttpServer())
+        .post('/api/bookings')
+        .set(ownerAuthHeader)
+        .send({
+          userId: bookingOwner.id,
+          vehicleId: vehicleResponse.body.id,
+          timeSlotId: timeSlotsResponse.body[0].id,
+          scheduledDate: '2026-04-20',
+          serviceIds: [servicesResponse.body[0].id],
+          notes: 'Please inspect the brakes.',
+        });
 
       expect(createBookingResponse.status).toBe(201);
       expect(createBookingResponse.body).toEqual(
         expect.objectContaining({
           id: expect.any(String),
-          userId: userResponse.body.id,
+          userId: bookingOwner.id,
           vehicleId: vehicleResponse.body.id,
-          status: 'pending',
+          status: 'pending_payment',
           customerName: 'Jamie Driver',
           vehicleDisplayName: '2022 Toyota Vios',
         }),
       );
-
-      const readBookingResponse = await request(app.getHttpServer()).get(
-        `/api/bookings/${createBookingResponse.body.id}`,
+      expect(createBookingResponse.body.reservationPayment).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+        }),
       );
+
+      const readBookingResponse = await request(app.getHttpServer())
+        .get(`/api/bookings/${createBookingResponse.body.id}`)
+        .set(ownerAuthHeader);
       expect(readBookingResponse.status).toBe(200);
       expect(readBookingResponse.body.timeSlot.id).toBe(timeSlotsResponse.body[0].id);
+      expect(readBookingResponse.body.status).toBe('pending_payment');
 
-      const updateStatusResponse = await request(app.getHttpServer())
-        .patch(`/api/bookings/${createBookingResponse.body.id}/status`)
+      const confirmReservationPaymentResponse = await request(app.getHttpServer())
+        .patch(`/api/bookings/${createBookingResponse.body.id}/reservation-payment/confirm`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
-          status: 'confirmed',
-          reason: 'Staff approved the slot.',
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-2026-0001',
         });
-      expect(updateStatusResponse.status).toBe(200);
-      expect(updateStatusResponse.body.status).toBe('confirmed');
-      expect(updateStatusResponse.body.statusHistory[0].changedByUserId).toBeTruthy();
+      expect(confirmReservationPaymentResponse.status).toBe(200);
+      expect(confirmReservationPaymentResponse.body.status).toBe('confirmed');
+      expect(confirmReservationPaymentResponse.body.statusHistory[0].changedByUserId).toBeTruthy();
 
       const rescheduleResponse = await request(app.getHttpServer())
         .post(`/api/bookings/${createBookingResponse.body.id}/reschedule`)
@@ -217,9 +236,9 @@ describe('BookingsController integration', () => {
         }),
       );
 
-      const userBookingsResponse = await request(app.getHttpServer()).get(
-        `/api/users/${userResponse.body.id}/bookings`,
-      );
+      const userBookingsResponse = await request(app.getHttpServer())
+        .get(`/api/users/${bookingOwner.id}/bookings`)
+        .set(ownerAuthHeader);
       expect(userBookingsResponse.status).toBe(200);
       expect(userBookingsResponse.body).toEqual(
         expect.arrayContaining([
@@ -254,27 +273,39 @@ describe('BookingsController integration', () => {
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
 
-      const ownerResponse = await request(app.getHttpServer()).post('/api/users').send({
+      const ownerResponse = await seedAuthUser({
         email: 'owner@example.com',
+        password: 'password123',
         firstName: 'Casey',
         lastName: 'Owner',
       });
-      const otherUserResponse = await request(app.getHttpServer()).post('/api/users').send({
+      const otherUserResponse = await seedAuthUser({
         email: 'other@example.com',
+        password: 'password123',
         firstName: 'Robin',
         lastName: 'Other',
       });
+      const ownerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: 'owner@example.com',
+        password: 'password123',
+      });
+      const otherUserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
+        email: 'other@example.com',
+        password: 'password123',
+      });
+      const ownerAuthHeader = { Authorization: `Bearer ${ownerLogin.body.accessToken}` };
+      const otherAuthHeader = { Authorization: `Bearer ${otherUserLogin.body.accessToken}` };
 
-      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').send({
-        userId: ownerResponse.body.id,
+      const vehicleResponse = await request(app.getHttpServer()).post('/api/vehicles').set(ownerAuthHeader).send({
+        userId: ownerResponse.id,
         plateNumber: 'OWN5678',
         make: 'Honda',
         model: 'City',
         year: 2021,
       });
 
-      const invalidOwnership = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: otherUserResponse.body.id,
+      const invalidOwnership = await request(app.getHttpServer()).post('/api/bookings').set(otherAuthHeader).send({
+        userId: otherUserResponse.id,
         vehicleId: vehicleResponse.body.id,
         timeSlotId: timeSlotsResponse.body[0].id,
         scheduledDate: '2026-04-22',
@@ -282,8 +313,8 @@ describe('BookingsController integration', () => {
       });
       expect(invalidOwnership.status).toBe(404);
 
-      const firstBooking = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: ownerResponse.body.id,
+      const firstBooking = await request(app.getHttpServer()).post('/api/bookings').set(ownerAuthHeader).send({
+        userId: ownerResponse.id,
         vehicleId: vehicleResponse.body.id,
         timeSlotId: timeSlotsResponse.body[1].id,
         scheduledDate: '2026-04-22',
@@ -291,8 +322,8 @@ describe('BookingsController integration', () => {
       });
       expect(firstBooking.status).toBe(201);
 
-      const fullSlotAttempt = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: ownerResponse.body.id,
+      const fullSlotAttempt = await request(app.getHttpServer()).post('/api/bookings').set(ownerAuthHeader).send({
+        userId: ownerResponse.id,
         vehicleId: vehicleResponse.body.id,
         timeSlotId: timeSlotsResponse.body[1].id,
         scheduledDate: '2026-04-22',
@@ -300,8 +331,8 @@ describe('BookingsController integration', () => {
       });
       expect(fullSlotAttempt.status).toBe(409);
 
-      const outsideWindowAttempt = await request(app.getHttpServer()).post('/api/bookings').send({
-        userId: ownerResponse.body.id,
+      const outsideWindowAttempt = await request(app.getHttpServer()).post('/api/bookings').set(ownerAuthHeader).send({
+        userId: ownerResponse.id,
         vehicleId: vehicleResponse.body.id,
         timeSlotId: timeSlotsResponse.body[0].id,
         scheduledDate: '2026-10-15',
@@ -309,12 +340,23 @@ describe('BookingsController integration', () => {
       });
       expect(outsideWindowAttempt.status).toBe(409);
 
-      await request(app.getHttpServer())
+      const directStatusConfirmAttempt = await request(app.getHttpServer())
         .patch(`/api/bookings/${firstBooking.body.id}/status`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'confirmed',
         });
+      expect(directStatusConfirmAttempt.status).toBe(409);
+
+      const confirmReservationPayment = await request(app.getHttpServer())
+        .patch(`/api/bookings/${firstBooking.body.id}/reservation-payment/confirm`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          provider: 'manual_counter',
+          referenceNumber: 'COUNTER-2026-0002',
+        });
+      expect(confirmReservationPayment.status).toBe(200);
+      expect(confirmReservationPayment.body.status).toBe('confirmed');
 
       const directCompletionAttempt = await request(app.getHttpServer())
         .patch(`/api/bookings/${firstBooking.body.id}/status`)
@@ -340,7 +382,7 @@ describe('BookingsController integration', () => {
         });
       expect(invalidTransition.status).toBe(409);
 
-      const customerUser = await seedAuthUser({
+      await seedAuthUser({
         email: 'customer.auth@example.com',
         password: 'password123',
         firstName: 'Jamie',

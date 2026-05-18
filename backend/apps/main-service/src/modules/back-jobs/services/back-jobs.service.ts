@@ -198,7 +198,7 @@ export class BackJobsService {
     backJob: Awaited<ReturnType<BackJobsRepository['findById']>>,
     actor: BackJobActor,
   ) {
-    if (['service_adviser', 'super_admin'].includes(actor.role)) {
+    if (['head_technician', 'service_adviser', 'super_admin'].includes(actor.role)) {
       return;
     }
 
@@ -210,7 +210,7 @@ export class BackJobsService {
   }
 
   private async assertVehicleViewerCanAccess(vehicleOwnerUserId: string, actor: BackJobActor) {
-    if (['service_adviser', 'super_admin'].includes(actor.role)) {
+    if (['head_technician', 'service_adviser', 'super_admin'].includes(actor.role)) {
       return;
     }
 
@@ -227,8 +227,8 @@ export class BackJobsService {
       throw new NotFoundException('Back-job reviewer not found');
     }
 
-    if (!['service_adviser', 'super_admin'].includes(user.role)) {
-      throw new ForbiddenException('Only service advisers or super admins can review back jobs');
+    if (!['head_technician', 'service_adviser', 'super_admin'].includes(user.role)) {
+      throw new ForbiddenException('Only head technicians, service advisers, or super admins can review back jobs');
     }
 
     return user;

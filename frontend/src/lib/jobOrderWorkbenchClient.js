@@ -262,6 +262,7 @@ export const getJobOrderById = async ({ jobOrderId, accessToken }) => {
 export const replaceJobOrderAssignments = async ({
   jobOrderId,
   assignedTechnicianIds,
+  expectedUpdatedAt,
   accessToken,
 }) => {
   if (!jobOrderId) {
@@ -278,6 +279,7 @@ export const replaceJobOrderAssignments = async ({
         assignedTechnicianIds: Array.isArray(assignedTechnicianIds)
           ? [...new Set(assignedTechnicianIds.filter(Boolean))]
           : [],
+        expectedUpdatedAt: trimOrUndefined(expectedUpdatedAt),
       },
     }),
   );
@@ -287,6 +289,7 @@ export const updateJobOrderStatus = async ({
   jobOrderId,
   status,
   reason,
+  expectedUpdatedAt,
   accessToken,
 }) => {
   if (!jobOrderId) {
@@ -302,6 +305,7 @@ export const updateJobOrderStatus = async ({
       body: {
         status,
         reason: trimOrUndefined(reason),
+        expectedUpdatedAt: trimOrUndefined(expectedUpdatedAt),
       },
     }),
   );
@@ -312,6 +316,7 @@ export const addJobOrderProgressEntry = async ({
   entryType,
   message,
   completedItemIds,
+  expectedUpdatedAt,
   accessToken,
 }) => {
   if (!jobOrderId) {
@@ -331,6 +336,7 @@ export const addJobOrderProgressEntry = async ({
           Array.isArray(completedItemIds) && completedItemIds.length > 0
             ? completedItemIds
             : undefined,
+        expectedUpdatedAt: trimOrUndefined(expectedUpdatedAt),
       },
     }),
   );
@@ -342,6 +348,7 @@ export const addJobOrderPhotoEvidence = async ({
   caption,
   linkedEntityType,
   linkedEntityId,
+  expectedUpdatedAt,
   accessToken,
 }) => {
   if (!jobOrderId) {
@@ -370,6 +377,10 @@ export const addJobOrderPhotoEvidence = async ({
   if (normalizedLinkedEntityId) {
     formData.append('linkedEntityId', normalizedLinkedEntityId);
   }
+  const normalizedExpectedUpdatedAt = trimOrUndefined(expectedUpdatedAt);
+  if (normalizedExpectedUpdatedAt) {
+    formData.append('expectedUpdatedAt', normalizedExpectedUpdatedAt);
+  }
 
   return normalizeJobOrderForWorkbench(
     await request(`/api/job-orders/${jobOrderId}/photos/upload`, {
@@ -387,6 +398,7 @@ export const finalizeJobOrder = async ({
   paymentMethod,
   paymentReference,
   receivedAt,
+  expectedUpdatedAt,
   accessToken,
 }) => {
   if (!jobOrderId) {
@@ -405,6 +417,7 @@ export const finalizeJobOrder = async ({
         paymentMethod: trimOrUndefined(paymentMethod),
         paymentReference: trimOrUndefined(paymentReference),
         receivedAt: trimOrUndefined(receivedAt) ? new Date(receivedAt).toISOString() : undefined,
+        expectedUpdatedAt: trimOrUndefined(expectedUpdatedAt),
       },
     }),
   );
@@ -430,6 +443,7 @@ export const recordJobOrderInvoicePayment = async ({
   paymentMethod,
   reference,
   receivedAt,
+  expectedUpdatedAt,
   accessToken,
 }) => {
   if (!jobOrderId) {
@@ -456,6 +470,7 @@ export const recordJobOrderInvoicePayment = async ({
         paymentMethod,
         reference: trimOrUndefined(reference),
         receivedAt: normalizedReceivedAt ? new Date(normalizedReceivedAt).toISOString() : undefined,
+        expectedUpdatedAt: trimOrUndefined(expectedUpdatedAt),
       },
     }),
   );

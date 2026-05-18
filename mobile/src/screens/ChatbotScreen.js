@@ -306,7 +306,7 @@ export default function ChatbotScreen({ account, navigation }) {
     if (normalizedPrompt.length < 3) {
       setSendState({
         status: 'validation',
-        message: 'Enter at least three characters so the deterministic FAQ router has enough context.',
+        message: 'Enter at least three characters so the support assistant has enough context.',
       });
       return;
     }
@@ -325,8 +325,8 @@ export default function ChatbotScreen({ account, navigation }) {
         status: 'saved',
         message:
           nextConversation.responseType === 'escalation'
-            ? 'Your prompt was escalated because it did not match an approved FAQ flow.'
-            : 'Support response loaded from the live chatbot routes.',
+            ? 'Your prompt was escalated because staff follow-up is the safer next step.'
+            : 'Support response loaded from the live assistant.',
       });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -391,7 +391,7 @@ export default function ChatbotScreen({ account, navigation }) {
   };
 
   const heroSubtitle = hasSession
-    ? 'Ask deterministic support questions about booking, insurance, and workshop guidance without drifting into unsupported AI behavior.'
+    ? 'Ask for booking help, insurance guidance, or your latest account-aware status updates from the customer support assistant.'
     : 'You can open customer support from the landing page, but account-aware booking and insurance answers need a signed-in customer session.';
 
   return (
@@ -465,8 +465,8 @@ export default function ChatbotScreen({ account, navigation }) {
             <>
               <SupportStatePanel
                 icon="robot-outline"
-                title="Deterministic support only"
-                message="This support flow is FAQ and rule based. Unsupported prompts escalate instead of pretending to reason autonomously about repairs, billing, or claims."
+                title="Account-aware support assistant"
+                message="This assistant can help with booking status, insurance status, required documents, and clear next steps. When the request needs staff review, it will offer escalation instead of guessing."
               />
 
               <View style={styles.sectionCard}>
