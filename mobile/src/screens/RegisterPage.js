@@ -99,13 +99,30 @@ export default function RegisterPage({ navigation, onRegister }) {
       setFormError('');
 
       try {
-        const enrollment = await onRegister(trimmedAccount);
+        const registrationResult = await onRegister(trimmedAccount);
+
+        if (registrationResult?.mode === 'session') {
+          const nextRoute = registrationResult.nextRoute || 'Menu';
+
+          if (registrationResult.resetStack) {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: nextRoute }],
+            });
+            return;
+          }
+
+          navigation.replace(nextRoute);
+          return;
+        }
+
+        const enrollment = registrationResult?.enrollment ?? registrationResult;
 
         navigation.replace('OTP', {
           email: trimmedAccount.email,
-          maskedEmail: enrollment.maskedEmail,
-          enrollmentId: enrollment.enrollmentId,
-          otpExpiresAt: enrollment.otpExpiresAt,
+          maskedEmail: enrollment?.maskedEmail,
+          enrollmentId: enrollment?.enrollmentId,
+          otpExpiresAt: enrollment?.otpExpiresAt,
           otpPurpose: 'register',
           accountDraft: {
             ...trimmedAccount,

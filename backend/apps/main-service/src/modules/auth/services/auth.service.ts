@@ -299,16 +299,15 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(registerDto.password, 10);
     await this.authRepository.createAccount(user.id, passwordHash);
-    await this.usersService.setActivationStatus(user.id, false);
-    await this.authRepository.updateAccountStatus(user.id, false);
+    await this.usersService.setActivationStatus(user.id, true);
+    await this.authRepository.updateAccountStatus(user.id, true);
 
-    return this.createOtpEnrollment({
-      userId: user.id,
-      email: user.email,
-      purpose: 'customer_signup',
-      activationContext: 'customer_signup',
-      status: 'pending_activation',
-    });
+    const activatedUser = await this.usersService.findById(user.id);
+    if (!activatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.issueTokens(activatedUser);
   }
 
   async login(loginDto: LoginDto, ipAddress?: string) {
