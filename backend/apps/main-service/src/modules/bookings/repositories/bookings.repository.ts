@@ -6,13 +6,16 @@ import { DRIZZLE_DB } from '@shared/db/database.constants';
 import { AppDatabase } from '@shared/db/database.types';
 
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateBookingDateClosureDto } from '../dto/create-booking-date-closure.dto';
 import { CreateServiceCategoryDto } from '../dto/create-service-category.dto';
 import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
+import { UpdateBookingDateClosureDto } from '../dto/update-booking-date-closure.dto';
 import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
 import {
+  bookingDateClosures,
   bookingServices,
   bookingPaymentPolicies,
   bookingReservationPayments,
@@ -34,6 +37,12 @@ type UpdateBookingStatusPersistenceInput = UpdateBookingStatusDto & {
 type RescheduleBookingPersistenceInput = RescheduleBookingDto & {
   changedByUserId?: string | null;
 };
+
+const isMissingBookingDateClosuresTableError = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  error.code === '42P01';
 
 @Injectable()
 export class BookingsRepository extends BaseRepository {
@@ -101,6 +110,111 @@ export class BookingsRepository extends BaseRepository {
       .from(timeSlots)
       .where(isNull(timeSlots.deletedAt))
       .orderBy(asc(timeSlots.startTime));
+  }
+
+  async findDateClosureByScheduledDate(scheduledDate: string) {
+    try {
+      return this.db.query.bookingDateClosures.findFirst({
+        where: eq(bookingDateClosures.scheduledDate, scheduledDate),
+      });
+    } catch (error) {
+      if (isMissingBookingDateClosuresTableError(error)) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
+  async findDateClosuresInRange(startDate: string, endDate: string) {
+    try {
+      return this.db
+        .select()
+        .from(bookingDateClosures)
+        .where(
+          and(
+            gte(bookingDateClosures.scheduledDate, startDate),
+            lte(bookingDateClosures.scheduledDate, endDate),
+            eq(bookingDateClosures.isClosed, true),
+          ),
+        )
+        .orderBy(asc(bookingDateClosures.scheduledDate));
+    } catch (error) {
+      if (isMissingBookingDateClosuresTableError(error)) {
+        return [];
+      }
+
+      throw error;
+    }
+  }
+
+  async upsertDateClosure(
+    payload: CreateBookingDateClosureDto,
+    actorUserId?: string | null,
+  ) {
+    try {
+      const [closure] = await this.db
+        .insert(bookingDateClosures)
+        .values({
+          scheduledDate: payload.scheduledDate,
+          label: payload.label?.trim() || null,
+          reason: payload.reason.trim(),
+          isClosed: payload.isClosed ?? true,
+          createdByUserId: actorUserId ?? null,
+          updatedByUserId: actorUserId ?? null,
+        })
+        .onConflictDoUpdate({
+          target: bookingDateClosures.scheduledDate,
+          set: {
+            label: payload.label?.trim() || null,
+            reason: payload.reason.trim(),
+            isClosed: payload.isClosed ?? true,
+            updatedByUserId: actorUserId ?? null,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+
+      return this.assertFound(closure, 'Booking closure could not be saved');
+    } catch (error) {
+      if (isMissingBookingDateClosuresTableError(error)) {
+        throw new Error(
+          'Booking closure storage is unavailable until the database schema is updated.',
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  async updateDateClosure(
+    scheduledDate: string,
+    payload: UpdateBookingDateClosureDto,
+    actorUserId?: string | null,
+  ) {
+    try {
+      const [closure] = await this.db
+        .update(bookingDateClosures)
+        .set({
+          ...(payload.label !== undefined ? { label: payload.label.trim() || null } : {}),
+          ...(payload.reason !== undefined ? { reason: payload.reason.trim() } : {}),
+          ...(payload.isClosed !== undefined ? { isClosed: payload.isClosed } : {}),
+          updatedByUserId: actorUserId ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(bookingDateClosures.scheduledDate, scheduledDate))
+        .returning();
+
+      return this.assertFound(closure, 'Booking closure not found');
+    } catch (error) {
+      if (isMissingBookingDateClosuresTableError(error)) {
+        throw new Error(
+          'Booking closure storage is unavailable until the database schema is updated.',
+        );
+      }
+
+      throw error;
+    }
   }
 
   async findServiceIds(serviceIds: string[]) {

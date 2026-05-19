@@ -105,6 +105,7 @@ import {
 
 const BOTTOM_NAV_HEIGHT = 82;
 const DASHBOARD_WEB_SCROLL_HEIGHT = `calc(100vh - ${BOTTOM_NAV_HEIGHT}px)`;
+const MOBILE_DEEP_LINK_SCHEME = 'autocarecc';
 
 const tabs = [
   { key: 'explore', label: 'Home', icon: 'home-outline' },
@@ -386,6 +387,22 @@ const normalizeNavigationId = (value) => {
   return normalizedValue.length ? normalizedValue : null;
 };
 
+const buildMobileDeepLinkUrl = (path, queryParams = null) => {
+  const normalizedPath = String(path ?? '').trim().replace(/^\/+/, '');
+  const searchParams = new URLSearchParams();
+
+  Object.entries(queryParams ?? {}).forEach(([key, value]) => {
+    const normalizedValue = String(value ?? '').trim();
+
+    if (normalizedValue) {
+      searchParams.set(key, normalizedValue);
+    }
+  });
+
+  const queryString = searchParams.toString();
+  return `${MOBILE_DEEP_LINK_SCHEME}://${normalizedPath}${queryString ? `?${queryString}` : ''}`;
+};
+
 const formatStoreDateLabel = (value) => {
   if (!value) {
     return '--';
@@ -557,6 +574,8 @@ const formatBookingAvailabilityStatusLabel = (status) => {
       return 'Limited';
     case 'full':
       return 'Full';
+    case 'closed':
+      return 'Closed';
     case 'no_active_slots':
       return 'Closed';
     case 'outside_window':
@@ -574,6 +593,8 @@ const getBookingAvailabilityTone = (status) => {
       return 'warning';
     case 'full':
       return 'danger';
+    case 'closed':
+      return 'muted';
     default:
       return 'muted';
   }
@@ -599,6 +620,8 @@ const buildBookingDateCardItem = (availabilityDay, selectedTimeSlot) => {
     ? matchingSlot.isAvailable
       ? `${matchingSlot.remainingCapacity} left in ${selectedTimeSlot?.label || 'selected slot'}`
       : `${selectedTimeSlot?.label || 'Selected slot'} is full`
+    : availabilityDay?.status === 'closed'
+      ? availabilityDay?.closureLabel || availabilityDay?.closureReason || 'Shop closed for this date'
     : availabilityDay?.status === 'no_active_slots'
       ? 'No live slots'
       : `${availabilityDay?.availableSlotCount ?? 0} of ${availabilityDay?.activeSlotCount ?? 0} slots open`;
@@ -2156,6 +2179,20 @@ export default function Dashboard({
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [isProfileEditing, setIsProfileEditing] = useState(false);
   const [profileForm, setProfileForm] = useState(createProfileForm(account));
+  const buildMobileCheckoutReturnUrls = (kind, id = null) => {
+    const normalizedId = String(id ?? '').trim() || undefined;
+    const queryParams =
+      normalizedId
+        ? kind === 'booking'
+          ? { bookingId: normalizedId }
+          : { orderId: normalizedId }
+        : undefined;
+
+    return {
+      successUrl: buildMobileDeepLinkUrl(`checkout/${kind}/success`, queryParams),
+      cancelUrl: buildMobileDeepLinkUrl(`checkout/${kind}/cancel`, queryParams),
+    };
+  };
   const garageVehicleSummaries = digitalGarageState.vehicleSummaries ?? [];
   const selectedGarageVehicle =
     digitalGarageState.vehicles.find((vehicle) => vehicle.id === selectedGarageVehicleId) ??
@@ -2303,8 +2340,20 @@ export default function Dashboard({
       setMenuScreen(supportJump.menuScreen);
     }
 
+    if (supportJump.storeSection) {
+      setStoreSection(supportJump.storeSection);
+    }
+
     if (Object.prototype.hasOwnProperty.call(supportJump, 'selectedHistoryBookingId')) {
       setSelectedHistoryBookingId(supportJump.selectedHistoryBookingId ?? null);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(supportJump, 'selectedStoreOrderId')) {
+      setSelectedStoreOrderId(supportJump.selectedStoreOrderId ?? null);
+    }
+
+    if (supportJump.showStoreOrderDetail) {
+      setIsStoreOrderDetailVisible(true);
     }
 
     setIsProfileTooltipVisible(false);
@@ -3545,6 +3594,8 @@ export default function Dashboard({
       const invoice = await startCustomerOrderInvoicePaymongoCheckout({
         orderId: selectedStoreOrderId,
         accessToken: account.accessToken,
+        checkoutSuccessUrl: buildMobileCheckoutReturnUrls('store', selectedStoreOrderId).successUrl,
+        checkoutCancelUrl: buildMobileCheckoutReturnUrls('store', selectedStoreOrderId).cancelUrl,
       });
 
       setStoreOrderTrackingState((currentState) => ({
@@ -4051,6 +4102,8 @@ export default function Dashboard({
         serviceIds: [selectedService.id],
         notes: bookingNotes.trim() || undefined,
         accessToken: account?.accessToken,
+        checkoutSuccessUrl: buildMobileCheckoutReturnUrls('booking').successUrl,
+        checkoutCancelUrl: buildMobileCheckoutReturnUrls('booking').cancelUrl,
       });
 
       setBookingCreateState({
@@ -4207,6 +4260,8 @@ export default function Dashboard({
       const reservationPayment = await retryBookingReservationPayment({
         bookingId,
         accessToken: account.accessToken,
+        checkoutSuccessUrl: buildMobileCheckoutReturnUrls('booking', bookingId).successUrl,
+        checkoutCancelUrl: buildMobileCheckoutReturnUrls('booking', bookingId).cancelUrl,
       });
 
       applyReservationPaymentToBookingState(bookingId, reservationPayment);
@@ -5894,7 +5949,9 @@ export default function Dashboard({
                       <View
                         style={[
                           styles.bookingDateStatusBadge,
-                          selectedBookingSlotAvailability?.isAvailable
+                          selectedBookingDay.status === 'closed'
+                            ? styles.bookingDateStatusBadgeMuted
+                            : selectedBookingSlotAvailability?.isAvailable
                             ? selectedBookingDay.status === 'limited'
                               ? styles.bookingDateStatusBadgeWarning
                               : styles.bookingDateStatusBadgeSuccess
@@ -5903,7 +5960,9 @@ export default function Dashboard({
                       >
                         <Text style={styles.bookingDateStatusText}>
                           {formatBookingAvailabilityStatusLabel(
-                            selectedBookingSlotAvailability?.isAvailable
+                            selectedBookingDay.status === 'closed'
+                              ? 'closed'
+                              : selectedBookingSlotAvailability?.isAvailable
                               ? selectedBookingDay.status
                               : 'full',
                           )}
@@ -5911,7 +5970,9 @@ export default function Dashboard({
                       </View>
                     </View>
                     <Text style={styles.bookingAvailabilitySelectionMeta}>
-                      {selectedBookingSlotAvailability
+                      {selectedBookingDay.status === 'closed'
+                        ? selectedBookingDay.closureLabel || selectedBookingDay.closureReason || 'This date is closed for new bookings.'
+                        : selectedBookingSlotAvailability
                         ? `${selectedBookingSlotAvailability.label}: ${selectedBookingSlotAvailability.remainingCapacity} of ${selectedBookingSlotAvailability.capacity} spots left.`
                         : `${selectedBookingDay.availableSlotCount} of ${selectedBookingDay.activeSlotCount} live slots are still available on this day.`}
                     </Text>
@@ -6393,7 +6454,7 @@ export default function Dashboard({
         <View style={styles.infoPanel}>
           <Text style={styles.infoPanelTitle}>No loyalty activity yet</Text>
           <Text style={styles.infoPanelText}>
-            Complete paid service work, then come back here to track your rewards ledger.
+            Points appear here after qualifying paid service invoices or fully paid ecommerce orders reach the loyalty ledger.
           </Text>
         </View>
       )}

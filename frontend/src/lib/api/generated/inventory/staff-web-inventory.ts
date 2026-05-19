@@ -30,7 +30,6 @@ export type StaffInventoryDetailState =
 export type StaffInventoryStockState =
   | 'in_stock'
   | 'low_stock'
-  | 'reserved'
   | 'out_of_stock';
 
 export interface StaffInventoryCategoryPresentation {
@@ -53,17 +52,19 @@ export interface StaffInventoryProductPresentation {
   categoryLabel: string;
   visibilityLabel: 'Published' | 'Hidden';
   visibilityRouteStatus: 'live';
-  stockRouteStatus: 'planned';
+  stockRouteStatus: 'live';
   stockRouteLabel: string;
+  quantityOnHand: number;
+  reorderThreshold: number;
+  stockState: StaffInventoryStockState;
   updatedAt: string;
 }
 
 export interface StaffInventoryStateScenario {
   key: StaffInventoryStockState;
   label: string;
-  routeStatus: 'planned';
+  routeStatus: 'live';
   quantityLabel: string;
-  reservationLabel: string;
   customerImpact: string;
   notes: string;
 }
@@ -91,22 +92,30 @@ export const staffInventoryRoles: StaffInventoryRole[] = [
   'super_admin',
 ];
 
-const plannedInventoryRoutes = {
+const liveInventoryRoutes = {
   getInventoryProduct: {
     method: 'GET',
     path: '/inventory/products/:productId',
-    status: 'planned',
-    source: 'task',
+    status: 'live',
+    source: 'code',
     notes:
-      'Intended inventory quantity and reservation-detail route for backoffice stock visibility.',
+      'Live inventory detail route for quantity and threshold visibility.',
   },
   createAdjustment: {
     method: 'POST',
-    path: '/inventory/adjustments',
-    status: 'planned',
-    source: 'task',
+    path: '/inventory/products/:productId/adjustments',
+    status: 'live',
+    source: 'code',
     notes:
-      'Manual stock adjustment remains planned and must not be implied as live write behavior in the web client.',
+      'Live stock adjustment route for incrementing or decrementing quantity on hand.',
+  },
+  updateInventoryPolicy: {
+    method: 'PATCH',
+    path: '/inventory/products/:productId/policy',
+    status: 'live',
+    source: 'code',
+    notes:
+      'Live threshold and direct-count reconciliation route for staff inventory policy updates.',
   },
 } as const satisfies Record<string, RouteContract>;
 
@@ -114,8 +123,9 @@ export const staffInventoryRoutes = {
   listProducts: catalogRoutes.listProducts,
   getProductById: catalogRoutes.getProductById,
   listCategories: catalogRoutes.listCategories,
-  getInventoryProduct: plannedInventoryRoutes.getInventoryProduct,
-  createAdjustment: plannedInventoryRoutes.createAdjustment,
+  getInventoryProduct: liveInventoryRoutes.getInventoryProduct,
+  createAdjustment: liveInventoryRoutes.createAdjustment,
+  updateInventoryPolicy: liveInventoryRoutes.updateInventoryPolicy,
 } as const;
 
 export const staffInventoryRouteRules: StaffInventoryRouteRule[] = [
@@ -127,7 +137,7 @@ export const staffInventoryRouteRules: StaffInventoryRouteRule[] = [
     status: staffInventoryRoutes.listProducts.status,
     source: staffInventoryRoutes.listProducts.source,
     notes:
-      'Live route used today for staff product visibility while inventory controllers are not yet exposed.',
+      'Live route used for product creation and publish metadata in the linked catalog.',
   },
   {
     key: 'getProductById',
@@ -137,7 +147,7 @@ export const staffInventoryRouteRules: StaffInventoryRouteRule[] = [
     status: staffInventoryRoutes.getProductById.status,
     source: staffInventoryRoutes.getProductById.source,
     notes:
-      'Live route used for refreshed product metadata only; it does not include stock counters yet.',
+      'Live route used for refreshed product metadata when staff pivot into catalog editing.',
   },
   {
     key: 'listCategories',
@@ -157,7 +167,7 @@ export const staffInventoryRouteRules: StaffInventoryRouteRule[] = [
     status: staffInventoryRoutes.getInventoryProduct.status,
     source: staffInventoryRoutes.getInventoryProduct.source,
     notes:
-      'Planned route for quantity-on-hand, reserved quantity, and stock movement detail.',
+      'Live route for quantity-on-hand and low-stock threshold detail.',
   },
   {
     key: 'createAdjustment',
@@ -167,7 +177,17 @@ export const staffInventoryRouteRules: StaffInventoryRouteRule[] = [
     status: staffInventoryRoutes.createAdjustment.status,
     source: staffInventoryRoutes.createAdjustment.source,
     notes:
-      'Planned write route. Procurement or restock operations must stay out of the live web UI until the backend exposes this contract.',
+      'Live write route for restock, shrinkage, and correction adjustments.',
+  },
+  {
+    key: 'updateInventoryPolicy',
+    label: 'Inventory threshold policy',
+    method: staffInventoryRoutes.updateInventoryPolicy.method,
+    path: staffInventoryRoutes.updateInventoryPolicy.path,
+    status: staffInventoryRoutes.updateInventoryPolicy.status,
+    source: staffInventoryRoutes.updateInventoryPolicy.source,
+    notes:
+      'Live route for low-stock warning thresholds and direct quantity reconciliation.',
   },
 ];
 
@@ -175,49 +195,36 @@ export const staffInventoryStateScenarios: StaffInventoryStateScenario[] = [
   {
     key: 'in_stock',
     label: 'In Stock',
-    routeStatus: 'planned',
+    routeStatus: 'live',
     quantityLabel: '24 available',
-    reservationLabel: '0 reserved',
     customerImpact: 'Checkout should proceed without inventory warnings.',
     notes:
-      'Shown here as planned only because quantity and reservation DTOs are not yet live-backed.',
+      'Live stock is healthy and above the configured reorder threshold.',
   },
   {
     key: 'low_stock',
     label: 'Low Stock',
-    routeStatus: 'planned',
+    routeStatus: 'live',
     quantityLabel: '4 available',
-    reservationLabel: '0 reserved',
     customerImpact: 'Backoffice should receive a visible warning before oversell risk rises.',
     notes:
-      'Low-stock thresholds must come from explicit inventory policy, not hidden client math, once the route exists.',
-  },
-  {
-    key: 'reserved',
-    label: 'Reserved',
-    routeStatus: 'planned',
-    quantityLabel: '6 available',
-    reservationLabel: '8 reserved',
-    customerImpact: 'Staff should understand that checkout has held stock even before fulfillment commits it.',
-    notes:
-      'Reservation visibility depends on the planned inventory detail route and should not be guessed from order state alone.',
+      'Live stock remains available but is at or below the configured reorder threshold.',
   },
   {
     key: 'out_of_stock',
     label: 'Out of Stock',
-    routeStatus: 'planned',
+    routeStatus: 'live',
     quantityLabel: '0 available',
-    reservationLabel: '0 reserved',
     customerImpact: 'Product should be treated as unavailable for checkout until staff adjusts stock.',
     notes:
-      'Availability remains a planned inventory truth, distinct from whether the product is published in the catalog.',
+      'Live stock has reached zero and needs an inventory adjustment before more units can be sold.',
   },
 ];
 
 export const staffInventoryKnownApiGaps = [
-  'Quantity and reservation counts remain planned, so the demo should not show fake stock numbers.',
-  'Manual stock adjustments are future work and should stay out of demo-critical flows for now.',
-  'Reserved quantity, movement logs, and low-stock policy thresholds are not available in product records yet.',
+  'Inventory quantity and low-stock thresholds are now live, but reservation counters and movement logs are still not exposed.',
+  'Catalog publishing and stock operations are linked but still managed from separate work surfaces.',
+  'Checkout reservation math is not yet exposed back into the inventory workspace as a movement history.',
 ] as const;
 
 export const buildStaffInventoryCategoryPresentation = (
@@ -244,8 +251,21 @@ export const buildStaffInventoryProductPresentation = (
   categoryLabel: product.category?.name ?? 'Uncategorized',
   visibilityLabel: product.isActive ? 'Published' : 'Hidden',
   visibilityRouteStatus: 'live',
-  stockRouteStatus: 'planned',
-  stockRouteLabel: 'Quantity and reservation routes are still planned.',
+  stockRouteStatus: 'live',
+  stockRouteLabel:
+    Number(product.quantityOnHand ?? 0) <= 0
+      ? 'Out of stock until staff add quantity.'
+      : Number(product.quantityOnHand ?? 0) <= Number(product.reorderThreshold ?? 0)
+        ? 'Low-stock warning is active.'
+        : 'Stock is above the current threshold.',
+  quantityOnHand: Number(product.quantityOnHand ?? 0),
+  reorderThreshold: Number(product.reorderThreshold ?? 0),
+  stockState:
+    Number(product.quantityOnHand ?? 0) <= 0
+      ? 'out_of_stock'
+      : Number(product.quantityOnHand ?? 0) <= Number(product.reorderThreshold ?? 0)
+        ? 'low_stock'
+        : 'in_stock',
   updatedAt: product.updatedAt,
 });
 

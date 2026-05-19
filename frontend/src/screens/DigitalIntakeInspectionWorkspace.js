@@ -39,6 +39,7 @@ import {
   getIntakeRequirementOptions,
   intakeFieldMaxLengths,
   resolveIntakeNextRoute,
+  sanitizeIntakeOdometer,
 } from './digitalIntakeInspectionWorkspaceForm.mjs'
 import {
   getArrivalPhotoButtonLabel,
@@ -163,6 +164,13 @@ const getDraftStatusMeta = (status) =>
     label: formatLabel(status) || 'Intake draft',
   }
 
+const getResetIntakeDraft = ({ receivedByStaff = '' } = {}) => ({
+  ...createInitialIntakeDraft(),
+  receivedByStaff,
+})
+
+const isAttachmentLinkOpenable = (reference) => /^https?:\/\//i.test(String(reference ?? '').trim())
+
 const getUserDisplayLabel = (user) =>
   user?.displayName ||
   user?.name ||
@@ -253,7 +261,7 @@ export default function DigitalIntakeInspectionWorkspace() {
   const [selectedInspectionId, setSelectedInspectionId] = useState('')
   const [historyState, setHistoryState] = useState({
     status: 'history_empty',
-    message: 'Enter a vehicle id to load live inspection history, or save a first inspection for that vehicle.',
+    message: 'Select a vehicle to load live inspection history, or save a first inspection for that vehicle.',
   })
   const [captureState, setCaptureState] = useState({
     status: 'capture_ready',
@@ -283,7 +291,7 @@ export default function DigitalIntakeInspectionWorkspace() {
   }, [])
 
   useEffect(() => {
-    if (!user?.accessToken || isTechnician) {
+    if (!user?.accessToken) {
       setCustomers([])
       return
     }
@@ -291,7 +299,7 @@ export default function DigitalIntakeInspectionWorkspace() {
     void listAdminCustomers(user.accessToken)
       .then((items) => setCustomers(items))
       .catch(() => setCustomers([]))
-  }, [isTechnician, user?.accessToken])
+  }, [user?.accessToken])
 
   useEffect(() => {
     if (!user?.accessToken) {
@@ -305,7 +313,7 @@ export default function DigitalIntakeInspectionWorkspace() {
   }, [user?.accessToken])
 
   useEffect(() => {
-    if (!draft.vehicleId || !user?.accessToken || isTechnician) {
+    if (!draft.vehicleId || !user?.accessToken) {
       setVehicleBookings([])
       return
     }
@@ -313,7 +321,7 @@ export default function DigitalIntakeInspectionWorkspace() {
     void listVehicleBookings(draft.vehicleId, user.accessToken)
       .then((items) => setVehicleBookings(items))
       .catch(() => setVehicleBookings([]))
-  }, [draft.vehicleId, isTechnician, user?.accessToken])
+  }, [draft.vehicleId, user?.accessToken])
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === draft.customerUserId) ?? null,
@@ -719,6 +727,10 @@ export default function DigitalIntakeInspectionWorkspace() {
   }
 
   const saveInspection = async (nextStatus) => {
+    if (captureState.status === 'capture_submitting') {
+      return
+    }
+
     if (!canUseInspection) {
       setCaptureState({
         status: 'forbidden_role',
@@ -766,12 +778,13 @@ export default function DigitalIntakeInspectionWorkspace() {
 
       setInspections((current) => [savedInspection, ...current.filter((item) => item.id !== savedInspection.id)])
       setSelectedInspectionId(savedInspection.id)
-      setDraft((current) => ({
-        ...current,
-        arrivalPhotos: normalizedDraftWithUploads.arrivalPhotos,
-        status: savedInspection.status || nextStatus,
-        receivedByStaff: current.receivedByStaff || defaultReceivedByStaff,
-      }))
+      setDraft((current) =>
+        getResetIntakeDraft({
+          receivedByStaff: current.receivedByStaff || defaultReceivedByStaff,
+        }),
+      )
+      setArrivalPhotoUploads({})
+      setActiveIntakeTab('arrival_visit')
       setSubmitIntent(null)
       setCaptureState({
         status: nextCaptureState,
@@ -894,65 +907,41 @@ export default function DigitalIntakeInspectionWorkspace() {
                         })}
                       </div>
                     </div>
-                    {!isTechnician ? (
-                      <label className="label">
-                        Customer
-                        <PortalSelect
-                          value={draft.customerUserId}
-                          onValueChange={(nextValue) =>
-                            updateDraft({
-                              customerUserId: nextValue,
-                              vehicleId: '',
-                              bookingId: '',
-                            })
-                          }
-                          items={customerSelectItems}
-                          placeholder="Choose a customer"
-                          emptyOptionLabel="Choose a customer"
-                        />
-                      </label>
-                    ) : null}
+                    <label className="label">
+                      Customer
+                      <PortalSelect
+                        value={draft.customerUserId}
+                        onValueChange={(nextValue) =>
+                          updateDraft({
+                            customerUserId: nextValue,
+                            vehicleId: '',
+                            bookingId: '',
+                          })
+                        }
+                        items={customerSelectItems}
+                        placeholder="Choose a customer"
+                        emptyOptionLabel="Choose a customer"
+                      />
+                    </label>
                     <label className="label">
                       Vehicle
-                      {isTechnician ? (
-                        <input
-                          value={draft.vehicleId}
-                          onChange={(event) => updateDraft({ vehicleId: event.target.value, bookingId: '' })}
-                          className="input"
-                          placeholder="Paste vehicle UUID"
-                        />
-                      ) : (
-                        <PortalSelect
-                          value={draft.vehicleId}
-                          onValueChange={(nextValue) => updateDraft({ vehicleId: nextValue, bookingId: '' })}
-                          items={vehicleSelectItems}
-                          placeholder="Choose a customer vehicle"
-                          emptyOptionLabel="Choose a customer vehicle"
-                        />
-                      )}
+                      <PortalSelect
+                        value={draft.vehicleId}
+                        onValueChange={(nextValue) => updateDraft({ vehicleId: nextValue, bookingId: '' })}
+                        items={vehicleSelectItems}
+                        placeholder="Choose a customer vehicle"
+                        emptyOptionLabel="Choose a customer vehicle"
+                      />
                     </label>
                     <label className="label md:col-span-2">
                       {draft.arrivalType === 'with_booking' ? 'Booking' : 'Booking reference'}
-                      {isTechnician ? (
-                        <input
-                          value={draft.bookingId}
-                          onChange={(event) => updateDraft({ bookingId: event.target.value })}
-                          className="input"
-                          placeholder={
-                            draft.arrivalType === 'with_booking'
-                              ? 'Paste the booking UUID for this arrival'
-                              : 'Optional booking UUID for linked arrivals'
-                          }
-                        />
-                      ) : (
-                        <PortalSelect
-                          value={draft.bookingId}
-                          onValueChange={(nextValue) => updateDraft({ bookingId: nextValue })}
-                          items={bookingSelectItems}
-                          placeholder={draft.arrivalType === 'with_booking' ? 'Choose a booking' : 'No booking link'}
-                          emptyOptionLabel={draft.arrivalType === 'with_booking' ? 'Choose a booking' : 'No booking link'}
-                        />
-                      )}
+                      <PortalSelect
+                        value={draft.bookingId}
+                        onValueChange={(nextValue) => updateDraft({ bookingId: nextValue })}
+                        items={bookingSelectItems}
+                        placeholder={draft.arrivalType === 'with_booking' ? 'Choose a booking' : 'No booking link'}
+                        emptyOptionLabel={draft.arrivalType === 'with_booking' ? 'Choose a booking' : 'No booking link'}
+                      />
                     </label>
                     <div className="rounded-xl border border-surface-border bg-surface-raised p-4 md:col-span-2">
                       <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Selected context</p>
@@ -1128,7 +1117,9 @@ export default function DigitalIntakeInspectionWorkspace() {
                     Current odometer (km)
                     <input
                       value={draft.currentOdometerKm}
-                      onChange={(event) => updateDraft({ currentOdometerKm: event.target.value })}
+                      onChange={(event) =>
+                        updateDraft({ currentOdometerKm: sanitizeIntakeOdometer(event.target.value) })
+                      }
                       className="input"
                       inputMode="numeric"
                       maxLength={intakeFieldMaxLengths.currentOdometerKm}
@@ -1483,11 +1474,19 @@ export default function DigitalIntakeInspectionWorkspace() {
                   </div>
                 </div>
                 <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-                  <p className="text-sm font-bold text-ink-primary">Findings</p>
-                  <p className="mt-1 text-xs text-ink-muted">
-                    {inspectionSummaryCount} finding{inspectionSummaryCount === 1 ? '' : 's'} attached to this inspection
-                    record.
-                  </p>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-ink-primary">Findings</p>
+                      <p className="mt-1 text-xs text-ink-muted">
+                        {inspectionSummaryCount} finding{inspectionSummaryCount === 1 ? '' : 's'} attached to this inspection
+                        record.
+                      </p>
+                    </div>
+                    <span className="badge badge-gray">
+                      {selectedInspection.attachmentRefs?.length ?? 0} attachment
+                      {(selectedInspection.attachmentRefs?.length ?? 0) === 1 ? '' : 's'}
+                    </span>
+                  </div>
                   <div className="mt-3 space-y-3">
                     {selectedInspection.findings?.length ? (
                       selectedInspection.findings.map((finding) => (
@@ -1506,6 +1505,44 @@ export default function DigitalIntakeInspectionWorkspace() {
                     ) : (
                       <p className="text-sm text-ink-muted">
                         No findings are attached. This record cannot be treated as verified condition evidence yet.
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                  <p className="text-sm font-bold text-ink-primary">Attachment References</p>
+                  <p className="mt-1 text-xs text-ink-muted">
+                    Saved intake uploads stay visible here so staff can review what was stored with the record.
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {selectedInspection.attachmentRefs?.length ? (
+                      selectedInspection.attachmentRefs.map((reference) => {
+                        const openable = isAttachmentLinkOpenable(reference)
+
+                        return (
+                          <div
+                            key={reference}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-raised px-3 py-3"
+                          >
+                            <p className="min-w-0 flex-1 break-all text-sm text-ink-primary">{reference}</p>
+                            {openable ? (
+                              <a
+                                href={reference}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn-ghost min-h-9 px-3 text-xs"
+                              >
+                                Open file
+                              </a>
+                            ) : (
+                              <span className="badge badge-gray">Stored reference</span>
+                            )}
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <p className="text-sm text-ink-muted">
+                        No attachment references are stored on this inspection yet.
                       </p>
                     )}
                   </div>

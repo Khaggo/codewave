@@ -135,7 +135,7 @@ export const customerMobileLoyaltyHistoryStateRules: CustomerMobileLoyaltyHistor
     truth: 'loyalty-transactions-route',
     routeKey: 'getLoyaltyTransactions',
     description:
-      'The customer has a small loyalty history, such as an initial service-earned accrual plus a recent redemption.',
+      'The customer has a small loyalty history, such as an initial qualifying paid-purchase accrual plus a recent redemption.',
   },
   {
     state: 'history_ready',
@@ -182,7 +182,7 @@ export const customerMobileLoyaltyRewardStateRules: CustomerMobileLoyaltyRewardS
     truth: 'client-derived',
     routeKey: 'listLoyaltyRewards',
     description:
-      'The reward is active, but the customer needs more service-earned points before redeeming it.',
+      'The reward is active, but the customer needs more qualifying earned points before redeeming it.',
   },
   {
     state: 'reward_inactive',

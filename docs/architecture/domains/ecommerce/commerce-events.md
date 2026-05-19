@@ -6,7 +6,7 @@
 
 ## Agent Summary
 
-Load this doc for outbox, inbox, and cross-service event publication from e-commerce domains. Skip it for local order, inventory, or loyalty earning rules.
+Load this doc for outbox, inbox, and cross-service event publication from e-commerce domains. Skip it for local order, inventory, or the downstream earning-rule policy itself.
 
 ## Primary Objective
 
@@ -48,8 +48,8 @@ Key relations:
 - consume relevant upstream events if the commerce domain needs them
 - guarantee idempotent event processing and replay safety
 - keep cross-service communication decoupled from direct table access
-- keep `invoice.payment_recorded` as a commerce settlement fact for notifications and analytics only
-- never treat ecommerce payment events as loyalty earning triggers for workshop/service loyalty
+- keep `invoice.payment_recorded` as the canonical commerce settlement fact that downstream services may consume under their own policies
+- let downstream loyalty decide eligibility from `invoice.payment_recorded` through active earning rules instead of hardcoding commerce ownership rules here
 
 ## Process Flow
 
@@ -63,7 +63,7 @@ Key relations:
 - order creation triggers analytics without direct main-service reads into ecommerce tables
 - invoice issuance triggers notifications and analytics refresh planning
 - invoice payment recorded refreshes invoice-related notification policy and analytics facts
-- downstream services use `invoice.payment_recorded` as a billing fact only, not as proof of workshop loyalty eligibility
+- downstream services use `invoice.payment_recorded` as a billing fact and must still apply their own eligibility rules before awarding downstream effects like loyalty
 - inventory change emits stock-related events for downstream summaries
 
 ## API Surface
@@ -78,7 +78,7 @@ Key relations:
 - consumer processes a message after source state was corrected
 - outbox rows accumulate because the publisher is stalled
 - consumer treats `invoice.payment_recorded` as proof of service completion or workshop payment
-- downstream loyalty logic awards points from ecommerce events
+- downstream service assumes every ecommerce payment event automatically creates a loyalty award
 - downstream service assumes global delivery order that is not guaranteed
 
 ## Writable Sections

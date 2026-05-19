@@ -240,6 +240,31 @@ export class JobOrdersService {
     return jobOrder;
   }
 
+  async findInvoiceLookupById(id: string, actor: JobOrderActor) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    const jobOrder = await this.jobOrdersRepository.findById(id);
+
+    this.assertViewerCanAccess(jobOrder, {
+      userId: resolvedActor.id,
+      role: resolvedActor.role as JobOrderActorRole,
+    });
+
+    return {
+      id: jobOrder.id,
+      status: jobOrder.status,
+      sourceType: jobOrder.sourceType,
+      jobType: jobOrder.jobType,
+      sourceId: jobOrder.sourceId,
+      customerUserId: jobOrder.customerUserId,
+      vehicleId: jobOrder.vehicleId,
+      serviceAdviserUserId: jobOrder.serviceAdviserUserId,
+      serviceAdviserCode: jobOrder.serviceAdviserCode,
+      createdAt: jobOrder.createdAt.toISOString(),
+      updatedAt: jobOrder.updatedAt.toISOString(),
+      invoiceRecord: jobOrder.invoiceRecord ?? null,
+    };
+  }
+
   async listCustomerServiceHistory(userId: string, actor: { userId: string; role: string }) {
     const resolvedActor = await this.assertCustomerReadableActor(actor.userId);
     await this.assertCanAccessCustomerHistory(userId, {

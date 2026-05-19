@@ -529,7 +529,7 @@ export const clientRegressionTraceabilityMatrix: ClientRegressionTraceabilityRow
     routeContracts: Object.values(staffInventoryRoutes),
     knownApiGaps: [...staffInventoryKnownApiGaps],
     notes:
-      'Tracks live catalog-backed inventory visibility and the explicit planned-gap routes for quantity detail and adjustments.',
+      'Tracks the live catalog-backed inventory workspace, including quantity detail, low-stock thresholds, and stock adjustments.',
   },
   {
     coordinationKey: 'commerce-derived-sync',

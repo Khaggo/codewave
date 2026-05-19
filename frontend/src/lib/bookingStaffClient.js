@@ -100,6 +100,9 @@ export const getDailySchedule = async (query, accessToken) => {
 
   return {
     ...schedule,
+    isClosed: Boolean(schedule?.isClosed),
+    closureLabel: schedule?.closureLabel ?? null,
+    closureReason: schedule?.closureReason ?? null,
     slots: Array.isArray(schedule?.slots)
       ? schedule.slots.map((slot) => ({
           ...slot,
@@ -109,6 +112,36 @@ export const getDailySchedule = async (query, accessToken) => {
         }))
       : [],
   };
+};
+
+export const listBookingDateClosures = async (query, accessToken) => {
+  const closures = await request('/api/admin/booking-date-closures', {
+    accessToken,
+    query,
+  });
+
+  return Array.isArray(closures) ? closures : [];
+};
+
+export const createBookingDateClosure = (payload, accessToken) =>
+  request('/api/admin/booking-date-closures', {
+    method: 'POST',
+    accessToken,
+    body: payload,
+  });
+
+export const updateBookingDateClosure = ({ scheduledDate, ...payload }, accessToken) => {
+  if (!scheduledDate) {
+    throw new ApiError('Select a date before updating its closure state.', 400, {
+      path: '/api/admin/booking-date-closures/:scheduledDate',
+    });
+  }
+
+  return request(`/api/admin/booking-date-closures/${scheduledDate}`, {
+    method: 'PATCH',
+    accessToken,
+    body: payload,
+  });
 };
 
 export const getCurrentQueue = async (query, accessToken) => {

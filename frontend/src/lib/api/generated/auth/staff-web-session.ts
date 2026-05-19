@@ -106,14 +106,6 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     notes: 'Staff can review customer profile and vehicle context without exposing customer self-service flows on web.',
   },
   {
-    key: 'vehicle-records',
-    href: '/vehicles',
-    label: 'Vehicle Records',
-    visibleTo: ['service_adviser', 'super_admin'],
-    group: 'Customer Records',
-    notes: 'Vehicle-record administration is backed by the adviser/admin customer directory in this phase.',
-  },
-  {
     key: 'back-jobs',
     href: '/backjobs',
     label: 'Back-Jobs',

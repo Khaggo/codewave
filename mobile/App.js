@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import { Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { createNavigationContainerRef, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { enableScreens } from 'react-native-screens';
@@ -50,6 +50,45 @@ enableScreens(false);
 
 const Stack = createStackNavigator();
 const AppSessionContext = createContext(null);
+const navigationRef = createNavigationContainerRef();
+const MOBILE_DEEP_LINK_SCHEME = 'autocarecc';
+
+const parseMobileDeepLink = (url) => {
+  if (!url) {
+    return {
+      hostname: '',
+      path: '',
+      queryParams: {},
+    };
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    return {
+      hostname: String(parsedUrl.hostname ?? '').trim().toLowerCase(),
+      path: String(parsedUrl.pathname ?? '').trim().replace(/^\/+/, ''),
+      queryParams: Object.fromEntries(parsedUrl.searchParams.entries()),
+    };
+  } catch (error) {
+    const fallbackMatch = /^([a-z0-9+.-]+):\/\/([^/?#]+)?\/?([^?#]*)?(?:\?([^#]*))?/i.exec(
+      String(url).trim(),
+    );
+    const queryParams = {};
+
+    if (fallbackMatch?.[4]) {
+      const searchParams = new URLSearchParams(fallbackMatch[4]);
+      searchParams.forEach((value, key) => {
+        queryParams[key] = value;
+      });
+    }
+
+    return {
+      hostname: String(fallbackMatch?.[2] ?? '').trim().toLowerCase(),
+      path: String(fallbackMatch?.[3] ?? '').trim().replace(/^\/+/, ''),
+      queryParams,
+    };
+  }
+};
 
 const useAppSessionContext = () => {
   const context = useContext(AppSessionContext);
@@ -481,6 +520,7 @@ export default function App() {
   const [pendingAccount, setPendingAccount] = useState(null);
   const [activeAccount, setActiveAccount] = useState(null);
   const [pendingOnboardingCompletion, setPendingOnboardingCompletion] = useState(null);
+  const [pendingSupportJump, setPendingSupportJump] = useState(null);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
@@ -581,6 +621,84 @@ export default function App() {
       setCustomerSessionExpiredHandler(null);
     };
   }, []);
+
+  useEffect(() => {
+    const buildSupportJumpFromUrl = (url) => {
+      if (!url) {
+        return null;
+      }
+
+      const { hostname, path, queryParams } = parseMobileDeepLink(url);
+      const normalizedPath = String(path ?? '').trim().replace(/^\/+/, '');
+      const normalizedHost = String(hostname ?? '').trim().toLowerCase();
+      const normalizedOrderId = String(queryParams?.orderId ?? '').trim() || null;
+      const normalizedBookingId = String(queryParams?.bookingId ?? '').trim() || null;
+
+      if (
+        normalizedHost === 'checkout' ||
+        normalizedPath.startsWith('checkout/') ||
+        url.startsWith(`${MOBILE_DEEP_LINK_SCHEME}://checkout/`)
+      ) {
+        const checkoutPath =
+          normalizedHost === 'checkout' ? normalizedPath : `checkout/${normalizedPath}`;
+
+        if (checkoutPath.startsWith('checkout/store/')) {
+          return {
+            id: `${Date.now()}-store-${normalizedOrderId ?? 'none'}`,
+            activeTab: 'store',
+            storeSection: 'orders',
+            selectedStoreOrderId: normalizedOrderId,
+            showStoreOrderDetail: Boolean(normalizedOrderId),
+          };
+        }
+
+        if (checkoutPath.startsWith('checkout/booking/')) {
+          return {
+            id: `${Date.now()}-booking-${normalizedBookingId ?? 'none'}`,
+            activeTab: 'notifications',
+            bookingMode: 'track',
+            selectedHistoryBookingId: normalizedBookingId,
+          };
+        }
+      }
+
+      return null;
+    };
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      const supportJump = buildSupportJumpFromUrl(url);
+
+      if (!supportJump) {
+        return;
+      }
+
+      if (navigationRef.isReady()) {
+        navigationRef.navigate('Menu', { supportJump });
+        return;
+      }
+
+      setPendingSupportJump(supportJump);
+    });
+
+    void Linking.getInitialURL().then((url) => {
+      const supportJump = buildSupportJumpFromUrl(url);
+
+      if (supportJump) {
+        setPendingSupportJump(supportJump);
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!pendingSupportJump || !activeAccount || !navigationRef.isReady()) {
+      return;
+    }
+
+    navigationRef.navigate('Menu', { supportJump: pendingSupportJump });
+    setPendingSupportJump(null);
+  }, [activeAccount, pendingSupportJump]);
 
   const rememberKnownAccount = (nextAccount) => {
     setRegisteredAccount((currentAccount) => {
@@ -1220,7 +1338,16 @@ export default function App() {
         <View style={styles.appRoot}>
           <StatusBar style="light" backgroundColor={colors.background} translucent={false} />
           <AppSessionContext.Provider value={appSessionContextValue}>
-            <NavigationContainer theme={navigationTheme}>
+            <NavigationContainer
+              ref={navigationRef}
+              theme={navigationTheme}
+              onReady={() => {
+                if (pendingSupportJump) {
+                  navigationRef.navigate('Menu', { supportJump: pendingSupportJump });
+                  setPendingSupportJump(null);
+                }
+              }}
+            >
           <Stack.Navigator
             initialRouteName="Landing"
             detachInactiveScreens={false}

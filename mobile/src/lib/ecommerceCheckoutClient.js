@@ -1,7 +1,6 @@
 import { ApiError } from './authClient';
 import { getEcommerceApiBaseUrl } from './catalogClient';
 
-const ECOMMERCE_API_BASE_URL = getEcommerceApiBaseUrl();
 const CHECKOUT_REQUEST_TIMEOUT_MS = 8000;
 const ORDER_CROSS_SERVICE_HINT =
   'Order history is direct ecommerce truth. Notifications and loyalty can refresh separately after downstream sync completes.';
@@ -52,8 +51,9 @@ const request = async (path, options = {}) => {
   let timeoutId = null;
 
   try {
+    const ecommerceApiBaseUrl = getEcommerceApiBaseUrl();
     const runRequest = async () => {
-      const response = await fetch(`${ECOMMERCE_API_BASE_URL}${path}`, {
+      const response = await fetch(`${ecommerceApiBaseUrl}${path}`, {
         ...rest,
         signal: abortController?.signal,
         headers: {
@@ -93,11 +93,11 @@ const request = async (path, options = {}) => {
               abortController?.abort();
               reject(
                 new ApiError(
-                  `Timed out reaching ${ECOMMERCE_API_BASE_URL}${path} after ${timeoutMs}ms. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL.`,
+                  `Timed out reaching ${ecommerceApiBaseUrl}${path} after ${timeoutMs}ms. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL.`,
                   0,
                   {
                     path,
-                    apiBaseUrl: ECOMMERCE_API_BASE_URL,
+                    apiBaseUrl: ecommerceApiBaseUrl,
                     timeoutMs,
                     reason: 'timeout',
                   },
@@ -121,11 +121,11 @@ const request = async (path, options = {}) => {
         : 'Unable to reach the ecommerce API server.';
 
     throw new ApiError(
-      `Unable to reach ${ECOMMERCE_API_BASE_URL}${path}. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL. ${errorMessage}`,
+      `Unable to reach ${ecommerceApiBaseUrl}${path}. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL. ${errorMessage}`,
       0,
       {
         path,
-        apiBaseUrl: ECOMMERCE_API_BASE_URL,
+        apiBaseUrl: ecommerceApiBaseUrl,
         timeoutMs,
         reason: 'network',
       },
@@ -829,7 +829,12 @@ export const getCustomerOrderInvoice = async ({ orderId, accessToken } = {}) => 
   return normalizedInvoice;
 };
 
-export const startCustomerOrderInvoicePaymongoCheckout = async ({ orderId, accessToken } = {}) => {
+export const startCustomerOrderInvoicePaymongoCheckout = async ({
+  orderId,
+  accessToken,
+  checkoutSuccessUrl,
+  checkoutCancelUrl,
+} = {}) => {
   const normalizedOrderId = String(orderId ?? '').trim();
 
   if (!normalizedOrderId) {
@@ -841,7 +846,11 @@ export const startCustomerOrderInvoicePaymongoCheckout = async ({ orderId, acces
 
   const data = await request(`/api/orders/${encodeURIComponent(normalizedOrderId)}/invoice/paymongo/checkout`, {
     method: 'POST',
-    headers: buildAuthHeaders(accessToken),
+    headers: {
+      ...(buildAuthHeaders(accessToken) ?? {}),
+      ...(checkoutSuccessUrl ? { 'x-mobile-success-url': checkoutSuccessUrl } : {}),
+      ...(checkoutCancelUrl ? { 'x-mobile-cancel-url': checkoutCancelUrl } : {}),
+    },
   });
   const normalizedInvoice = normalizeInvoice(data);
 

@@ -286,6 +286,18 @@ type TimeSlotRecord = {
   updatedAt: Date;
 };
 
+type BookingDateClosureRecord = {
+  id: string;
+  scheduledDate: string;
+  label: string | null;
+  reason: string;
+  isClosed: boolean;
+  createdByUserId: string | null;
+  updatedByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type BookingRecord = {
   id: string;
   userId: string;
@@ -1628,6 +1640,7 @@ class InMemoryBookingsRepository {
 
   private readonly services = new Map<string, ServiceRecord>();
   private readonly timeSlots = new Map<string, TimeSlotRecord>();
+  private readonly dateClosures = new Map<string, BookingDateClosureRecord>();
   private readonly bookings = new Map<string, BookingRecord>();
   private readonly bookingServices: BookingServiceRecord[] = [];
   private readonly bookingStatusHistory: BookingStatusHistoryRecord[] = [];
@@ -1653,6 +1666,63 @@ class InMemoryBookingsRepository {
       .filter((slot) => !slot.deletedAt)
       .sort((left, right) => left.startTime.localeCompare(right.startTime))
       .map((slot) => ({ ...slot }));
+  }
+
+  async findDateClosureByScheduledDate(scheduledDate: string) {
+    const closure = this.dateClosures.get(scheduledDate);
+    return closure ? { ...closure } : null;
+  }
+
+  async findDateClosuresInRange(startDate: string, endDate: string) {
+    return Array.from(this.dateClosures.values())
+      .filter((closure) => closure.isClosed && closure.scheduledDate >= startDate && closure.scheduledDate <= endDate)
+      .sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate))
+      .map((closure) => ({ ...closure }));
+  }
+
+  async upsertDateClosure(
+    payload: { scheduledDate: string; label?: string; reason: string; isClosed?: boolean },
+    actorUserId?: string | null,
+  ) {
+    const existing = this.dateClosures.get(payload.scheduledDate);
+    const now = new Date();
+    const closure: BookingDateClosureRecord = {
+      id: existing?.id ?? randomUUID(),
+      scheduledDate: payload.scheduledDate,
+      label: payload.label?.trim() || null,
+      reason: payload.reason.trim(),
+      isClosed: payload.isClosed ?? true,
+      createdByUserId: existing?.createdByUserId ?? actorUserId ?? null,
+      updatedByUserId: actorUserId ?? null,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    this.dateClosures.set(payload.scheduledDate, closure);
+    return { ...closure };
+  }
+
+  async updateDateClosure(
+    scheduledDate: string,
+    payload: { label?: string; reason?: string; isClosed?: boolean },
+    actorUserId?: string | null,
+  ) {
+    const existing = this.dateClosures.get(scheduledDate);
+    if (!existing) {
+      throw new NotFoundException('Booking closure not found');
+    }
+
+    const closure: BookingDateClosureRecord = {
+      ...existing,
+      ...(payload.label !== undefined ? { label: payload.label.trim() || null } : {}),
+      ...(payload.reason !== undefined ? { reason: payload.reason.trim() } : {}),
+      ...(payload.isClosed !== undefined ? { isClosed: payload.isClosed } : {}),
+      updatedByUserId: actorUserId ?? null,
+      updatedAt: new Date(),
+    };
+
+    this.dateClosures.set(scheduledDate, closure);
+    return { ...closure };
   }
 
   async findServiceIds(serviceIds: string[]) {

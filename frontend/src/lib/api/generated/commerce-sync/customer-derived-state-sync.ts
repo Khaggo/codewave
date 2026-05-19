@@ -119,13 +119,13 @@ export const customerDerivedStateGlossary: CustomerDerivedStateGlossaryEntry[] =
     surfaceKey: 'loyalty_balance',
     surface: 'customer-mobile',
     ownerDomain: 'main-service.loyalty',
-    sourceDomains: ['main-service.job-orders'],
+    sourceDomains: ['main-service.job-orders', 'ecommerce.invoice-payments'],
     consistencyModel: 'event_driven_read_model',
     routeContracts: [loyaltyRoutes.getLoyaltyAccount],
     description:
-      'Customer loyalty balance is a derived ledger owned by main-service loyalty and refreshed from paid-service facts.',
+      'Customer loyalty balance is a derived ledger owned by main-service loyalty and refreshed from qualifying paid service or ecommerce facts.',
     customerCopyRule:
-      'Describe loyalty as service-earned points that post after the loyalty ledger processes the paid-service fact.',
+      'Describe loyalty as points that post after the loyalty ledger processes qualifying paid service or ecommerce events.',
     directJoinWarning:
       'Do not infer loyalty accrual directly from ecommerce order or invoice routes, even when those routes change first.',
   },
@@ -133,11 +133,11 @@ export const customerDerivedStateGlossary: CustomerDerivedStateGlossaryEntry[] =
     surfaceKey: 'loyalty_activity',
     surface: 'customer-mobile',
     ownerDomain: 'main-service.loyalty',
-    sourceDomains: ['main-service.job-orders', 'main-service.loyalty'],
+    sourceDomains: ['main-service.job-orders', 'ecommerce.invoice-payments', 'main-service.loyalty'],
     consistencyModel: 'event_driven_read_model',
     routeContracts: [loyaltyRoutes.getLoyaltyTransactions],
     description:
-      'Customer loyalty activity is the append-only loyalty ledger view for service-earned points, redemptions, and manual adjustments.',
+      'Customer loyalty activity is the append-only loyalty ledger view for qualifying earned points, redemptions, and manual adjustments.',
     customerCopyRule:
       'Keep transaction wording anchored to the loyalty ledger and separate from ecommerce order history or invoice history.',
     directJoinWarning:
@@ -211,7 +211,7 @@ export const customerDerivedStateSyncScenarios: CustomerDerivedStateScenario[] =
         surfaceKey: 'loyalty_activity',
         syncStatus: 'fully_synced',
         reason:
-          'The loyalty ledger includes the service-earned transaction with its own append-only activity row.',
+          'The loyalty ledger includes the qualifying earned transaction with its own append-only activity row.',
       },
     ],
   },

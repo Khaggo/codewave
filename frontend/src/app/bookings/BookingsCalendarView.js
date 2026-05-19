@@ -1,6 +1,6 @@
 'use client'
 
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, UserRound, CarFront } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, ShieldAlert, UserRound, CarFront } from 'lucide-react'
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MAX_VISIBLE_BOOKINGS = 2
@@ -55,7 +55,7 @@ function isSameMonth(left, right) {
   return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth()
 }
 
-function buildCalendarCells(monthDate, groupedBookingsByDate) {
+function buildCalendarCells(monthDate, groupedBookingsByDate, dateMetaByDate = {}) {
   const year = monthDate.getFullYear()
   const month = monthDate.getMonth()
   const firstDayIndex = new Date(year, month, 1).getDay()
@@ -83,6 +83,7 @@ function buildCalendarCells(monthDate, groupedBookingsByDate) {
       isCurrentMonth: isSameMonth(cellDate, monthDate),
       isToday: dateKey === todayKey,
       bookings: groupedBookingsByDate[dateKey] ?? [],
+      dateMeta: dateMetaByDate[dateKey] ?? { isClosed: false, closureLabel: null, closureReason: null },
     }
   })
 }
@@ -110,6 +111,7 @@ function getStatusStyle(status) {
 export default function BookingsCalendarView({
   monthDate,
   groupedBookingsByDate,
+  dateMetaByDate,
   loading,
   error,
   scope = 'active',
@@ -119,8 +121,9 @@ export default function BookingsCalendarView({
   onNextMonth,
   onToday,
 }) {
-  const calendarCells = buildCalendarCells(monthDate, groupedBookingsByDate)
+  const calendarCells = buildCalendarCells(monthDate, groupedBookingsByDate, dateMetaByDate)
   const selectedBookings = groupedBookingsByDate[selectedDate] ?? []
+  const selectedDateMeta = dateMetaByDate?.[selectedDate] ?? { isClosed: false, closureLabel: null, closureReason: null }
 
   if (loading) {
     return (
@@ -194,6 +197,7 @@ export default function BookingsCalendarView({
             const visibleBookings = cell.bookings.slice(0, MAX_VISIBLE_BOOKINGS)
             const hiddenCount = cell.bookings.length - visibleBookings.length
             const isSelected = cell.dateKey === selectedDate
+            const isClosed = Boolean(cell.dateMeta?.isClosed)
 
             return (
               <button
@@ -217,10 +221,17 @@ export default function BookingsCalendarView({
                     <span className="text-[10px] font-semibold text-ink-muted">
                       {cell.bookings.length}
                     </span>
+                  ) : isClosed ? (
+                    <span className="text-[10px] font-semibold text-amber-300">Closed</span>
                   ) : null}
                 </div>
 
                 <div className="space-y-1.5">
+                  {isClosed ? (
+                    <div className="truncate rounded-md border border-amber-400/20 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200 md:text-[11px]">
+                      {cell.dateMeta?.closureLabel || 'Shop closed'}
+                    </div>
+                  ) : null}
                   {visibleBookings.map((booking) => {
                     const statusStyle = getStatusStyle(booking.status)
                     return (
@@ -266,10 +277,19 @@ export default function BookingsCalendarView({
               <div>
                 <p className="text-base font-black text-ink-primary">{formatLongDate(selectedDate)}</p>
                 <p className="text-xs text-ink-muted">
-                  {selectedBookings.length} booking{selectedBookings.length === 1 ? '' : 's'} on the selected day
+            {selectedBookings.length} booking{selectedBookings.length === 1 ? '' : 's'} on the selected day
                 </p>
               </div>
             </div>
+            {selectedDateMeta?.isClosed ? (
+              <div className="status-message status-message-warning mt-3 flex items-center gap-2">
+                <ShieldAlert size={14} />
+                <span>
+                  {selectedDateMeta.closureLabel ? `${selectedDateMeta.closureLabel}: ` : ''}
+                  {selectedDateMeta.closureReason || 'This date is closed for new bookings.'}
+                </span>
+              </div>
+            ) : null}
             {error ? <p className="mt-3 text-xs text-amber-300">{error}</p> : null}
           </div>
         </div>

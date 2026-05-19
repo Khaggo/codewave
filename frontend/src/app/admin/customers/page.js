@@ -1,9 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CarFront,
-  ChevronRight,
   MapPin,
   MoreHorizontal,
   RefreshCw,
@@ -34,24 +33,52 @@ function MetricCard({ label, value, hint }) {
   )
 }
 
-function RowActionMenu({ customer, isUpdating, onToggleStatus }) {
+function RowActionMenu({ customer, isOpen, isUpdating, onOpen, onClose, onToggleStatus }) {
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const handlePointerDown = (event) => {
+      if (menuRef.current?.contains(event.target)) {
+        return
+      }
+
+      onClose()
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [isOpen, onClose])
+
   return (
-    <details className="relative" onClick={(event) => event.stopPropagation()}>
-      <summary className="btn-ghost min-h-9 w-9 cursor-pointer list-none justify-center px-0">
+    <div ref={menuRef} className="relative" onClick={(event) => event.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => (isOpen ? onClose() : onOpen(customer.id))}
+        className="btn-ghost min-h-9 w-9 justify-center px-0"
+      >
         <MoreHorizontal size={14} />
-      </summary>
-      <div className="absolute right-0 z-20 mt-2 min-w-[176px] rounded-2xl border border-surface-border bg-surface-card p-2 shadow-2xl">
-        <button
-          type="button"
-          onClick={() => onToggleStatus(customer)}
-          disabled={isUpdating}
-          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs text-ink-primary hover:bg-surface-raised disabled:opacity-60"
-        >
-          <RefreshCw size={13} className={isUpdating ? 'animate-spin' : ''} />
-          {customer.isActive ? 'Deactivate account' : 'Activate account'}
-        </button>
-      </div>
-    </details>
+      </button>
+      {isOpen ? (
+        <div className="absolute right-0 z-20 mt-2 min-w-[176px] rounded-2xl border border-surface-border bg-surface-card p-2 shadow-2xl">
+          <button
+            type="button"
+            onClick={() => {
+              onToggleStatus(customer)
+              onClose()
+            }}
+            disabled={isUpdating}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs text-ink-primary hover:bg-surface-raised disabled:opacity-60"
+          >
+            <RefreshCw size={13} className={isUpdating ? 'animate-spin' : ''} />
+            {customer.isActive ? 'Deactivate account' : 'Activate account'}
+          </button>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -63,6 +90,7 @@ export default function AdminCustomersPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [vehicleFilter, setVehicleFilter] = useState('all')
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
+  const [openMenuCustomerId, setOpenMenuCustomerId] = useState('')
   const [actionState, setActionState] = useState({ status: 'idle', customerId: '', message: '' })
 
   const loadCustomers = useCallback(async () => {
@@ -115,6 +143,7 @@ export default function AdminCustomersPage() {
         ...current,
         customers: current.customers.map((entry) => (entry.id === updatedCustomer.id ? updatedCustomer : entry)),
       }))
+      setOpenMenuCustomerId('')
       setActionState({
         status: 'success',
         customerId: updatedCustomer.id,
@@ -278,7 +307,7 @@ export default function AdminCustomersPage() {
             </p>
           </div>
           <div className="table-scroll">
-            <table className="data-table min-w-[960px]">
+            <table className="data-table min-w-[1120px]">
               <thead>
                 <tr>
                   <th>Customer</th>
@@ -318,7 +347,6 @@ export default function AdminCustomersPage() {
                             <p className="font-semibold text-ink-primary">{customer.displayName}</p>
                             <p className="mt-0.5 truncate text-xs text-ink-secondary">{customer.email}</p>
                           </div>
-                          <ChevronRight size={14} className="ml-auto mt-1 shrink-0 text-ink-muted" />
                         </button>
                       </td>
                       <td className="text-xs text-ink-secondary">
@@ -354,16 +382,12 @@ export default function AdminCustomersPage() {
                       </td>
                       <td>
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedCustomerId(customer.id)}
-                            className="btn-ghost min-h-9 px-3 text-xs"
-                          >
-                            Review
-                          </button>
                           <RowActionMenu
                             customer={customer}
+                            isOpen={openMenuCustomerId === customer.id}
                             isUpdating={isUpdating}
+                            onOpen={setOpenMenuCustomerId}
+                            onClose={() => setOpenMenuCustomerId('')}
                             onToggleStatus={handleToggleStatus}
                           />
                         </div>

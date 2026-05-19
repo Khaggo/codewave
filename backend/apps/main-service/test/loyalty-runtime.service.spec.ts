@@ -77,4 +77,68 @@ describe('LoyaltyRuntimeService', () => {
 
     runtimeService.onModuleDestroy();
   });
+
+  it('subscribes to ecommerce invoice payment events and forwards them to loyalty accrual', async () => {
+    const loyaltyService = {
+      applyLoyaltyAccrual: jest.fn().mockResolvedValue({
+        wasAwarded: true,
+      }),
+      ensureDefaultServicePaymentRule: jest.fn().mockResolvedValue({ id: 'default-rule-1' }),
+    };
+    const usersService = {
+      listStaffAccounts: jest.fn().mockResolvedValue([
+        {
+          id: 'admin-1',
+          role: 'super_admin',
+          isActive: true,
+        },
+      ]),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AutocareEventBusService,
+        LoyaltyRuntimeService,
+        { provide: LoyaltyService, useValue: loyaltyService },
+        { provide: UsersService, useValue: usersService },
+      ],
+    }).compile();
+
+    const runtimeService = moduleRef.get(LoyaltyRuntimeService);
+    const eventBus = moduleRef.get(AutocareEventBusService);
+
+    await runtimeService.onModuleInit();
+
+    eventBus.publish('invoice.payment_recorded', {
+      invoiceId: 'invoice-1',
+      orderId: 'order-1',
+      customerUserId: 'customer-1',
+      invoiceNumber: 'INV-2026-0001',
+      paymentEntryId: 'payment-entry-1',
+      amountCents: 120000,
+      paymentMethod: 'cash',
+      receivedAt: '2026-05-14T10:30:00.000Z',
+      invoiceStatus: 'paid',
+      amountPaidCents: 120000,
+      amountDueCents: 0,
+      currencyCode: 'PHP',
+      productIds: ['product-1'],
+      productCategoryIds: ['category-1'],
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(loyaltyService.applyLoyaltyAccrual).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'invoice.payment_recorded',
+        payload: expect.objectContaining({
+          invoiceId: 'invoice-1',
+          customerUserId: 'customer-1',
+          invoiceStatus: 'paid',
+        }),
+      }),
+    );
+
+    runtimeService.onModuleDestroy();
+  });
 });

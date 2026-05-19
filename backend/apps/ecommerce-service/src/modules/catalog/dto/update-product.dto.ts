@@ -69,4 +69,24 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    example: 18,
+    minimum: 0,
+    description: 'Current quantity on hand for inventory-backed product maintenance.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  quantityOnHand?: number;
+
+  @ApiPropertyOptional({
+    example: 5,
+    minimum: 0,
+    description: 'Low-stock warning threshold for inventory-backed products.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  reorderThreshold?: number;
 }

@@ -27,8 +27,6 @@ const deriveEcommerceApiBaseUrl = () => {
   }
 };
 
-const ECOMMERCE_API_BASE_URL = deriveEcommerceApiBaseUrl();
-
 const buildAuthHeaders = (accessToken) =>
   accessToken
     ? {
@@ -89,8 +87,9 @@ const request = async (path, options = {}) => {
   let timeoutId = null;
 
   try {
+    const ecommerceApiBaseUrl = deriveEcommerceApiBaseUrl();
     const runRequest = async () => {
-      const response = await fetch(`${ECOMMERCE_API_BASE_URL}${path}`, {
+      const response = await fetch(`${ecommerceApiBaseUrl}${path}`, {
         ...rest,
         signal: abortController?.signal,
         headers: {
@@ -130,11 +129,11 @@ const request = async (path, options = {}) => {
               abortController?.abort();
               reject(
                 new ApiError(
-                  `Timed out reaching ${ECOMMERCE_API_BASE_URL}${path} after ${timeoutMs}ms. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL.`,
+                  `Timed out reaching ${ecommerceApiBaseUrl}${path} after ${timeoutMs}ms. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL.`,
                   0,
                   {
                     path,
-                    apiBaseUrl: ECOMMERCE_API_BASE_URL,
+                    apiBaseUrl: ecommerceApiBaseUrl,
                     timeoutMs,
                     reason: 'timeout',
                   },
@@ -158,11 +157,11 @@ const request = async (path, options = {}) => {
         : 'Unable to reach the ecommerce API server.';
 
     throw new ApiError(
-      `Unable to reach ${ECOMMERCE_API_BASE_URL}${path}. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL. ${errorMessage}`,
+      `Unable to reach ${ecommerceApiBaseUrl}${path}. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL. ${errorMessage}`,
       0,
       {
         path,
-        apiBaseUrl: ECOMMERCE_API_BASE_URL,
+        apiBaseUrl: ecommerceApiBaseUrl,
         timeoutMs,
         reason: 'network',
       },
@@ -241,7 +240,7 @@ const normalizeCatalogProduct = (product) => {
   };
 };
 
-export const getEcommerceApiBaseUrl = () => ECOMMERCE_API_BASE_URL;
+export const getEcommerceApiBaseUrl = () => deriveEcommerceApiBaseUrl();
 
 export const createEmptyCustomerCatalogSnapshot = () => ({
   categories: [],

@@ -40,6 +40,18 @@ export class ProductResponseDto {
   isActive!: boolean;
 
   @ApiProperty({
+    example: 12,
+    description: 'Current quantity on hand for inventory-backed product operations.',
+  })
+  quantityOnHand!: number;
+
+  @ApiProperty({
+    example: 4,
+    description: 'Low-stock warning threshold for inventory-backed product operations.',
+  })
+  reorderThreshold!: number;
+
+  @ApiProperty({
     type: () => ProductCategoryResponseDto,
   })
   category!: ProductCategoryResponseDto;

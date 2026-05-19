@@ -26,6 +26,8 @@ export class InvoicePaymentsPaymongoService {
     amountCents: number;
     currencyCode: string;
     customerEmail: string | null;
+    successUrl?: string | null;
+    cancelUrl?: string | null;
   }): Promise<EcommerceInvoicePaymongoResult> {
     const secretKey = this.getSecretKey();
     if (!secretKey) {
@@ -45,8 +47,10 @@ export class InvoicePaymentsPaymongoService {
       };
     }
 
-    const successUrl = this.configService.get<string>('payments.paymongoCheckoutSuccessUrl');
-    const cancelUrl = this.configService.get<string>('payments.paymongoCheckoutCancelUrl');
+    const successUrl =
+      payload.successUrl?.trim() || this.configService.get<string>('payments.paymongoCheckoutSuccessUrl');
+    const cancelUrl =
+      payload.cancelUrl?.trim() || this.configService.get<string>('payments.paymongoCheckoutCancelUrl');
     const response = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
       method: 'POST',
       headers: {

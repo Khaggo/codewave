@@ -81,6 +81,13 @@ export const jobOrdersRoutes: Record<string, RouteContract> = {
     status: 'live',
     source: 'swagger',
   },
+  getJobOrderInvoiceRecord: {
+    method: 'GET',
+    path: '/api/job-orders/:id/invoice-record',
+    status: 'live',
+    source: 'swagger',
+    notes: 'Live route. Returns the invoice-ready snapshot used by the staff billing workspace.',
+  },
   replaceJobOrderAssignments: {
     method: 'PATCH',
     path: '/api/job-orders/:id/assignments',

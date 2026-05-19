@@ -913,6 +913,10 @@ export default function LoyaltyManager() {
 
       {tab === 'rewards' ? (
         <div className="space-y-4">
+          <InfoPanel
+            title="Reward config is redemption-only"
+            body="Rewards define what customers can redeem with their existing points balance. Reward catalog entries do not create points on their own; active earning rules are what award points after qualifying paid service invoices or fully paid ecommerce orders."
+          />
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-center gap-2 bg-surface-card border border-surface-border rounded-lg px-3 py-2 flex-1 max-w-md">
               <Search size={14} className="text-ink-muted flex-shrink-0" />
@@ -995,6 +999,10 @@ export default function LoyaltyManager() {
 
       {tab === 'rules' ? (
         <div className="space-y-4">
+          <InfoPanel
+            title="Earning rules control when points are awarded"
+            body="Points are awarded only after a payment-recorded event matches at least one active rule. Service earning works out of the box through the default service payment rule. Ecommerce earning is opt-in and only works when an active ecommerce or service + e-commerce rule matches a fully paid order invoice."
+          />
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-center gap-2 bg-surface-card border border-surface-border rounded-lg px-3 py-2 flex-1 max-w-md">
               <Search size={14} className="text-ink-muted flex-shrink-0" />

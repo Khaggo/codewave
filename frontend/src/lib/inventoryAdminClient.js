@@ -169,7 +169,7 @@ export const getEcommerceInventoryApiBaseUrl = () => ECOMMERCE_API_BASE_URL;
 
 export const listStaffInventoryProducts = async ({ accessToken } = {}) =>
   normalizeCatalogProducts(
-    await request('/api/products', {
+    await request('/api/inventory/products', {
       accessToken,
     }),
   );
@@ -305,6 +305,8 @@ export const createStaffInventoryProduct = async ({
   sku,
   description,
   pricePhp,
+  quantityOnHand,
+  reorderThreshold,
   isActive = true,
 } = {}) => {
   const normalizedName = String(name ?? '').trim();
@@ -330,6 +332,14 @@ export const createStaffInventoryProduct = async ({
     sku: normalizedSku,
     description: String(description ?? '').trim() || undefined,
     priceCents: toPriceCents(pricePhp),
+    quantityOnHand:
+      quantityOnHand !== undefined && quantityOnHand !== ''
+        ? Math.max(0, Math.trunc(Number(quantityOnHand) || 0))
+        : undefined,
+    reorderThreshold:
+      reorderThreshold !== undefined && reorderThreshold !== ''
+        ? Math.max(0, Math.trunc(Number(reorderThreshold) || 0))
+        : undefined,
     isActive,
   };
 
@@ -350,6 +360,8 @@ export const updateStaffInventoryProduct = async ({
   sku,
   description,
   pricePhp,
+  quantityOnHand,
+  reorderThreshold,
   isActive,
 } = {}) => {
   const normalizedProductId = String(productId ?? '').trim();
@@ -373,6 +385,14 @@ export const updateStaffInventoryProduct = async ({
     sku: sku ? String(sku).trim() : undefined,
     description: description !== undefined ? String(description).trim() || undefined : undefined,
     priceCents: pricePhp !== undefined ? toPriceCents(pricePhp) : undefined,
+    quantityOnHand:
+      quantityOnHand !== undefined && quantityOnHand !== ''
+        ? Math.max(0, Math.trunc(Number(quantityOnHand) || 0))
+        : undefined,
+    reorderThreshold:
+      reorderThreshold !== undefined && reorderThreshold !== ''
+        ? Math.max(0, Math.trunc(Number(reorderThreshold) || 0))
+        : undefined,
     isActive,
   };
 
@@ -381,6 +401,83 @@ export const updateStaffInventoryProduct = async ({
       accessToken,
       method: 'PATCH',
       body: payload,
+    }),
+  );
+};
+
+export const updateStaffInventoryPolicy = async ({
+  accessToken,
+  productId,
+  quantityOnHand,
+  reorderThreshold,
+} = {}) => {
+  const normalizedProductId = String(productId ?? '').trim();
+
+  if (!accessToken) {
+    throw new ApiError('Sign in as staff before updating inventory policy.', 401, {
+      path: '/api/inventory/products/:id/policy',
+    });
+  }
+
+  if (!normalizedProductId) {
+    throw new ApiError('Select a product before updating inventory policy.', 400, {
+      path: '/api/inventory/products/:id/policy',
+    });
+  }
+
+  return buildStaffInventoryProductPresentation(
+    await request(`/api/inventory/products/${encodeURIComponent(normalizedProductId)}/policy`, {
+      accessToken,
+      method: 'PATCH',
+      body: {
+        quantityOnHand:
+          quantityOnHand !== undefined && quantityOnHand !== ''
+            ? Math.max(0, Math.trunc(Number(quantityOnHand) || 0))
+            : undefined,
+        reorderThreshold:
+          reorderThreshold !== undefined && reorderThreshold !== ''
+            ? Math.max(0, Math.trunc(Number(reorderThreshold) || 0))
+            : undefined,
+      },
+    }),
+  );
+};
+
+export const createStaffInventoryAdjustment = async ({
+  accessToken,
+  productId,
+  quantityDelta,
+  reason,
+} = {}) => {
+  const normalizedProductId = String(productId ?? '').trim();
+  const normalizedDelta = Math.trunc(Number(quantityDelta) || 0);
+
+  if (!accessToken) {
+    throw new ApiError('Sign in as staff before adjusting inventory.', 401, {
+      path: '/api/inventory/products/:id/adjustments',
+    });
+  }
+
+  if (!normalizedProductId) {
+    throw new ApiError('Select a product before adjusting inventory.', 400, {
+      path: '/api/inventory/products/:id/adjustments',
+    });
+  }
+
+  if (!normalizedDelta) {
+    throw new ApiError('Enter a non-zero stock adjustment.', 400, {
+      path: '/api/inventory/products/:id/adjustments',
+    });
+  }
+
+  return buildStaffInventoryProductPresentation(
+    await request(`/api/inventory/products/${encodeURIComponent(normalizedProductId)}/adjustments`, {
+      accessToken,
+      method: 'POST',
+      body: {
+        quantityDelta: normalizedDelta,
+        reason: String(reason ?? '').trim() || undefined,
+      },
     }),
   );
 };

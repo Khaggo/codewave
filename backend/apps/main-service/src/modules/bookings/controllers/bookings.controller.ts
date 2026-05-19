@@ -20,12 +20,15 @@ import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 
 import { BookingAvailabilityQueryDto } from '../dto/booking-availability-query.dto';
+import { BookingDateClosureQueryDto } from '../dto/booking-date-closure-query.dto';
+import { BookingDateClosureResponseDto } from '../dto/booking-date-closure-response.dto';
 import { BookingPaymentPolicyResponseDto } from '../dto/booking-payment-policy-response.dto';
 import { BookingReservationPaymentResponseDto } from '../dto/booking-reservation-payment-response.dto';
 import { BookingAvailabilityResponseDto } from '../dto/booking-availability-response.dto';
 import { BookingResponseDto } from '../dto/booking-response.dto';
 import { ConfirmBookingReservationPaymentDto } from '../dto/confirm-booking-reservation-payment.dto';
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateBookingDateClosureDto } from '../dto/create-booking-date-closure.dto';
 import { CreateServiceCategoryDto } from '../dto/create-service-category.dto';
 import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
@@ -37,6 +40,7 @@ import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { ServiceCategoryResponseDto } from '../dto/service-category-response.dto';
 import { ServiceResponseDto } from '../dto/service-response.dto';
 import { TimeSlotResponseDto } from '../dto/time-slot-response.dto';
+import { UpdateBookingDateClosureDto } from '../dto/update-booking-date-closure.dto';
 import { UpdateBookingPaymentPolicyDto } from '../dto/update-booking-payment-policy.dto';
 import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
@@ -141,6 +145,58 @@ export class BookingsController {
     return this.bookingsService.getAvailability(query);
   }
 
+  @Get('admin/booking-date-closures')
+  @ApiOperation({ summary: 'List closed booking dates inside the requested window.' })
+  @ApiOkResponse({
+    description: 'Active booking date closures used by booking availability and staff scheduling.',
+    type: BookingDateClosureResponseDto,
+    isArray: true,
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  listDateClosures(@Query() query: BookingDateClosureQueryDto) {
+    return this.bookingsService.listDateClosures(query);
+  }
+
+  @Post('admin/booking-date-closures')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create or replace a booking date closure.' })
+  @ApiCreatedResponse({
+    description: 'Saved booking date closure.',
+    type: BookingDateClosureResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The submitted booking closure payload is invalid.' })
+  @ApiConflictResponse({ description: 'The selected closure date is outside the supported booking window.' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  createDateClosure(@Body() payload: CreateBookingDateClosureDto, @Req() request: Request) {
+    return this.bookingsService.createDateClosure(payload, (request.user as { userId: string }).userId);
+  }
+
+  @Patch('admin/booking-date-closures/:scheduledDate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update or reopen a booking date closure.' })
+  @ApiOkResponse({
+    description: 'Updated booking date closure.',
+    type: BookingDateClosureResponseDto,
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  updateDateClosure(
+    @Param('scheduledDate') scheduledDate: string,
+    @Body() payload: UpdateBookingDateClosureDto,
+    @Req() request: Request,
+  ) {
+    return this.bookingsService.updateDateClosure(
+      scheduledDate,
+      payload,
+      (request.user as { userId: string }).userId,
+    );
+  }
+
   @Post('time-slots')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a booking time slot definition for staff operations.' })
@@ -225,10 +281,19 @@ export class BookingsController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('customer', 'service_adviser', 'super_admin')
-  create(@Body() createBookingDto: CreateBookingDto, @Req() request: Request) {
+  create(
+    @Body() createBookingDto: CreateBookingDto,
+    @Req() request: Request,
+    @Headers('x-mobile-success-url') mobileSuccessUrl?: string,
+    @Headers('x-mobile-cancel-url') mobileCancelUrl?: string,
+  ) {
     return this.bookingsService.create(
       createBookingDto,
       request.user as { userId: string; role: string },
+      {
+        successUrl: mobileSuccessUrl,
+        cancelUrl: mobileCancelUrl,
+      },
     );
   }
 
@@ -257,10 +322,19 @@ export class BookingsController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('customer', 'service_adviser', 'super_admin')
-  retryReservationPayment(@Param('id') id: string, @Req() request: Request) {
+  retryReservationPayment(
+    @Param('id') id: string,
+    @Req() request: Request,
+    @Headers('x-mobile-success-url') mobileSuccessUrl?: string,
+    @Headers('x-mobile-cancel-url') mobileCancelUrl?: string,
+  ) {
     return this.bookingsService.retryReservationPayment(
       id,
       request.user as { userId: string; role: string },
+      {
+        successUrl: mobileSuccessUrl,
+        cancelUrl: mobileCancelUrl,
+      },
     );
   }
 
@@ -483,7 +557,7 @@ export class BookingsController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('service_adviser', 'super_admin')
+  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
   @Get('vehicles/:id/bookings')
   @ApiOperation({ summary: 'List bookings tied to a specific vehicle for staff lookup selectors.' })
   @ApiBearerAuth('access-token')
@@ -497,7 +571,10 @@ export class BookingsController {
     type: BookingResponseDto,
     isArray: true,
   })
-  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can list vehicle booking records.' })
+  @ApiForbiddenResponse({
+    description:
+      'Only technicians, head technicians, service advisers, or super admins can list vehicle booking records for intake selectors.',
+  })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   findByVehicleId(@Param('id') id: string, @Req() request: Request) {
     return this.bookingsService.findByVehicleId(

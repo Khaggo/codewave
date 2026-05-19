@@ -16,7 +16,7 @@ import {
 import PageHeader from '@/components/ui/PageHeader'
 import { ApiError, listAdminCustomers } from '@/lib/authClient'
 import { getInvoiceAgingAnalytics } from '@/lib/analyticsAdminClient'
-import { getJobOrderById, listJobOrderWorkbenchSummaries } from '@/lib/jobOrderWorkbenchClient'
+import { getJobOrderInvoiceLookup, listJobOrderWorkbenchSummaries } from '@/lib/jobOrderWorkbenchClient'
 import {
   formatInvoiceOrderCurrency,
   listStaffEcommerceOrdersByUserId,
@@ -309,21 +309,29 @@ export default function InvoiceOrderManagementWorkspace() {
     }))
 
     try {
-      const jobOrder = await getJobOrderById({
+      const jobOrder = await getJobOrderInvoiceLookup({
         jobOrderId: jobOrderId.trim(),
         accessToken: user.accessToken,
       })
+      const invoiceRecord = jobOrder?.invoiceRecord ?? jobOrder?.invoice_record ?? null
 
       setJobOrderState({
         status: getStaffInvoiceOrderLoadState({
           hasSession: true,
           canRead,
-          hasData: Boolean(jobOrder?.invoiceRecord),
+          hasData: Boolean(invoiceRecord),
         }),
-        message: jobOrder?.invoiceRecord
+        message: invoiceRecord
           ? 'Service record loaded for invoice follow-through.'
-          : 'Job order loaded, but no invoice-ready record is attached yet.',
-        jobOrder,
+          : jobOrder
+            ? 'Job order loaded, but no invoice-ready record is attached yet.'
+            : 'Service invoice snapshot is unavailable for the selected job order.',
+        jobOrder: jobOrder
+          ? {
+              ...jobOrder,
+              invoiceRecord,
+            }
+          : null,
       })
     } catch (error) {
       const notFound = error instanceof ApiError && error.status === 404

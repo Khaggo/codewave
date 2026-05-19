@@ -476,6 +476,46 @@ export const recordJobOrderInvoicePayment = async ({
   );
 };
 
+export const getJobOrderInvoiceLookup = async ({ jobOrderId, accessToken }) => {
+  if (!jobOrderId) {
+    throw new ApiError('Enter or select a finalized job-order id before loading invoice detail.', 400, {
+      path: '/api/job-orders/:id/invoice-record',
+    });
+  }
+
+  let snapshot = null;
+
+  try {
+    snapshot = await request(`/api/job-orders/${jobOrderId}/invoice-record`, {
+      method: 'GET',
+      headers: buildAuthorizedHeaders(accessToken),
+    });
+  } catch (error) {
+    const routeUnavailable = error instanceof ApiError && error.status === 404;
+
+    if (!routeUnavailable) {
+      throw error;
+    }
+
+    snapshot = await request(`/api/job-orders/${jobOrderId}`, {
+      method: 'GET',
+      headers: buildAuthorizedHeaders(accessToken),
+    });
+  }
+
+  if (!snapshot || typeof snapshot !== 'object') {
+    return null;
+  }
+
+  return {
+    ...snapshot,
+    invoiceRecord:
+      snapshot.invoiceRecord ??
+      snapshot.invoice_record ??
+      null,
+  };
+};
+
 export const startJobOrderInvoicePaymongoCheckout = async ({ jobOrderId, accessToken }) => {
   if (!jobOrderId) {
     throw new ApiError('Load a finalized job order before starting PayMongo checkout.', 400, {

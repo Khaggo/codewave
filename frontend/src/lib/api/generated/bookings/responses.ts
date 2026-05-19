@@ -26,6 +26,7 @@ export type BookingAvailabilityDayStatus =
   | 'bookable'
   | 'limited'
   | 'full'
+  | 'closed'
   | 'outside_window'
   | 'no_active_slots';
 
@@ -46,6 +47,8 @@ export interface BookingAvailabilitySlotResponse {
 export interface BookingAvailabilityDayResponse {
   scheduledDate: string;
   status: BookingAvailabilityDayStatus;
+  closureLabel?: string | null;
+  closureReason?: string | null;
   isBookable: boolean;
   activeSlotCount: number;
   availableSlotCount: number;
@@ -114,6 +117,9 @@ export interface DailyScheduleSlotView {
 
 export interface DailyScheduleResponse {
   scheduledDate: string;
+  isClosed: boolean;
+  closureLabel?: string | null;
+  closureReason?: string | null;
   slots: DailyScheduleSlotView[];
 }
 

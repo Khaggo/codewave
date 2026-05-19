@@ -25,14 +25,17 @@ import {
   bookingAvailabilitySlotStatusValues,
 } from '../bookings.constants';
 import { BookingAvailabilityQueryDto } from '../dto/booking-availability-query.dto';
+import { BookingDateClosureQueryDto } from '../dto/booking-date-closure-query.dto';
 import { ConfirmBookingReservationPaymentDto } from '../dto/confirm-booking-reservation-payment.dto';
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateBookingDateClosureDto } from '../dto/create-booking-date-closure.dto';
 import { CreateServiceCategoryDto } from '../dto/create-service-category.dto';
 import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { DailyScheduleQueryDto, type DailyScheduleScope } from '../dto/daily-schedule-query.dto';
 import { QueueCurrentQueryDto } from '../dto/queue-current-query.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
+import { UpdateBookingDateClosureDto } from '../dto/update-booking-date-closure.dto';
 import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingPaymentPolicyDto } from '../dto/update-booking-payment-policy.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
@@ -174,10 +177,19 @@ export class BookingsService {
     return this.bookingsRepository.listTimeSlots();
   }
 
+  async listDateClosures(query: BookingDateClosureQueryDto) {
+    const { startDate, endDate } = this.normalizeClosureQuery(query);
+    return this.bookingsRepository.findDateClosuresInRange(startDate, endDate);
+  }
+
   async getAvailability(query: BookingAvailabilityQueryDto) {
     const { startDate, endDate, timeSlotId } = this.normalizeAvailabilityQuery(query);
     const { minBookableDate, maxBookableDate } = this.getBookingWindowBounds();
-    const activeTimeSlots = await this.listActiveAvailabilitySlots(timeSlotId);
+    const [activeTimeSlots, activeClosures] = await Promise.all([
+      this.listActiveAvailabilitySlots(timeSlotId),
+      this.bookingsRepository.findDateClosuresInRange(startDate, endDate),
+    ]);
+    const closuresByDate = new Map(activeClosures.map((closure) => [closure.scheduledDate, closure]));
     const activeBookings = activeTimeSlots.length
       ? await this.bookingsRepository.findByScheduledDateRange(startDate, endDate, {
           timeSlotId,
@@ -199,6 +211,8 @@ export class BookingsService {
         return {
           scheduledDate,
           status: 'outside_window' as (typeof bookingAvailabilityDayStatusValues)[number],
+          closureLabel: null,
+          closureReason: null,
           isBookable: false,
           activeSlotCount: 0,
           availableSlotCount: 0,
@@ -212,6 +226,24 @@ export class BookingsService {
         return {
           scheduledDate,
           status: 'no_active_slots' as (typeof bookingAvailabilityDayStatusValues)[number],
+          closureLabel: null,
+          closureReason: null,
+          isBookable: false,
+          activeSlotCount: 0,
+          availableSlotCount: 0,
+          totalCapacity: 0,
+          remainingCapacity: 0,
+          slots: [],
+        };
+      }
+
+      const closure = closuresByDate.get(scheduledDate);
+      if (closure?.isClosed) {
+        return {
+          scheduledDate,
+          status: 'closed' as (typeof bookingAvailabilityDayStatusValues)[number],
+          closureLabel: closure.label ?? null,
+          closureReason: closure.reason ?? null,
           isBookable: false,
           activeSlotCount: 0,
           availableSlotCount: 0,
@@ -252,6 +284,8 @@ export class BookingsService {
       return {
         scheduledDate,
         status,
+        closureLabel: null,
+        closureReason: null,
         isBookable: availableSlotCount > 0,
         activeSlotCount: slots.length,
         availableSlotCount,
@@ -305,7 +339,23 @@ export class BookingsService {
     return this.bookingsRepository.archiveTimeSlot(id);
   }
 
-  async create(createBookingDto: CreateBookingDto, actor?: { userId: string; role: string }) {
+  async createDateClosure(payload: CreateBookingDateClosureDto, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+    this.assertClosureDateWithinWindow(payload.scheduledDate);
+    return this.bookingsRepository.upsertDateClosure(payload, actorUserId);
+  }
+
+  async updateDateClosure(scheduledDate: string, payload: UpdateBookingDateClosureDto, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+    this.assertClosureDateWithinWindow(scheduledDate);
+    return this.bookingsRepository.updateDateClosure(scheduledDate, payload, actorUserId);
+  }
+
+  async create(
+    createBookingDto: CreateBookingDto,
+    actor?: { userId: string; role: string },
+    checkoutReturnUrls?: { successUrl?: string | null; cancelUrl?: string | null },
+  ) {
     if (actor) {
       this.assertBookingActorCanAccessUser(createBookingDto.userId, actor);
     }
@@ -320,7 +370,7 @@ export class BookingsService {
       await this.issueOrRefreshReservationPayment(booking, {
         customerName: this.getCustomerDisplayName(user),
         customerEmail: user.email,
-      });
+      }, checkoutReturnUrls);
     } catch (error) {
       const paymentPolicy = await this.bookingsRepository.getOrCreatePaymentPolicy();
       const failureReason =
@@ -374,7 +424,7 @@ export class BookingsService {
   }
 
   async findByVehicleId(vehicleId: string, actorUserId: string) {
-    await this.assertStaffActor(actorUserId);
+    await this.assertIntakeLookupActor(actorUserId);
     const bookings = await this.bookingsRepository.findByVehicleId(vehicleId);
     return bookings.map((booking) => this.toBookingView(booking));
   }
@@ -425,12 +475,13 @@ export class BookingsService {
   async getDailySchedule(query: DailyScheduleQueryDto) {
     await this.normalizePastDueOpenBookings();
     const statuses = this.resolveDailyScheduleStatuses(query.status, query.scope);
-    const [slots, scheduleBookings] = await Promise.all([
+    const [slots, scheduleBookings, closure] = await Promise.all([
       this.bookingsRepository.listTimeSlots(),
       this.bookingsRepository.findByScheduledDate(query.scheduledDate, {
         timeSlotId: query.timeSlotId,
         statuses,
       }),
+      this.bookingsRepository.findDateClosureByScheduledDate(query.scheduledDate),
     ]);
 
     const filteredSlots = query.timeSlotId
@@ -439,6 +490,9 @@ export class BookingsService {
 
     return {
       scheduledDate: query.scheduledDate,
+      isClosed: Boolean(closure?.isClosed),
+      closureLabel: closure?.label ?? null,
+      closureReason: closure?.reason ?? null,
       slots: filteredSlots.map((slot) => {
         const slotBookings = scheduleBookings
           .filter((booking) => booking.timeSlotId === slot.id)
@@ -532,6 +586,7 @@ export class BookingsService {
 
   private async assertTimeSlotAvailability(timeSlotId: string, scheduledDate: string, excludeBookingId?: string) {
     this.assertBookingDateWithinWindow(scheduledDate);
+    await this.assertDateIsOpenForBookings(scheduledDate);
     const timeSlot = await this.bookingsRepository.findTimeSlotById(timeSlotId);
     if (!timeSlot || !timeSlot.isActive) {
       throw new NotFoundException('Time slot not found');
@@ -580,6 +635,27 @@ export class BookingsService {
     };
   }
 
+  private normalizeClosureQuery(query: BookingDateClosureQueryDto) {
+    const startDate = query.startDate ? parseDateOnly(query.startDate) : toDateOnly(this.getCurrentDate());
+    const endDate = query.endDate ? parseDateOnly(query.endDate) : addDays(toDateOnly(this.getCurrentDate()), 62);
+
+    if (!startDate || !endDate) {
+      throw new BadRequestException('Booking closure queries require valid startDate and endDate values');
+    }
+
+    const normalizedStartDate = formatDateOnly(startDate);
+    const normalizedEndDate = formatDateOnly(endDate);
+
+    if (normalizedStartDate > normalizedEndDate) {
+      throw new BadRequestException('Booking closure startDate must be earlier than or equal to endDate');
+    }
+
+    return {
+      startDate: normalizedStartDate,
+      endDate: normalizedEndDate,
+    };
+  }
+
   private async listActiveAvailabilitySlots(timeSlotId?: string) {
     if (timeSlotId) {
       const timeSlot = await this.bookingsRepository.findTimeSlotById(timeSlotId);
@@ -605,6 +681,27 @@ export class BookingsService {
 
     if (normalizedDate < minBookableDate || normalizedDate > maxBookableDate) {
       throw new ConflictException('Scheduled date is outside the supported booking window');
+    }
+  }
+
+  private assertClosureDateWithinWindow(scheduledDate: string) {
+    const parsedDate = parseDateOnly(scheduledDate);
+    if (!parsedDate) {
+      throw new BadRequestException('Closure date must use YYYY-MM-DD format');
+    }
+
+    const normalizedDate = formatDateOnly(parsedDate);
+    const { minBookableDate, maxBookableDate } = this.getBookingWindowBounds();
+
+    if (normalizedDate < minBookableDate || normalizedDate > maxBookableDate) {
+      throw new ConflictException('Closure date is outside the supported booking window');
+    }
+  }
+
+  private async assertDateIsOpenForBookings(scheduledDate: string) {
+    const closure = await this.bookingsRepository.findDateClosureByScheduledDate(scheduledDate);
+    if (closure?.isClosed) {
+      throw new ConflictException('Selected date is currently closed for bookings');
     }
   }
 
@@ -668,7 +765,11 @@ export class BookingsService {
     return booking.reservationPayment ?? null;
   }
 
-  async retryReservationPayment(bookingId: string, actor?: { userId: string; role: string }) {
+  async retryReservationPayment(
+    bookingId: string,
+    actor?: { userId: string; role: string },
+    checkoutReturnUrls?: { successUrl?: string | null; cancelUrl?: string | null },
+  ) {
     const booking = await this.assertFreshBookingState(bookingId);
     if (actor) {
       this.assertBookingActorCanAccessUser(booking.userId, actor);
@@ -681,7 +782,7 @@ export class BookingsService {
     await this.issueOrRefreshReservationPayment(booking, {
       customerName: this.getCustomerDisplayName(user),
       customerEmail: user.email,
-    });
+    }, checkoutReturnUrls);
 
     return this.toBookingView(await this.bookingsRepository.findById(bookingId));
   }
@@ -883,6 +984,21 @@ export class BookingsService {
     return user;
   }
 
+  private async assertIntakeLookupActor(userId: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user || !user.isActive) {
+      throw new NotFoundException('Booking operator not found');
+    }
+
+    if (!['technician', 'head_technician', 'service_adviser', 'super_admin'].includes(user.role)) {
+      throw new ForbiddenException(
+        'Only technicians, head technicians, service advisers, or super admins can load intake booking references',
+      );
+    }
+
+    return user;
+  }
+
   private assertBookingActorCanAccessUser(userId: string, actor: { userId: string; role: string }) {
     if (!['customer', 'service_adviser', 'super_admin'].includes(actor.role)) {
       throw new ForbiddenException('Only customers, service advisers, or super admins can access bookings');
@@ -896,6 +1012,7 @@ export class BookingsService {
   private async issueOrRefreshReservationPayment(
     booking: any,
     customer: { customerName: string | null; customerEmail: string | null },
+    checkoutReturnUrls?: { successUrl?: string | null; cancelUrl?: string | null },
   ) {
     const paymentPolicy = await this.bookingsRepository.getOrCreatePaymentPolicy();
     const expiresAt = new Date(
@@ -908,6 +1025,8 @@ export class BookingsService {
       currencyCode: paymentPolicy.currencyCode,
       customerName: customer.customerName ?? 'AUTOCARE Customer',
       customerEmail: customer.customerEmail ?? '',
+      successUrl: checkoutReturnUrls?.successUrl ?? null,
+      cancelUrl: checkoutReturnUrls?.cancelUrl ?? null,
     });
 
     await this.bookingsRepository.createOrReplaceReservationPayment({

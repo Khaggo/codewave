@@ -61,6 +61,15 @@ function buildModalForm(product) {
   }
 }
 
+function normalizeCatalogSku(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/[^a-zA-Z0-9-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toUpperCase()
+}
+
 function SectionShell({ title, description, children, action }) {
   return (
     <section className="card overflow-hidden">
@@ -150,15 +159,17 @@ function ProductEditModal({
               </label>
 
               <label className="md:col-span-2">
-                <span className="label">SKU</span>
+                <span className="label">SKU (required)</span>
                 <div className="relative">
                   <Tag size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim" />
                   <input
                     className="input pl-10"
                     value={form.sku}
                     onChange={(event) => onChange('sku', event.target.value)}
+                    placeholder="UPPERCASE-SKU"
                   />
                 </div>
+                <p className="mt-2 text-xs text-ink-muted">Use uppercase letters, numbers, and hyphens only.</p>
               </label>
 
               <label className="md:col-span-2">
@@ -285,11 +296,17 @@ export default function ShopProductAdmin() {
   }, [products, searchParams])
 
   function updateProductForm(field, value) {
-    setProductForm((current) => ({ ...current, [field]: value }))
+    setProductForm((current) => ({
+      ...current,
+      [field]: field === 'sku' ? normalizeCatalogSku(value) : value,
+    }))
   }
 
   function updateEditForm(field, value) {
-    setEditForm((current) => ({ ...current, [field]: value }))
+    setEditForm((current) => ({
+      ...current,
+      [field]: field === 'sku' ? normalizeCatalogSku(value) : value,
+    }))
   }
 
   function openProductEditor(product) {
@@ -332,6 +349,17 @@ export default function ShopProductAdmin() {
 
   async function handlePublishProduct(event) {
     event.preventDefault()
+    const normalizedSku = normalizeCatalogSku(productForm.sku)
+
+    if (!normalizedSku) {
+      toast({
+        type: 'error',
+        title: 'SKU required',
+        message: 'Catalog products need a SKU before they can be published.',
+      })
+      return
+    }
+
     setSubmittingProduct(true)
 
     try {
@@ -339,7 +367,7 @@ export default function ShopProductAdmin() {
         accessToken: user?.accessToken,
         categoryId: productForm.categoryId,
         name: productForm.name,
-        sku: productForm.sku,
+        sku: normalizedSku,
         description: productForm.description,
         pricePhp: productForm.price,
       })
@@ -367,6 +395,16 @@ export default function ShopProductAdmin() {
 
   async function handleSaveProductEdits() {
     if (!editorProduct) return
+    const normalizedSku = normalizeCatalogSku(editForm.sku)
+
+    if (!normalizedSku) {
+      toast({
+        type: 'error',
+        title: 'SKU required',
+        message: 'Catalog products need a SKU before they can stay published or active.',
+      })
+      return
+    }
 
     setSavingProduct(true)
     try {
@@ -375,7 +413,7 @@ export default function ShopProductAdmin() {
         productId: editorProduct.id,
         categoryId: editForm.categoryId,
         name: editForm.name,
-        sku: editForm.sku,
+        sku: normalizedSku,
         description: editForm.description,
         pricePhp: editForm.price,
         isActive: editForm.isActive,
@@ -648,16 +686,17 @@ export default function ShopProductAdmin() {
                 </label>
 
                 <label className="md:col-span-2">
-                  <span className="label">SKU</span>
+                  <span className="label">SKU (required)</span>
                   <div className="relative">
                     <Tag size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim" />
                     <input
                       className="input pl-10"
                       value={productForm.sku}
                       onChange={(event) => updateProductForm('sku', event.target.value)}
-                      placeholder="Optional internal SKU"
+                      placeholder="UPPERCASE-SKU"
                     />
                   </div>
+                  <p className="mt-2 text-xs text-ink-muted">Use uppercase letters, numbers, and hyphens only.</p>
                 </label>
 
                 <label className="md:col-span-2">

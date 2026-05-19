@@ -66,4 +66,24 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    example: 12,
+    minimum: 0,
+    description: 'Opening quantity on hand for the inventory-backed product.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  quantityOnHand?: number;
+
+  @ApiPropertyOptional({
+    example: 4,
+    minimum: 0,
+    description: 'Low-stock warning threshold for staff inventory operations.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  reorderThreshold?: number;
 }
