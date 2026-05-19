@@ -45,9 +45,9 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('auth/register')
-  @ApiOperation({ summary: 'Start password-based customer signup and send an email OTP when registration OTP is enabled.' })
+  @ApiOperation({ summary: 'Start password-based customer signup and send an email OTP.' })
   @ApiCreatedResponse({
-    description: 'Registration either returned an OTP enrollment or auto-activated the customer session when the temporary bypass is enabled.',
+    description: 'The signup enrollment was created and an email OTP was sent.',
     type: GoogleSignupStartResponseDto,
   })
   @ApiBadRequestResponse({ description: 'The registration payload is invalid.' })
