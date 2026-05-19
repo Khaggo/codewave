@@ -3,5 +3,6 @@
 railway-*.png
 ecommerce-config-path-section.html
 .runtime/
+.runtime-*.json
 frontend/.runtime/
 mobile/.runtime/

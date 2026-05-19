@@ -374,7 +374,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('service_adviser', 'super_admin')
+  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
   @Get('admin/customers')
   @ApiOperation({ summary: 'List customer records with vehicle details for staff administration.' })
   @ApiBearerAuth('access-token')
@@ -383,7 +383,10 @@ export class AuthController {
     type: UserResponseDto,
     isArray: true,
   })
-  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can list customer records.' })
+  @ApiForbiddenResponse({
+    description:
+      'Only technicians, head technicians, service advisers, or super admins can load customer records for staff workflows.',
+  })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   listAdminCustomers(@Req() request: Request) {
     return this.authService.listCustomersWithVehicles(

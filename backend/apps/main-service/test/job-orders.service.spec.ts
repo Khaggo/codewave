@@ -805,6 +805,10 @@ describe('JobOrdersService', () => {
       sourceType: 'booking',
       sourceId: 'booking-1',
     });
+    expect(eventBus.publish).not.toHaveBeenCalledWith(
+      'service.payment_recorded',
+      expect.anything(),
+    );
     expect(bookingsRepository.updateStatus).toHaveBeenCalledWith(
       'booking-1',
       expect.objectContaining({

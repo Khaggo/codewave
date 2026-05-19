@@ -44,6 +44,7 @@ import { AddJobOrderProgressDto } from '../dto/add-job-order-progress.dto';
 import { CreateJobOrderDto } from '../dto/create-job-order.dto';
 import { CustomerServiceHistoryResponseDto } from '../dto/customer-service-history-response.dto';
 import { FinalizeJobOrderDto } from '../dto/finalize-job-order.dto';
+import { JobOrderInvoiceLookupResponseDto } from '../dto/job-order-invoice-lookup-response.dto';
 import { JobOrderResponseDto } from '../dto/job-order-response.dto';
 import { JobOrderWorkbenchSummaryResponseDto } from '../dto/job-order-workbench-summary-response.dto';
 import { ListJobOrderWorkbenchQueryDto } from '../dto/list-job-order-workbench-query.dto';
@@ -234,6 +235,30 @@ export class JobOrdersController {
     return this.jobOrdersService.replaceAssignments(
       id,
       payload,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Get(':id/invoice-record')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Get the invoice-ready snapshot for one job order.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Job-order identifier.',
+    example: '7bc8926d-8eb7-4c97-85ab-4597a58e1f43',
+  })
+  @ApiOkResponse({
+    description: 'The matching job-order invoice lookup snapshot.',
+    type: JobOrderInvoiceLookupResponseDto,
+  })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can load invoice-ready records.' })
+  @ApiNotFoundResponse({ description: 'Job order not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  findInvoiceLookupById(@Param('id') id: string, @Req() request: Request) {
+    return this.jobOrdersService.findInvoiceLookupById(
+      id,
       request.user as { userId: string; role: string },
     );
   }

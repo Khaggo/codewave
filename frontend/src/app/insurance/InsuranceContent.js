@@ -33,6 +33,7 @@ import {
   sendInsuranceBroadcasts,
   sendInsuranceReminders,
   updateInsuranceInquiryStatus,
+  updateInsuranceInquiryWorkflow,
 } from '@/lib/insuranceStaffClient'
 import {
   getAllowedInsuranceStatusTargets,
@@ -74,6 +75,7 @@ const PAYMENT_STATUS_OPTIONS = ['not_required', 'unpaid', 'proof_submitted', 've
 const RENEWAL_STATUS_OPTIONS = [
   'not_applicable',
   'upcoming',
+  'quote_preparing',
   'quoted',
   'awaiting_customer',
   'renewed',
@@ -174,6 +176,20 @@ const formatDateOnly = (value) => {
     day: 'numeric',
     year: 'numeric',
   })
+}
+
+const getOpenableInsuranceDocumentUrl = (fileUrl) => {
+  const normalizedFileUrl = String(fileUrl ?? '').trim()
+
+  if (!normalizedFileUrl) {
+    return null
+  }
+
+  if (/^https?:\/\//i.test(normalizedFileUrl) || normalizedFileUrl.startsWith('/')) {
+    return normalizedFileUrl
+  }
+
+  return null
 }
 
 const getTimelineItems = (inquiry) => [
@@ -569,6 +585,7 @@ function InsuranceDetailTabContent({ inquiry, tabKey }) {
               <div className="space-y-3">
                 {inquiry.documents.map((document) => {
                   const DocumentIcon = getInsuranceDocumentIcon(document.documentType)
+                  const openableDocumentUrl = getOpenableInsuranceDocumentUrl(document.fileUrl)
 
                   return (
                     <article
@@ -614,7 +631,16 @@ function InsuranceDetailTabContent({ inquiry, tabKey }) {
                             <span className="rounded-full border border-surface-border bg-surface-raised px-2.5 py-1">
                               Ready for review
                             </span>
-                            {document.fileUrl ? (
+                            {openableDocumentUrl ? (
+                              <a
+                                href={openableDocumentUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-full border border-[#f07c00]/20 bg-[#f07c00]/10 px-2.5 py-1 font-semibold text-[#f07c00] transition hover:bg-[#f07c00]/15"
+                              >
+                                Open file
+                              </a>
+                            ) : document.fileUrl ? (
                               <span className="rounded-full border border-surface-border bg-surface-raised px-2.5 py-1">
                                 Stored in insurance uploads
                               </span>
@@ -731,6 +757,8 @@ export default function InsuranceContent() {
   const [detailMessage, setDetailMessage] = useState('')
   const [updateState, setUpdateState] = useState('status_update_ready')
   const [updateMessage, setUpdateMessage] = useState('')
+  const [workflowActionState, setWorkflowActionState] = useState('idle')
+  const [workflowActionMessage, setWorkflowActionMessage] = useState('')
   const [updateDraft, setUpdateDraft] = useState(DEFAULT_UPDATE_DRAFT)
   const [reloadTick, setReloadTick] = useState(0)
   const [selectedInquiryIds, setSelectedInquiryIds] = useState([])
@@ -909,6 +937,8 @@ export default function InsuranceContent() {
     setUpdateDraft(nextViewState.updateDraft)
     setUpdateState(nextViewState.updateState)
     setUpdateMessage(nextViewState.updateMessage)
+    setWorkflowActionState('idle')
+    setWorkflowActionMessage('')
   }, [detailTabs, inquiries.length, nextStatuses, selectedInquiry])
 
   const summaryCards = useMemo(
@@ -975,6 +1005,74 @@ export default function InsuranceContent() {
       }),
     [activeFilterCount, filteredInquiries.length, selectedInquiry, selectedInquiryIds.length],
   )
+  const workflowQuickActions = useMemo(() => {
+    if (!selectedInquiry) {
+      return []
+    }
+
+    return [
+      {
+        key: 'quote_preparing',
+        label: 'Prepare quote',
+        description: 'Use this when staff are building or validating the renewal quote.',
+        payload: {
+          status: 'for_renewal',
+          renewalStatus: 'quote_preparing',
+          reviewNotes:
+            selectedInquiry.reviewNotes ||
+            'Preparing the renewal quote for customer review.',
+        },
+      },
+      {
+        key: 'quoted',
+        label: 'Quote shared',
+        description: 'Mark the case once the renewal quote has been sent to the customer.',
+        payload: {
+          status: 'for_renewal',
+          renewalStatus: 'quoted',
+          reviewNotes:
+            selectedInquiry.reviewNotes ||
+            'Renewal quote shared with the customer for review.',
+        },
+      },
+      {
+        key: 'awaiting_customer',
+        label: 'Await customer decision',
+        description: 'Use this after the quote is shared and the next step is customer confirmation.',
+        payload: {
+          status: 'for_renewal',
+          renewalStatus: 'awaiting_customer',
+          reviewNotes:
+            selectedInquiry.reviewNotes ||
+            'Waiting for the customer to approve the renewal quote.',
+        },
+      },
+      {
+        key: 'payment_pending',
+        label: 'Request customer payment',
+        description: 'Move the case into a payment-follow-up state with an unpaid balance.',
+        payload: {
+          status: 'payment_pending',
+          paymentStatus: 'unpaid',
+          reviewNotes:
+            selectedInquiry.reviewNotes ||
+            'Customer payment is now required before the case can continue.',
+        },
+      },
+      {
+        key: 'proof_submitted',
+        label: 'Mark proof submitted',
+        description: 'Use this after the customer has uploaded payment proof for staff verification.',
+        payload: {
+          status: 'payment_pending',
+          paymentStatus: 'proof_submitted',
+          reviewNotes:
+            selectedInquiry.reviewNotes ||
+            'Customer payment proof was submitted and is ready for verification.',
+        },
+      },
+    ]
+  }, [selectedInquiry])
 
   const handleFilterChange = (field) => (nextValueOrEvent) => {
     const nextValue =
@@ -1091,7 +1189,7 @@ export default function InsuranceContent() {
         inquiryId: requestInquiryId,
         status: updateDraft.status,
         reviewNotes: updateDraft.reviewNotes,
-        expectedUpdatedAt: selectedInquiryRef.current?.updatedAt,
+        expectedUpdatedAt: selectedInquiry?.updatedAt,
         accessToken: user.accessToken,
       })
       const refreshedNextStatuses = getAllowedInsuranceStatusTargets(updatedInquiry.status)
@@ -1162,6 +1260,54 @@ export default function InsuranceContent() {
       }
 
       setUpdateMessage(error?.message || 'Insurance workflow could not be updated.')
+    }
+  }
+
+  const handleApplyWorkflowQuickAction = async (workflowAction) => {
+    if (!selectedInquiry?.id) {
+      setWorkflowActionState('failed')
+      setWorkflowActionMessage('Select a live insurance case before applying quotation or payment workflow actions.')
+      return
+    }
+
+    if (!user?.accessToken) {
+      setWorkflowActionState('failed')
+      setWorkflowActionMessage('A valid staff session is required before saving quotation or payment workflow actions.')
+      return
+    }
+
+    const requestInquiryId = selectedInquiry.id
+
+    setWorkflowActionState('submitting')
+    setWorkflowActionMessage('')
+
+    try {
+      const updatedInquiry = await updateInsuranceInquiryWorkflow({
+        inquiryId: requestInquiryId,
+        status: workflowAction.payload.status,
+        paymentStatus: workflowAction.payload.paymentStatus,
+        renewalStatus: workflowAction.payload.renewalStatus,
+        reviewNotes: workflowAction.payload.reviewNotes,
+        expectedUpdatedAt: selectedInquiry.updatedAt,
+        accessToken: user.accessToken,
+      })
+
+      setInquiries((currentInquiries) =>
+        currentInquiries.map((inquiry) => (inquiry.id === updatedInquiry.id ? updatedInquiry : inquiry)),
+      )
+
+      if (
+        shouldApplyInsuranceAsyncResult({
+          requestInquiryId,
+          selectedInquiryId: selectedInquiryIdRef.current,
+        })
+      ) {
+        setWorkflowActionState('saved')
+        setWorkflowActionMessage(`${workflowAction.label} saved. This case is now in ${formatStatusLabel(updatedInquiry.status)}.`)
+      }
+    } catch (error) {
+      setWorkflowActionState('failed')
+      setWorkflowActionMessage(error?.message || 'Quotation or payment workflow could not be updated.')
     }
   }
 
@@ -1767,6 +1913,49 @@ export default function InsuranceContent() {
                     ? 'Status and review notes only'
                     : 'View-only terminal case'}
               </span>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-surface-border bg-surface-raised px-4 py-4">
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-semibold text-ink-primary">Quotation and payment path</p>
+                <p className="text-xs leading-5 text-ink-muted">
+                  Use these shortcuts when staff need to move a case into quote delivery or customer payment follow-up without guessing which workflow values to set.
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-2">
+                {workflowQuickActions.map((workflowAction) => (
+                  <button
+                    key={workflowAction.key}
+                    type="button"
+                    onClick={() => void handleApplyWorkflowQuickAction(workflowAction)}
+                    disabled={!selectedInquiry || workflowActionState === 'submitting'}
+                    className="flex items-start justify-between gap-3 rounded-2xl border border-surface-border bg-surface-card px-4 py-3 text-left transition hover:border-[#f07c00]/30 hover:bg-[#f07c00]/6 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-ink-primary">{workflowAction.label}</p>
+                      <p className="mt-1 text-xs leading-5 text-ink-muted">{workflowAction.description}</p>
+                    </div>
+                    <span className="badge badge-gray">
+                      {workflowAction.payload.renewalStatus
+                        ? formatStatusLabel(workflowAction.payload.renewalStatus)
+                        : formatStatusLabel(workflowAction.payload.paymentStatus)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {workflowActionMessage ? (
+                <div
+                  className={`mt-4 ${
+                    workflowActionState === 'saved'
+                      ? 'status-message status-message-success'
+                      : 'status-message status-message-danger'
+                  }`}
+                >
+                  {workflowActionMessage}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

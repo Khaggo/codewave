@@ -125,6 +125,55 @@ describe('BookingsController integration', () => {
         ]),
       );
 
+      const createClosureResponse = await request(app.getHttpServer())
+        .post('/api/admin/booking-date-closures')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .send({
+          scheduledDate: '2026-04-22',
+          label: 'Holiday closure',
+          reason: 'Shop is closed for a holiday.',
+        });
+      expect(createClosureResponse.status).toBe(201);
+      expect(createClosureResponse.body).toEqual(
+        expect.objectContaining({
+          scheduledDate: '2026-04-22',
+          isClosed: true,
+          label: 'Holiday closure',
+        }),
+      );
+
+      const closedAvailabilityResponse = await request(app.getHttpServer())
+        .get('/api/bookings/availability')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .query({
+          startDate: '2026-04-22',
+          endDate: '2026-04-22',
+        });
+      expect(closedAvailabilityResponse.status).toBe(200);
+      expect(closedAvailabilityResponse.body.days).toEqual([
+        expect.objectContaining({
+          scheduledDate: '2026-04-22',
+          status: 'closed',
+          isBookable: false,
+          closureLabel: 'Holiday closure',
+        }),
+      ]);
+
+      const closedDailyScheduleResponse = await request(app.getHttpServer())
+        .get('/api/bookings/daily-schedule')
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .query({
+          scheduledDate: '2026-04-22',
+        });
+      expect(closedDailyScheduleResponse.status).toBe(200);
+      expect(closedDailyScheduleResponse.body).toEqual(
+        expect.objectContaining({
+          scheduledDate: '2026-04-22',
+          isClosed: true,
+          closureLabel: 'Holiday closure',
+        }),
+      );
+
       const vehicleResponse = await request(app.getHttpServer())
         .post('/api/vehicles')
         .set(ownerAuthHeader)

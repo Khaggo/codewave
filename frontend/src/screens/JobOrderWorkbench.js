@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -681,6 +681,7 @@ export default function JobOrderWorkbench() {
     bookingQueueDates: [],
     message: '',
   })
+  const initializedJobOrderIdRef = useRef(null)
 
   const navigateToWorkbenchStage = useCallback((stageKey) => {
     setWorkbenchStage(stageKey)
@@ -1194,6 +1195,21 @@ export default function JobOrderWorkbench() {
     () => monthJobOrders.filter((jobOrder) => jobOrder.workDate === selectedDate),
     [monthJobOrders, selectedDate],
   )
+  const queueMode = useMemo(() => {
+    if (isTechnician || workbenchScope === 'history') {
+      return 'job_order_queue'
+    }
+
+    if (selectedDateJobOrders.length === 0 && handoffCandidates.length > 0) {
+      return 'handoff_create'
+    }
+
+    if (selectedDateJobOrders.length === 0 && handoffCandidates.length === 0 && monthJobOrders.length === 0) {
+      return 'empty'
+    }
+
+    return 'job_order_queue'
+  }, [handoffCandidates.length, isTechnician, monthJobOrders.length, selectedDateJobOrders.length, workbenchScope])
   const photoTargetOptions = useMemo(() => {
     const options = [
       {
@@ -1536,7 +1552,8 @@ export default function JobOrderWorkbench() {
   }, [])
 
   useEffect(() => {
-    if (!activeJobOrder) {
+    if (!activeJobOrder?.id) {
+      initializedJobOrderIdRef.current = null
       setAssignmentDraftIds([])
       setAssignmentState(initialAssignmentState)
       setStatusDraft({
@@ -1562,20 +1579,24 @@ export default function JobOrderWorkbench() {
       return
     }
 
+    if (initializedJobOrderIdRef.current === activeJobOrder.id) {
+      return
+    }
+
+    initializedJobOrderIdRef.current = activeJobOrder.id
+
+    const initialNextStatuses = getAllowedJobOrderStatusTargets(activeJobOrder.status)
+
     setAssignmentDraftIds(activeJobOrder.assignedTechnicianIds ?? [])
     setAssignmentState(initialAssignmentState)
     setStatusDraft({
-      status: nextStatuses[0] ?? activeJobOrder.status,
+      status: initialNextStatuses[0] ?? activeJobOrder.status,
       reason: '',
     })
     setStatusState(initialStatusState)
     setProgressDraft(emptyProgressDraft)
     setProgressState(initialProgressState)
-    setPhotoDraft({
-      ...emptyPhotoDraft,
-      linkedEntityType: photoTargetOptions[0]?.linkedEntityType ?? 'job_order',
-      linkedEntityId: photoTargetOptions[0]?.linkedEntityId ?? '',
-    })
+    setPhotoDraft(emptyPhotoDraft)
     setPhotoState(initialPhotoState)
     setFinalizeDraft({
       summary: buildSuggestedFinalizationSummary(activeJobOrder),
@@ -1590,7 +1611,35 @@ export default function JobOrderWorkbench() {
       receivedAt: formatDateTimeInputValue(activeJobOrder.invoiceRecord?.paidAt),
     })
     setPaymentState(initialPaymentState)
-  }, [activeJobOrder, nextStatuses, photoTargetOptions])
+  }, [activeJobOrder])
+
+  useEffect(() => {
+    if (!activeJobOrder?.id) {
+      return
+    }
+
+    const allowedNextStatuses = getAllowedJobOrderStatusTargets(activeJobOrder.status)
+
+    setStatusDraft((current) => {
+      const fallbackStatus = allowedNextStatuses[0] ?? activeJobOrder.status
+
+      if (allowedNextStatuses.length === 0) {
+        return current.status === activeJobOrder.status
+          ? current
+          : {
+              ...current,
+              status: activeJobOrder.status,
+            }
+      }
+
+      return allowedNextStatuses.includes(current.status)
+        ? current
+        : {
+            ...current,
+            status: fallbackStatus,
+          }
+    })
+  }, [activeJobOrder?.id, activeJobOrder?.status])
 
   useEffect(() => {
     if (
@@ -2430,6 +2479,169 @@ export default function JobOrderWorkbench() {
     }
   }
 
+  const renderBookingCreateWorkspace = ({ mode = 'primary' } = {}) => {
+    if (!selectedCandidate) {
+      return (
+        <div className={mode === 'primary' ? 'empty-panel' : 'empty-panel mt-4'}>
+          <AlertTriangle size={28} className="mx-auto text-ink-dim mb-3" />
+          <p className="text-sm font-semibold text-ink-primary">Select a confirmed or workshop-handoff booking first</p>
+          <p className="mt-2 text-sm leading-6 text-ink-secondary">
+            The workbench creates job orders from confirmed bookings and bookings already moved into workshop handoff.
+          </p>
+        </div>
+      )
+    }
+
+    return (
+      <div className={mode === 'primary' ? 'rounded-2xl border border-brand-orange/30 bg-brand-orange/10 p-4' : 'space-y-4 mt-4'}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-ink-primary">
+              {mode === 'primary' ? 'Ready to create first job order from booking handoff' : 'Create / Load Job Order'}
+            </p>
+            <p className="text-xs text-ink-muted mt-1">
+              {mode === 'primary'
+                ? 'This date has a handoff-ready booking but no created job order yet. Use this booking as the primary workspace action.'
+                : 'Convert the selected confirmed booking into a new job order without leaving the execution workspace.'}
+            </p>
+          </div>
+          <span className="badge badge-orange">Booking handoff active</span>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3 mt-4">
+          <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Source booking</p>
+            <p className="text-sm text-ink-primary mt-1">BK-{selectedCandidate.bookingId.slice(0, 8).toUpperCase()}</p>
+            <p className="text-xs text-ink-muted mt-2">{selectedCandidate.timeSlotLabel}</p>
+          </div>
+          <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Customer and vehicle</p>
+            <p className="text-sm text-ink-primary mt-1">{selectedCandidate.customerLabel}</p>
+            <p className="text-xs text-ink-muted mt-2">{selectedCandidate.vehicleLabel}</p>
+          </div>
+          <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Service and adviser</p>
+            <p className="text-sm text-ink-primary mt-1">{selectedCandidate.serviceSummary}</p>
+            <p className="text-xs text-ink-muted mt-2">{user?.staffCode ?? 'Missing staff code'}</p>
+          </div>
+        </div>
+
+        <label className="text-xs text-ink-muted block mt-4">
+          Work items
+          <div className="space-y-3 mt-2">
+            {createDraft.items.map((item, index) => (
+              <div
+                key={`${item.name}-${index}`}
+                className="rounded-xl border border-surface-border bg-surface-raised p-3"
+              >
+                <div className="grid md:grid-cols-[minmax(0,1fr)_120px] gap-3">
+                  <input
+                    value={item.name}
+                    onChange={(event) =>
+                      handleCreateItemChange(index, { name: event.target.value })
+                    }
+                    className="input"
+                    placeholder="Work item name"
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={item.estimatedHours ?? ''}
+                    onChange={(event) =>
+                      handleCreateItemChange(index, {
+                        estimatedHours:
+                          event.target.value === ''
+                            ? undefined
+                            : Math.max(1, Math.ceil(Number(event.target.value))),
+                      })
+                    }
+                    className="input"
+                    placeholder="Whole hours"
+                  />
+                </div>
+                <textarea
+                  value={item.description ?? ''}
+                  onChange={(event) =>
+                    handleCreateItemChange(index, { description: event.target.value })
+                  }
+                  rows={2}
+                  className="mt-3 textarea"
+                  placeholder="Optional work-item description"
+                />
+              </div>
+            ))}
+          </div>
+        </label>
+
+        <div className="grid gap-3 md:grid-cols-2 mt-4">
+          <label className="text-xs text-ink-muted block">
+            Assigned technician
+            <select
+              value={createDraft.assignedTechnicianId}
+              onChange={(event) =>
+                setCreateDraft((current) => ({
+                  ...current,
+                  assignedTechnicianId: event.target.value,
+                }))
+              }
+              className="mt-1 select"
+            >
+              <option value="">Create as draft - assign later</option>
+              {technicianOptions.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.displayName || account.email} - {account.roleLabel}
+                  {account.staffCode ? ` (${account.staffCode})` : ''}
+                </option>
+              ))}
+            </select>
+            <span className="block text-[11px] text-ink-muted mt-1">
+              Leaving this blank creates a draft job order instead of sending an invalid technician ID.
+            </span>
+            {staffDirectoryState.message ? (
+              <span className="block text-[11px] text-ink-muted mt-1">
+                {staffDirectoryState.message}
+              </span>
+            ) : null}
+          </label>
+
+          <label className="text-xs text-ink-muted block">
+            Job-order notes
+            <textarea
+              value={createDraft.notes}
+              onChange={(event) =>
+                setCreateDraft((current) => ({
+                  ...current,
+                  notes: event.target.value,
+                }))
+              }
+              rows={3}
+              className="mt-1 textarea"
+              placeholder="Add workshop notes carried into the job order."
+            />
+          </label>
+        </div>
+
+        {createState.message ? <div className={`mt-4 ${createStateClassName}`}>{createState.message}</div> : null}
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button
+            onClick={handleCreateJobOrder}
+            disabled={createState.status === 'create_submitting'}
+            className="ops-action-primary"
+          >
+            {createState.status === 'create_submitting' ? (
+              <RefreshCw size={14} className="animate-spin" />
+            ) : (
+              <ClipboardList size={14} />
+            )}
+            Create Job Order - adviser/admin
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const getMessageClassName = (tone) =>
     tone === 'success'
       ? 'status-message status-message-success'
@@ -2551,10 +2763,18 @@ export default function JobOrderWorkbench() {
             <SummaryTile
               icon={ClipboardList}
               label={workbenchScope === 'history' ? 'Job Order History' : 'Booking Handoff Queue'}
-              value={workbenchScope === 'history' ? monthJobOrders.length : handoffCandidates.length}
+              value={
+                workbenchScope === 'history'
+                  ? monthJobOrders.length
+                  : queueMode === 'handoff_create'
+                    ? 'Ready to create'
+                    : handoffCandidates.length
+              }
               sub={
                 workbenchScope === 'history'
                   ? 'Finalized and cancelled work stays here instead of the live workshop queue.'
+                  : queueMode === 'handoff_create'
+                    ? 'A handoff-ready booking is selected and can now become the first job order for this date.'
                   : handoffState.status === 'handoff_empty'
                     ? 'No confirmed booking source is ready today'
                     : 'Ready for job-order handoff'
@@ -2564,11 +2784,19 @@ export default function JobOrderWorkbench() {
           <SummaryTile
             icon={Wrench}
             label="Active Phase"
-            value={activeJobOrder ? formatStatusLabel(executionPhase) : 'Awaiting load'}
+            value={
+              activeJobOrder
+                ? formatStatusLabel(executionPhase)
+                : queueMode === 'handoff_create'
+                  ? 'Create first job order'
+                  : 'Awaiting load'
+            }
             sub={
               activeJobOrder
                 ? `Current status: ${formatStatusLabel(activeJobOrder.status)}`
-                : 'Load or create a job order to begin execution'
+                : queueMode === 'handoff_create'
+                  ? 'No job order exists yet for this date, but the booking handoff is ready to convert.'
+                  : 'Load or create a job order to begin execution'
             }
           />
           <SummaryTile
@@ -2586,7 +2814,9 @@ export default function JobOrderWorkbench() {
                     ? `${activeJobOrder.assignedTechnicianIds.length} assigned`
                     : 'Unassigned'
                   : selectedCandidate
-                    ? 'Ready to assign'
+                    ? queueMode === 'handoff_create'
+                      ? 'Ready to create'
+                      : 'Ready to assign'
                     : 'Awaiting source'
             }
             sub={
@@ -2599,7 +2829,9 @@ export default function JobOrderWorkbench() {
                 : activeJobOrder
                   ? activeJobOrder.assignedTechnicianIds.join(', ') || 'No technician assigned'
                   : selectedCandidate
-                    ? selectedCandidate.serviceSummary
+                    ? queueMode === 'handoff_create'
+                      ? `${selectedCandidate.serviceSummary} is ready to become the first job order on this date.`
+                      : selectedCandidate.serviceSummary
                     : 'Select a confirmed or workshop-handoff booking first'
             }
           />
@@ -2656,17 +2888,25 @@ export default function JobOrderWorkbench() {
           <div>
             <p className="card-title">Job Order Queue</p>
             <p className="mt-1 text-sm leading-6 text-ink-secondary">
-              Focus on the live execution queue first, then stay on one loaded record while you work through the guided stages below.
+              {queueMode === 'handoff_create' && !isTechnician
+                ? 'This date has a handoff-ready booking and no created job order yet, so the workspace is focused on creating the first job order.'
+                : 'Focus on the live execution queue first, then stay on one loaded record while you work through the guided stages below.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <span className={`badge ${workbenchScope === 'history' ? 'badge-blue' : 'badge-orange'}`}>
-              {workbenchScope === 'history' ? 'History queue' : 'Live queue'}
+              {workbenchScope === 'history'
+                ? 'History queue'
+                : queueMode === 'handoff_create' && !isTechnician
+                  ? 'Handoff create mode'
+                  : 'Live queue'}
             </span>
             <span className="badge badge-gray">
               {isTechnician
                 ? `${selectedDateJobOrders.length} assigned on this date`
-                : `${handoffCandidates.length} handoff source${handoffCandidates.length === 1 ? '' : 's'}`}
+                : queueMode === 'handoff_create'
+                  ? `${handoffCandidates.length} ready booking source${handoffCandidates.length === 1 ? '' : 's'}`
+                  : `${handoffCandidates.length} handoff source${handoffCandidates.length === 1 ? '' : 's'}`}
             </span>
           </div>
         </div>
@@ -2709,62 +2949,121 @@ export default function JobOrderWorkbench() {
                 />
               </label>
 
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <label>
-                  <span className="label">{isTechnician ? 'Assigned job order' : 'Job-order lookup'}</span>
-                  <select
-                    value={manualJobOrderId}
-                    onChange={(event) => setManualJobOrderId(event.target.value)}
-                    className="select"
-                  >
-                    <option value="">
-                      {selectedDateJobOrders.length > 0
-                        ? 'Choose a job order for the selected date'
-                        : monthJobOrders.length > 0
-                          ? 'No job orders on this date - choose from this month'
-                          : 'No job orders available in this month'}
-                    </option>
-                    {selectedDateJobOrders.length > 0 ? (
-                      <optgroup label="Selected date">
-                        {selectedDateJobOrders.map((jobOrder) => (
-                          <option key={jobOrder.id} value={jobOrder.id}>
-                            JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatStatusLabel(jobOrder.status)} - {formatDate(jobOrder.workDate)}
-                          </option>
-                        ))}
-                      </optgroup>
+              <div className="space-y-3">
+                {queueMode === 'handoff_create' && !isTechnician ? (
+                  <>
+                    <div className="rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-4 py-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-ink-primary">Queue mode: booking handoff creation</p>
+                          <p className="mt-1 text-sm text-ink-secondary">
+                            No job order exists yet for {formatDate(selectedDate)}. This workspace has switched into create-first mode for the selected booking handoff.
+                          </p>
+                        </div>
+                        <span className="badge badge-orange">Create first job order</span>
+                      </div>
+                    </div>
+                    {renderBookingCreateWorkspace({ mode: 'primary' })}
+                    {monthJobOrders.length > 0 ? (
+                      <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-ink-primary">Existing job orders elsewhere this month</p>
+                            <p className="mt-1 text-sm text-ink-secondary">
+                              This date has no created job order yet. You can still load another record from {selectedMonth} if needed.
+                            </p>
+                          </div>
+                          <span className="badge badge-gray">{monthJobOrders.length} in month</span>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] mt-4">
+                          <label>
+                            <span className="label">Other job orders this month</span>
+                            <select
+                              value={manualJobOrderId}
+                              onChange={(event) => setManualJobOrderId(event.target.value)}
+                              className="select"
+                            >
+                              <option value="">Choose a job order from this month</option>
+                              {monthJobOrders.map((jobOrder) => (
+                                <option key={jobOrder.id} value={jobOrder.id}>
+                                  JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatDate(jobOrder.workDate)} - {formatStatusLabel(jobOrder.status)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            onClick={handleLoadJobOrder}
+                            className="ops-action-secondary sm:min-w-[168px] sm:self-end"
+                            disabled={!manualJobOrderId}
+                          >
+                            <RefreshCw size={14} />
+                            Load Other Job Order
+                          </button>
+                        </div>
+                      </div>
                     ) : null}
-                    {monthJobOrders.filter((jobOrder) => jobOrder.workDate !== selectedDate).length > 0 ? (
-                      <optgroup label={`Other dates in ${selectedMonth}`}>
-                        {monthJobOrders
-                          .filter((jobOrder) => jobOrder.workDate !== selectedDate)
-                          .map((jobOrder) => (
-                            <option key={jobOrder.id} value={jobOrder.id}>
-                              JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatDate(jobOrder.workDate)} - {formatStatusLabel(jobOrder.status)}
-                            </option>
-                          ))}
-                      </optgroup>
-                    ) : null}
-                  </select>
-                </label>
-                <button
-                  onClick={handleLoadJobOrder}
-                  className="ops-action-primary sm:min-w-[168px] sm:self-end"
-                  disabled={!manualJobOrderId}
-                >
-                  <RefreshCw size={14} />
-                  Load Job Order
-                </button>
-
-                {detailState.message ? (
-                  <div className={`sm:col-span-2 ${detailStateClassName}`}>{detailState.message}</div>
+                  </>
                 ) : (
-                  <p className="sm:col-span-2 text-[11px] text-ink-muted">
-                    {isTechnician
-                      ? 'Choose an assigned job order before updating it.'
-                      : workbenchScope === 'history'
-                        ? 'History mode keeps completed work out of the live queue.'
-                        : 'Use the selector to load a known live record.'}
-                  </p>
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <label>
+                      <span className="label">{isTechnician ? 'Assigned job order' : 'Job-order lookup'}</span>
+                      <select
+                        value={manualJobOrderId}
+                        onChange={(event) => setManualJobOrderId(event.target.value)}
+                        className="select"
+                      >
+                        <option value="">
+                          {selectedDateJobOrders.length > 0
+                            ? 'Choose a job order for the selected date'
+                            : monthJobOrders.length > 0
+                              ? 'No job orders on this date - choose from this month'
+                              : 'No job orders available in this month'}
+                        </option>
+                        {selectedDateJobOrders.length > 0 ? (
+                          <optgroup label="Selected date">
+                            {selectedDateJobOrders.map((jobOrder) => (
+                              <option key={jobOrder.id} value={jobOrder.id}>
+                                JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatStatusLabel(jobOrder.status)} - {formatDate(jobOrder.workDate)}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
+                        {monthJobOrders.filter((jobOrder) => jobOrder.workDate !== selectedDate).length > 0 ? (
+                          <optgroup label={`Other dates in ${selectedMonth}`}>
+                            {monthJobOrders
+                              .filter((jobOrder) => jobOrder.workDate !== selectedDate)
+                              .map((jobOrder) => (
+                                <option key={jobOrder.id} value={jobOrder.id}>
+                                  JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatDate(jobOrder.workDate)} - {formatStatusLabel(jobOrder.status)}
+                                </option>
+                              ))}
+                          </optgroup>
+                        ) : null}
+                      </select>
+                    </label>
+                    <button
+                      onClick={handleLoadJobOrder}
+                      className="ops-action-primary sm:min-w-[168px] sm:self-end"
+                      disabled={!manualJobOrderId}
+                    >
+                      <RefreshCw size={14} />
+                      Load Job Order
+                    </button>
+
+                    {detailState.message ? (
+                      <div className={`sm:col-span-2 ${detailStateClassName}`}>{detailState.message}</div>
+                    ) : (
+                      <p className="sm:col-span-2 text-[11px] text-ink-muted">
+                        {isTechnician
+                          ? 'Choose an assigned job order before updating it.'
+                          : workbenchScope === 'history'
+                            ? 'History mode keeps completed work out of the live queue.'
+                            : handoffCandidates.length > 0
+                              ? 'You can load an existing job order here or create a new one from the booking handoff sources below.'
+                              : 'Use the selector to load a known live record.'}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -2840,6 +3139,8 @@ export default function JobOrderWorkbench() {
                     ? selectedDateJobOrders.length > 0
                       ? 'Load assigned work from the selector above before updating details below.'
                       : 'No assigned job orders are queued for the selected date yet.'
+                    : queueMode === 'handoff_create'
+                      ? 'This selected booking is now the primary action above. Create the first job order there, then the normal live queue will take over.'
                     : handoffCandidates.length > 0
                       ? 'Confirmed bookings on this date are ready for job-order creation and execution follow-through.'
                       : 'No confirmed or workshop-handoff bookings are queued for the selected date yet.'}
@@ -3781,7 +4082,9 @@ export default function JobOrderWorkbench() {
                   <div>
                     <p className="text-sm font-bold text-ink-primary">Booking Handoff Sources</p>
                     <p className="text-xs text-ink-muted mt-1">
-                      Select a confirmed booking when you need to create another job order in the live queue.
+                      {queueMode === 'handoff_create'
+                        ? 'Use this list as the source picker for the promoted create workspace above.'
+                        : 'Select a confirmed booking when you need to create another job order in the live queue.'}
                     </p>
                   </div>
                   <span className="badge badge-gray">{formatDate(selectedDate)}</span>
@@ -3852,146 +4155,15 @@ export default function JobOrderWorkbench() {
                       The workbench creates job orders from confirmed bookings and bookings already moved into workshop handoff.
                     </p>
                   </div>
-                ) : (
-                  <div className="space-y-4 mt-4">
-                    <div>
-                      <p className="text-sm font-bold text-ink-primary">Create / Load Job Order</p>
-                      <p className="text-xs text-ink-muted mt-1">
-                        Convert the selected confirmed booking into a new job order without leaving the execution workspace.
-                      </p>
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-3">
-                      <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                        <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
-                          Source Booking
-                        </p>
-                        <p className="text-sm text-ink-primary mt-1">
-                          BK-{selectedCandidate.bookingId.slice(0, 8).toUpperCase()}
-                        </p>
-                        <p className="text-xs text-ink-muted mt-2">{selectedCandidate.customerLabel}</p>
-                      </div>
-                      <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                        <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
-                          Adviser Snapshot
-                        </p>
-                        <p className="text-sm text-ink-primary mt-1">
-                          {user?.staffCode ?? 'Missing staff code'}
-                        </p>
-                        <p className="text-xs text-ink-muted mt-2">
-                          This identifies who prepared the job order.
-                        </p>
-                      </div>
-                    </div>
-
-                    <label className="text-xs text-ink-muted block">
-                      Work items
-                      <div className="space-y-3 mt-2">
-                        {createDraft.items.map((item, index) => (
-                          <div
-                            key={`${item.name}-${index}`}
-                            className="rounded-xl border border-surface-border bg-surface-raised p-3"
-                          >
-                            <div className="grid md:grid-cols-[minmax(0,1fr)_120px] gap-3">
-                              <input
-                                value={item.name}
-                                onChange={(event) =>
-                                  handleCreateItemChange(index, { name: event.target.value })
-                                }
-                                className="input"
-                                placeholder="Work item name"
-                              />
-                              <input
-                                type="number"
-                                min="1"
-                                step="1"
-                                value={item.estimatedHours ?? ''}
-                                onChange={(event) =>
-                                  handleCreateItemChange(index, {
-                                    estimatedHours:
-                                      event.target.value === ''
-                                        ? undefined
-                                        : Math.max(1, Math.ceil(Number(event.target.value))),
-                                  })
-                                }
-                                className="input"
-                                placeholder="Whole hours"
-                              />
-                            </div>
-                            <textarea
-                              value={item.description ?? ''}
-                              onChange={(event) =>
-                                handleCreateItemChange(index, { description: event.target.value })
-                              }
-                              rows={2}
-                              className="mt-3 textarea"
-                              placeholder="Optional work-item description"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </label>
-
-                    <label className="text-xs text-ink-muted block">
-                      Assigned technician
-                      <select
-                        value={createDraft.assignedTechnicianId}
-                        onChange={(event) =>
-                          setCreateDraft((current) => ({
-                            ...current,
-                            assignedTechnicianId: event.target.value,
-                          }))
-                        }
-                        className="mt-1 select"
-                      >
-                        <option value="">Create as draft - assign later</option>
-                        {technicianOptions.map((account) => (
-                          <option key={account.id} value={account.id}>
-                            {account.displayName || account.email} - {account.roleLabel}
-                            {account.staffCode ? ` (${account.staffCode})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="block text-[11px] text-ink-muted mt-1">
-                        Leaving this blank creates a draft job order instead of sending an invalid technician ID.
-                      </span>
-                      {staffDirectoryState.message ? (
-                        <span className="block text-[11px] text-ink-muted mt-1">
-                          {staffDirectoryState.message}
-                        </span>
-                      ) : null}
-                    </label>
-
-                    <label className="text-xs text-ink-muted block">
-                      Job-order notes
-                      <textarea
-                        value={createDraft.notes}
-                        onChange={(event) =>
-                          setCreateDraft((current) => ({
-                            ...current,
-                            notes: event.target.value,
-                          }))
-                        }
-                        rows={3}
-                        className="mt-1 textarea"
-                        placeholder="Add workshop notes carried into the job order."
-                      />
-                    </label>
-
-                    {createState.message ? <div className={createStateClassName}>{createState.message}</div> : null}
-
-                    <button
-                      onClick={handleCreateJobOrder}
-                      disabled={createState.status === 'create_submitting'}
-                      className="ops-action-primary"
-                    >
-                      {createState.status === 'create_submitting' ? (
-                        <RefreshCw size={14} className="animate-spin" />
-                      ) : (
-                        <ClipboardList size={14} />
-                      )}
-                      Create Job Order - adviser/admin
-                    </button>
+                ) : queueMode === 'handoff_create' ? (
+                  <div className="ops-panel-muted mt-4">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Promoted action</p>
+                    <p className="text-sm text-ink-primary mt-1">
+                      The selected booking is now driving the top create-first workspace. Change the source here if you want to create the job order from a different handoff.
+                    </p>
                   </div>
+                ) : (
+                  renderBookingCreateWorkspace({ mode: 'secondary' })
                 )}
               </div>
             </div>

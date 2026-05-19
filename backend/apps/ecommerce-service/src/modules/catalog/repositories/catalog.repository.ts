@@ -26,6 +26,8 @@ type CatalogProductRecord = {
   description: string | null;
   priceCents: number;
   isActive: boolean;
+  quantityOnHand: number;
+  reorderThreshold: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -52,6 +54,8 @@ const bootstrapCatalogProducts: CatalogProductRecord[] = [
     description: 'Fully synthetic 5W-30 engine oil for smoother starts, cleaner engine operation, and regular PMS top-ups.',
     priceCents: 189900,
     isActive: true,
+    quantityOnHand: 12,
+    reorderThreshold: 4,
     createdAt: new Date('2026-05-12T03:05:00.000Z'),
     updatedAt: new Date('2026-05-12T03:05:00.000Z'),
   },
@@ -160,6 +164,8 @@ export class CatalogRepository {
       description: payload.description ?? null,
       priceCents: payload.priceCents,
       isActive: payload.isActive ?? true,
+      quantityOnHand: payload.quantityOnHand ?? 0,
+      reorderThreshold: payload.reorderThreshold ?? 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -183,6 +189,48 @@ export class CatalogRepository {
       description: payload.description ?? existingProduct.description,
       priceCents: payload.priceCents ?? existingProduct.priceCents,
       isActive: payload.isActive ?? existingProduct.isActive,
+      quantityOnHand: payload.quantityOnHand ?? existingProduct.quantityOnHand,
+      reorderThreshold: payload.reorderThreshold ?? existingProduct.reorderThreshold,
+      updatedAt: new Date(),
+    };
+
+    this.products.set(id, updatedProduct);
+    return { ...updatedProduct };
+  }
+
+  async updateInventoryFields(
+    id: string,
+    payload: {
+      quantityOnHand?: number;
+      reorderThreshold?: number;
+    },
+  ) {
+    const existingProduct = this.products.get(id);
+    if (!existingProduct) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const updatedProduct: CatalogProductRecord = {
+      ...existingProduct,
+      quantityOnHand: payload.quantityOnHand ?? existingProduct.quantityOnHand,
+      reorderThreshold: payload.reorderThreshold ?? existingProduct.reorderThreshold,
+      updatedAt: new Date(),
+    };
+
+    this.products.set(id, updatedProduct);
+    return { ...updatedProduct };
+  }
+
+  async adjustInventoryQuantity(id: string, quantityDelta: number) {
+    const existingProduct = this.products.get(id);
+    if (!existingProduct) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const updatedQuantity = Math.max(0, existingProduct.quantityOnHand + quantityDelta);
+    const updatedProduct: CatalogProductRecord = {
+      ...existingProduct,
+      quantityOnHand: updatedQuantity,
       updatedAt: new Date(),
     };
 

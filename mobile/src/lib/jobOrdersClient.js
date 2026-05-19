@@ -1,6 +1,4 @@
 import { ApiError, getApiBaseUrl } from './authClient';
-
-const API_BASE_URL = getApiBaseUrl();
 const JOB_ORDERS_REQUEST_TIMEOUT_MS = 8000;
 
 const buildAuthHeaders = (accessToken) =>
@@ -27,8 +25,9 @@ const request = async (path, options = {}) => {
   let timeoutId = null;
 
   try {
+    const apiBaseUrl = getApiBaseUrl();
     const runRequest = async () => {
-      const response = await fetch(`${API_BASE_URL}${path}`, {
+      const response = await fetch(`${apiBaseUrl}${path}`, {
         ...rest,
         signal: abortController?.signal,
         headers: isFormData
@@ -72,11 +71,11 @@ const request = async (path, options = {}) => {
               abortController?.abort();
               reject(
                 new ApiError(
-                  `Timed out reaching ${API_BASE_URL}${path} after ${timeoutMs}ms.`,
+                  `Timed out reaching ${apiBaseUrl}${path} after ${timeoutMs}ms.`,
                   0,
                   {
                     path,
-                    apiBaseUrl: API_BASE_URL,
+                    apiBaseUrl,
                     timeoutMs,
                     reason: 'timeout',
                   },
@@ -100,11 +99,11 @@ const request = async (path, options = {}) => {
         : 'Unable to reach the API server.';
 
     throw new ApiError(
-      `Unable to reach ${API_BASE_URL}${path}. ${errorMessage}`,
+      `Unable to reach ${apiBaseUrl}${path}. ${errorMessage}`,
       0,
       {
         path,
-        apiBaseUrl: API_BASE_URL,
+        apiBaseUrl,
         timeoutMs,
         reason: 'network',
       },

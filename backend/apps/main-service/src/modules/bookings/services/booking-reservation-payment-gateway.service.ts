@@ -23,6 +23,8 @@ export class BookingReservationPaymentGatewayService {
     currencyCode: string;
     customerName: string;
     customerEmail: string;
+    successUrl?: string | null;
+    cancelUrl?: string | null;
   }) {
     const secretKey = this.getSecretKey();
 
@@ -39,8 +41,10 @@ export class BookingReservationPaymentGatewayService {
     }
 
     const authToken = buildPaymongoAuthToken(secretKey);
-    const successUrl = this.configService.get<string>('payments.paymongoCheckoutSuccessUrl');
-    const cancelUrl = this.configService.get<string>('payments.paymongoCheckoutCancelUrl');
+    const successUrl =
+      payload.successUrl?.trim() || this.configService.get<string>('payments.paymongoCheckoutSuccessUrl');
+    const cancelUrl =
+      payload.cancelUrl?.trim() || this.configService.get<string>('payments.paymongoCheckoutCancelUrl');
     const response = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
       method: 'POST',
       headers: {

@@ -14,6 +14,7 @@ export const bookingAvailabilityDayStatusValues = [
   'bookable',
   'limited',
   'full',
+  'closed',
   'outside_window',
   'no_active_slots',
 ] as const;

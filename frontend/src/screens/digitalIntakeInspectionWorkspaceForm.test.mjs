@@ -8,6 +8,7 @@ import {
   getIntakeRequirementOptions,
   getReasonForVisitOptions,
   resolveIntakeNextRoute,
+  sanitizeIntakeOdometer,
 } from './digitalIntakeInspectionWorkspaceForm.mjs'
 
 test('createInitialIntakeDraft returns the intake defaults', () => {
@@ -356,4 +357,22 @@ test('getIntakeRequirementOptions surfaces insurance-specific requirement checks
       { value: 'supportingDocsPresent', required: true },
     ],
   )
+})
+
+test('sanitizeIntakeOdometer strips non-digit input before the payload is built', () => {
+  assert.equal(sanitizeIntakeOdometer('45,230 km'), '45230')
+  assert.equal(sanitizeIntakeOdometer('odo-ABC-123'), '123')
+  assert.equal(sanitizeIntakeOdometer(''), '')
+})
+
+test('buildIntakeInspectionPayload stores a numeric odometer even when the draft input contains mixed characters', () => {
+  const payload = buildIntakeInspectionPayload({
+    draft: {
+      ...createInitialIntakeDraft(),
+      currentOdometerKm: '45,230 km',
+    },
+    userId: 'staff-88',
+  })
+
+  assert.match(payload.notes, /Current odometer \(km\): 45230/)
 })

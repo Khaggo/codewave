@@ -281,6 +281,22 @@ export default function BackJobsContent() {
     [customers, selectedCustomerUserId],
   )
   const selectedCustomerVehicles = selectedCustomer?.vehicles ?? []
+  const selectedCreateCustomer = useMemo(
+    () => customers.find((customer) => customer.id === createDraft.customerUserId) ?? null,
+    [createDraft.customerUserId, customers],
+  )
+  const selectedCreateVehicle = useMemo(
+    () => (selectedCreateCustomer?.vehicles ?? []).find((vehicle) => vehicle.id === createDraft.vehicleId) ?? null,
+    [createDraft.vehicleId, selectedCreateCustomer],
+  )
+  const selectedCreateOriginalJobOrder = useMemo(
+    () => vehicleJobOrders.find((jobOrder) => jobOrder.id === createDraft.originalJobOrderId) ?? null,
+    [createDraft.originalJobOrderId, vehicleJobOrders],
+  )
+  const selectedCreateReturnInspection = useMemo(
+    () => vehicleInspections.find((inspection) => inspection.id === createDraft.returnInspectionId) ?? null,
+    [createDraft.returnInspectionId, vehicleInspections],
+  )
   const technicianOptions = useMemo(
     () =>
       staffAccounts.filter(
@@ -341,6 +357,33 @@ export default function BackJobsContent() {
         setVehicleInspections([])
       })
   }, [activeBackJob?.vehicleId, canManage, createDraft.vehicleId, user?.accessToken, vehicleId])
+
+  useEffect(() => {
+    if (!selectedCreateOriginalJobOrder) {
+      return
+    }
+
+    if (selectedCreateOriginalJobOrder.sourceType === 'booking' && selectedCreateOriginalJobOrder.sourceId) {
+      setCreateDraft((current) =>
+        current.originalBookingId === selectedCreateOriginalJobOrder.sourceId
+          ? current
+          : {
+              ...current,
+              originalBookingId: selectedCreateOriginalJobOrder.sourceId,
+            },
+      )
+      return
+    }
+
+    setCreateDraft((current) =>
+      current.originalBookingId
+        ? {
+            ...current,
+            originalBookingId: '',
+          }
+        : current,
+    )
+  }, [selectedCreateOriginalJobOrder])
 
   function requireStaffSession(stateSetter, failedStatus, message) {
     if (!canManage) {
@@ -471,6 +514,67 @@ export default function BackJobsContent() {
     event.preventDefault()
     if (!requireStaffSession(setCreateState, 'create_forbidden_role', 'A valid staff session is required before creating a back-job.')) {
       return
+    }
+
+    if (!createDraft.customerUserId || !createDraft.vehicleId || !createDraft.originalJobOrderId) {
+      setCreateState({
+        status: 'create_failed',
+        message: 'Choose the customer, vehicle, and finalized original job order before opening a back-job case.',
+      })
+      return
+    }
+
+    if (!createDraft.complaint.trim()) {
+      setCreateState({
+        status: 'create_failed',
+        message: 'Enter the customer complaint before opening a back-job case.',
+      })
+      return
+    }
+
+    if (!selectedCreateOriginalJobOrder) {
+      setCreateState({
+        status: 'create_failed',
+        message: 'Reload the original vehicle history, then choose the finalized job order again.',
+      })
+      return
+    }
+
+    if (selectedCreateOriginalJobOrder.status !== 'finalized') {
+      setCreateState({
+        status: 'create_failed',
+        message: 'Only finalized original job orders can be reviewed as back-job lineage.',
+      })
+      return
+    }
+
+    if (
+      selectedCreateOriginalJobOrder.customerUserId !== createDraft.customerUserId ||
+      selectedCreateOriginalJobOrder.vehicleId !== createDraft.vehicleId
+    ) {
+      setCreateState({
+        status: 'create_lineage_conflict',
+        message: 'The selected original job order does not match the chosen customer and vehicle.',
+      })
+      return
+    }
+
+    if (createDraft.returnInspectionId) {
+      if (!selectedCreateReturnInspection) {
+        setCreateState({
+          status: 'create_failed',
+          message: 'Reload the vehicle inspections, then choose the return inspection again.',
+        })
+        return
+      }
+
+      if (selectedCreateReturnInspection.inspectionType !== 'return') {
+        setCreateState({
+          status: 'create_failed',
+          message: 'Back-job review can only link a return inspection from the same vehicle.',
+        })
+        return
+      }
     }
 
     setCreateState({ status: 'create_submitting', message: '' })
@@ -904,12 +1008,52 @@ export default function BackJobsContent() {
                 }))}
               />
             </label>
+            <div className="rounded-xl border border-surface-border bg-surface-raised p-3 md:col-span-2">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted">Original completed service</p>
+              {selectedCreateOriginalJobOrder ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">Job order</p>
+                    <p className="mt-2 text-sm font-semibold text-ink-primary">
+                      JO-{selectedCreateOriginalJobOrder.id.slice(0, 8).toUpperCase()}
+                    </p>
+                    <p className="mt-1 text-xs text-ink-muted">{selectedCreateOriginalJobOrder.status}</p>
+                  </div>
+                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">Source</p>
+                    <p className="mt-2 text-sm font-semibold text-ink-primary">
+                      {selectedCreateOriginalJobOrder.sourceType === 'booking' ? 'Completed booking service' : 'Manual staff source'}
+                    </p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      {selectedCreateOriginalJobOrder.sourceId || 'No booking reference'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-surface-border bg-surface-card p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">Review gate</p>
+                    <p className="mt-2 text-sm font-semibold text-ink-primary">
+                      {selectedCreateOriginalJobOrder.status === 'finalized' ? 'Eligible for back-job review' : 'Not review-ready'}
+                    </p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      Back-jobs should open from completed service history, not from a fresh booking.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-ink-muted">
+                  Choose a finalized original job order from the vehicle history to anchor this complaint to completed service.
+                </p>
+              )}
+            </div>
             <label className="label">
               Original job order
               <PortalSelect
                 value={createDraft.originalJobOrderId}
                 onValueChange={(nextValue) =>
-                  setCreateDraft((current) => ({ ...current, originalJobOrderId: nextValue }))
+                  setCreateDraft((current) => ({
+                    ...current,
+                    originalJobOrderId: nextValue,
+                    originalBookingId: '',
+                  }))
                 }
                 placeholder="Choose finalized job order"
                 emptyOptionLabel="Choose finalized job order"

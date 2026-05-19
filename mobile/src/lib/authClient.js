@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
 const LOCAL_API_BASE_URL =
   Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://127.0.0.1:3000';
@@ -7,10 +7,63 @@ const defaultApiBaseUrl = __DEV__ ? LOCAL_API_BASE_URL : PRODUCTION_API_BASE_URL
 const REQUEST_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? 20000);
 const CUSTOMER_SESSION_EXPIRED_HANDLER_KEY = '__codewaveCustomerSessionExpiredHandler';
 
-const API_BASE_URL = (
-  process.env.EXPO_PUBLIC_API_BASE_URL ??
-  defaultApiBaseUrl
-).replace(/\/$/, '');
+const normalizeApiBaseUrl = (value) => {
+  const normalizedValue = String(value ?? '').trim();
+  return normalizedValue ? normalizedValue.replace(/\/$/, '') : '';
+};
+
+const deriveApiBaseUrlFromSourceScript = () => {
+  if (!__DEV__) {
+    return '';
+  }
+
+  const scriptUrl = String(NativeModules?.SourceCode?.scriptURL ?? '').trim();
+  if (!scriptUrl) {
+    return '';
+  }
+
+  try {
+    const parsedScriptUrl = new URL(scriptUrl);
+    const hostname = String(parsedScriptUrl.hostname ?? '').trim();
+
+    if (!hostname) {
+      return '';
+    }
+
+    if (Platform.OS === 'android' && ['localhost', '127.0.0.1'].includes(hostname)) {
+      return LOCAL_API_BASE_URL;
+    }
+
+    const protocol = parsedScriptUrl.protocol === 'https:' ? 'https:' : 'http:';
+    return normalizeApiBaseUrl(`${protocol}//${hostname}:3000`);
+  } catch {
+    return '';
+  }
+};
+
+const buildApiBaseUrlCandidates = () => {
+  const candidates = [
+    normalizeApiBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL),
+    deriveApiBaseUrlFromSourceScript(),
+    normalizeApiBaseUrl(defaultApiBaseUrl),
+  ].filter(Boolean);
+
+  return Array.from(new Set(candidates));
+};
+
+let resolvedApiBaseUrl = buildApiBaseUrlCandidates()[0] ?? normalizeApiBaseUrl(defaultApiBaseUrl);
+
+const getApiBaseUrlCandidates = () => {
+  const candidates = [resolvedApiBaseUrl, ...buildApiBaseUrlCandidates()].filter(Boolean);
+  return Array.from(new Set(candidates));
+};
+
+const setResolvedApiBaseUrl = (value) => {
+  const normalizedValue = normalizeApiBaseUrl(value);
+  if (normalizedValue) {
+    resolvedApiBaseUrl = normalizedValue;
+  }
+};
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -307,44 +360,64 @@ const buildUsername = (email) => {
 
 const request = async (path, options = {}) => {
   const { body, headers, ...rest } = options;
+  const apiBaseUrlCandidates = getApiBaseUrlCandidates();
+  const fallbackAttemptTimeoutMs =
+    apiBaseUrlCandidates.length > 1 ? Math.min(REQUEST_TIMEOUT_MS, 4500) : REQUEST_TIMEOUT_MS;
   let response;
-  const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  const timeoutHandle =
-    controller && Number.isFinite(REQUEST_TIMEOUT_MS) && REQUEST_TIMEOUT_MS > 0
-      ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-      : null;
+  let lastNetworkError = null;
+  let activeApiBaseUrl = apiBaseUrlCandidates[0] ?? resolvedApiBaseUrl;
 
-  try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      ...rest,
-      signal: controller?.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(headers ?? {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch (error) {
+  for (const candidateApiBaseUrl of apiBaseUrlCandidates) {
+    activeApiBaseUrl = candidateApiBaseUrl;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timeoutHandle =
+      controller && Number.isFinite(fallbackAttemptTimeoutMs) && fallbackAttemptTimeoutMs > 0
+        ? setTimeout(() => controller.abort(), fallbackAttemptTimeoutMs)
+        : null;
+
+    try {
+      response = await fetch(`${candidateApiBaseUrl}${path}`, {
+        ...rest,
+        signal: controller?.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(headers ?? {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      setResolvedApiBaseUrl(candidateApiBaseUrl);
+      break;
+    } catch (error) {
+      lastNetworkError = error;
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+      continue;
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
+  }
+
+  if (!response) {
     const errorMessage =
-      error instanceof Error && error.name === 'AbortError'
-        ? `The request took too long to complete.`
-        : error instanceof Error && error.message
-          ? error.message
+      lastNetworkError instanceof Error && lastNetworkError.name === 'AbortError'
+        ? 'The request took too long to complete.'
+        : lastNetworkError instanceof Error && lastNetworkError.message
+          ? lastNetworkError.message
           : 'Unable to reach the API server.';
 
     throw new ApiError(
-      `Unable to reach ${API_BASE_URL}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
+      `Unable to reach ${activeApiBaseUrl}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
       0,
       {
         path,
-        apiBaseUrl: API_BASE_URL,
-        timedOut: error instanceof Error && error.name === 'AbortError',
+        apiBaseUrl: activeApiBaseUrl,
+        attemptedApiBaseUrls: apiBaseUrlCandidates,
+        timedOut: lastNetworkError instanceof Error && lastNetworkError.name === 'AbortError',
       },
     );
-  } finally {
-    if (timeoutHandle) {
-      clearTimeout(timeoutHandle);
-    }
   }
 
   const rawText = await response.text();
@@ -707,4 +780,4 @@ export const buildMobileAccountProfile = ({
   };
 };
 
-export const getApiBaseUrl = () => API_BASE_URL;
+export const getApiBaseUrl = () => resolvedApiBaseUrl;

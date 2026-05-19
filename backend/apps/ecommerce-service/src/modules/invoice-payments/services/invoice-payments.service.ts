@@ -106,7 +106,11 @@ export class InvoicePaymentsService {
     return hydratedInvoice;
   }
 
-  async createPaymongoCheckoutForOrder(orderId: string, actor: ActorContext) {
+  async createPaymongoCheckoutForOrder(
+    orderId: string,
+    actor: ActorContext,
+    checkoutReturnUrls?: { successUrl?: string | null; cancelUrl?: string | null },
+  ) {
     const invoice = await this.findInvoiceByOrderId(orderId, actor);
     this.assertInvoiceReadyForOnlinePayment(invoice);
 
@@ -117,6 +121,8 @@ export class InvoicePaymentsService {
       amountCents: invoice.amountDueCents,
       currencyCode: invoice.currencyCode,
       customerEmail: null,
+      successUrl: checkoutReturnUrls?.successUrl ?? null,
+      cancelUrl: checkoutReturnUrls?.cancelUrl ?? null,
     });
 
     await this.invoicePaymentsRepository.updateInvoice(invoice.id, (currentInvoice) => ({

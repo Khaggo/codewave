@@ -203,5 +203,9 @@ export const getCustomerBookingAvailabilityState = (
     return 'availability_no_active_slots';
   }
 
+  if (availability.days.some((day) => day.status === 'closed')) {
+    return 'availability_no_active_slots';
+  }
+
   return 'availability_outside_window_only';
 };

@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 import { bookingAvailabilityDayStatusValues } from '../bookings.constants';
 import { BookingAvailabilitySlotViewDto } from './booking-availability-slot-view.dto';
@@ -14,6 +14,18 @@ export class BookingAvailabilityDayViewDto {
     example: 'limited',
   })
   status!: (typeof bookingAvailabilityDayStatusValues)[number];
+
+  @ApiPropertyOptional({
+    example: 'Holiday closure',
+    nullable: true,
+  })
+  closureLabel?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Shop is closed for the Christmas holiday.',
+    nullable: true,
+  })
+  closureReason?: string | null;
 
   @ApiProperty({
     example: true,

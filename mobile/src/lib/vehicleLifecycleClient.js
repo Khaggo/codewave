@@ -1,7 +1,6 @@
 import { ApiError, getApiBaseUrl } from './authClient';
 import { formatDate } from '../utils/validation';
 
-const API_BASE_URL = getApiBaseUrl();
 const VEHICLE_LIFECYCLE_REQUEST_TIMEOUT_MS = 8000;
 
 const customerTimelineFilters = ['All', 'Verified', 'Administrative', 'Summary'];
@@ -29,8 +28,9 @@ const request = async (path, options = {}) => {
   let timeoutId = null;
 
   try {
+    const apiBaseUrl = getApiBaseUrl();
     const runRequest = async () => {
-      const response = await fetch(`${API_BASE_URL}${path}`, {
+      const response = await fetch(`${apiBaseUrl}${path}`, {
         ...rest,
         signal: abortController?.signal,
         headers: {
@@ -70,11 +70,11 @@ const request = async (path, options = {}) => {
               abortController?.abort();
               reject(
                 new ApiError(
-                  `Timed out reaching ${API_BASE_URL}${path} after ${timeoutMs}ms. Check EXPO_PUBLIC_API_BASE_URL for the current device.`,
+                  `Timed out reaching ${apiBaseUrl}${path} after ${timeoutMs}ms. Check EXPO_PUBLIC_API_BASE_URL for the current device.`,
                   0,
                   {
                     path,
-                    apiBaseUrl: API_BASE_URL,
+                    apiBaseUrl,
                     timeoutMs,
                     reason: 'timeout',
                   },
@@ -98,11 +98,11 @@ const request = async (path, options = {}) => {
         : 'Unable to reach the API server.';
 
     throw new ApiError(
-      `Unable to reach ${API_BASE_URL}${path}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
+      `Unable to reach ${apiBaseUrl}${path}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
       0,
       {
         path,
-        apiBaseUrl: API_BASE_URL,
+        apiBaseUrl,
         timeoutMs,
         reason: 'network',
       },

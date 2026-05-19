@@ -92,10 +92,19 @@ export class InvoicePaymentsController {
   @ApiForbiddenResponse({ description: 'Customers can only start checkout for their own ecommerce invoice.' })
   @ApiNotFoundResponse({ description: 'Invoice not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
-  createPaymongoCheckout(@Param('id') orderId: string, @Req() request: Request) {
+  createPaymongoCheckout(
+    @Param('id') orderId: string,
+    @Req() request: Request,
+    @Headers('x-mobile-success-url') mobileSuccessUrl?: string,
+    @Headers('x-mobile-cancel-url') mobileCancelUrl?: string,
+  ) {
     return this.invoicePaymentsService.createPaymongoCheckoutForOrder(
       orderId,
       request.user as { userId: string; role: string },
+      {
+        successUrl: mobileSuccessUrl,
+        cancelUrl: mobileCancelUrl,
+      },
     );
   }
 

@@ -1,7 +1,7 @@
-import VehicleRecords from './VehicleRecords'
+import { redirect } from 'next/navigation'
 
-export const metadata = { title: 'Vehicle Records' }
+export const metadata = { title: 'Customers & Vehicles' }
 
 export default function VehicleRecordsPage() {
-  return <VehicleRecords />
+  redirect('/admin/customers')
 }

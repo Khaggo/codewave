@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
 import { BaseRepository } from '@shared/base/base.repository';
@@ -63,6 +63,25 @@ type RecordJobOrderInvoicePaymentPersistenceInput = Omit<
 > & {
   recordedByUserId: string;
   receivedAt: Date;
+};
+
+const createUpdatedAtMatchFilters = (expectedUpdatedAt?: string) => {
+  if (!expectedUpdatedAt) {
+    return [];
+  }
+
+  const expectedDate = new Date(expectedUpdatedAt);
+  const nextMillisecond = new Date(expectedDate.getTime() + 1);
+
+  return [gte(jobOrders.updatedAt, expectedDate), lt(jobOrders.updatedAt, nextMillisecond)];
+};
+
+const matchesUpdatedAtWithinMillisecond = (actualUpdatedAt: Date, expectedUpdatedAt?: string) => {
+  if (!expectedUpdatedAt) {
+    return true;
+  }
+
+  return actualUpdatedAt.getTime() === new Date(expectedUpdatedAt).getTime();
 };
 
 @Injectable()
@@ -271,10 +290,7 @@ export class JobOrdersRepository extends BaseRepository {
   }
 
   async updateStatus(id: string, payload: UpdateJobOrderStatusPersistenceInput) {
-    const filters = [eq(jobOrders.id, id)];
-    if (payload.expectedUpdatedAt) {
-      filters.push(eq(jobOrders.updatedAt, new Date(payload.expectedUpdatedAt)));
-    }
+    const filters = [eq(jobOrders.id, id), ...createUpdatedAtMatchFilters(payload.expectedUpdatedAt)];
 
     const [updatedJobOrder] = await this.db
       .update(jobOrders)
@@ -302,8 +318,7 @@ export class JobOrdersRepository extends BaseRepository {
         throw new NotFoundException('Job order not found');
       }
       if (
-        payload.expectedUpdatedAt &&
-        existingJobOrder.updatedAt.toISOString() !== new Date(payload.expectedUpdatedAt).toISOString()
+        !matchesUpdatedAtWithinMillisecond(existingJobOrder.updatedAt, payload.expectedUpdatedAt)
       ) {
         throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
       }
@@ -404,10 +419,7 @@ export class JobOrdersRepository extends BaseRepository {
     },
     technicianUserId: string,
   ) {
-    const filters = [eq(jobOrders.id, id)];
-    if (payload.expectedUpdatedAt) {
-      filters.push(eq(jobOrders.updatedAt, new Date(payload.expectedUpdatedAt)));
-    }
+    const filters = [eq(jobOrders.id, id), ...createUpdatedAtMatchFilters(payload.expectedUpdatedAt)];
 
     const [touchedJobOrder] = await this.db
       .update(jobOrders)
@@ -458,10 +470,7 @@ export class JobOrdersRepository extends BaseRepository {
     },
     takenByUserId: string,
   ) {
-    const filters = [eq(jobOrders.id, id)];
-    if (payload.expectedUpdatedAt) {
-      filters.push(eq(jobOrders.updatedAt, new Date(payload.expectedUpdatedAt)));
-    }
+    const filters = [eq(jobOrders.id, id), ...createUpdatedAtMatchFilters(payload.expectedUpdatedAt)];
 
     const [touchedJobOrder] = await this.db
       .update(jobOrders)
@@ -497,10 +506,7 @@ export class JobOrdersRepository extends BaseRepository {
 
   async finalize(id: string, payload: FinalizeJobOrderPersistenceInput) {
     const jobOrder = await this.findById(id);
-    if (
-      payload.expectedUpdatedAt &&
-      jobOrder.updatedAt.toISOString() !== new Date(payload.expectedUpdatedAt).toISOString()
-    ) {
+    if (!matchesUpdatedAtWithinMillisecond(jobOrder.updatedAt, payload.expectedUpdatedAt)) {
       throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
     }
 
@@ -581,10 +587,7 @@ export class JobOrdersRepository extends BaseRepository {
 
   async recordInvoicePayment(id: string, payload: RecordJobOrderInvoicePaymentPersistenceInput) {
     const jobOrder = await this.findById(id);
-    if (
-      payload.expectedUpdatedAt &&
-      jobOrder.updatedAt.toISOString() !== new Date(payload.expectedUpdatedAt).toISOString()
-    ) {
+    if (!matchesUpdatedAtWithinMillisecond(jobOrder.updatedAt, payload.expectedUpdatedAt)) {
       throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
     }
     const invoiceRecord = this.assertFound(jobOrder.invoiceRecord, 'Job order invoice record not found');

@@ -79,6 +79,26 @@ export const timeSlots = pgTable('time_slots', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const bookingDateClosures = pgTable(
+  'booking_date_closures',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    scheduledDate: date('scheduled_date', { mode: 'string' }).notNull(),
+    label: varchar('label', { length: 120 }),
+    reason: text('reason').notNull(),
+    isClosed: boolean('is_closed').notNull().default(true),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    updatedByUserId: uuid('updated_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    bookingDateClosureScheduledDateUnique: uniqueIndex('booking_date_closures_scheduled_date_idx').on(
+      table.scheduledDate,
+    ),
+  }),
+);
+
 export const bookings = pgTable('bookings', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id')
@@ -185,6 +205,17 @@ export const servicesRelations = relations(services, ({ one, many }) => ({
 
 export const timeSlotsRelations = relations(timeSlots, ({ many }) => ({
   bookings: many(bookings),
+}));
+
+export const bookingDateClosuresRelations = relations(bookingDateClosures, ({ one }) => ({
+  createdByUser: one(users, {
+    fields: [bookingDateClosures.createdByUserId],
+    references: [users.id],
+  }),
+  updatedByUser: one(users, {
+    fields: [bookingDateClosures.updatedByUserId],
+    references: [users.id],
+  }),
 }));
 
 export const bookingsRelations = relations(bookings, ({ one, many }) => ({

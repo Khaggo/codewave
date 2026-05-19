@@ -142,6 +142,11 @@ const normalizeAttachmentRefs = (arrivalPhotos) =>
       .filter(Boolean),
   )]
 
+export const sanitizeIntakeOdometer = (value) =>
+  String(value ?? '')
+    .replace(/[^\d]/g, '')
+    .slice(0, intakeFieldMaxLengths.currentOdometerKm)
+
 const truncateText = (value, maxLength) => {
   const text = String(value ?? '').trim()
   if (!text || text.length <= maxLength) {
@@ -235,7 +240,7 @@ const buildCappedIntakeDraft = (draft) => {
       draft.requestedServiceSummary,
       intakeFieldMaxLengths.requestedServiceSummary,
     ),
-    currentOdometerKm: truncateText(draft.currentOdometerKm, intakeFieldMaxLengths.currentOdometerKm),
+    currentOdometerKm: sanitizeIntakeOdometer(draft.currentOdometerKm),
     fuelLevel: truncateText(draft.fuelLevel, intakeFieldMaxLengths.fuelLevel),
     serviceConcern: truncateText(draft.serviceConcern, intakeFieldMaxLengths.serviceConcern),
     missingRequirementsNote: truncateText(

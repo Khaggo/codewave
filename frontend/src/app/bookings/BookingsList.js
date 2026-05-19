@@ -20,12 +20,15 @@ import {
 } from 'lucide-react'
 import {
   confirmReservationPayment,
+  createBookingDateClosure,
   createTimeSlotDefinition,
   deleteTimeSlotDefinition,
   getCurrentQueue,
   getDailySchedule,
   getTimeSlotDefinitions,
+  listBookingDateClosures,
   updateBookingStatus,
+  updateBookingDateClosure,
   updateTimeSlotDefinition,
 } from '@/lib/bookingStaffClient'
 import { useToast } from '@/components/Toast'
@@ -83,6 +86,11 @@ const initialSlotForm = {
   startTime: '08:00',
   endTime: '09:00',
   capacity: '2',
+}
+
+const initialClosureForm = {
+  label: '',
+  reason: '',
 }
 
 const UPCOMING_SCHEDULE_DAYS = 31
@@ -1056,8 +1064,10 @@ export default function BookingsList() {
   const [scheduleWindowState, setScheduleWindowState] = useState(initialScheduleWindowState)
   const [calendarState, setCalendarState] = useState(initialCalendarState)
   const [slotDefinitionsState, setSlotDefinitionsState] = useState(initialLoadState)
+  const [closureListState, setClosureListState] = useState(initialLoadState)
   const [timeSlotOptions, setTimeSlotOptions] = useState([])
   const [slotForm, setSlotForm] = useState(initialSlotForm)
+  const [closureForm, setClosureForm] = useState(initialClosureForm)
   const [editingSlotId, setEditingSlotId] = useState('')
   const [slotEditForm, setSlotEditForm] = useState(initialSlotForm)
   const [slotMutationState, setSlotMutationState] = useState({
@@ -1068,6 +1078,10 @@ export default function BookingsList() {
   const [actionState, setActionState] = useState({
     status: 'idle',
     busyBookingId: '',
+    message: '',
+  })
+  const [closureMutationState, setClosureMutationState] = useState({
+    status: 'idle',
     message: '',
   })
   const [pendingAction, setPendingAction] = useState(null)
@@ -1105,6 +1119,77 @@ export default function BookingsList() {
   useEffect(() => {
     void loadSlotDefinitions()
   }, [loadSlotDefinitions])
+
+  const loadDateClosures = useCallback(async (activeMonth = calendarMonth) => {
+    if (!user?.accessToken || !canReadBookingOperations) {
+      setClosureListState({
+        status: user?.accessToken ? 'forbidden' : 'unauthorized',
+        data: [],
+        error: user?.accessToken
+          ? 'Only service advisers and super admins can manage booking closures.'
+          : 'Sign in with a staff session before reading booking closures.',
+      })
+      return
+    }
+
+    const dateKeys = buildMonthDateWindow(activeMonth)
+    const startDate = dateKeys[0]
+    const endDate = dateKeys[dateKeys.length - 1]
+
+    setClosureListState((previous) => ({ ...previous, status: 'loading', error: '' }))
+
+    try {
+      const closures = await listBookingDateClosures(
+        {
+          startDate,
+          endDate,
+        },
+        user.accessToken,
+      )
+
+      setClosureListState({
+        status: 'success',
+        data: closures,
+        error: '',
+      })
+    } catch (error) {
+      setClosureListState((previous) => ({
+        ...previous,
+        data: previous.data,
+        ...buildErrorState(error, 'Booking closures could not be loaded.'),
+      }))
+    }
+  }, [calendarMonth, canReadBookingOperations, user?.accessToken])
+
+  useEffect(() => {
+    void loadDateClosures(calendarMonth)
+  }, [calendarMonth, loadDateClosures])
+
+  const selectedDateClosure = useMemo(
+    () =>
+      Array.isArray(closureListState.data)
+        ? closureListState.data.find((closure) => closure?.scheduledDate === selectedDate && closure?.isClosed)
+        : null,
+    [closureListState.data, selectedDate],
+  )
+
+  useEffect(() => {
+    setClosureForm({
+      label:
+        selectedDateClosure?.label ??
+        (scheduleState.data?.isClosed ? scheduleState.data?.closureLabel ?? '' : ''),
+      reason:
+        selectedDateClosure?.reason ??
+        (scheduleState.data?.isClosed ? scheduleState.data?.closureReason ?? '' : ''),
+    })
+  }, [
+    scheduleState.data?.closureLabel,
+    scheduleState.data?.closureReason,
+    scheduleState.data?.isClosed,
+    selectedDate,
+    selectedDateClosure?.label,
+    selectedDateClosure?.reason,
+  ])
 
   const loadStaffBookingReads = useCallback(async () => {
     if (!user?.accessToken) {
@@ -1499,6 +1584,8 @@ export default function BookingsList() {
           dateKey: dateKeys[index],
           totalBookings: getScheduleBookingTotal(data),
           pendingCount: summary.pendingCount,
+          isClosed: Boolean(data?.isClosed),
+          closureLabel: data?.closureLabel ?? null,
         }
       })
       .filter(Boolean)
@@ -1588,6 +1675,9 @@ export default function BookingsList() {
           confirmedCount: summary.confirmedCount,
           inServiceCount: summary.inServiceCount,
           rescheduledCount: summary.rescheduledCount,
+          isClosed: Boolean(data?.isClosed),
+          closureLabel: data?.closureLabel ?? null,
+          closureReason: data?.closureReason ?? null,
           bookings: flattenScheduleBookings(data),
         }
       })
@@ -1628,6 +1718,7 @@ export default function BookingsList() {
 
     const refreshTasks = [
       loadSlotDefinitions(),
+      loadDateClosures(startOfMonth(toDateFromKey(selectedDateRef.current))),
       loadStaffBookingReads(),
       loadUpcomingScheduleWindow(selectedDateRef.current),
     ]
@@ -1661,6 +1752,113 @@ export default function BookingsList() {
     hasAutoSelectedUpcomingDate.current = true
     setSelectedDate(normalizedDate)
     setCalendarMonth(startOfMonth(toDateFromKey(normalizedDate)))
+  }
+
+  function handleClosureFormChange(patch) {
+    setClosureForm((previous) => ({
+      ...previous,
+      ...patch,
+    }))
+    setClosureMutationState((previous) =>
+      previous.status === 'error'
+        ? {
+            status: 'idle',
+            message: '',
+          }
+        : previous,
+    )
+  }
+
+  async function handleSaveDateClosure() {
+    if (!user?.accessToken || !canReadBookingOperations) {
+      setClosureMutationState({
+        status: 'error',
+        message: 'Sign in with a service adviser or super admin account before managing booking closures.',
+      })
+      return
+    }
+
+    if (!closureForm.reason.trim()) {
+      setClosureMutationState({
+        status: 'error',
+        message: 'Add a customer-safe closure reason before closing this booking date.',
+      })
+      return
+    }
+
+    setClosureMutationState({
+      status: 'submitting',
+      message: '',
+    })
+
+    try {
+      await createBookingDateClosure(
+        {
+          scheduledDate: selectedDate,
+          label: closureForm.label.trim() || undefined,
+          reason: closureForm.reason.trim(),
+          isClosed: true,
+        },
+        user.accessToken,
+      )
+      await Promise.all([loadStaffBookingReads(), loadDateClosures(startOfMonth(toDateFromKey(selectedDate)))])
+      setClosureMutationState({
+        status: 'success',
+        message: 'Selected date was closed for new bookings. Existing records remain visible in the schedule.',
+      })
+      toast({
+        type: 'success',
+        title: 'Date closed',
+        message: `${formatDate(selectedDate)} is now blocked from new bookings.`,
+      })
+    } catch (error) {
+      setClosureMutationState({
+        status: 'error',
+        message: error?.message || 'Booking closure could not be saved.',
+      })
+    }
+  }
+
+  async function handleReopenDate() {
+    if (!user?.accessToken || !canReadBookingOperations) {
+      setClosureMutationState({
+        status: 'error',
+        message: 'Sign in with a service adviser or super admin account before reopening booking dates.',
+      })
+      return
+    }
+
+    setClosureMutationState({
+      status: 'submitting',
+      message: '',
+    })
+
+    try {
+      await updateBookingDateClosure(
+        {
+          scheduledDate: selectedDate,
+          isClosed: false,
+          label: closureForm.label.trim() || undefined,
+          reason: closureForm.reason.trim() || 'Date reopened for customer bookings.',
+        },
+        user.accessToken,
+      )
+      await Promise.all([loadStaffBookingReads(), loadDateClosures(startOfMonth(toDateFromKey(selectedDate)))])
+      setClosureMutationState({
+        status: 'success',
+        message: 'Selected date was reopened for customer bookings.',
+      })
+      toast({
+        type: 'success',
+        title: 'Date reopened',
+        message: `${formatDate(selectedDate)} is bookable again if slot capacity is available.`,
+      })
+    } catch (error) {
+      setClosureMutationState({
+        status: 'error',
+        message: error?.message || 'Booking date could not be reopened.',
+      })
+    }
   }
 
   async function submitBookingStatusAction(booking, action) {
@@ -1756,13 +1954,27 @@ export default function BookingsList() {
 
   const scheduleSummary = useMemo(() => summarizeSchedule(scheduleState.data), [scheduleState.data])
   const bookedScheduleDates = useMemo(
-    () => scheduleWindowState.dates.filter((date) => date.totalBookings > 0),
+    () => scheduleWindowState.dates.filter((date) => date.totalBookings > 0 || date.isClosed),
     [scheduleWindowState.dates],
   )
   const calendarBookingsByDate = useMemo(
     () =>
       Object.fromEntries(
         calendarState.dates.map((date) => [date.dateKey, date.bookings ?? []]),
+      ),
+    [calendarState.dates],
+  )
+  const calendarDateMetaByDate = useMemo(
+    () =>
+      Object.fromEntries(
+        calendarState.dates.map((date) => [
+          date.dateKey,
+          {
+            isClosed: Boolean(date.isClosed),
+            closureLabel: date.closureLabel ?? null,
+            closureReason: date.closureReason ?? null,
+          },
+        ]),
       ),
     [calendarState.dates],
   )
@@ -1900,13 +2112,14 @@ export default function BookingsList() {
           <div className="flex shrink-0 items-center gap-2.5">
             <BellRing size={16} className="text-brand-orange" />
             <p className="text-xs font-semibold text-ink-primary">
-              Pending customer bookings
-              <span className="font-normal text-ink-muted"> — choose a date to review</span>
+              Booking watchlist
+              <span className="font-normal text-ink-muted"> — choose a date with live bookings or an active closure</span>
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5 md:ml-auto">
             {bookedScheduleDates.map((date) => {
               const isActive = selectedDate === date.dateKey
+              const isClosedDate = Boolean(date.isClosed)
               return (
                 <button
                   key={date.dateKey}
@@ -1920,8 +2133,10 @@ export default function BookingsList() {
                       : { background: 'rgb(var(--brand-orange) / 0.12)', color: 'rgb(var(--brand-orange))' }
                   }
                 >
-                  {formatDate(date.dateKey)} • {date.totalBookings}
-                  {date.pendingCount ? `/${date.pendingCount} pending` : ''}
+                  {formatDate(date.dateKey)}
+                  {isClosedDate
+                    ? ` • Closed${date.totalBookings ? ` • ${date.totalBookings} bookings` : ''}`
+                    : ` • ${date.totalBookings}${date.pendingCount ? `/${date.pendingCount} pending` : ''}`}
                 </button>
               )
             })}
@@ -1930,6 +2145,148 @@ export default function BookingsList() {
       ) : scheduleScope === 'active' && scheduleWindowState.status === 'loading' ? (
         <div className="text-xs text-ink-muted px-1">Scanning the next month for customer-created bookings...</div>
       ) : null}
+
+      <section className="card p-5">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="card-title">Date closure</p>
+            <p className="mt-1 text-sm leading-6 text-ink-secondary">
+              Mark a selected date closed for holidays or one-off shop downtime. Existing bookings stay visible for staff follow-through.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`badge ${scheduleState.data?.isClosed ? 'badge-orange' : 'badge-green'}`}>
+              {scheduleState.data?.isClosed ? 'Closed for new bookings' : 'Open for bookings'}
+            </span>
+            <span className="badge badge-gray">{formatDate(selectedDate)}</span>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
+          <div className="space-y-4 rounded-2xl border border-surface-border bg-surface-raised/70 p-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="label">Closure label</span>
+                <input
+                  value={closureForm.label}
+                  onChange={(event) => handleClosureFormChange({ label: event.target.value })}
+                  placeholder="Holiday closure"
+                  className="input"
+                />
+              </label>
+              <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                <p className="label">Selected date state</p>
+                <p className="mt-2 text-sm font-semibold text-ink-primary">
+                  {scheduleState.data?.isClosed ? 'Closed to new bookings' : 'Bookable if slot capacity allows'}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                  {scheduleState.data?.isClosed
+                    ? scheduleState.data?.closureReason || 'This date is currently blocked from new customer appointments.'
+                    : 'Use a closure when the shop is unavailable even though slot definitions still exist.'}
+                </p>
+              </div>
+            </div>
+
+            <label className="block">
+              <span className="label">Customer-safe closure reason</span>
+              <textarea
+                value={closureForm.reason}
+                onChange={(event) => handleClosureFormChange({ reason: event.target.value })}
+                placeholder="Shop is closed for a holiday or facility maintenance."
+                rows={4}
+                className="textarea"
+              />
+            </label>
+
+            {closureMutationState.message ? (
+              <div
+                className={
+                  closureMutationState.status === 'error'
+                    ? 'status-message status-message-danger'
+                    : 'status-message status-message-success'
+                }
+              >
+                {closureMutationState.message}
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleSaveDateClosure}
+                disabled={closureMutationState.status === 'submitting'}
+                className="btn-primary"
+              >
+                {closureMutationState.status === 'submitting' ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <ShieldAlert size={14} />
+                )}
+                Mark date closed
+              </button>
+              <button
+                type="button"
+                onClick={handleReopenDate}
+                disabled={closureMutationState.status === 'submitting' || !scheduleState.data?.isClosed}
+                className="btn-ghost"
+              >
+                <CheckCircle2 size={14} />
+                Reopen date
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-ink-primary">Closed dates this month</p>
+                <p className="mt-1 text-sm leading-6 text-ink-secondary">
+                  The selected month stays aligned with booking availability and staff schedule reads.
+                </p>
+              </div>
+              <span className="badge badge-gray">
+                {Array.isArray(closureListState.data) ? closureListState.data.length : 0} configured
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {closureListState.status === 'loading' && !Array.isArray(closureListState.data) ? (
+                <p className="text-sm text-ink-muted">Loading closed dates...</p>
+              ) : Array.isArray(closureListState.data) && closureListState.data.length > 0 ? (
+                closureListState.data.map((closure) => (
+                  <button
+                    key={closure.id ?? closure.scheduledDate}
+                    type="button"
+                    onClick={() => handleSelectedDateChange(closure.scheduledDate)}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                      selectedDate === closure.scheduledDate
+                        ? 'border-brand-orange/40 bg-brand-orange/10'
+                        : 'border-surface-border bg-surface-raised/60 hover:border-brand-orange/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-ink-primary">{formatDate(closure.scheduledDate)}</p>
+                      <span className="badge badge-orange">Closed</span>
+                    </div>
+                    <p className="mt-2 text-sm text-ink-secondary">{closure.label || closure.reason}</p>
+                  </button>
+                ))
+              ) : (
+                <div className="empty-panel">
+                  <p className="text-sm font-semibold text-ink-primary">No closed dates in this month</p>
+                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                    Use the left-side form when a holiday or one-off closure needs to block booking availability.
+                  </p>
+                </div>
+              )}
+
+              {closureListState.error ? (
+                <div className="status-message status-message-danger">{closureListState.error}</div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <SlotDefinitionsPanel
         slots={slotDefinitions}
@@ -2015,6 +2372,13 @@ export default function BookingsList() {
                 </div>
               ) : null}
 
+              {scheduleState.data?.isClosed ? (
+                <div className="status-message status-message-warning">
+                  {scheduleState.data?.closureLabel ? `${scheduleState.data.closureLabel}: ` : ''}
+                  {scheduleState.data?.closureReason || 'This date is closed for new bookings.'} Existing schedule records remain visible below.
+                </div>
+              ) : null}
+
               {isLoadingSchedule ? (
                 <LoadingRows />
               ) : scheduleSlots.length === 0 ? (
@@ -2056,6 +2420,7 @@ export default function BookingsList() {
         <BookingsCalendarView
           monthDate={calendarMonth}
           groupedBookingsByDate={calendarBookingsByDate}
+          dateMetaByDate={calendarDateMetaByDate}
           loading={isLoadingCalendar}
           error={calendarState.error}
           scope={scheduleScope}

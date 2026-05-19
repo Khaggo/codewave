@@ -1,6 +1,4 @@
 import { ApiError, getApiBaseUrl, normalizeVehicleRecord } from './authClient';
-
-const API_BASE_URL = getApiBaseUrl();
 const BOOKING_DISCOVERY_REQUEST_TIMEOUT_MS = 8000;
 
 const buildAuthHeaders = (accessToken) =>
@@ -28,8 +26,9 @@ const request = async (path, options = {}) => {
   let timeoutId = null;
 
   try {
+    const apiBaseUrl = getApiBaseUrl();
     const runRequest = async () => {
-      const response = await fetch(`${API_BASE_URL}${path}`, {
+      const response = await fetch(`${apiBaseUrl}${path}`, {
         ...rest,
         signal: abortController?.signal,
         headers: {
@@ -69,11 +68,11 @@ const request = async (path, options = {}) => {
               abortController?.abort();
               reject(
                 new ApiError(
-                  `Timed out reaching ${API_BASE_URL}${path} after ${timeoutMs}ms. Check EXPO_PUBLIC_API_BASE_URL for the current device.`,
+                  `Timed out reaching ${apiBaseUrl}${path} after ${timeoutMs}ms. Check EXPO_PUBLIC_API_BASE_URL for the current device.`,
                   0,
                   {
                     path,
-                    apiBaseUrl: API_BASE_URL,
+                    apiBaseUrl,
                     timeoutMs,
                     reason: 'timeout',
                   },
@@ -97,11 +96,11 @@ const request = async (path, options = {}) => {
         : 'Unable to reach the API server.';
 
     throw new ApiError(
-      `Unable to reach ${API_BASE_URL}${path}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
+      `Unable to reach ${apiBaseUrl}${path}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
       0,
       {
         path,
-        apiBaseUrl: API_BASE_URL,
+        apiBaseUrl,
         timeoutMs,
         reason: 'network',
       },
@@ -139,6 +138,7 @@ const BOOKING_AVAILABILITY_DAY_STATUSES = new Set([
   'bookable',
   'limited',
   'full',
+  'closed',
   'outside_window',
   'no_active_slots',
 ]);
@@ -235,6 +235,8 @@ const normalizeBookingAvailabilityDay = (day) => {
   return {
     scheduledDate: normalizeIsoDateOnly(day?.scheduledDate),
     status: BOOKING_AVAILABILITY_DAY_STATUSES.has(day?.status) ? day.status : fallbackStatus,
+    closureLabel: typeof day?.closureLabel === 'string' ? day.closureLabel : null,
+    closureReason: typeof day?.closureReason === 'string' ? day.closureReason : null,
     isBookable:
       typeof day?.isBookable === 'boolean'
         ? day.isBookable
@@ -329,7 +331,9 @@ const normalizeBookingAvailability = (payload, query) => {
 /**
  * @typedef {Object} BookingAvailabilityDayRecord
  * @property {string} scheduledDate
- * @property {'bookable' | 'limited' | 'full' | 'outside_window' | 'no_active_slots'} status
+ * @property {'bookable' | 'limited' | 'full' | 'closed' | 'outside_window' | 'no_active_slots'} status
+ * @property {string | null | undefined} closureLabel
+ * @property {string | null | undefined} closureReason
  * @property {boolean} isBookable
  * @property {number} activeSlotCount
  * @property {number} availableSlotCount
@@ -712,10 +716,16 @@ export const createCustomerBooking = async ({
   serviceIds,
   notes,
   accessToken,
+  checkoutSuccessUrl,
+  checkoutCancelUrl,
 }) =>
   request('/api/bookings', {
     method: 'POST',
-    headers: buildAuthHeaders(accessToken),
+    headers: {
+      ...(buildAuthHeaders(accessToken) ?? {}),
+      ...(checkoutSuccessUrl ? { 'x-mobile-success-url': checkoutSuccessUrl } : {}),
+      ...(checkoutCancelUrl ? { 'x-mobile-cancel-url': checkoutCancelUrl } : {}),
+    },
     body: {
       userId,
       vehicleId,
@@ -752,7 +762,12 @@ export const getBookingReservationPayment = async ({ bookingId, accessToken }) =
   });
 };
 
-export const retryBookingReservationPayment = async ({ bookingId, accessToken }) => {
+export const retryBookingReservationPayment = async ({
+  bookingId,
+  accessToken,
+  checkoutSuccessUrl,
+  checkoutCancelUrl,
+}) => {
   if (!bookingId) {
     throw new ApiError('Select a booking before retrying its reservation payment.', 400, {
       path: '/api/bookings/:id/reservation-payment/retry',
@@ -761,7 +776,11 @@ export const retryBookingReservationPayment = async ({ bookingId, accessToken })
 
   return request(`/api/bookings/${bookingId}/reservation-payment/retry`, {
     method: 'POST',
-    headers: buildAuthHeaders(accessToken),
+    headers: {
+      ...(buildAuthHeaders(accessToken) ?? {}),
+      ...(checkoutSuccessUrl ? { 'x-mobile-success-url': checkoutSuccessUrl } : {}),
+      ...(checkoutCancelUrl ? { 'x-mobile-cancel-url': checkoutCancelUrl } : {}),
+    },
   });
 };
 

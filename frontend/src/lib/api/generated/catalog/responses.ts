@@ -16,6 +16,8 @@ export interface ProductResponse {
   description?: string | null;
   priceCents: number;
   isActive: boolean;
+  quantityOnHand?: number;
+  reorderThreshold?: number;
   category: ProductCategoryResponse | null;
   createdAt: string;
   updatedAt: string;

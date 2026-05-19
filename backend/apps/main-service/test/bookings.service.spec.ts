@@ -92,6 +92,8 @@ describe('BookingsService', () => {
   });
 
   const buildBookingsRepositoryMock = () => ({
+    findDateClosureByScheduledDate: jest.fn().mockResolvedValue(null),
+    findDateClosuresInRange: jest.fn().mockResolvedValue([]),
     findServiceIds: jest.fn().mockResolvedValue([{ id: 'service-1' }]),
     findTimeSlotById: jest.fn().mockResolvedValue({
       id: 'slot-1',
@@ -116,6 +118,8 @@ describe('BookingsService', () => {
     listTimeSlots: jest.fn().mockResolvedValue([]),
     findByScheduledDate: jest.fn().mockResolvedValue([]),
     findByScheduledDateRange: jest.fn().mockResolvedValue([]),
+    upsertDateClosure: jest.fn(),
+    updateDateClosure: jest.fn(),
   });
 
   const buildUsersServiceMock = () => ({
@@ -499,6 +503,74 @@ describe('BookingsService', () => {
         }),
       ]),
     );
+  });
+
+  it('marks closed dates as unavailable in booking availability reads', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    bookingsRepository.listTimeSlots.mockResolvedValue([
+      {
+        id: 'slot-1',
+        label: 'Morning Slot',
+        startTime: '09:00',
+        endTime: '10:00',
+        capacity: 2,
+        isActive: true,
+      },
+    ]);
+    bookingsRepository.findDateClosuresInRange.mockResolvedValue([
+      {
+        id: 'closure-1',
+        scheduledDate: '2026-04-02',
+        label: 'Holiday closure',
+        reason: 'Shop is closed for a holiday.',
+        isClosed: true,
+      },
+    ]);
+
+    const { service } = await createModule({ bookingsRepository });
+
+    const availability = await service.getAvailability({
+      startDate: '2026-04-02',
+      endDate: '2026-04-02',
+    });
+
+    expect(availability.days).toEqual([
+      expect.objectContaining({
+        scheduledDate: '2026-04-02',
+        status: 'closed',
+        closureLabel: 'Holiday closure',
+        closureReason: 'Shop is closed for a holiday.',
+        isBookable: false,
+        availableSlotCount: 0,
+      }),
+    ]);
+  });
+
+  it('rejects booking creation when the selected date is closed for bookings', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    bookingsRepository.findDateClosureByScheduledDate.mockResolvedValue({
+      id: 'closure-1',
+      scheduledDate: '2026-04-20',
+      label: 'Holiday closure',
+      reason: 'Shop is closed for a holiday.',
+      isClosed: true,
+    });
+
+    const { service } = await createModule({ bookingsRepository });
+
+    await expect(
+      service.create(
+        {
+          userId: 'user-1',
+          vehicleId: 'vehicle-1',
+          timeSlotId: 'slot-1',
+          scheduledDate: '2026-04-20',
+          serviceIds: ['service-1'],
+          notes: '',
+        },
+        { userId: 'user-1', role: 'customer' },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('auto-confirms a pending reservation payment when PayMongo reports a paid checkout session', async () => {

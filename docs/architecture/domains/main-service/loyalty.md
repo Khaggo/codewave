@@ -6,16 +6,17 @@
 
 ## Agent Summary
 
-Load this doc for service-paid loyalty accrual, reward definitions, earning-rule configuration, and redemption logic. Skip it for ecommerce checkout ownership, direct payment collection, or booking ownership.
+Load this doc for loyalty accrual, reward definitions, earning-rule configuration, and redemption logic. Skip it for ecommerce checkout ownership, direct payment collection, or booking ownership.
 
 ## Primary Objective
 
-Own a correct, idempotent loyalty ledger that awards points **only after successful paid service work**, while letting admins configure rewards and earning rules without leaking loyalty semantics into job-order, billing, or ecommerce domains.
+Own a correct, idempotent loyalty ledger that awards points **only after a qualifying payment-recorded fact matches at least one active earning rule**, while letting admins configure rewards and earning rules without leaking loyalty semantics into job-order, billing, or ecommerce domains.
 
 ## Inputs
 
 - user references
 - `service.payment_recorded` facts from `main-service.job-orders`
+- `invoice.payment_recorded` facts from `ecommerce.invoice-payments`
 - admin reward-catalog management requests
 - admin earning-rule management requests
 - redemption requests
@@ -32,6 +33,7 @@ Own a correct, idempotent loyalty ledger that awards points **only after success
 
 - `main-service.users`
 - `main-service.job-orders`
+- `ecommerce.invoice-payments`
 
 ## Owned Data / ERD
 
@@ -54,27 +56,30 @@ Key relations:
 ## Primary Business Logic
 
 - create and maintain a points ledger
-- award points only when a repair/service job is both:
-  - successfully completed, and
-  - paid through a recorded service payment fact
-- never award points from ecommerce checkout or ecommerce invoice payment facts
-- evaluate only active earning rules that match the paid service context
+- award points only when a payment-recorded fact matches at least one active earning rule
+- accept both payment-backed accrual sources:
+  - `service.payment_recorded`
+  - `invoice.payment_recorded`
+- treat service and ecommerce as rule-driven accrual sources, not automatic guarantees
+- evaluate only active earning rules that match the paid context
 - support configurable earning formulas:
   - `flat_points`
   - `amount_ratio`
+- preserve the default active service-payment rule bootstrap
+- never bootstrap ecommerce earning automatically; ecommerce earning remains opt-in through active matching rules
 - let admins add, edit, activate, deactivate, and audit rewards
 - let admins add, edit, activate, deactivate, and audit earning rules
 - treat stickers or similar perks as reward/benefit metadata or operational fulfillment notes, not ecommerce stock
 - guarantee idempotent accrual on repeated payment events by stable source references such as `invoice_record_id`
 - keep reversal policy explicit: service-payment accruals require manual adjustment until a dedicated service refund or reversal fact exists
-- reject booking-created, booking-confirmed, invoice-finalized-only, or ecommerce payment facts as loyalty earning triggers
+- reject booking-created, booking-confirmed, invoice-finalized-only, or unpaid ecommerce facts as loyalty earning triggers
 - expose balances, reward catalog state, earning-rule state, and redemption history to customers and admins as appropriate
 
 ## Process Flow
 
-1. `service.payment_recorded` occurs after successful paid service.
+1. `service.payment_recorded` or `invoice.payment_recorded` occurs after a qualifying payment is recorded.
 2. Loyalty derives an accrual plan with a deterministic idempotency key from the payment fact.
-3. Active earning rules are evaluated against paid amount, active window, and optional service-type/category filters.
+3. Active earning rules are evaluated against paid amount, active window, and optional service/product filters.
 4. If one or more rules qualify, one ledger transaction is written once or ignored if the idempotency key already exists.
 5. Customer balance is refreshed.
 6. Admins manage reward and earning-rule lifecycle without mutating historical ledger entries.
@@ -89,6 +94,7 @@ Key relations:
 - admin creates, edits, activates, or deactivates an earning rule
 - admin audits why points were or were not added
 - service payment recording requests loyalty accrual through `service.payment_recorded`
+- fully paid ecommerce invoice settlement requests loyalty accrual through `invoice.payment_recorded`
 - duplicate event delivery is ignored without double-awarding points
 
 ## API Surface
@@ -110,8 +116,9 @@ Key relations:
 
 - booking creation or booking confirmation incorrectly tries to award points
 - service work is finalized but not yet paid
-- same service payment fact sends duplicate accrual events
-- no active earning rule matches a paid service
+- ecommerce invoice is only partially paid
+- same payment fact sends duplicate accrual events
+- no active earning rule matches a qualifying paid event
 - reward redemption occurs with stale balance
 - reward or earning-rule activation state changes while an accrual or redemption request is in flight
 - a service payment later needs reversal before a dedicated service refund event exists
@@ -124,6 +131,5 @@ Key relations:
 ## Out of Scope
 
 - direct ecommerce order ownership
-- ecommerce-based loyalty earning
 - payment verification gateway logic
 - automatic marketing campaign engines beyond reward definitions and earning rules
