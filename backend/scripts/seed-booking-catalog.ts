@@ -252,7 +252,8 @@ const run = async () => {
           name = $1,
           category_id = $2,
           description = $3,
-          duration_minutes = $4,
+          base_price_cents = $4,
+          duration_minutes = $5,
           is_active = true,
           updated_at = now()
         where name = 'Smoke Test Oil Change'
@@ -261,7 +262,8 @@ const run = async () => {
       [
         oilChangeSeed.name,
         categoryIds.get(oilChangeSeed.category),
-        `${oilChangeSeed.description} Reference price: PHP ${oilChangeSeed.pricePhp}.`,
+        oilChangeSeed.description,
+        Math.round(oilChangeSeed.pricePhp * 100),
         oilChangeSeed.durationMinutes,
       ],
     );
@@ -269,12 +271,13 @@ const run = async () => {
     for (const service of bookingServiceCatalog) {
       await client.query(
         `
-          insert into services (category_id, name, description, duration_minutes, is_active, updated_at)
-          values ($1, $2, $3, $4, true, now())
+          insert into services (category_id, name, description, base_price_cents, duration_minutes, is_active, updated_at)
+          values ($1, $2, $3, $4, $5, true, now())
           on conflict (name)
           do update set
             category_id = excluded.category_id,
             description = excluded.description,
+            base_price_cents = excluded.base_price_cents,
             duration_minutes = excluded.duration_minutes,
             is_active = true,
             updated_at = now()
@@ -282,7 +285,8 @@ const run = async () => {
         [
           categoryIds.get(service.category),
           service.name,
-          `${service.description} Reference price: PHP ${service.pricePhp}.`,
+          service.description,
+          Math.round(service.pricePhp * 100),
           service.durationMinutes,
         ],
       );

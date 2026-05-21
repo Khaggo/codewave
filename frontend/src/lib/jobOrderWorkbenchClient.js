@@ -100,8 +100,12 @@ export const normalizeJobOrderForWorkbench = (jobOrder) => {
 
 export const normalizeJobOrderWorkbenchSummary = (jobOrder) => ({
   id: jobOrder?.id ?? '',
+  jobOrderReference: jobOrder?.jobOrderReference ?? null,
   status: jobOrder?.status ?? 'draft',
   sourceType: jobOrder?.sourceType ?? 'booking',
+  sourceId: jobOrder?.sourceId ?? null,
+  sourceBookingReference: jobOrder?.sourceBookingReference ?? null,
+  sourceBackJobReference: jobOrder?.sourceBackJobReference ?? null,
   workDate: jobOrder?.workDate ?? null,
   vehicleId: jobOrder?.vehicleId ?? null,
   serviceAdviserCode: jobOrder?.serviceAdviserCode ?? null,

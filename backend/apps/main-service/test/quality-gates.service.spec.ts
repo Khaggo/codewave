@@ -1047,6 +1047,80 @@ describe('QualityGatesService', () => {
     expect(result.status).toBe('passed');
   });
 
+  it('allows a head technician to record a QA pass verdict', async () => {
+    const qualityGatesRepository = {
+      findOptionalByJobOrderId: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'pending_review',
+      }),
+      recordReviewerVerdict: jest.fn().mockResolvedValue({
+        id: 'quality-gate-1',
+        jobOrderId: 'job-order-1',
+        status: 'passed',
+        reviewerVerdict: 'passed',
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        QualityGatesService,
+        QualityGateDiscrepancyEngineService,
+        QualityGateSemanticAuditorService,
+        { provide: QualityGatesRepository, useValue: qualityGatesRepository },
+        {
+          provide: JobOrdersRepository,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'job-order-1',
+              status: 'ready_for_qa',
+              assignments: [],
+            }),
+            updateStatus: jest.fn(),
+          },
+        },
+        { provide: BookingsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn() } },
+        { provide: InspectionsRepository, useValue: { findByVehicleId: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'head-tech-1',
+              role: 'head_technician',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(QualityGatesService);
+
+    const result = await service.recordReviewerVerdict(
+      'job-order-1',
+      {
+        verdict: 'passed',
+        note: 'Head technician release sign-off.',
+      },
+      {
+        userId: 'head-tech-1',
+        role: 'head_technician',
+      },
+    );
+
+    expect(qualityGatesRepository.recordReviewerVerdict).toHaveBeenCalledWith(
+      'job-order-1',
+      expect.objectContaining({
+        reviewerUserId: 'head-tech-1',
+        reviewerVerdict: 'passed',
+      }),
+    );
+    expect(result.status).toBe('passed');
+  });
+
   it('rejects manual override attempts from non-super-admin staff', async () => {
     const moduleRef = await Test.createTestingModule({
       providers: [

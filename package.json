@@ -5,6 +5,12 @@
     "dev:ecommerce": "cd backend && npm run dev:ecommerce",
     "dev:web": "cd frontend && npm install && npm run dev -- --port 3002",
     "dev:mobile": "cd mobile && npm install && npx expo start --lan --clear --port 8081",
-    "dev:mobile:web": "cd mobile && npx expo start --web --port 8090 --clear"
+    "dev:mobile:web": "cd mobile && npx expo start --web --port 8090 --clear",
+    "qa:e2e": "playwright test --config=playwright.config.mjs",
+    "qa:e2e:headed": "playwright test --config=playwright.config.mjs --headed",
+    "qa:e2e:report": "playwright show-report qa/playwright/artifacts/html-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
   }
 }

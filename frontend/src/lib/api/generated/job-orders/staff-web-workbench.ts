@@ -78,6 +78,7 @@ export interface StaffJobOrderStatusUpdateRule {
 
 export interface StaffJobOrderHandoffCandidate {
   bookingId: string;
+  bookingReference?: string | null;
   customerUserId: string;
   vehicleId: string;
   scheduledDate: string;
@@ -351,6 +352,7 @@ export const buildBookingJobOrderHandoffCandidate = (
   },
 ): StaffJobOrderHandoffCandidate => ({
   bookingId: booking.id,
+  bookingReference: booking.bookingReference ?? null,
   customerUserId: booking.userId,
   vehicleId: booking.vehicleId,
   scheduledDate: booking.scheduledDate,

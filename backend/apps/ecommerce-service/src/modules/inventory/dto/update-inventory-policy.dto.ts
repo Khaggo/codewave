@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsOptional, Min } from 'class-validator';
 
@@ -8,6 +9,7 @@ export class UpdateInventoryPolicyDto {
     description: 'Low-stock warning threshold for the selected product.',
   })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   reorderThreshold?: number;
@@ -18,6 +20,7 @@ export class UpdateInventoryPolicyDto {
     description: 'Direct quantity overwrite used by staff when reconciling a stock count.',
   })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   quantityOnHand?: number;

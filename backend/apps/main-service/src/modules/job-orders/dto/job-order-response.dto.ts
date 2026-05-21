@@ -99,6 +99,31 @@ export class JobOrderResponseDto {
   })
   serviceAdviserCode!: string;
 
+  @ApiPropertyOptional({
+    example: 'Jamie Cruz',
+  })
+  customerLabel?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Toyota Vios (ABC-1234)',
+  })
+  vehicleLabel?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'JO · BK-20260521-0007',
+  })
+  jobOrderReference?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'BK-20260521-0007',
+  })
+  sourceBookingReference?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'BJ-20260521-091500',
+  })
+  sourceBackJobReference?: string | null;
+
   @ApiProperty({
     enum: jobOrderStatusEnum.enumValues,
     example: 'assigned',

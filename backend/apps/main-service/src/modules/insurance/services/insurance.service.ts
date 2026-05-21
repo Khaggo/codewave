@@ -412,6 +412,16 @@ export class InsuranceService {
     }
   }
 
+  async getDocumentBinary(documentId: string, actor: InsuranceActor) {
+    const document = await this.insuranceRepository.findDocumentById(documentId);
+    await this.assertCanAccessInquiry(document.inquiry.userId, actor);
+
+    return this.getInsuranceDocumentStorage().readDocument({
+      fileUrl: document.fileUrl,
+      fileName: document.fileName,
+    });
+  }
+
   async findRecordsByVehicleId(vehicleId: string, actor: InsuranceActor) {
     const vehicle = await this.vehiclesService.findById(vehicleId);
     await this.assertCanAccessVehicleRecords(vehicle.userId, actor);

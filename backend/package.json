@@ -25,7 +25,8 @@
     "cleanup:legacy-back-job-rework": "node -r ts-node/register -r tsconfig-paths/register scripts/cleanup-legacy-back-job-rework.ts",
     "smoke:job-order-qa": "node -r ts-node/register scripts/smoke-job-order-qa-release.ts",
     "smoke:notifications": "node -r ts-node/register scripts/smoke-notifications-feed.ts",
-    "seed:booking-catalog": "node -r ts-node/register scripts/seed-booking-catalog.ts"
+    "seed:booking-catalog": "node -r ts-node/register scripts/seed-booking-catalog.ts",
+    "seed:booking-job-order-qa-accounts": "node -r ts-node/register scripts/seed-booking-job-order-qa-accounts.ts"
   },
   "keywords": [],
   "author": "",

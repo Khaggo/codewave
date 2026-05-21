@@ -42,11 +42,12 @@ const deriveApiBaseUrlFromSourceScript = () => {
 };
 
 const buildApiBaseUrlCandidates = () => {
-  const candidates = [
-    normalizeApiBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL),
-    deriveApiBaseUrlFromSourceScript(),
-    normalizeApiBaseUrl(defaultApiBaseUrl),
-  ].filter(Boolean);
+  const runtimeDerivedApiBaseUrl = deriveApiBaseUrlFromSourceScript();
+  const configuredApiBaseUrl = normalizeApiBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
+  const fallbackApiBaseUrl = normalizeApiBaseUrl(defaultApiBaseUrl);
+  const candidates = __DEV__
+    ? [runtimeDerivedApiBaseUrl, configuredApiBaseUrl, fallbackApiBaseUrl].filter(Boolean)
+    : [configuredApiBaseUrl, fallbackApiBaseUrl].filter(Boolean);
 
   return Array.from(new Set(candidates));
 };
@@ -227,6 +228,28 @@ const buildVehicleDisplayName = ({ vehicleMake, vehicleModel, vehicleYear }) =>
     .filter(Boolean)
     .join(' ');
 
+const buildVehicleDisplayId = ({ displayId, plateNumber, vehicleMake, vehicleModel, vehicleYear }) => {
+  const normalizedDisplayId = trimOrUndefined(displayId);
+  if (normalizedDisplayId) {
+    return normalizedDisplayId;
+  }
+
+  const plateToken = String(plateNumber ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  if (plateToken) {
+    return `VEH-${plateToken}`;
+  }
+
+  const modelToken = [vehicleYear, vehicleMake, vehicleModel]
+    .map((part) => String(part ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, ''))
+    .filter(Boolean)
+    .join('-');
+
+  return modelToken ? `VEH-${modelToken}` : 'VEH-UNLISTED';
+};
+
 const normalizeVehiclePayload = (payload = {}) => {
   const normalizedPayload = {};
 
@@ -282,6 +305,13 @@ export const normalizeVehicleRecord = (vehicle) => {
   return {
     id: vehicle.id ?? null,
     userId: vehicle.userId ?? null,
+    displayId: buildVehicleDisplayId({
+      displayId: vehicle.displayId,
+      plateNumber,
+      vehicleMake: make,
+      vehicleModel: model,
+      vehicleYear: year,
+    }),
     plateNumber,
     make,
     model,

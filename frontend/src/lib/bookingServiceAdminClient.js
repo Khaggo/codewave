@@ -32,6 +32,15 @@ const withAuthorization = (accessToken) => ({
   Authorization: `Bearer ${accessToken}`,
 })
 
+const toPriceCents = (value) => {
+  const normalizedValue = Number(value)
+  if (!Number.isFinite(normalizedValue) || normalizedValue < 0) {
+    return 0
+  }
+
+  return Math.round(normalizedValue * 100)
+}
+
 export const listBookingServices = async () => {
   const services = await request('/api/services', { method: 'GET' })
   return Array.isArray(services) ? services : []
@@ -52,13 +61,41 @@ export const createBookingServiceCategory = async ({ name, description }, access
     },
   })
 
+export const updateBookingServiceCategory = async ({ categoryId, name, description, isActive }, accessToken) =>
+  request(`/api/service-categories/${encodeURIComponent(categoryId)}`, {
+    method: 'PATCH',
+    headers: withAuthorization(accessToken),
+    body: {
+      name: name || undefined,
+      description: description || undefined,
+      isActive,
+    },
+  })
+
 export const createBookingService = async (payload, accessToken) =>
   request('/api/services', {
     method: 'POST',
     headers: withAuthorization(accessToken),
     body: {
-      ...payload,
       categoryId: payload.categoryId || undefined,
+      name: payload.name,
       description: payload.description || undefined,
+      durationMinutes: payload.durationMinutes !== undefined ? Number(payload.durationMinutes) : undefined,
+      isActive: payload.isActive,
+      basePriceCents: toPriceCents(payload.basePricePhp),
+    },
+  })
+
+export const updateBookingService = async (payload, accessToken) =>
+  request(`/api/services/${encodeURIComponent(payload.serviceId)}`, {
+    method: 'PATCH',
+    headers: withAuthorization(accessToken),
+    body: {
+      categoryId: payload.categoryId || undefined,
+      name: payload.name || undefined,
+      description: payload.description || undefined,
+      basePriceCents: payload.basePricePhp !== undefined ? toPriceCents(payload.basePricePhp) : undefined,
+      durationMinutes: payload.durationMinutes !== undefined ? Number(payload.durationMinutes) : undefined,
+      isActive: payload.isActive,
     },
   })

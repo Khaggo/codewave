@@ -7,6 +7,9 @@ const ORDER_CROSS_SERVICE_HINT =
 const INVOICE_CROSS_SERVICE_HINT =
   'Invoice tracking is direct ecommerce truth. Notification reminder visibility may catch up after downstream sync.';
 
+const ECOMMERCE_RUNTIME_UNAVAILABLE_MESSAGE =
+  'The ecommerce service is unavailable right now. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL.';
+
 const buildAuthHeaders = (accessToken) =>
   accessToken
     ? {
@@ -93,7 +96,7 @@ const request = async (path, options = {}) => {
               abortController?.abort();
               reject(
                 new ApiError(
-                  `Timed out reaching ${ecommerceApiBaseUrl}${path} after ${timeoutMs}ms. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL.`,
+                  `Timed out waiting for the ecommerce service after ${timeoutMs}ms. ${ECOMMERCE_RUNTIME_UNAVAILABLE_MESSAGE}`,
                   0,
                   {
                     path,
@@ -121,7 +124,7 @@ const request = async (path, options = {}) => {
         : 'Unable to reach the ecommerce API server.';
 
     throw new ApiError(
-      `Unable to reach ${ecommerceApiBaseUrl}${path}. Start ecommerce-service on port 3001 or set EXPO_PUBLIC_ECOMMERCE_API_BASE_URL. ${errorMessage}`,
+      `${ECOMMERCE_RUNTIME_UNAVAILABLE_MESSAGE} ${errorMessage}`,
       0,
       {
         path,

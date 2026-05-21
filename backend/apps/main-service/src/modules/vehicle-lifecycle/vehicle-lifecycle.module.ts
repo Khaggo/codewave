@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AuthModule } from '@main-modules/auth/auth.module';
 import { BookingsModule } from '@main-modules/bookings/bookings.module';
+import { InsuranceModule } from '@main-modules/insurance/insurance.module';
 import { InspectionsModule } from '@main-modules/inspections/inspections.module';
 import { JobOrdersModule } from '@main-modules/job-orders/job-orders.module';
 import { QualityGatesModule } from '@main-modules/quality-gates/quality-gates.module';
@@ -19,6 +20,7 @@ import { VehicleLifecycleSummaryProviderService } from './services/vehicle-lifec
     UsersModule,
     VehiclesModule,
     BookingsModule,
+    InsuranceModule,
     InspectionsModule,
     JobOrdersModule,
     QualityGatesModule,

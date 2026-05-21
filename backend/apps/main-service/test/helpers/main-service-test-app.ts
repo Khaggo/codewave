@@ -268,6 +268,7 @@ type ServiceRecord = {
   categoryId: string | null;
   name: string;
   description: string | null;
+  basePriceCents: number;
   durationMinutes: number;
   isActive: boolean;
   createdAt: Date;
@@ -305,6 +306,7 @@ type BookingRecord = {
   timeSlotId: string;
   scheduledDate: string;
   status: BookingStatus;
+  bookingReference?: string | null;
   qrCodeToken?: string | null;
   qrCodeIssuedAt?: Date | null;
   notes: string | null;
@@ -1591,6 +1593,7 @@ class InMemoryBookingsRepository {
       categoryId: null,
       name: 'Oil Change',
       description: 'Replace oil and inspect basic consumables.',
+      basePriceCents: 85000,
       durationMinutes: 45,
       isActive: true,
       createdAt: now,
@@ -1602,6 +1605,7 @@ class InMemoryBookingsRepository {
       categoryId: null,
       name: 'Brake Inspection',
       description: 'Inspect brake pads, discs, and fluid condition.',
+      basePriceCents: 60000,
       durationMinutes: 30,
       isActive: true,
       createdAt: now,
@@ -1821,6 +1825,32 @@ class InMemoryBookingsRepository {
     }).length;
   }
 
+  async findActiveBookingsForUserInRange(userId: string, startDate: string, endDate: string) {
+    return Array.from(this.bookings.values())
+      .filter((booking) => {
+        const matchesUser = booking.userId === userId;
+        const matchesWindow = booking.scheduledDate >= startDate && booking.scheduledDate <= endDate;
+        const isActiveStatus = ['pending', 'pending_payment', 'confirmed', 'in_service', 'rescheduled'].includes(
+          booking.status,
+        );
+
+        return matchesUser && matchesWindow && isActiveStatus;
+      })
+      .sort((left, right) => {
+        if (left.scheduledDate !== right.scheduledDate) {
+          return left.scheduledDate.localeCompare(right.scheduledDate);
+        }
+
+        return left.createdAt.getTime() - right.createdAt.getTime();
+      })
+      .map((booking) => ({
+        id: booking.id,
+        timeSlotId: booking.timeSlotId,
+        scheduledDate: booking.scheduledDate,
+        status: booking.status,
+      }));
+  }
+
   async findByScheduledDateRange(
     startDate: string,
     endDate: string,
@@ -1900,6 +1930,7 @@ class InMemoryBookingsRepository {
       timeSlotId: createBookingDto.timeSlotId,
       scheduledDate: createBookingDto.scheduledDate,
       status: 'pending_payment',
+      bookingReference: null,
       qrCodeToken: null,
       qrCodeIssuedAt: null,
       notes: createBookingDto.notes ?? null,
@@ -1928,6 +1959,35 @@ class InMemoryBookingsRepository {
     });
 
     return this.findById(booking.id);
+  }
+
+  async assignBookingReference(bookingId: string, scheduledDate: string) {
+    const booking = this.bookings.get(bookingId);
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    if (booking.bookingReference) {
+      return booking.bookingReference;
+    }
+
+    const buildBookingReference = (date: string, sequenceNumber: number) =>
+      `BK-${String(date ?? '').slice(0, 10).replace(/-/g, '')}-${String(Math.max(1, sequenceNumber)).padStart(4, '0')}`;
+
+    const sameDayReferences = Array.from(this.bookings.values())
+      .filter((entry) => entry.scheduledDate === scheduledDate)
+      .map((entry) => entry.bookingReference)
+      .filter((entry): entry is string => Boolean(entry));
+
+    let sequenceNumber = 1;
+    while (sameDayReferences.includes(buildBookingReference(scheduledDate, sequenceNumber))) {
+      sequenceNumber += 1;
+    }
+
+    booking.bookingReference = buildBookingReference(scheduledDate, sequenceNumber);
+    booking.updatedAt = new Date();
+    this.bookings.set(booking.id, booking);
+    return booking.bookingReference;
   }
 
   async findById(id: string) {

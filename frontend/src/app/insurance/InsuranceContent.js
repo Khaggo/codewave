@@ -28,6 +28,7 @@ import PortalSelect from '@/components/ui/PortalSelect'
 import { useUser } from '@/lib/userContext'
 import { ApiError } from '@/lib/authClient'
 import {
+  getInsuranceDocumentFile,
   getInsuranceInquiryById,
   listInsuranceInquiries,
   sendInsuranceBroadcasts,
@@ -178,8 +179,17 @@ const formatDateOnly = (value) => {
   })
 }
 
-const getOpenableInsuranceDocumentUrl = (fileUrl) => {
-  const normalizedFileUrl = String(fileUrl ?? '').trim()
+const getOpenableInsuranceDocumentUrl = (document, resolvedDocumentUrl = null) => {
+  if (resolvedDocumentUrl) {
+    return resolvedDocumentUrl
+  }
+
+  const normalizedDownloadUrl = String(document?.downloadUrl ?? '').trim()
+  if (normalizedDownloadUrl) {
+    return normalizedDownloadUrl
+  }
+
+  const normalizedFileUrl = String(document?.fileUrl ?? '').trim()
 
   if (!normalizedFileUrl) {
     return null
@@ -459,7 +469,7 @@ function CompactActionPanel({
   )
 }
 
-function InsuranceDetailTabContent({ inquiry, tabKey }) {
+function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} }) {
   if (!inquiry) {
     return (
       <EmptyPanel
@@ -585,7 +595,10 @@ function InsuranceDetailTabContent({ inquiry, tabKey }) {
               <div className="space-y-3">
                 {inquiry.documents.map((document) => {
                   const DocumentIcon = getInsuranceDocumentIcon(document.documentType)
-                  const openableDocumentUrl = getOpenableInsuranceDocumentUrl(document.fileUrl)
+                  const openableDocumentUrl = getOpenableInsuranceDocumentUrl(
+                    document,
+                    document.id ? resolvedDocumentUrls[document.id] ?? null : null,
+                  )
 
                   return (
                     <article
@@ -776,6 +789,7 @@ export default function InsuranceContent() {
   const [broadcastResults, setBroadcastResults] = useState([])
   const [isReminderPanelOpen, setIsReminderPanelOpen] = useState(false)
   const [isBroadcastPanelOpen, setIsBroadcastPanelOpen] = useState(false)
+  const [resolvedDocumentUrls, setResolvedDocumentUrls] = useState({})
   const previousSelectedInquiryIdRef = useRef('')
   const selectedInquiryIdRef = useRef('')
   const workspaceStateRef = useRef({
@@ -897,6 +911,66 @@ export default function InsuranceContent() {
     () => filteredInquiries.find((inquiry) => inquiry.id === selectedInquiryId) ?? null,
     [filteredInquiries, selectedInquiryId],
   )
+
+  useEffect(() => {
+    let isMounted = true
+    const blobUrlsToRevoke = []
+
+    const revokeResolvedUrls = () => {
+      blobUrlsToRevoke.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url)
+        } catch {}
+      })
+    }
+
+    const loadResolvedDocumentUrls = async () => {
+      if (!selectedInquiry?.documents?.length || !user?.accessToken) {
+        if (isMounted) {
+          setResolvedDocumentUrls({})
+        }
+        return
+      }
+
+      const uploadedDocuments = selectedInquiry.documents.filter(
+        (document) => document?.id && String(document?.fileUrl ?? '').startsWith('upload://insurance/'),
+      )
+
+      if (!uploadedDocuments.length) {
+        if (isMounted) {
+          setResolvedDocumentUrls({})
+        }
+        return
+      }
+
+      const nextResolvedUrls = {}
+
+      for (const document of uploadedDocuments) {
+        try {
+          const { blob } = await getInsuranceDocumentFile({
+            documentId: document.id,
+            accessToken: user.accessToken,
+          })
+          const blobUrl = URL.createObjectURL(blob)
+          blobUrlsToRevoke.push(blobUrl)
+          nextResolvedUrls[document.id] = blobUrl
+        } catch {}
+      }
+
+      if (isMounted) {
+        setResolvedDocumentUrls(nextResolvedUrls)
+      } else {
+        revokeResolvedUrls()
+      }
+    }
+
+    void loadResolvedDocumentUrls()
+
+    return () => {
+      isMounted = false
+      revokeResolvedUrls()
+    }
+  }, [selectedInquiry?.id, selectedInquiry?.documents, user?.accessToken])
 
   const nextStatuses = useMemo(
     () => getAllowedInsuranceStatusTargets(selectedInquiry?.status ?? 'closed'),
@@ -1811,7 +1885,11 @@ export default function InsuranceContent() {
                 <TabsPrimitives.Content key={tab.key} value={tab.key} className="mt-4 min-w-0">
                   <ScrollAreaPrimitives.Root className="max-h-[640px] overflow-hidden rounded-2xl">
                     <ScrollAreaPrimitives.Viewport className="h-[640px] min-w-0 pr-2">
-                      <InsuranceDetailTabContent inquiry={selectedInquiry} tabKey={tab.key} />
+                      <InsuranceDetailTabContent
+                        inquiry={selectedInquiry}
+                        tabKey={tab.key}
+                        resolvedDocumentUrls={resolvedDocumentUrls}
+                      />
                     </ScrollAreaPrimitives.Viewport>
                     <ScrollAreaPrimitives.Scrollbar orientation="vertical" className="primitive-scrollbar">
                       <ScrollAreaPrimitives.Thumb className="primitive-scrollbar-thumb" />

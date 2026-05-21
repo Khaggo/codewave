@@ -4,6 +4,7 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
+import { InsuranceRepository } from '@main-modules/insurance/repositories/insurance.repository';
 import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
 import { QualityGatesRepository } from '@main-modules/quality-gates/repositories/quality-gates.repository';
 import { VehicleLifecycleRepository } from '@main-modules/vehicle-lifecycle/repositories/vehicle-lifecycle.repository';
@@ -14,7 +15,67 @@ import { VehiclesService } from '@main-modules/vehicles/services/vehicles.servic
 import { AI_WORKER_QUEUE_NAME } from '@shared/queue/ai-worker.constants';
 
 describe('VehicleLifecycleService', () => {
-  it('builds a timeline with booking, inspection, job-order, QA, and summary-review events', async () => {
+  it('returns the latest customer-visible lifecycle summary for customer-safe surfaces', async () => {
+    const vehicleLifecycleRepository = {
+      listSummariesByVehicleId: jest.fn().mockResolvedValue([
+        {
+          id: 'summary-hidden',
+          vehicleId: 'vehicle-1',
+          status: 'pending_review',
+          customerVisible: false,
+        },
+        {
+          id: 'summary-visible',
+          vehicleId: 'vehicle-1',
+          status: 'approved',
+          customerVisible: true,
+          summaryText: 'Reviewed customer-safe summary.',
+        },
+      ]),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        VehicleLifecycleService,
+        { provide: VehicleLifecycleRepository, useValue: vehicleLifecycleRepository },
+        {
+          provide: VehiclesService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({ id: 'vehicle-1' }),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        { provide: BookingsRepository, useValue: {} },
+        { provide: InspectionsRepository, useValue: {} },
+        { provide: JobOrdersRepository, useValue: {} },
+        { provide: QualityGatesRepository, useValue: {} },
+        { provide: VehicleLifecycleSummaryProviderService, useValue: { generate: jest.fn() } },
+        { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(VehicleLifecycleService);
+
+    await expect(
+      service.findLatestCustomerVisibleSummary('vehicle-1', {
+        userId: 'customer-1',
+        role: 'customer',
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: 'summary-visible',
+        customerVisible: true,
+        summaryText: 'Reviewed customer-safe summary.',
+      }),
+    );
+  });
+
+  it('builds a timeline with booking, inspection, insurance, invoice/payment, job-order, QA, and summary-review events', async () => {
     let projectedEvents: unknown[] = [];
 
     const bookingsRepository = {
@@ -56,6 +117,33 @@ describe('VehicleLifecycleService', () => {
       ]),
     };
 
+    const insuranceRepository = {
+      findInquiriesByVehicleId: jest.fn().mockResolvedValue([
+        {
+          id: 'insurance-inquiry-1',
+          vehicleId: 'vehicle-1',
+          status: 'submitted',
+          subject: 'Insurance follow-up opened.',
+          reviewNotes: null,
+          createdByUserId: 'customer-1',
+          reviewedByUserId: null,
+          createdAt: new Date('2026-04-20T11:30:00.000Z'),
+          reviewedAt: null,
+          updatedAt: new Date('2026-04-20T11:30:00.000Z'),
+        },
+      ]),
+      findRecordsByVehicleId: jest.fn().mockResolvedValue([
+        {
+          id: 'insurance-record-1',
+          inquiryId: 'insurance-inquiry-1',
+          vehicleId: 'vehicle-1',
+          status: 'active',
+          createdAt: new Date('2026-04-20T15:30:00.000Z'),
+          updatedAt: new Date('2026-04-20T16:00:00.000Z'),
+        },
+      ]),
+    };
+
     const jobOrdersRepository = {
       findByVehicleId: jest.fn().mockResolvedValue([
         {
@@ -80,6 +168,8 @@ describe('VehicleLifecycleService', () => {
             summary: 'Invoice-ready after QA pass.',
             finalizedByUserId: 'user-2',
             createdAt: new Date('2026-04-20T14:30:00.000Z'),
+            paidAt: new Date('2026-04-20T14:45:00.000Z'),
+            recordedByUserId: 'user-2',
           },
         },
       ]),
@@ -136,6 +226,7 @@ describe('VehicleLifecycleService', () => {
             findById: jest.fn(),
           },
         },
+        { provide: InsuranceRepository, useValue: insuranceRepository },
         { provide: BookingsRepository, useValue: bookingsRepository },
         { provide: InspectionsRepository, useValue: inspectionsRepository },
         { provide: JobOrdersRepository, useValue: jobOrdersRepository },
@@ -154,6 +245,8 @@ describe('VehicleLifecycleService', () => {
 
     expect(bookingsRepository.findByVehicleId).toHaveBeenCalledWith('vehicle-1');
     expect(inspectionsRepository.findByVehicleId).toHaveBeenCalledWith('vehicle-1');
+    expect(insuranceRepository.findInquiriesByVehicleId).toHaveBeenCalledWith('vehicle-1');
+    expect(insuranceRepository.findRecordsByVehicleId).toHaveBeenCalledWith('vehicle-1');
     expect(jobOrdersRepository.findByVehicleId).toHaveBeenCalledWith('vehicle-1');
     expect(qualityGatesRepository.findByJobOrderIds).toHaveBeenCalledWith(['job-order-1']);
     expect(vehicleLifecycleRepository.replaceForVehicle).toHaveBeenCalled();
@@ -173,12 +266,31 @@ describe('VehicleLifecycleService', () => {
           sourceType: 'inspection',
         }),
         expect.objectContaining({
+          eventType: 'insurance_inquiry_submitted',
+          sourceId: 'insurance-inquiry-1',
+          notes: 'Insurance follow-up opened.',
+        }),
+        expect.objectContaining({
+          eventType: 'insurance_record_active',
+          sourceId: 'insurance-record-1',
+        }),
+        expect.objectContaining({
           eventType: 'job_order_created',
           sourceType: 'job_order',
         }),
         expect.objectContaining({
           eventType: 'job_order_finalized',
           sourceType: 'job_order',
+        }),
+        expect.objectContaining({
+          eventType: 'invoice_generated',
+          sourceType: 'job_order',
+          sourceId: 'invoice-record-1',
+        }),
+        expect.objectContaining({
+          eventType: 'invoice_paid',
+          sourceType: 'job_order',
+          actorUserId: 'user-2',
         }),
         expect.objectContaining({
           eventType: 'quality_gate_passed',

@@ -73,6 +73,83 @@ const releaseSummaryByState = {
   },
 }
 
+function normalizeBusinessToken(value, fallback = 'WORK') {
+  const normalizedValue = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+
+  return normalizedValue || fallback
+}
+
+function formatCompactDateToken(value) {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}${month}${day}`
+}
+
+function formatCompactTimeToken(value) {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${hours}${minutes}${seconds}`
+}
+
+function formatJobOrderReference(jobOrder) {
+  if (jobOrder?.jobOrderReference) {
+    return jobOrder.jobOrderReference
+  }
+
+  if (jobOrder?.sourceBackJobReference) {
+    return `JO-RW · ${jobOrder.sourceBackJobReference}`
+  }
+
+  if (jobOrder?.sourceBookingReference) {
+    return `JO · ${jobOrder.sourceBookingReference}`
+  }
+
+  const compactDate = formatCompactDateToken(jobOrder?.workDate ?? jobOrder?.createdAt)
+  const timeToken = formatCompactTimeToken(jobOrder?.createdAt ?? jobOrder?.updatedAt)
+  const plateToken = normalizeBusinessToken(
+    jobOrder?.plateNumber ?? jobOrder?.vehicleDisplayName ?? jobOrder?.serviceAdviserCode,
+    'WORK',
+  )
+  const prefix = jobOrder?.jobType === 'back_job' ? 'JO-RW' : 'JO'
+
+  return compactDate ? `${prefix}-${compactDate}-${timeToken || plateToken}` : `${prefix}-${plateToken}`
+}
+
+function getLoadedJobOrderReference(jobOrderId, jobOrderOptions, qualityGate = null) {
+  if (qualityGate?.jobOrderReference) {
+    return qualityGate.jobOrderReference
+  }
+
+  const matchingJobOrder =
+    jobOrderOptions.find((jobOrder) => jobOrder.id === jobOrderId) ??
+    (qualityGate?.jobOrderId ? jobOrderOptions.find((jobOrder) => jobOrder.id === qualityGate.jobOrderId) : null)
+
+  if (matchingJobOrder) {
+    return formatJobOrderReference(matchingJobOrder)
+  }
+
+  return 'Selected job order'
+}
+
 function getPendingReviewGuidance({
   qualityGate,
   blockingFindings,
@@ -250,11 +327,10 @@ export default function QAAuditWorkspace() {
 
     void listJobOrderWorkbenchSummaries({
       accessToken: user.accessToken,
-      month: new Date().toISOString().slice(0, 7),
     })
       .then((items) => {
         if (!cancelled) {
-          setJobOrderOptions(items)
+          setJobOrderOptions(items.filter((jobOrder) => jobOrder.status === 'ready_for_qa'))
         }
       })
       .catch(() => {
@@ -285,6 +361,7 @@ export default function QAAuditWorkspace() {
     reviewNeededFindings,
     canRecordLiveVerdict,
   })
+  const selectedJobOrderReference = getLoadedJobOrderReference(jobOrderId, jobOrderOptions, qualityGate)
 
   async function loadQualityGate() {
     if (qaLoadInFlightRef.current) {
@@ -419,7 +496,7 @@ export default function QAAuditWorkspace() {
       toast({
         type: 'success',
         title: 'QA Override Recorded',
-        message: `${qualityGate.jobOrderId} now has an auditable super-admin override.`,
+        message: `${selectedJobOrderReference} now has an auditable super-admin override.`,
       })
     } catch (error) {
       let nextStatus = 'override_failed'
@@ -489,8 +566,8 @@ export default function QAAuditWorkspace() {
         title: 'QA Verdict Recorded',
         message:
           updatedQualityGate.reviewerVerdict === 'blocked'
-            ? `${qualityGate.jobOrderId} was returned for technician remediation.`
-            : `${qualityGate.jobOrderId} is now cleared for release review.`,
+            ? `${selectedJobOrderReference} was returned for technician remediation.`
+            : `${selectedJobOrderReference} is now cleared for release review.`,
       })
     } catch (error) {
       let nextStatus = 'verdict_failed'
@@ -550,7 +627,7 @@ export default function QAAuditWorkspace() {
                 <option value="">Choose a release review</option>
                 {jobOrderOptions.map((jobOrder) => (
                   <option key={jobOrder.id} value={jobOrder.id}>
-                    JO-{jobOrder.id.slice(0, 8).toUpperCase()} / {formatLabel(jobOrder.status)}
+                    {formatJobOrderReference(jobOrder)} / {formatLabel(jobOrder.status)}
                   </option>
                 ))}
               </select>
@@ -580,7 +657,7 @@ export default function QAAuditWorkspace() {
                       : 'border-surface-border bg-surface-card hover:border-brand-orange/40'
                   }`}
                 >
-                  <p className="text-sm font-semibold text-ink-primary">JO-{jobOrder.id.slice(0, 8).toUpperCase()}</p>
+                  <p className="text-sm font-semibold text-ink-primary">{formatJobOrderReference(jobOrder)}</p>
                   <p className="mt-2 text-sm text-ink-secondary">{formatLabel(jobOrder.status)}</p>
                 </button>
               )
@@ -610,7 +687,7 @@ export default function QAAuditWorkspace() {
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <div className="ops-panel-muted">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Job Order</p>
-                <p className="mt-2 break-all text-sm font-semibold text-ink-primary">{qualityGate.jobOrderId}</p>
+                <p className="mt-2 break-all text-sm font-semibold text-ink-primary">{selectedJobOrderReference}</p>
               </div>
               <div className="ops-panel-muted">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">QA Status</p>

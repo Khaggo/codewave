@@ -49,6 +49,27 @@ export class VehicleLifecycleController {
     );
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @Get('vehicles/:id/lifecycle-summary/latest')
+  @ApiOperation({ summary: 'Get the latest customer-visible lifecycle summary for a vehicle.' })
+  @ApiParam({
+    name: 'id',
+    description: 'Vehicle identifier.',
+    example: '7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d',
+  })
+  @ApiOkResponse({
+    description: 'The latest reviewed lifecycle summary approved for customer visibility, if available.',
+    type: VehicleLifecycleSummaryResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'Vehicle not found.' })
+  findLatestCustomerVisibleSummary(@Param('id') id: string, @Req() request: Request) {
+    return this.vehicleLifecycleService.findLatestCustomerVisibleSummary(
+      id,
+      request.user as { userId: string; role: string },
+    );
+  }
+
   @Post('vehicles/:id/lifecycle-summary/generate')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('service_adviser', 'super_admin')

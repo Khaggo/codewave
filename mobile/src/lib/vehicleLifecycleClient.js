@@ -405,6 +405,28 @@ export const listVehicleTimeline = async ({ vehicleId, accessToken }) => {
   return Array.isArray(response) ? response : [];
 };
 
+export const getLatestCustomerVisibleLifecycleSummary = async ({
+  vehicleId,
+  accessToken,
+}) => {
+  if (!vehicleId) {
+    throw new ApiError(
+      'Select an owned vehicle before loading its lifecycle summary.',
+      400,
+      {
+        path: '/api/vehicles/:id/lifecycle-summary/latest',
+      },
+    );
+  }
+
+  const response = await request(`/api/vehicles/${vehicleId}/lifecycle-summary/latest`, {
+    method: 'GET',
+    headers: buildAuthHeaders(accessToken),
+  });
+
+  return response && typeof response === 'object' ? response : null;
+};
+
 export const buildCustomerVehicleLifecycleSnapshot = ({
   timelineEvents = [],
   summary = null,
@@ -438,13 +460,21 @@ export const loadCustomerVehicleLifecycleSnapshot = async ({
   accessToken,
   summary = null,
 }) => {
-  const timelineEvents = await listVehicleTimeline({
-    vehicleId,
-    accessToken,
-  });
+  const [timelineEvents, latestSummary] = await Promise.all([
+    listVehicleTimeline({
+      vehicleId,
+      accessToken,
+    }),
+    summary === null
+      ? getLatestCustomerVisibleLifecycleSummary({
+          vehicleId,
+          accessToken,
+        }).catch(() => null)
+      : Promise.resolve(summary),
+  ]);
 
   return buildCustomerVehicleLifecycleSnapshot({
     timelineEvents,
-    summary,
+    summary: latestSummary,
   });
 };

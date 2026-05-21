@@ -118,6 +118,10 @@ export default function RegisterPage({ navigation, onRegister }) {
 
         const enrollment = registrationResult?.enrollment ?? registrationResult;
 
+        if (!enrollment?.enrollmentId) {
+          throw new Error('Registration OTP enrollment is missing. Please try signing up again.');
+        }
+
         navigation.replace('OTP', {
           email: trimmedAccount.email,
           maskedEmail: enrollment?.maskedEmail,

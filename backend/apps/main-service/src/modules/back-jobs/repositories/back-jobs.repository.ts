@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, lt } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -14,6 +14,25 @@ type CreateBackJobPersistenceInput = CreateBackJobDto & {
 };
 
 type UpdateBackJobStatusPersistenceInput = UpdateBackJobStatusDto;
+
+export const createUpdatedAtMatchFilters = (expectedUpdatedAt?: string) => {
+  if (!expectedUpdatedAt) {
+    return [];
+  }
+
+  const expectedDate = new Date(expectedUpdatedAt);
+  const nextMillisecond = new Date(expectedDate.getTime() + 1);
+
+  return [gte(backJobs.updatedAt, expectedDate), lt(backJobs.updatedAt, nextMillisecond)];
+};
+
+export const matchesUpdatedAtWithinMillisecond = (actualUpdatedAt: Date, expectedUpdatedAt?: string) => {
+  if (!expectedUpdatedAt) {
+    return true;
+  }
+
+  return actualUpdatedAt.getTime() === new Date(expectedUpdatedAt).getTime();
+};
 
 @Injectable()
 export class BackJobsRepository extends BaseRepository {
@@ -124,10 +143,7 @@ export class BackJobsRepository extends BaseRepository {
       nextValues.resolutionNotes = payload.resolutionNotes;
     }
 
-    const filters = [eq(backJobs.id, id)];
-    if (payload.expectedUpdatedAt) {
-      filters.push(eq(backJobs.updatedAt, new Date(payload.expectedUpdatedAt)));
-    }
+    const filters = [eq(backJobs.id, id), ...createUpdatedAtMatchFilters(payload.expectedUpdatedAt)];
 
     const [updatedBackJob] = await this.db
       .update(backJobs)

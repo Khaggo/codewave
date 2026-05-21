@@ -30,9 +30,16 @@ export class InventoryService {
   }
 
   async updatePolicy(productId: string, payload: UpdateInventoryPolicyDto) {
+    const normalizedQuantityOnHand =
+      payload.quantityOnHand === undefined ? undefined : Math.max(0, Math.trunc(Number(payload.quantityOnHand)));
+    const normalizedReorderThreshold =
+      payload.reorderThreshold === undefined
+        ? undefined
+        : Math.max(0, Math.trunc(Number(payload.reorderThreshold)));
+
     const product = await this.catalogRepository.updateInventoryFields(productId, {
-      quantityOnHand: payload.quantityOnHand,
-      reorderThreshold: payload.reorderThreshold,
+      quantityOnHand: normalizedQuantityOnHand,
+      reorderThreshold: normalizedReorderThreshold,
     });
     const category = await this.catalogRepository.findCategoryById(product.categoryId);
     return this.toInventoryProduct(product, category?.name);

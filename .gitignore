@@ -1,8 +1,15 @@
 .worktrees/
 .playwright-mcp/
+node_modules/
 railway-*.png
 ecommerce-config-path-section.html
 .runtime/
 .runtime-*.json
+.runtime-start-test.txt
 frontend/.runtime/
 mobile/.runtime/
+debug.log
+playwright-report/
+test-results/
+qa/playwright/.auth/
+qa/playwright/artifacts/

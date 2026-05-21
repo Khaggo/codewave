@@ -36,9 +36,11 @@ import { DailyScheduleQueryDto, type DailyScheduleScope } from '../dto/daily-sch
 import { QueueCurrentQueryDto } from '../dto/queue-current-query.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { UpdateBookingDateClosureDto } from '../dto/update-booking-date-closure.dto';
-import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingPaymentPolicyDto } from '../dto/update-booking-payment-policy.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
+import { UpdateServiceCategoryDto } from '../dto/update-service-category.dto';
+import { UpdateServiceDto } from '../dto/update-service.dto';
+import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { BookingsRepository } from '../repositories/bookings.repository';
 import { bookingStatusEnum } from '../schemas/bookings.schema';
 import { BookingReservationPaymentGatewayService } from './booking-reservation-payment-gateway.service';
@@ -173,6 +175,59 @@ export class BookingsService {
     });
   }
 
+  async updateServiceCategory(id: string, payload: UpdateServiceCategoryDto, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+
+    const existingCategory = await this.bookingsRepository.findServiceCategoryById(id);
+    if (!existingCategory) {
+      throw new NotFoundException('Service category not found');
+    }
+
+    const normalizedName = payload.name?.trim();
+    if (normalizedName && normalizedName !== existingCategory.name) {
+      const duplicateCategory = await this.bookingsRepository.findServiceCategoryByName(normalizedName);
+      if (duplicateCategory && duplicateCategory.id !== id) {
+        throw new ConflictException('Service category name already exists');
+      }
+    }
+
+    return this.bookingsRepository.updateServiceCategory(id, {
+      ...payload,
+      name: normalizedName,
+      description: payload.description?.trim(),
+    });
+  }
+
+  async updateService(id: string, payload: UpdateServiceDto, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+
+    const existingService = await this.bookingsRepository.findServiceById(id);
+    if (!existingService) {
+      throw new NotFoundException('Service not found');
+    }
+
+    const normalizedName = payload.name?.trim();
+    if (normalizedName && normalizedName !== existingService.name) {
+      const duplicateService = await this.bookingsRepository.findServiceByName(normalizedName);
+      if (duplicateService && duplicateService.id !== id) {
+        throw new ConflictException('Service name already exists');
+      }
+    }
+
+    if (payload.categoryId) {
+      const category = await this.bookingsRepository.findServiceCategoryById(payload.categoryId);
+      if (!category) {
+        throw new NotFoundException('Service category not found');
+      }
+    }
+
+    return this.bookingsRepository.updateService(id, {
+      ...payload,
+      name: normalizedName,
+      description: payload.description?.trim(),
+    });
+  }
+
   async listTimeSlots() {
     return this.bookingsRepository.listTimeSlots();
   }
@@ -182,14 +237,23 @@ export class BookingsService {
     return this.bookingsRepository.findDateClosuresInRange(startDate, endDate);
   }
 
-  async getAvailability(query: BookingAvailabilityQueryDto) {
+  async getAvailability(
+    query: BookingAvailabilityQueryDto,
+    actor?: { userId: string; role: string } | null,
+  ) {
     const { startDate, endDate, timeSlotId } = this.normalizeAvailabilityQuery(query);
     const { minBookableDate, maxBookableDate } = this.getBookingWindowBounds();
-    const [activeTimeSlots, activeClosures] = await Promise.all([
+    const [activeTimeSlots, activeClosures, customerActiveBookings] = await Promise.all([
       this.listActiveAvailabilitySlots(timeSlotId),
       this.bookingsRepository.findDateClosuresInRange(startDate, endDate),
+      actor?.role === 'customer'
+        ? this.bookingsRepository.findActiveBookingsForUserInRange(actor.userId, startDate, endDate)
+        : Promise.resolve([]),
     ]);
     const closuresByDate = new Map(activeClosures.map((closure) => [closure.scheduledDate, closure]));
+    const customerSlotConflicts = new Set(
+      customerActiveBookings.map((booking) => `${booking.scheduledDate}:${booking.timeSlotId}`),
+    );
     const activeBookings = activeTimeSlots.length
       ? await this.bookingsRepository.findByScheduledDateRange(startDate, endDate, {
           timeSlotId,
@@ -255,8 +319,9 @@ export class BookingsService {
 
       const slots = activeTimeSlots.map((timeSlot) => {
         const bookingCount = bookingCountsBySlotAndDate.get(`${scheduledDate}:${timeSlot.id}`) ?? 0;
+        const hasCustomerConflict = customerSlotConflicts.has(`${scheduledDate}:${timeSlot.id}`);
         const remainingCapacity = Math.max(0, timeSlot.capacity - bookingCount);
-        const isAvailable = remainingCapacity > 0;
+        const isAvailable = remainingCapacity > 0 && !hasCustomerConflict;
 
         return {
           timeSlotId: timeSlot.id,
@@ -362,6 +427,7 @@ export class BookingsService {
     const user = await this.assertUserExists(createBookingDto.userId);
     await this.assertVehicleOwnership(createBookingDto.userId, createBookingDto.vehicleId);
     await this.assertServicesExist(createBookingDto.serviceIds);
+    await this.assertNoCustomerSlotConflict(createBookingDto.userId, createBookingDto.timeSlotId, createBookingDto.scheduledDate);
     await this.assertTimeSlotAvailability(createBookingDto.timeSlotId, createBookingDto.scheduledDate);
 
     const booking = await this.bookingsRepository.create(createBookingDto);
@@ -394,12 +460,12 @@ export class BookingsService {
       });
     }
 
-    return this.toBookingView(await this.bookingsRepository.findById(booking.id));
+    return this.toBookingView(await this.refreshBookingForRead(await this.bookingsRepository.findById(booking.id)));
   }
 
   async findById(id: string, actor?: { userId: string; role: string }) {
     await this.normalizePastDueOpenBookings();
-    const booking = await this.bookingsRepository.findById(id);
+    const booking = await this.refreshBookingForRead(await this.bookingsRepository.findById(id));
     if (actor) {
       this.assertBookingActorCanAccessUser(booking.userId, actor);
     }
@@ -420,13 +486,15 @@ export class BookingsService {
 
     await this.normalizePastDueOpenBookings();
     const bookings = await this.bookingsRepository.findByUserId(userId);
-    return bookings.map((booking) => this.toBookingView(booking));
+    const refreshedBookings = await Promise.all(bookings.map((booking) => this.refreshBookingForRead(booking)));
+    return refreshedBookings.map((booking) => this.toBookingView(booking));
   }
 
   async findByVehicleId(vehicleId: string, actorUserId: string) {
     await this.assertIntakeLookupActor(actorUserId);
     const bookings = await this.bookingsRepository.findByVehicleId(vehicleId);
-    return bookings.map((booking) => this.toBookingView(booking));
+    const refreshedBookings = await Promise.all(bookings.map((booking) => this.refreshBookingForRead(booking)));
+    return refreshedBookings.map((booking) => this.toBookingView(booking));
   }
 
   async updateStatus(id: string, payload: UpdateBookingStatusDto, actorUserId: string) {
@@ -461,6 +529,7 @@ export class BookingsService {
       throw new ConflictException(`Cannot reschedule a booking in ${currentStatus} status`);
     }
 
+    await this.assertNoCustomerSlotConflict(booking.userId, payload.timeSlotId, payload.scheduledDate, booking.id);
     await this.assertTimeSlotAvailability(payload.timeSlotId, payload.scheduledDate, booking.id);
     const command: RescheduleBookingCommand = {
       ...payload,
@@ -483,6 +552,9 @@ export class BookingsService {
       }),
       this.bookingsRepository.findDateClosureByScheduledDate(query.scheduledDate),
     ]);
+    const freshScheduleBookings = await Promise.all(
+      scheduleBookings.map((booking) => this.refreshBookingForRead(booking)),
+    );
 
     const filteredSlots = query.timeSlotId
       ? slots.filter((slot) => slot.id === query.timeSlotId)
@@ -492,11 +564,11 @@ export class BookingsService {
       scheduledDate: query.scheduledDate,
       isClosed: Boolean(closure?.isClosed),
       closureLabel: closure?.label ?? null,
-      closureReason: closure?.reason ?? null,
-      slots: filteredSlots.map((slot) => {
-        const slotBookings = scheduleBookings
-          .filter((booking) => booking.timeSlotId === slot.id)
-          .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+        closureReason: closure?.reason ?? null,
+        slots: filteredSlots.map((slot) => {
+          const slotBookings = freshScheduleBookings
+            .filter((booking) => booking.timeSlotId === slot.id)
+            .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
 
         return {
           timeSlotId: slot.id,
@@ -517,10 +589,13 @@ export class BookingsService {
     const scheduledDate = query.scheduledDate ?? formatDateOnly(toDateOnly(this.getCurrentDate()));
     const queueBookings = await this.bookingsRepository.findByScheduledDate(scheduledDate, {
       timeSlotId: query.timeSlotId,
-      statuses: ['confirmed', 'rescheduled'],
+      statuses: ['pending_payment', 'confirmed', 'rescheduled'],
     });
+    const freshQueueBookings = (
+      await Promise.all(queueBookings.map((booking) => this.refreshBookingForRead(booking)))
+    ).filter((booking) => ['confirmed', 'rescheduled'].includes(booking.status));
 
-    const items = queueBookings
+    const items = freshQueueBookings
       .sort((left, right) => {
         const leftTimeSlot = Array.isArray(left.timeSlot) ? left.timeSlot[0] : left.timeSlot;
         const rightTimeSlot = Array.isArray(right.timeSlot) ? right.timeSlot[0] : right.timeSlot;
@@ -600,6 +675,29 @@ export class BookingsService {
 
     if (activeBookings >= timeSlot.capacity) {
       throw new ConflictException('Selected time slot is already full');
+    }
+  }
+
+  private async assertNoCustomerSlotConflict(
+    userId: string,
+    timeSlotId: string,
+    scheduledDate: string,
+    excludeBookingId?: string,
+  ) {
+    const activeBookings = await this.bookingsRepository.findActiveBookingsForUserInRange(
+      userId,
+      scheduledDate,
+      scheduledDate,
+    );
+    const conflictingBooking = activeBookings.find(
+      (booking) =>
+        booking.timeSlotId === timeSlotId &&
+        booking.scheduledDate === scheduledDate &&
+        booking.id !== excludeBookingId,
+    );
+
+    if (conflictingBooking) {
+      throw new ConflictException('You already have an active booking in this slot');
     }
   }
 
@@ -720,31 +818,113 @@ export class BookingsService {
     return this.bookingsClock?.now() ?? new Date();
   }
 
-  private async assertFreshBookingState(bookingId: string) {
-    await this.normalizePastDueOpenBookings();
-    let booking = await this.bookingsRepository.findById(bookingId);
-    const reservationPayment = booking.reservationPayment;
-
-    if (
-      booking.status === 'pending_payment' &&
-      reservationPayment?.status === 'pending' &&
-      reservationPayment.provider === 'paymongo' &&
-      reservationPayment.providerPaymentId
-    ) {
-      booking = await this.reconcilePaymongoReservationPayment(booking);
+  private buildReservationPaymentReference(
+    bookingId: string,
+    existingReference?: string | null,
+    providerPaymentId?: string | null,
+  ) {
+    const normalizedExisting = String(existingReference ?? '').trim();
+    if (normalizedExisting) {
+      return normalizedExisting;
     }
 
-    const refreshedReservationPayment = booking.reservationPayment;
+    const providerFragment = String(providerPaymentId ?? '')
+      .replace(/[^a-z0-9]/gi, '')
+      .slice(-8)
+      .toUpperCase();
+    if (providerFragment) {
+      return `RSV-${providerFragment}`;
+    }
+
+    const bookingFragment = String(bookingId ?? '')
+      .replace(/[^a-z0-9]/gi, '')
+      .slice(0, 8)
+      .toUpperCase();
+    return `RSV-${bookingFragment || 'PENDING'}`;
+  }
+
+  private async assertFreshBookingState(bookingId: string) {
+    await this.normalizePastDueOpenBookings();
+    const booking = await this.bookingsRepository.findById(bookingId);
+    return this.refreshBookingForRead(booking);
+  }
+
+  private async refreshBookingForRead(booking: any) {
+    let refreshedBooking = booking;
+    if (!refreshedBooking.bookingReference) {
+      await this.bookingsRepository.assignBookingReference(
+        refreshedBooking.id,
+        refreshedBooking.scheduledDate,
+      );
+      refreshedBooking = await this.bookingsRepository.findById(refreshedBooking.id);
+    }
+
+    const reservationPayment = refreshedBooking.reservationPayment;
+
+    if (reservationPayment && !reservationPayment.referenceNumber) {
+      await this.bookingsRepository.createOrReplaceReservationPayment({
+        bookingId: refreshedBooking.id,
+        provider: reservationPayment.provider,
+        status: reservationPayment.status,
+        amountCents: reservationPayment.amountCents,
+        currencyCode: reservationPayment.currencyCode,
+        providerPaymentId: reservationPayment.providerPaymentId ?? null,
+        providerCheckoutUrl: reservationPayment.providerCheckoutUrl ?? null,
+        referenceNumber: this.buildReservationPaymentReference(
+          refreshedBooking.id,
+          reservationPayment.referenceNumber ?? null,
+          reservationPayment.providerPaymentId ?? null,
+        ),
+        failureReason: reservationPayment.failureReason ?? null,
+        expiresAt: reservationPayment.expiresAt ? new Date(reservationPayment.expiresAt) : null,
+        paidAt: reservationPayment.paidAt ? new Date(reservationPayment.paidAt) : null,
+        refundedAt: reservationPayment.refundedAt ? new Date(reservationPayment.refundedAt) : null,
+        confirmedByUserId: reservationPayment.confirmedByUserId ?? null,
+        refundStatus: reservationPayment.refundStatus,
+        auditMetadata: reservationPayment.auditMetadata ?? null,
+      });
+      refreshedBooking = await this.bookingsRepository.findById(refreshedBooking.id);
+    }
+
     if (
-      booking.status === 'pending_payment' &&
+      refreshedBooking.status === 'pending_payment' &&
+      reservationPayment?.status === 'paid'
+    ) {
+      refreshedBooking = await this.applyReservationPaymentConfirmation(refreshedBooking, {
+        provider: reservationPayment.provider === 'manual_counter' ? 'manual_counter' : 'paymongo',
+        providerPaymentId: reservationPayment.providerPaymentId ?? null,
+        referenceNumber: reservationPayment.referenceNumber ?? null,
+        paidAt: reservationPayment.paidAt ? new Date(reservationPayment.paidAt) : this.getCurrentDate(),
+        actorUserId: reservationPayment.confirmedByUserId ?? null,
+        auditMetadata:
+          reservationPayment.auditMetadata ??
+          `Recovered paid reservation status during booking read at ${this.getCurrentDate().toISOString()}`,
+      });
+    }
+
+    if (
+      refreshedBooking.status === 'pending_payment' &&
+      refreshedBooking.reservationPayment?.status === 'pending' &&
+      refreshedBooking.reservationPayment.provider === 'paymongo' &&
+      refreshedBooking.reservationPayment.providerPaymentId
+    ) {
+      refreshedBooking = await this.reconcilePaymongoReservationPayment(refreshedBooking);
+    }
+
+    const refreshedReservationPayment = refreshedBooking.reservationPayment;
+    if (
+      refreshedBooking.status === 'pending_payment' &&
       refreshedReservationPayment?.status === 'pending' &&
       refreshedReservationPayment.expiresAt &&
       new Date(refreshedReservationPayment.expiresAt).getTime() <= this.getCurrentDate().getTime()
     ) {
-      return this.expireReservationPaymentWindow(booking, 'Reservation payment window expired before confirmation.');
+      return this.expireReservationPaymentWindow(
+        refreshedBooking,
+        'Reservation payment window expired before confirmation.',
+      );
     }
 
-    return booking;
+    return refreshedBooking;
   }
 
   async getPaymentPolicy(actorUserId: string) {
@@ -945,6 +1125,7 @@ export class BookingsService {
   private toBookingView(booking: any) {
     return {
       ...booking,
+      bookingReference: booking?.bookingReference ?? null,
       customerName: this.getCustomerDisplayName(booking?.user),
       customerEmail: booking?.user?.email ?? null,
       vehicleDisplayName: this.getVehicleDisplayName(booking?.vehicle),
@@ -1037,6 +1218,11 @@ export class BookingsService {
       currencyCode: paymentPolicy.currencyCode,
       providerPaymentId: paymentSession.providerPaymentId,
       providerCheckoutUrl: paymentSession.checkoutUrl,
+      referenceNumber: this.buildReservationPaymentReference(
+        booking.id,
+        paymentSession.referenceNumber ?? null,
+        paymentSession.providerPaymentId ?? null,
+      ),
       failureReason: paymentSession.failureReason,
       expiresAt,
       refundStatus: 'not_required',
@@ -1137,7 +1323,11 @@ export class BookingsService {
       currencyCode: reservationPayment.currencyCode,
       providerPaymentId: reservationPayment.providerPaymentId ?? null,
       providerCheckoutUrl: reservationPayment.providerCheckoutUrl ?? null,
-      referenceNumber: reservationPayment.referenceNumber ?? null,
+      referenceNumber: this.buildReservationPaymentReference(
+        booking.id,
+        reservationPayment.referenceNumber ?? null,
+        reservationPayment.providerPaymentId ?? null,
+      ),
       failureReason,
       expiresAt: reservationPayment.expiresAt ? new Date(reservationPayment.expiresAt) : null,
       refundStatus: reservationPayment.refundStatus,
@@ -1186,7 +1376,11 @@ export class BookingsService {
       currencyCode: paymentRecord.currencyCode,
       providerPaymentId: payload.providerPaymentId ?? paymentRecord.providerPaymentId ?? null,
       providerCheckoutUrl: paymentRecord.providerCheckoutUrl ?? null,
-      referenceNumber: payload.referenceNumber ?? paymentRecord.referenceNumber ?? null,
+      referenceNumber: this.buildReservationPaymentReference(
+        booking.id,
+        payload.referenceNumber ?? paymentRecord.referenceNumber ?? null,
+        payload.providerPaymentId ?? paymentRecord.providerPaymentId ?? null,
+      ),
       paidAt: payload.paidAt ?? this.getCurrentDate(),
       expiresAt: paymentRecord.expiresAt ? new Date(paymentRecord.expiresAt) : null,
       confirmedByUserId: payload.actorUserId ?? null,

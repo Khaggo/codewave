@@ -9,6 +9,12 @@ export class JobOrderWorkbenchSummaryResponseDto {
   id!: string;
 
   @ApiProperty({
+    example: 'JO · BK-20260603-0003',
+    description: 'Readable selector reference for staff workbench and QA queue surfaces.',
+  })
+  jobOrderReference!: string;
+
+  @ApiProperty({
     enum: jobOrderStatusEnum.enumValues,
     example: 'assigned',
   })
@@ -19,6 +25,20 @@ export class JobOrderWorkbenchSummaryResponseDto {
     example: 'booking',
   })
   sourceType!: (typeof jobOrderSourceTypeEnum.enumValues)[number];
+
+  @ApiProperty({
+    example: 'BK-20260603-0003',
+    required: false,
+    nullable: true,
+  })
+  sourceBookingReference!: string | null;
+
+  @ApiProperty({
+    example: 'BJ-20260603-091500 · BK-20260601-0001',
+    required: false,
+    nullable: true,
+  })
+  sourceBackJobReference!: string | null;
 
   @ApiProperty({
     example: '2026-05-02',

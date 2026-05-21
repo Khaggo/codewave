@@ -21,7 +21,7 @@ describe('BookingsService', () => {
     currencyCode: 'PHP',
     providerPaymentId: 'cs_123',
     providerCheckoutUrl: 'https://checkout.paymongo.test/cs_123',
-    referenceNumber: null,
+    referenceNumber: 'RSV-CS123',
     failureReason: null,
     expiresAt: new Date('2026-04-01T00:30:00.000Z'),
     refundStatus: 'not_required',
@@ -31,6 +31,7 @@ describe('BookingsService', () => {
 
   const buildBooking = (overrides: Record<string, any> = {}) => ({
     id: 'booking-1',
+    bookingReference: 'BK-20260420-0001',
     userId: 'user-1',
     vehicleId: 'vehicle-1',
     timeSlotId: 'slot-1',
@@ -92,6 +93,16 @@ describe('BookingsService', () => {
   });
 
   const buildBookingsRepositoryMock = () => ({
+    listServices: jest.fn().mockResolvedValue([]),
+    listServiceCategories: jest.fn().mockResolvedValue([]),
+    findServiceCategoryById: jest.fn().mockResolvedValue(null),
+    findServiceCategoryByName: jest.fn().mockResolvedValue(null),
+    findServiceByName: jest.fn().mockResolvedValue(null),
+    findServiceById: jest.fn().mockResolvedValue(null),
+    createServiceCategory: jest.fn(),
+    createService: jest.fn(),
+    updateServiceCategory: jest.fn(),
+    updateService: jest.fn(),
     findDateClosureByScheduledDate: jest.fn().mockResolvedValue(null),
     findDateClosuresInRange: jest.fn().mockResolvedValue([]),
     findServiceIds: jest.fn().mockResolvedValue([{ id: 'service-1' }]),
@@ -103,7 +114,9 @@ describe('BookingsService', () => {
       endTime: '10:00',
     }),
     countActiveBookingsForSlot: jest.fn().mockResolvedValue(0),
+    findActiveBookingsForUserInRange: jest.fn().mockResolvedValue([]),
     create: jest.fn().mockResolvedValue(buildBooking()),
+    assignBookingReference: jest.fn().mockResolvedValue('BK-20260420-0001'),
     findById: jest.fn().mockResolvedValue(buildBooking()),
     findOptionalById: jest.fn().mockResolvedValue(null),
     findByReservationProviderPaymentId: jest.fn().mockResolvedValue(null),
@@ -176,6 +189,16 @@ describe('BookingsService', () => {
 
   it('creates a booking when user, vehicle, services, and slot are valid', async () => {
     const bookingsRepository = buildBookingsRepositoryMock();
+    const paymentGateway = buildGatewayMock();
+    paymentGateway.createReservationPayment.mockResolvedValue({
+      provider: 'paymongo',
+      status: 'pending',
+      providerPaymentId: 'cs_live_1',
+      checkoutUrl: 'https://checkout.paymongo.test/cs_live_1',
+      referenceNumber: 'PM-BOOKING-1001',
+      paidAt: null,
+      failureReason: null,
+    });
     bookingsRepository.create.mockResolvedValue(
       buildBooking({
         id: 'booking-1',
@@ -190,7 +213,7 @@ describe('BookingsService', () => {
       }),
     );
 
-    const { service } = await createModule({ bookingsRepository });
+    const { service } = await createModule({ bookingsRepository, paymentGateway });
 
     const result = await service.create({
       userId: 'user-1',
@@ -202,8 +225,166 @@ describe('BookingsService', () => {
     }, { userId: 'user-1', role: 'customer' });
 
     expect(bookingsRepository.create).toHaveBeenCalled();
-    expect(bookingsRepository.createOrReplaceReservationPayment).toHaveBeenCalled();
+    expect(bookingsRepository.createOrReplaceReservationPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingId: 'booking-1',
+        providerPaymentId: 'cs_live_1',
+        referenceNumber: 'PM-BOOKING-1001',
+      }),
+    );
     expect(result.id).toBe('booking-1');
+  });
+
+  it('creates a booking service with a persisted base price for service pricing management', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    bookingsRepository.findServiceCategoryById.mockResolvedValue({
+      id: 'category-1',
+      name: 'Preventive Maintenance',
+      description: 'Routine service work',
+      isActive: true,
+    });
+    bookingsRepository.createService.mockResolvedValue({
+      id: 'service-1',
+      categoryId: 'category-1',
+      name: 'Oil Change',
+      description: 'Replace engine oil and inspect basic consumables.',
+      basePriceCents: 85000,
+      durationMinutes: 45,
+      isActive: true,
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: '2026-04-01T00:00:00.000Z',
+    });
+    const usersService = buildUsersServiceMock();
+    usersService.findById.mockResolvedValue({
+      id: 'staff-1',
+      role: 'service_adviser',
+      isActive: true,
+    });
+
+    const { service } = await createModule({ bookingsRepository, usersService });
+
+    const createdService = await service.createService(
+      {
+        categoryId: 'category-1',
+        name: 'Oil Change',
+        description: 'Replace engine oil and inspect basic consumables.',
+        basePriceCents: 85000,
+        durationMinutes: 45,
+        isActive: true,
+      },
+      'staff-1',
+    );
+
+    expect(bookingsRepository.createService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Oil Change',
+        basePriceCents: 85000,
+      }),
+    );
+    expect(createdService.basePriceCents).toBe(85000);
+  });
+
+  it('updates a booking service price without dropping the rest of the service configuration', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    bookingsRepository.findServiceById.mockResolvedValue({
+      id: 'service-1',
+      categoryId: 'category-1',
+      name: 'Oil Change',
+      description: 'Replace engine oil and inspect basic consumables.',
+      basePriceCents: 85000,
+      durationMinutes: 45,
+      isActive: true,
+    });
+    bookingsRepository.updateService.mockResolvedValue({
+      id: 'service-1',
+      categoryId: 'category-1',
+      name: 'Oil Change',
+      description: 'Replace engine oil and inspect basic consumables.',
+      basePriceCents: 95000,
+      durationMinutes: 45,
+      isActive: true,
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: '2026-04-01T00:05:00.000Z',
+    });
+    const usersService = buildUsersServiceMock();
+    usersService.findById.mockResolvedValue({
+      id: 'staff-1',
+      role: 'service_adviser',
+      isActive: true,
+    });
+
+    const { service } = await createModule({ bookingsRepository, usersService });
+
+    const updatedService = await service.updateService(
+      'service-1',
+      {
+        basePriceCents: 95000,
+      },
+      'staff-1',
+    );
+
+    expect(bookingsRepository.updateService).toHaveBeenCalledWith(
+      'service-1',
+      expect.objectContaining({
+        basePriceCents: 95000,
+      }),
+    );
+    expect(updatedService.basePriceCents).toBe(95000);
+  });
+
+  it('generates a durable fallback reservation reference when the gateway response omits one', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    const paymentGateway = buildGatewayMock();
+    paymentGateway.createReservationPayment.mockResolvedValue({
+      provider: 'paymongo',
+      status: 'pending',
+      providerPaymentId: 'cs_missing_ref_1',
+      checkoutUrl: 'https://checkout.paymongo.test/cs_missing_ref_1',
+      referenceNumber: null,
+      paidAt: null,
+      failureReason: null,
+    });
+
+    const { service } = await createModule({ bookingsRepository, paymentGateway });
+
+    await service.create(
+      {
+        userId: 'user-1',
+        vehicleId: 'vehicle-1',
+        timeSlotId: 'slot-1',
+        scheduledDate: '2026-04-20',
+        serviceIds: ['service-1'],
+      },
+      { userId: 'user-1', role: 'customer' },
+    );
+
+    expect(bookingsRepository.createOrReplaceReservationPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingId: 'booking-1',
+        referenceNumber: expect.stringMatching(/^RSV-[A-Z0-9]+$/),
+      }),
+    );
+  });
+
+  it('returns a persisted readable booking reference after booking creation', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    const paymentGateway = buildGatewayMock();
+    bookingsRepository.create.mockResolvedValue(buildBooking({ bookingReference: null }));
+    bookingsRepository.findById.mockResolvedValue(buildBooking({ bookingReference: 'BK-20260420-0001' }));
+    const { service } = await createModule({ bookingsRepository, paymentGateway });
+
+    const result = await service.create(
+      {
+        userId: 'user-1',
+        vehicleId: 'vehicle-1',
+        timeSlotId: 'slot-1',
+        scheduledDate: '2026-04-20',
+        serviceIds: ['service-1'],
+      },
+      { userId: 'user-1', role: 'customer' },
+    );
+
+    expect(result.bookingReference).toBe('BK-20260420-0001');
   });
 
   it('rejects booking creation when the vehicle is not owned by the user', async () => {
@@ -253,6 +434,34 @@ describe('BookingsService', () => {
         scheduledDate: '2026-04-20',
         serviceIds: ['service-1'],
       }, { userId: 'user-1', role: 'customer' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rejects booking creation when the customer already has an active booking in the same slot', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    bookingsRepository.findActiveBookingsForUserInRange.mockResolvedValue([
+      {
+        id: 'booking-2',
+        userId: 'user-1',
+        timeSlotId: 'slot-1',
+        scheduledDate: '2026-04-20',
+        status: 'confirmed',
+      },
+    ]);
+
+    const { service } = await createModule({ bookingsRepository });
+
+    await expect(
+      service.create(
+        {
+          userId: 'user-1',
+          vehicleId: 'vehicle-1',
+          timeSlotId: 'slot-1',
+          scheduledDate: '2026-04-20',
+          serviceIds: ['service-1'],
+        },
+        { userId: 'user-1', role: 'customer' },
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -401,6 +610,107 @@ describe('BookingsService', () => {
     );
   });
 
+  it('self-heals a paid reservation booking during daily schedule reads', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    bookingsRepository.listTimeSlots.mockResolvedValue([
+      {
+        id: 'slot-1',
+        label: 'Morning Slot',
+        capacity: 2,
+      },
+    ]);
+    bookingsRepository.findByScheduledDate.mockResolvedValue([
+      buildBooking({
+        status: 'pending_payment',
+        reservationPayment: buildReservationPayment({
+          status: 'paid',
+          providerPaymentId: 'cs_paid_schedule',
+          referenceNumber: 'PM-SCHEDULE-1',
+          paidAt: new Date('2026-04-01T00:05:00.000Z'),
+        }),
+      }),
+    ]);
+    bookingsRepository.findById.mockResolvedValue(
+      buildBooking({
+        status: 'confirmed',
+        qrCodeToken: 'qr-schedule-1',
+        reservationPayment: buildReservationPayment({
+          status: 'paid',
+          providerPaymentId: 'cs_paid_schedule',
+          referenceNumber: 'PM-SCHEDULE-1',
+          paidAt: new Date('2026-04-01T00:05:00.000Z'),
+        }),
+      }),
+    );
+
+    const { service } = await createModule({ bookingsRepository });
+
+    const schedule = await service.getDailySchedule({
+      scheduledDate: '2026-04-20',
+    });
+
+    expect(bookingsRepository.updateStatus).toHaveBeenCalledWith(
+      'booking-1',
+      expect.objectContaining({
+        status: 'confirmed',
+      }),
+    );
+    expect(schedule.slots[0].confirmedCount).toBe(1);
+    expect(schedule.slots[0].bookings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'booking-1',
+          status: 'confirmed',
+        }),
+      ]),
+    );
+  });
+
+  it('includes self-healed paid reservation bookings in the current queue', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    bookingsRepository.findByScheduledDate.mockResolvedValue([
+      buildBooking({
+        status: 'pending_payment',
+        reservationPayment: buildReservationPayment({
+          status: 'paid',
+          providerPaymentId: 'cs_paid_queue',
+          referenceNumber: 'PM-QUEUE-1',
+          paidAt: new Date('2026-04-01T00:05:00.000Z'),
+        }),
+      }),
+    ]);
+    bookingsRepository.findById.mockResolvedValue(
+      buildBooking({
+        status: 'confirmed',
+        qrCodeToken: 'qr-queue-1',
+        reservationPayment: buildReservationPayment({
+          status: 'paid',
+          providerPaymentId: 'cs_paid_queue',
+          referenceNumber: 'PM-QUEUE-1',
+          paidAt: new Date('2026-04-01T00:05:00.000Z'),
+        }),
+      }),
+    );
+
+    const { service } = await createModule({ bookingsRepository });
+
+    const queue = await service.getQueueCurrent({
+      scheduledDate: '2026-04-20',
+    });
+
+    expect(bookingsRepository.findByScheduledDate).toHaveBeenCalledWith('2026-04-20', {
+      timeSlotId: undefined,
+      statuses: ['pending_payment', 'confirmed', 'rescheduled'],
+    });
+    expect(queue.currentCount).toBe(1);
+    expect(queue.items[0]).toEqual(
+      expect.objectContaining({
+        bookingId: 'booking-1',
+        status: 'confirmed',
+      }),
+    );
+  });
+
   it('rejects booking operations from non-adviser actors', async () => {
     const bookingsRepository = buildBookingsRepositoryMock();
     bookingsRepository.findById.mockResolvedValue(buildBooking({ reservationPayment: null }));
@@ -503,6 +813,56 @@ describe('BookingsService', () => {
         }),
       ]),
     );
+  });
+
+  it('marks customer-conflicting same-slot availability as unavailable before create is attempted', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    bookingsRepository.listTimeSlots.mockResolvedValue([
+      {
+        id: 'slot-1',
+        label: 'Morning Slot',
+        startTime: '09:00',
+        endTime: '10:00',
+        capacity: 2,
+        isActive: true,
+      },
+    ]);
+    bookingsRepository.findActiveBookingsForUserInRange.mockResolvedValue([
+      {
+        id: 'booking-2',
+        userId: 'user-1',
+        timeSlotId: 'slot-1',
+        scheduledDate: '2026-04-02',
+        status: 'confirmed',
+      },
+    ]);
+
+    const { service } = await createModule({ bookingsRepository });
+
+    const availability = await service.getAvailability(
+      {
+        startDate: '2026-04-02',
+        endDate: '2026-04-02',
+        timeSlotId: 'slot-1',
+      },
+      { userId: 'user-1', role: 'customer' },
+    );
+
+    expect(availability.days).toEqual([
+      expect.objectContaining({
+        scheduledDate: '2026-04-02',
+        status: 'full',
+        isBookable: false,
+        availableSlotCount: 0,
+        slots: [
+          expect.objectContaining({
+            timeSlotId: 'slot-1',
+            status: 'full',
+            isAvailable: false,
+          }),
+        ],
+      }),
+    ]);
   });
 
   it('marks closed dates as unavailable in booking availability reads', async () => {

@@ -42,8 +42,10 @@ import { ServiceResponseDto } from '../dto/service-response.dto';
 import { TimeSlotResponseDto } from '../dto/time-slot-response.dto';
 import { UpdateBookingDateClosureDto } from '../dto/update-booking-date-closure.dto';
 import { UpdateBookingPaymentPolicyDto } from '../dto/update-booking-payment-policy.dto';
-import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
+import { UpdateServiceCategoryDto } from '../dto/update-service-category.dto';
+import { UpdateServiceDto } from '../dto/update-service.dto';
+import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { BookingsService } from '../services/bookings.service';
 
 @ApiTags('bookings')
@@ -116,6 +118,52 @@ export class BookingsController {
     );
   }
 
+  @Patch('service-categories/:id')
+  @ApiOperation({ summary: 'Update a booking service category for staff operations.' })
+  @ApiParam({ name: 'id', example: 'd248f7e9-3efc-4ab4-a880-676c8041a25f' })
+  @ApiOkResponse({
+    description: 'The updated booking service category.',
+    type: ServiceCategoryResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The submitted category update payload is invalid.' })
+  @ApiConflictResponse({ description: 'The service category name already exists.' })
+  @ApiNotFoundResponse({ description: 'The selected service category was not found.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can manage booking service categories.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  updateServiceCategory(@Param('id') id: string, @Body() payload: UpdateServiceCategoryDto, @Req() request: Request) {
+    return this.bookingsService.updateServiceCategory(
+      id,
+      payload,
+      (request.user as { userId: string }).userId,
+    );
+  }
+
+  @Patch('services/:id')
+  @ApiOperation({ summary: 'Update a booking service offering for staff operations.' })
+  @ApiParam({ name: 'id', example: '2dd2f8e0-c25c-463b-a1d5-33e4e4ae8bb0' })
+  @ApiOkResponse({
+    description: 'The updated booking service.',
+    type: ServiceResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The submitted service update payload is invalid.' })
+  @ApiConflictResponse({ description: 'The service name already exists.' })
+  @ApiNotFoundResponse({ description: 'The selected service or category was not found.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can manage booking services.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  updateService(@Param('id') id: string, @Body() payload: UpdateServiceDto, @Req() request: Request) {
+    return this.bookingsService.updateService(
+      id,
+      payload,
+      (request.user as { userId: string }).userId,
+    );
+  }
+
   @Get('time-slots')
   @ApiOperation({ summary: 'List available booking time slot definitions.' })
   @ApiOkResponse({
@@ -141,8 +189,9 @@ export class BookingsController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('customer', 'service_adviser', 'super_admin')
-  getAvailability(@Query() query: BookingAvailabilityQueryDto) {
-    return this.bookingsService.getAvailability(query);
+  getAvailability(@Query() query: BookingAvailabilityQueryDto, @Req() request: Request) {
+    const actor = request.user as { userId: string; role: string } | undefined;
+    return this.bookingsService.getAvailability(query, actor ?? null);
   }
 
   @Get('admin/booking-date-closures')
