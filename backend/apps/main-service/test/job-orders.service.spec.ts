@@ -791,6 +791,8 @@ describe('JobOrdersService', () => {
       expect.objectContaining({
         finalizedByUserId: 'adviser-1',
         summary: 'Ready to hand off for invoice generation.',
+        invoiceReference: expect.stringMatching(/^INV-SVC-\d{8}-\d{6,9}$/),
+        officialReceiptReference: expect.stringMatching(/^OR-\d{8}-\d{6,9}$/),
       }),
     );
     expect(eventBus.publish).toHaveBeenCalledWith('service.invoice_finalized', {
@@ -818,6 +820,107 @@ describe('JobOrdersService', () => {
     expect(result).toBe(finalizedResult);
   });
 
+  it('returns readable labels and references for job-order detail surfaces', async () => {
+    const jobOrdersRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'job-order-1',
+        sourceType: 'booking',
+        sourceId: 'booking-1',
+        jobType: 'normal',
+        customerUserId: 'customer-1',
+        vehicleId: 'vehicle-1',
+        serviceAdviserUserId: 'adviser-1',
+        serviceAdviserCode: 'SA-1001',
+        status: 'assigned',
+        createdAt: new Date('2026-05-21T09:15:00.000Z'),
+        updatedAt: new Date('2026-05-21T09:20:00.000Z'),
+        items: [],
+        assignments: [],
+        progressEntries: [],
+        photos: [],
+        invoiceRecord: {
+          id: 'invoice-record-1',
+          invoiceReference: 'INV-SVC-20260521-091500123',
+        },
+      }),
+    };
+
+    const bookingsRepository = {
+      findBookingReadModelByIds: jest.fn().mockResolvedValue([
+        {
+          id: 'booking-1',
+          bookingReference: 'BK-20260521-0007',
+        },
+      ]),
+      findOptionalById: jest.fn(),
+    };
+
+    const usersService = {
+      findById: jest.fn().mockImplementation((id: string) => {
+        if (id === 'adviser-1') {
+          return Promise.resolve({
+            id,
+            role: 'service_adviser',
+            isActive: true,
+          });
+        }
+
+        if (id === 'customer-1') {
+          return Promise.resolve({
+            id,
+            role: 'customer',
+            isActive: true,
+            profile: {
+              firstName: 'Jamie',
+              lastName: 'Cruz',
+            },
+          });
+        }
+
+        return Promise.resolve(null);
+      }),
+    };
+
+    const vehiclesRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'vehicle-1',
+        make: 'Toyota',
+        model: 'Vios',
+        plateNumber: 'ABC-1234',
+      }),
+      findOwnedByUser: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        JobOrdersService,
+        { provide: JobOrdersRepository, useValue: jobOrdersRepository },
+        { provide: BookingsRepository, useValue: bookingsRepository },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn(), linkReworkJobOrder: jest.fn() } },
+        { provide: UsersService, useValue: usersService },
+        { provide: VehiclesRepository, useValue: vehiclesRepository },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(JobOrdersService);
+
+    await expect(
+      service.findById('job-order-1', {
+        userId: 'adviser-1',
+        role: 'service_adviser',
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        jobOrderReference: 'JO · BK-20260521-0007',
+        sourceBookingReference: 'BK-20260521-0007',
+        customerLabel: 'Jamie Cruz',
+        vehicleLabel: 'Toyota Vios (ABC-1234)',
+      }),
+    );
+  });
+
   it('marks workbench calendar dates from confirmed and workshop-handoff bookings', async () => {
     const jobOrdersRepository = {
       findAllSummaries: jest.fn().mockResolvedValue([]),
@@ -829,7 +932,7 @@ describe('JobOrdersService', () => {
         { scheduledDate: '2026-05-18', status: 'confirmed' },
         { scheduledDate: '2026-05-20', status: 'confirmed' },
       ]),
-      findScheduledDatesByIds: jest.fn().mockResolvedValue([]),
+      findBookingReadModelByIds: jest.fn().mockResolvedValue([]),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -867,6 +970,70 @@ describe('JobOrdersService', () => {
     expect(result.bookingQueueDates).toEqual([
       { date: '2026-05-18', count: 2 },
       { date: '2026-05-20', count: 1 },
+    ]);
+  });
+
+  it('lets head technicians see all workbench summaries for QA queue visibility', async () => {
+    const jobOrdersRepository = {
+      findAllSummaries: jest.fn().mockResolvedValue([
+        {
+          id: 'job-order-ready-for-qa',
+          status: 'ready_for_qa',
+          sourceType: 'booking',
+          sourceId: 'booking-1',
+          vehicleId: 'vehicle-1',
+          serviceAdviserCode: 'SA-1001',
+          assignments: [{ technicianUserId: 'tech-1' }],
+          createdAt: new Date('2026-05-20T08:00:00.000Z'),
+          updatedAt: new Date('2026-05-20T09:00:00.000Z'),
+        },
+      ]),
+      findAssignedSummaries: jest.fn().mockResolvedValue([]),
+    };
+    const bookingsRepository = {
+      findBookingReadModelByIds: jest.fn().mockResolvedValue([
+        { id: 'booking-1', scheduledDate: '2026-05-21', bookingReference: 'BK-20260521-0001' },
+      ]),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        JobOrdersService,
+        { provide: JobOrdersRepository, useValue: jobOrdersRepository },
+        { provide: BookingsRepository, useValue: bookingsRepository },
+        { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn(), linkReworkJobOrder: jest.fn() } },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'head-tech-1',
+              role: 'head_technician',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
+        { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(JobOrdersService);
+
+    const result = await service.listWorkbenchSummaries(
+      { userId: 'head-tech-1', role: 'head_technician' },
+      { month: '2026-05', scope: 'active' },
+    );
+
+    expect(jobOrdersRepository.findAllSummaries).toHaveBeenCalled();
+    expect(jobOrdersRepository.findAssignedSummaries).not.toHaveBeenCalled();
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'job-order-ready-for-qa',
+        workDate: '2026-05-21',
+        status: 'ready_for_qa',
+        sourceBookingReference: 'BK-20260521-0001',
+      }),
     ]);
   });
 

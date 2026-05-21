@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
-import { mkdir, readdir, rm, writeFile } from 'fs/promises';
-import { dirname, extname, join } from 'path';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { access, mkdir, readFile, readdir, rm, writeFile } from 'fs/promises';
+import { dirname, extname, join, resolve } from 'path';
 
 type SupportedInsuranceUploadMimeType =
   | 'application/pdf'
@@ -12,8 +12,11 @@ type SupportedInsuranceUploadMimeType =
 
 @Injectable()
 export class InsuranceDocumentStorageService {
+  private readonly backendWorkspaceRoot = resolve(__dirname, '..', '..', '..', '..', '..', '..');
+  private readonly repoWorkspaceRoot = resolve(this.backendWorkspaceRoot, '..');
+  private readonly currentWorkingDirectoryRoot = resolve(process.cwd());
   private readonly rootDirectory = join(
-    process.cwd(),
+    this.backendWorkspaceRoot,
     '.runtime',
     'uploads',
     'insurance-documents',
@@ -59,9 +62,80 @@ export class InsuranceDocumentStorageService {
       return;
     }
 
-    const absolutePath = join(this.rootDirectory, normalizedStorageKey);
-    await rm(absolutePath, { force: true });
-    await this.pruneEmptyDirectories(dirname(absolutePath));
+    for (const rootDirectory of this.resolveCandidateRootDirectories()) {
+      const absolutePath = join(rootDirectory, normalizedStorageKey);
+      await rm(absolutePath, { force: true });
+      await this.pruneEmptyDirectories(dirname(absolutePath), rootDirectory);
+    }
+  }
+
+  async readDocument(payload: { fileUrl: string; fileName: string }) {
+    const storageKey = this.resolveStorageKeyFromFileUrl(payload.fileUrl);
+    const absolutePath = await this.resolveAbsolutePath(storageKey);
+    const buffer = await readFile(absolutePath);
+
+    return {
+      storageKey,
+      buffer,
+      fileName: payload.fileName,
+      mimeType: this.resolveMimeTypeFromFileName(payload.fileName),
+    };
+  }
+
+  private resolveStorageKeyFromFileUrl(fileUrl: string) {
+    const normalizedFileUrl = String(fileUrl ?? '').trim();
+    const prefix = 'upload://insurance/';
+
+    if (!normalizedFileUrl.startsWith(prefix)) {
+      throw new BadRequestException('Insurance document does not use a supported upload storage URL');
+    }
+
+    const storageKey = normalizedFileUrl.slice(prefix.length).replace(/\\/g, '/').trim();
+    if (!storageKey) {
+      throw new BadRequestException('Insurance document storage key is missing');
+    }
+
+    return storageKey;
+  }
+
+  private async resolveAbsolutePath(storageKey: string) {
+    for (const rootDirectory of this.resolveCandidateRootDirectories()) {
+      const absolutePath = resolve(rootDirectory, storageKey);
+      const rootPath = resolve(rootDirectory);
+
+      if (!absolutePath.startsWith(rootPath)) {
+        continue;
+      }
+
+      try {
+        await access(absolutePath);
+        return absolutePath;
+      } catch {
+        continue;
+      }
+    }
+
+    throw new NotFoundException('Insurance document file not found');
+  }
+
+  private resolveMimeTypeFromFileName(fileName: string): SupportedInsuranceUploadMimeType {
+    const extension = extname(String(fileName ?? '')).replace('.', '').trim().toLowerCase();
+
+    switch (extension) {
+      case 'pdf':
+        return 'application/pdf';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      default:
+        throw new BadRequestException('Stored insurance document has an unsupported file extension');
+    }
   }
 
   private normalizeMimeType(mimeType: string) {
@@ -154,11 +228,19 @@ export class InsuranceDocumentStorageService {
     return null;
   }
 
-  private async pruneEmptyDirectories(directoryPath: string) {
+  private resolveCandidateRootDirectories() {
+    return [...new Set([
+      this.rootDirectory,
+      join(this.repoWorkspaceRoot, '.runtime', 'uploads', 'insurance-documents'),
+      join(this.currentWorkingDirectoryRoot, '.runtime', 'uploads', 'insurance-documents'),
+    ])];
+  }
+
+  private async pruneEmptyDirectories(directoryPath: string, rootDirectory: string) {
     let currentPath = directoryPath;
 
-    while (currentPath.startsWith(this.rootDirectory)) {
-      if (currentPath === this.rootDirectory) {
+    while (currentPath.startsWith(rootDirectory)) {
+      if (currentPath === rootDirectory) {
         break;
       }
 

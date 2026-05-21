@@ -4,12 +4,14 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
+import { InsuranceRepository } from '@main-modules/insurance/repositories/insurance.repository';
 import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
 import { QualityGatesRepository } from '@main-modules/quality-gates/repositories/quality-gates.repository';
 import { UsersService } from '@main-modules/users/services/users.service';
@@ -50,6 +52,7 @@ export class VehicleLifecycleService {
     private readonly vehicleLifecycleSummaryProvider: VehicleLifecycleSummaryProviderService,
     @InjectQueue(AI_WORKER_QUEUE_NAME)
     private readonly aiWorkerQueue: Queue,
+    @Optional() private readonly insuranceRepository?: InsuranceRepository,
   ) {}
 
   async findByVehicleId(vehicleId: string, actor?: LifecycleActor) {
@@ -57,6 +60,13 @@ export class VehicleLifecycleService {
     await this.refreshVehicleTimeline(vehicleId);
 
     return this.vehicleLifecycleRepository.findByVehicleId(vehicleId);
+  }
+
+  async findLatestCustomerVisibleSummary(vehicleId: string, actor?: LifecycleActor) {
+    await this.vehiclesService.findById(vehicleId, actor);
+    const summaries = await this.vehicleLifecycleRepository.listSummariesByVehicleId(vehicleId);
+
+    return summaries.find((summary) => summary.customerVisible) ?? null;
   }
 
   async appendVehicleTimelineEvent(payload: AppendVehicleTimelineEventDto) {
@@ -220,9 +230,11 @@ export class VehicleLifecycleService {
   }
 
   async refreshVehicleTimeline(vehicleId: string) {
-    const [bookings, inspections, jobOrders, summaries] = await Promise.all([
+    const [bookings, inspections, insuranceInquiries, insuranceRecords, jobOrders, summaries] = await Promise.all([
       this.bookingsRepository.findByVehicleId(vehicleId),
       this.inspectionsRepository.findByVehicleId(vehicleId),
+      this.insuranceRepository?.findInquiriesByVehicleId(vehicleId) ?? [],
+      this.insuranceRepository?.findRecordsByVehicleId(vehicleId) ?? [],
       this.jobOrdersRepository.findByVehicleId(vehicleId),
       this.vehicleLifecycleRepository.listSummariesByVehicleId(vehicleId),
     ]);
@@ -264,6 +276,56 @@ export class VehicleLifecycleService {
       dedupeKey: `inspection:${inspection.id}:${inspection.status}`,
     }));
 
+    const insuranceInquiryEvents = insuranceInquiries.flatMap((inquiry) => {
+      const events: AppendVehicleTimelineEventDto[] = [
+        {
+          vehicleId,
+          eventType: 'insurance_inquiry_submitted',
+          eventCategory: 'administrative',
+          sourceType: 'manual',
+          sourceId: inquiry.id,
+          occurredAt: inquiry.createdAt,
+          verified: false,
+          inspectionId: null,
+          actorUserId: inquiry.createdByUserId ?? inquiry.userId ?? null,
+          notes: inquiry.subject ?? inquiry.reviewNotes ?? null,
+          dedupeKey: `insurance-inquiry:${inquiry.id}:submitted`,
+        },
+      ];
+
+      if (inquiry.status && inquiry.status !== 'submitted') {
+        events.push({
+          vehicleId,
+          eventType: `insurance_inquiry_${inquiry.status}`,
+          eventCategory: 'administrative',
+          sourceType: 'manual',
+          sourceId: inquiry.id,
+          occurredAt: inquiry.reviewedAt ?? inquiry.updatedAt ?? inquiry.createdAt,
+          verified: false,
+          inspectionId: null,
+          actorUserId: inquiry.reviewedByUserId ?? null,
+          notes: inquiry.reviewNotes ?? inquiry.subject ?? null,
+          dedupeKey: `insurance-inquiry:${inquiry.id}:status:${inquiry.status}`,
+        });
+      }
+
+      return events;
+    });
+
+    const insuranceRecordEvents = insuranceRecords.map((record) => ({
+      vehicleId,
+      eventType: `insurance_record_${record.status}`,
+      eventCategory: 'administrative' as const,
+      sourceType: 'manual' as const,
+      sourceId: record.id,
+      occurredAt: record.updatedAt ?? record.createdAt,
+      verified: false,
+      inspectionId: null,
+      actorUserId: null,
+      notes: record.policyNumber ?? null,
+      dedupeKey: `insurance-record:${record.id}:status:${record.status}`,
+    }));
+
     const jobOrderEvents = jobOrders.flatMap((jobOrder) =>
       this.buildJobOrderTimelineEvents(jobOrder, qualityGateByJobOrderId.get(jobOrder.id) ?? null),
     );
@@ -273,6 +335,8 @@ export class VehicleLifecycleService {
     const timelineEvents: AppendVehicleTimelineEventDto[] = [
       ...bookingEvents,
       ...inspectionEvents,
+      ...insuranceInquiryEvents,
+      ...insuranceRecordEvents,
       ...jobOrderEvents,
       ...summaryReviewEvents,
     ].sort(
@@ -326,6 +390,38 @@ export class VehicleLifecycleService {
           : null,
         dedupeKey: `job-order:${jobOrder.id}:status:${jobOrder.status}`,
       });
+    }
+
+    if (jobOrder.invoiceRecord) {
+      statusEvents.push({
+        vehicleId: jobOrder.vehicleId,
+        eventType: 'invoice_generated',
+        eventCategory: 'administrative',
+        sourceType: 'job_order',
+        sourceId: jobOrder.invoiceRecord.id,
+        occurredAt: jobOrder.invoiceRecord.createdAt ?? jobOrder.updatedAt,
+        verified: false,
+        inspectionId: null,
+        actorUserId: jobOrder.invoiceRecord.finalizedByUserId ?? null,
+        notes: jobOrder.invoiceRecord.invoiceReference ?? null,
+        dedupeKey: `invoice:${jobOrder.invoiceRecord.id}:generated`,
+      });
+
+      if (jobOrder.invoiceRecord.paidAt) {
+        statusEvents.push({
+          vehicleId: jobOrder.vehicleId,
+          eventType: 'invoice_paid',
+          eventCategory: 'administrative',
+          sourceType: 'job_order',
+          sourceId: jobOrder.invoiceRecord.id,
+          occurredAt: jobOrder.invoiceRecord.paidAt,
+          verified: false,
+          inspectionId: null,
+          actorUserId: jobOrder.invoiceRecord.recordedByUserId ?? null,
+          notes: jobOrder.invoiceRecord.paymentReference ?? jobOrder.invoiceRecord.invoiceReference ?? null,
+          dedupeKey: `invoice:${jobOrder.invoiceRecord.id}:paid`,
+        });
+      }
     }
 
     return [

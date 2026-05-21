@@ -298,6 +298,41 @@ export const createStaffInventoryCategory = async ({ accessToken, name, descript
   );
 };
 
+export const updateStaffInventoryCategory = async ({
+  accessToken,
+  categoryId,
+  name,
+  description,
+  isActive,
+} = {}) => {
+  const normalizedCategoryId = String(categoryId ?? '').trim();
+
+  if (!accessToken) {
+    throw new ApiError('Sign in as staff before updating a category.', 401, {
+      path: '/api/product-categories/:id',
+    });
+  }
+
+  if (!normalizedCategoryId) {
+    throw new ApiError('Select a category before updating it.', 400, {
+      path: '/api/product-categories/:id',
+    });
+  }
+
+  return buildStaffInventoryCategoryPresentation(
+    await request(`/api/product-categories/${encodeURIComponent(normalizedCategoryId)}`, {
+      accessToken,
+      method: 'PATCH',
+      body: {
+        name: name !== undefined ? String(name).trim() || undefined : undefined,
+        slug: name ? slugify(name) : undefined,
+        description: description !== undefined ? String(description).trim() || undefined : undefined,
+        isActive,
+      },
+    }),
+  );
+};
+
 export const createStaffInventoryProduct = async ({
   accessToken,
   categoryId,

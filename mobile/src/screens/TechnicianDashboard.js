@@ -64,7 +64,58 @@ const formatDateTime = (value) => {
   return date.toLocaleString();
 };
 
-const shortJobOrderId = (id) => (id ? id.slice(0, 8).toUpperCase() : '—');
+const normalizeBusinessToken = (value, fallback = 'WORK') => {
+  const normalizedValue = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+
+  return normalizedValue || fallback;
+};
+
+const formatCompactDateToken = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+};
+
+const formatCompactTimeToken = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${hours}${minutes}${seconds}`;
+};
+
+const getJobOrderReference = (jobOrder) => {
+  if (jobOrder?.jobOrderReference) {
+    return jobOrder.jobOrderReference;
+  }
+
+  if (jobOrder?.sourceBackJobReference) {
+    return `JO-RW · ${jobOrder.sourceBackJobReference}`;
+  }
+
+  if (jobOrder?.sourceBookingReference) {
+    return `JO · ${jobOrder.sourceBookingReference}`;
+  }
+
+  const compactDate = formatCompactDateToken(jobOrder?.workDate ?? jobOrder?.createdAt ?? jobOrder?.updatedAt);
+  const timeToken = formatCompactTimeToken(jobOrder?.createdAt ?? jobOrder?.updatedAt);
+  const plateToken = normalizeBusinessToken(
+    jobOrder?.plateNumber ?? jobOrder?.vehicleDisplayName ?? jobOrder?.vehicleLabel ?? jobOrder?.serviceAdviserCode,
+    'WORK',
+  );
+  const prefix = jobOrder?.jobType === 'back_job' ? 'JO-RW' : 'JO';
+
+  return compactDate ? `${prefix}-${compactDate}-${timeToken || plateToken}` : `${prefix}-${plateToken}`;
+};
 
 function StatusPill({ status, size = 'sm' }) {
   const tone = STATUS_TONES[status] ?? STATUS_TONES.draft;
@@ -96,7 +147,7 @@ function JobOrderCard({ jobOrder, onOpen }) {
       <View style={styles.jobOrderCardHeader}>
         <View style={styles.jobOrderCardHeaderText}>
           <Text style={styles.jobOrderEyebrow}>Job order</Text>
-          <Text style={styles.jobOrderId}>{shortJobOrderId(jobOrder.id)}</Text>
+          <Text style={styles.jobOrderId}>{getJobOrderReference(jobOrder)}</Text>
         </View>
         <StatusPill status={jobOrder.status} />
       </View>
@@ -271,7 +322,7 @@ function JobOrderDetailModal({ jobOrder, accessToken, visible, onClose, onChange
 
         <ScrollView contentContainerStyle={styles.modalContent}>
           <Text style={styles.modalEyebrow}>Job order</Text>
-          <Text style={styles.modalTitle}>{shortJobOrderId(jobOrder.id)}</Text>
+          <Text style={styles.modalTitle}>{getJobOrderReference(jobOrder)}</Text>
           <Text style={styles.modalMeta}>Updated {formatDateTime(jobOrder.updatedAt)}</Text>
 
           {jobOrder.notes ? (

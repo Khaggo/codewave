@@ -2,13 +2,15 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ApiError, listCustomerVehicles } from '../lib/authClient';
+import { ApiError, createCustomerVehicle, listCustomerVehicles } from '../lib/authClient';
 import {
   createEmptyCustomerVehicleLifecycleSnapshot,
   loadCustomerVehicleLifecycleSnapshot,
@@ -17,6 +19,14 @@ import { colors, radius } from '../theme';
 import { formatVehicleDisplayName } from '../utils/validation';
 
 const emptySnapshot = createEmptyCustomerVehicleLifecycleSnapshot();
+const GARAGE_PAGE_SIZE = 3;
+const createEmptyVehicleDraft = () => ({
+  licensePlate: '',
+  vehicleMake: '',
+  vehicleModel: '',
+  vehicleYear: '',
+  color: '',
+});
 
 const getVehicleLabel = (vehicle) =>
   formatVehicleDisplayName({
@@ -119,6 +129,11 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
   const [selectedVehicleId, setSelectedVehicleId] = useState(
     route?.params?.vehicleId ?? account?.primaryVehicleId ?? account?.ownedVehicles?.[0]?.id ?? null,
   );
+  const [vehiclePage, setVehiclePage] = useState(0);
+  const [isAddVehicleModalOpen, setIsAddVehicleModalOpen] = useState(false);
+  const [isSavingVehicle, setIsSavingVehicle] = useState(false);
+  const [vehicleDraft, setVehicleDraft] = useState(createEmptyVehicleDraft);
+  const [vehicleDraftError, setVehicleDraftError] = useState('');
   const [status, setStatus] = useState('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [snapshot, setSnapshot] = useState(emptySnapshot);
@@ -127,12 +142,25 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
     () => vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? vehicles[0] ?? null,
     [selectedVehicleId, vehicles],
   );
+  const totalVehiclePages = Math.max(1, Math.ceil(vehicles.length / GARAGE_PAGE_SIZE));
+  const paginatedVehicles = useMemo(
+    () =>
+      vehicles.slice(
+        vehiclePage * GARAGE_PAGE_SIZE,
+        (vehiclePage + 1) * GARAGE_PAGE_SIZE,
+      ),
+    [vehiclePage, vehicles],
+  );
 
   useEffect(() => {
     if (!selectedVehicleId && selectedVehicle?.id) {
       setSelectedVehicleId(selectedVehicle.id);
     }
   }, [selectedVehicle?.id, selectedVehicleId]);
+
+  useEffect(() => {
+    setVehiclePage((currentPage) => Math.min(currentPage, totalVehiclePages - 1));
+  }, [totalVehiclePages]);
 
   const loadLifecycle = async () => {
     const accessToken = account?.accessToken;
@@ -218,6 +246,77 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedVehicleId]);
 
+  const handleOpenAddVehicleModal = () => {
+    setVehicleDraft(createEmptyVehicleDraft());
+    setVehicleDraftError('');
+    setIsAddVehicleModalOpen(true);
+  };
+
+  const handleCloseAddVehicleModal = () => {
+    if (isSavingVehicle) {
+      return;
+    }
+
+    setIsAddVehicleModalOpen(false);
+    setVehicleDraftError('');
+  };
+
+  const handleSaveVehicle = async () => {
+    const licensePlate = String(vehicleDraft.licensePlate ?? '').trim().toUpperCase();
+    const vehicleMake = String(vehicleDraft.vehicleMake ?? '').trim();
+    const vehicleModel = String(vehicleDraft.vehicleModel ?? '').trim();
+    const vehicleYear = String(vehicleDraft.vehicleYear ?? '').replace(/\D/g, '').slice(0, 4);
+    const color = String(vehicleDraft.color ?? '').trim();
+
+    if (!account?.userId || !account?.accessToken) {
+      setVehicleDraftError('Sign in again before adding another vehicle.');
+      return;
+    }
+
+    if (!licensePlate || !vehicleMake || !vehicleModel || vehicleYear.length !== 4) {
+      setVehicleDraftError('Plate number, make, model, and a 4-digit year are required.');
+      return;
+    }
+
+    setIsSavingVehicle(true);
+    setVehicleDraftError('');
+
+    try {
+      const createdVehicle = await createCustomerVehicle({
+        userId: account.userId,
+        licensePlate,
+        vehicleMake,
+        vehicleModel,
+        vehicleYear: Number(vehicleYear),
+        color: color || undefined,
+        accessToken: account.accessToken,
+      });
+
+      const nextVehicles = [...vehicles, createdVehicle];
+      setVehicles(nextVehicles);
+      setSelectedVehicleId(createdVehicle.id);
+      setVehiclePage(Math.max(0, Math.ceil(nextVehicles.length / GARAGE_PAGE_SIZE) - 1));
+      setIsAddVehicleModalOpen(false);
+      setVehicleDraft(createEmptyVehicleDraft());
+      setStatus('loading');
+
+      const nextSnapshot = await loadCustomerVehicleLifecycleSnapshot({
+        vehicleId: createdVehicle.id,
+        accessToken: account.accessToken,
+      });
+      setSnapshot(nextSnapshot);
+      setStatus(nextSnapshot.timelineState === 'timeline_ready' ? 'ready' : 'empty');
+    } catch (error) {
+      setVehicleDraftError(
+        error instanceof ApiError || error instanceof Error
+          ? error.message
+          : 'We could not save the vehicle right now.',
+      );
+    } finally {
+      setIsSavingVehicle(false);
+    }
+  };
+
   const serviceEvents = snapshot.events.filter((event) =>
     ['Booking', 'Inspection', 'Job Order', 'Quality Gate'].includes(event.typeLabel),
   );
@@ -244,10 +343,14 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
               A customer-safe history for maintenance, repair milestones, parts notes, and future AI recommendations.
             </Text>
           </View>
+          <TouchableOpacity activeOpacity={0.86} onPress={handleOpenAddVehicleModal} style={styles.addVehicleButton}>
+            <MaterialCommunityIcons name="plus" size={18} color={colors.onPrimary} />
+            <Text style={styles.addVehicleButtonText}>Add vehicle</Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vehicleScroller}>
-          {vehicles.map((vehicle) => (
+          {paginatedVehicles.map((vehicle) => (
             <VehicleChip
               key={vehicle.id}
               vehicle={vehicle}
@@ -256,6 +359,37 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             />
           ))}
         </ScrollView>
+        {vehicles.length > GARAGE_PAGE_SIZE ? (
+          <View style={styles.vehiclePagerRow}>
+            <Text style={styles.vehiclePagerText}>
+              Showing {Math.min(vehiclePage * GARAGE_PAGE_SIZE + 1, vehicles.length)}-
+              {Math.min((vehiclePage + 1) * GARAGE_PAGE_SIZE, vehicles.length)} of {vehicles.length} vehicles
+            </Text>
+            <View style={styles.vehiclePagerActions}>
+              <TouchableOpacity
+                activeOpacity={vehiclePage === 0 ? 1 : 0.86}
+                disabled={vehiclePage === 0}
+                onPress={() => setVehiclePage((currentPage) => Math.max(0, currentPage - 1))}
+                style={[styles.vehiclePagerButton, vehiclePage === 0 && styles.vehiclePagerButtonDisabled]}
+              >
+                <Text style={styles.vehiclePagerButtonText}>Prev</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={vehiclePage >= totalVehiclePages - 1 ? 1 : 0.86}
+                disabled={vehiclePage >= totalVehiclePages - 1}
+                onPress={() =>
+                  setVehiclePage((currentPage) => Math.min(totalVehiclePages - 1, currentPage + 1))
+                }
+                style={[
+                  styles.vehiclePagerButton,
+                  vehiclePage >= totalVehiclePages - 1 && styles.vehiclePagerButtonDisabled,
+                ]}
+              >
+                <Text style={styles.vehiclePagerButtonText}>Next</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.vehicleHero}>
           <Text style={styles.vehicleHeroLabel}>Selected Vehicle</Text>
@@ -335,8 +469,98 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             title={snapshot.summaryCard.title}
             message={snapshot.summaryCard.helperText}
           />
+          {snapshot.summaryCard.summaryText ? (
+            <View style={styles.summaryProofCard}>
+              <View style={styles.summaryProofHeader}>
+                <MaterialCommunityIcons name="file-document-check-outline" size={18} color={colors.primary} />
+                <Text style={styles.summaryProofTitle}>Customer-visible reviewed summary</Text>
+              </View>
+              <Text style={styles.summaryProofText}>{snapshot.summaryCard.summaryText}</Text>
+              {snapshot.summaryCard.reviewedAt ? (
+                <Text style={styles.summaryProofMeta}>
+                  Reviewed and approved on {new Date(snapshot.summaryCard.reviewedAt).toLocaleString()}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
+      <Modal
+        visible={isAddVehicleModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={handleCloseAddVehicleModal}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Add another vehicle</Text>
+            <Text style={styles.modalSubtitle}>
+              Save a second car directly into the customer garage so booking, lifecycle, and insurance flows can target it.
+            </Text>
+            <TextInput
+              value={vehicleDraft.licensePlate}
+              onChangeText={(value) => setVehicleDraft((current) => ({ ...current, licensePlate: value.toUpperCase() }))}
+              placeholder="Plate number"
+              placeholderTextColor={colors.mutedText}
+              style={styles.modalInput}
+              autoCapitalize="characters"
+            />
+            <TextInput
+              value={vehicleDraft.vehicleMake}
+              onChangeText={(value) => setVehicleDraft((current) => ({ ...current, vehicleMake: value }))}
+              placeholder="Make"
+              placeholderTextColor={colors.mutedText}
+              style={styles.modalInput}
+              autoCapitalize="words"
+            />
+            <TextInput
+              value={vehicleDraft.vehicleModel}
+              onChangeText={(value) => setVehicleDraft((current) => ({ ...current, vehicleModel: value }))}
+              placeholder="Model"
+              placeholderTextColor={colors.mutedText}
+              style={styles.modalInput}
+              autoCapitalize="words"
+            />
+            <TextInput
+              value={vehicleDraft.vehicleYear}
+              onChangeText={(value) => setVehicleDraft((current) => ({ ...current, vehicleYear: value.replace(/\D/g, '').slice(0, 4) }))}
+              placeholder="Year"
+              placeholderTextColor={colors.mutedText}
+              style={styles.modalInput}
+              keyboardType="number-pad"
+            />
+            <TextInput
+              value={vehicleDraft.color}
+              onChangeText={(value) => setVehicleDraft((current) => ({ ...current, color: value }))}
+              placeholder="Color (optional)"
+              placeholderTextColor={colors.mutedText}
+              style={styles.modalInput}
+              autoCapitalize="words"
+            />
+            {vehicleDraftError ? <Text style={styles.modalErrorText}>{vehicleDraftError}</Text> : null}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                activeOpacity={isSavingVehicle ? 1 : 0.86}
+                disabled={isSavingVehicle}
+                onPress={handleCloseAddVehicleModal}
+                style={styles.modalSecondaryButton}
+              >
+                <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={isSavingVehicle ? 1 : 0.86}
+                disabled={isSavingVehicle}
+                onPress={handleSaveVehicle}
+                style={styles.modalPrimaryButton}
+              >
+                <Text style={styles.modalPrimaryButtonText}>
+                  {isSavingVehicle ? 'Saving...' : 'Save vehicle'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -355,6 +579,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     gap: 14,
+    justifyContent: 'space-between',
   },
   backButton: {
     alignItems: 'center',
@@ -388,9 +613,55 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginTop: 8,
   },
+  addVehicleButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
   vehicleScroller: {
     gap: 10,
     paddingRight: 16,
+  },
+  addVehicleButtonText: {
+    color: colors.onPrimary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  vehiclePagerRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  vehiclePagerText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  vehiclePagerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  vehiclePagerButton: {
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  vehiclePagerButtonDisabled: {
+    opacity: 0.45,
+  },
+  vehiclePagerButtonText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
   },
   vehicleChip: {
     alignItems: 'center',
@@ -660,5 +931,108 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     marginTop: 5,
+  },
+  summaryProofCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    marginTop: 12,
+    padding: 14,
+  },
+  summaryProofHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  summaryProofTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  summaryProofText: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 21,
+    marginTop: 10,
+  },
+  summaryProofMeta: {
+    color: colors.mutedText,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 10,
+  },
+  modalBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 18,
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    gap: 10,
+    padding: 18,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  modalSubtitle: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  modalInput: {
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  modalErrorText: {
+    color: colors.error,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  modalPrimaryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  modalPrimaryButtonText: {
+    color: colors.onPrimary,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  modalSecondaryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  modalSecondaryButtonText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '800',
   },
 });

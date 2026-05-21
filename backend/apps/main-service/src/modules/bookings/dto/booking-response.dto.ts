@@ -15,6 +15,11 @@ export class BookingResponseDto {
   })
   id!: string;
 
+  @ApiPropertyOptional({
+    example: 'BK-20260420-0001',
+  })
+  bookingReference?: string | null;
+
   @ApiProperty({
     example: 'a3cce1f2-a6eb-4fdd-bf11-8b17d3ddfc17',
   })

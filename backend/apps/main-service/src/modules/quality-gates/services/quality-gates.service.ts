@@ -582,7 +582,7 @@ export class QualityGatesService {
       throw new NotFoundException('Quality-gate actor not found');
     }
 
-    if (!['technician', 'service_adviser', 'super_admin'].includes(user.role)) {
+    if (!['technician', 'head_technician', 'service_adviser', 'super_admin'].includes(user.role)) {
       throw new ForbiddenException('Only staff accounts can access quality gates');
     }
 

@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '@ecommerce-modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@ecommerce-modules/auth/guards/roles.guard';
 import { CartModule } from '@ecommerce-modules/cart/cart.module';
 import { CatalogModule } from '@ecommerce-modules/catalog/catalog.module';
+import { InventoryModule } from '@ecommerce-modules/inventory/inventory.module';
 import { InvoicePaymentsModule } from '@ecommerce-modules/invoice-payments/invoice-payments.module';
 import { OrdersModule } from '@ecommerce-modules/orders/orders.module';
 
@@ -25,7 +26,7 @@ describe('EcommerceService bootstrap integration', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [CatalogModule, CartModule, InvoicePaymentsModule, OrdersModule],
+      imports: [CatalogModule, InventoryModule, CartModule, InvoicePaymentsModule, OrdersModule],
       controllers: [HealthController],
     })
       .overrideGuard(JwtAuthGuard)
@@ -212,6 +213,54 @@ describe('EcommerceService bootstrap integration', () => {
         id: productId,
         priceCents: 69900,
         isActive: false,
+      }),
+    );
+  });
+
+  it('persists inventory quantity and low-stock threshold policy updates', async () => {
+    const createProductResponse = await request(app.getHttpServer()).post('/api/products').send({
+      categoryId: bootstrapCategoryId,
+      name: 'Inventory Policy QA Product',
+      slug: 'inventory-policy-qa-product',
+      sku: 'INV-POLICY-QA-01',
+      description: 'Inventory policy persistence proof product.',
+      priceCents: 49900,
+      quantityOnHand: 5,
+      reorderThreshold: 3,
+    });
+
+    expect(createProductResponse.status).toBe(201);
+    const productId = createProductResponse.body.id as string;
+
+    const updatePolicyResponse = await request(app.getHttpServer())
+      .patch(`/api/inventory/products/${productId}/policy`)
+      .send({
+        quantityOnHand: 7,
+        reorderThreshold: 6,
+      });
+
+    expect(updatePolicyResponse.status).toBe(200);
+    expect(updatePolicyResponse.body).toEqual(
+      expect.objectContaining({
+        id: productId,
+        quantityOnHand: 7,
+        reorderThreshold: 6,
+      }),
+    );
+
+    const updatePolicyStringPayloadResponse = await request(app.getHttpServer())
+      .patch(`/api/inventory/products/${productId}/policy`)
+      .send({
+        quantityOnHand: '8',
+        reorderThreshold: '9',
+      });
+
+    expect(updatePolicyStringPayloadResponse.status).toBe(200);
+    expect(updatePolicyStringPayloadResponse.body).toEqual(
+      expect.objectContaining({
+        id: productId,
+        quantityOnHand: 8,
+        reorderThreshold: 9,
       }),
     );
   });

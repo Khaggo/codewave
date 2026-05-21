@@ -26,6 +26,7 @@ import {
   buildOwnedVehicleLabel,
   createEmptyBookingAvailability,
   createCustomerBooking,
+  formatBookingServiceCurrency,
   formatBookingServiceDuration,
   formatBookingTimeSlotWindow,
   getBookingAvailability,
@@ -433,6 +434,39 @@ const formatStoreDateTimeLabel = (value) => {
   });
 };
 
+const formatReservationFeeUrgency = (value) => {
+  if (!value) {
+    return 'Complete the reservation fee soon to secure your appointment.';
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return 'Complete the reservation fee soon to secure your appointment.';
+  }
+
+  const diffMs = parsedDate.getTime() - Date.now();
+
+  if (diffMs <= 0) {
+    return 'Your reservation fee window has ended. Refresh the payment status or request a new payment link.';
+  }
+
+  const totalMinutes = Math.max(1, Math.round(diffMs / 60000));
+
+  if (totalMinutes < 60) {
+    return `Complete the reservation fee within ${totalMinutes} minute${totalMinutes === 1 ? '' : 's'} to secure your slot.`;
+  }
+
+  const totalHours = Math.max(1, Math.round(totalMinutes / 60));
+
+  if (totalHours < 24) {
+    return `Complete the reservation fee within ${totalHours} hour${totalHours === 1 ? '' : 's'} to secure your slot.`;
+  }
+
+  const totalDays = Math.max(1, Math.round(totalHours / 24));
+  return `Complete the reservation fee within ${totalDays} day${totalDays === 1 ? '' : 's'} to secure your slot.`;
+};
+
 const buildStoreOrderTitle = (order) => {
   if (order?.items?.length === 1) {
     return order.items[0].productName || 'Order snapshot';
@@ -692,21 +726,59 @@ const getReservationPaymentStatusLabel = (payment) => {
   }
 };
 
-const getBookingReference = (booking) =>
-  booking?.id ? booking.id.slice(0, 8).toUpperCase() : '--------';
+const normalizeBusinessToken = (value, fallback = 'UNSET') => {
+  const normalizedValue = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
 
-const getBookingServiceNames = (booking) => {
+  return normalizedValue || fallback;
+};
+
+const getBookingReference = (booking) => {
+  if (booking?.bookingReference) {
+    return booking.bookingReference;
+  }
+
+  const compactDate = String(booking?.scheduledDate ?? '').replace(/-/g, '');
+  const plateToken = normalizeBusinessToken(booking?.plateNumber, 'PENDING');
+  return compactDate ? `BK-${compactDate}-${plateToken}` : `BK-${plateToken}`;
+};
+
+const getBookingRequestedServiceNames = (booking) => {
   const serviceNames = (booking?.requestedServices ?? [])
     .map((requestedService) => requestedService?.service?.name)
     .filter(Boolean);
 
+  return Array.from(new Set(serviceNames));
+};
+
+const getBookingServiceNames = (booking) => {
+  const serviceNames = getBookingRequestedServiceNames(booking);
+
   return serviceNames.length ? serviceNames.join(', ') : 'Service request';
+};
+
+const getBookingServiceHeadline = (booking) => {
+  const serviceNames = getBookingRequestedServiceNames(booking);
+
+  if (!serviceNames.length) {
+    return 'Service request';
+  }
+
+  if (serviceNames.length === 1) {
+    return serviceNames[0];
+  }
+
+  return `${serviceNames[0]} + ${serviceNames.length - 1} more`;
 };
 
 const getBookingVehicleLabel = (booking, vehicles) => {
   const matchingVehicle = vehicles.find((vehicle) => vehicle.id === booking?.vehicleId);
 
-  return matchingVehicle ? buildOwnedVehicleLabel(matchingVehicle) : `Vehicle ${String(booking?.vehicleId ?? '').slice(0, 8)}`;
+  return matchingVehicle
+    ? buildOwnedVehicleLabel(matchingVehicle)
+    : booking?.vehicleDisplayName || booking?.plateNumber || `Vehicle ${normalizeBusinessToken(booking?.vehicleId, 'UNLISTED')}`;
 };
 
 const getBookingTimeLabel = (booking) => {
@@ -1351,7 +1423,7 @@ function LoyaltyTransactionRow({ item }) {
         <Text style={styles.loyaltyTransactionTitle}>{item.sourceLabel}</Text>
         <Text style={styles.loyaltyTransactionMeta}>
           {item.dateLabel}
-          {item.sourceReference ? ` - ${item.sourceReference}` : ''}
+          {item.sourceReferenceLabel ? ` - ${item.sourceReferenceLabel}` : ''}
         </Text>
       </View>
       <View style={styles.loyaltyTransactionAmountWrap}>
@@ -1685,14 +1757,14 @@ function BookingVehicleCard({ item, isSelected, onPress, isCompact = false }) {
           <View style={styles.bookingServiceTitleRow}>
             <Text style={styles.bookingServiceTitle}>{item.title}</Text>
             <View style={styles.bookingVehicleBadge}>
-              <Text style={styles.bookingVehicleBadgeText}>OWNED</Text>
+              <Text style={styles.bookingVehicleBadgeText}>YOUR VEHICLE</Text>
             </View>
           </View>
           <Text style={styles.bookingServiceSubtitle}>{item.subtitle}</Text>
         </View>
 
         <View style={[styles.bookingVehicleMeta, isCompact && styles.bookingVehicleMetaCompact]}>
-          <Text style={styles.bookingVehicleMetaLabel}>PLATE</Text>
+          <Text style={styles.bookingVehicleMetaLabel}>PLATE NUMBER</Text>
           <Text style={styles.bookingVehicleMetaValue}>{item.plateNumber}</Text>
         </View>
       </View>
@@ -1884,12 +1956,31 @@ function BookingHistoryCard({ booking, vehicles, isSelected, onPress }) {
         </View>
       </View>
 
-      <Text style={styles.bookingHistoryTitle}>{getBookingServiceNames(booking)}</Text>
+      <Text style={styles.bookingHistoryTitle}>{getBookingServiceHeadline(booking)}</Text>
+      <BookingRequestedServiceChips booking={booking} compact />
       <Text style={styles.bookingHistoryMeta}>
         {formatBookingDateLabel(booking.scheduledDate)} - {getBookingTimeLabel(booking)}
       </Text>
       <Text style={styles.bookingHistoryMeta}>{getBookingVehicleLabel(booking, vehicles)}</Text>
     </MotionPressable>
+  );
+}
+
+function BookingRequestedServiceChips({ booking, compact = false }) {
+  const serviceNames = getBookingRequestedServiceNames(booking);
+
+  if (!serviceNames.length) {
+    return null;
+  }
+
+  return (
+    <View style={[styles.bookingServiceChipRow, compact && styles.bookingServiceChipRowCompact]}>
+      {serviceNames.map((serviceName, index) => (
+        <View key={`${serviceName}-${index}`} style={styles.bookingServiceChip}>
+          <Text style={styles.bookingServiceChipText}>{serviceName}</Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -2127,7 +2218,7 @@ export default function Dashboard({
   const [menuScreen, setMenuScreen] = useState('root');
   const [bookingMode, setBookingMode] = useState('book');
   const [bookingDiscovery, setBookingDiscovery] = useState(createInitialBookingDiscoveryState);
-  const [selectedBookingServiceKey, setSelectedBookingServiceKey] = useState(null);
+  const [selectedBookingServiceIds, setSelectedBookingServiceIds] = useState([]);
   const [selectedBookingTimeKey, setSelectedBookingTimeKey] = useState(null);
   const [selectedBookingVehicleId, setSelectedBookingVehicleId] = useState(null);
   const [selectedBookingDateKey, setSelectedBookingDateKey] = useState(null);
@@ -2288,7 +2379,7 @@ export default function Dashboard({
 
   useEffect(() => {
     setBookingDiscovery(createInitialBookingDiscoveryState());
-    setSelectedBookingServiceKey(null);
+    setSelectedBookingServiceIds([]);
     setSelectedBookingTimeKey(null);
     setSelectedBookingVehicleId(null);
     setSelectedBookingDateKey(null);
@@ -3176,12 +3267,21 @@ export default function Dashboard({
       setSelectedBookingVehicleId(bookingDiscovery.vehicles[0]?.id ?? null);
     }
 
-    const matchingService = bookingDiscovery.services.find(
-      (service) => service.id === selectedBookingServiceKey && service.isActive,
+    const nextSelectedServiceIds = selectedBookingServiceIds.filter((serviceId) =>
+      bookingDiscovery.services.some((service) => service.id === serviceId && service.isActive),
     );
-    if (!matchingService) {
-      setSelectedBookingServiceKey(
-        bookingDiscovery.services.find(isBookableService)?.id ?? bookingDiscovery.services[0]?.id ?? null,
+    if (
+      nextSelectedServiceIds.length !== selectedBookingServiceIds.length ||
+      (!nextSelectedServiceIds.length && bookingDiscovery.services.length)
+    ) {
+      const fallbackServiceId =
+        bookingDiscovery.services.find(isBookableService)?.id ?? bookingDiscovery.services[0]?.id ?? null;
+      setSelectedBookingServiceIds(
+        nextSelectedServiceIds.length
+          ? nextSelectedServiceIds
+          : fallbackServiceId
+            ? [fallbackServiceId]
+            : [],
       );
     }
 
@@ -3197,7 +3297,7 @@ export default function Dashboard({
     bookingDiscovery.services,
     bookingDiscovery.timeSlots,
     bookingDiscovery.vehicles,
-    selectedBookingServiceKey,
+    selectedBookingServiceIds,
     selectedBookingTimeKey,
     selectedBookingVehicleId,
   ]);
@@ -4036,6 +4136,24 @@ export default function Dashboard({
     }
   };
 
+  const toggleBookingServiceSelection = (serviceId) => {
+    if (!serviceId) {
+      return;
+    }
+
+    setSelectedBookingServiceIds((currentIds) => {
+      const nextIds = currentIds.includes(serviceId)
+        ? currentIds.filter((currentId) => currentId !== serviceId)
+        : [...currentIds, serviceId];
+
+      return nextIds;
+    });
+
+    if (bookingCreateState.status !== 'submitting') {
+      setBookingCreateState(createInitialBookingCreateState());
+    }
+  };
+
   const handleSubmitBooking = async () => {
     if (bookingCreateState.status === 'submitting') {
       return;
@@ -4044,8 +4162,8 @@ export default function Dashboard({
     const selectedVehicle = bookingDiscovery.vehicles.find(
       (vehicle) => vehicle.id === selectedBookingVehicleId,
     );
-    const selectedService = bookingDiscovery.services.find(
-      (service) => service.id === selectedBookingServiceKey,
+    const selectedServices = bookingDiscovery.services.filter(
+      (service) => selectedBookingServiceIds.includes(service.id) && service.isActive,
     );
     const selectedTimeSlot = bookingDiscovery.timeSlots.find(
       (timeSlot) => timeSlot.id === selectedBookingTimeKey,
@@ -4073,7 +4191,7 @@ export default function Dashboard({
 
     if (
       !selectedVehicle ||
-      !selectedService?.isActive ||
+      !selectedServices.length ||
       !selectedTimeSlot?.isActive ||
       !selectedBookingDateKey ||
       !isSelectedDateAvailable
@@ -4081,7 +4199,7 @@ export default function Dashboard({
       setBookingCreateState({
         status: 'validation-error',
         message:
-          'Choose an owned vehicle, active service, active time slot, and a live available appointment date.',
+          'Choose an owned vehicle, at least one active service, an active time slot, and a live available appointment date.',
         booking: null,
       });
       return;
@@ -4089,7 +4207,7 @@ export default function Dashboard({
 
     setBookingCreateState({
       status: 'submitting',
-      message: 'Submitting your booking request. Duplicate taps are locked while this is in progress.',
+      message: 'Sending your booking request now. Duplicate taps are locked while this is in progress.',
       booking: null,
     });
 
@@ -4099,7 +4217,7 @@ export default function Dashboard({
         vehicleId: selectedVehicle.id,
         timeSlotId: selectedTimeSlot.id,
         scheduledDate: selectedBookingDateKey,
-        serviceIds: [selectedService.id],
+        serviceIds: selectedServices.map((service) => service.id),
         notes: bookingNotes.trim() || undefined,
         accessToken: account?.accessToken,
         checkoutSuccessUrl: buildMobileCheckoutReturnUrls('booking').successUrl,
@@ -4110,8 +4228,8 @@ export default function Dashboard({
         status: 'success',
         message:
           createdBooking?.status === 'pending_payment'
-            ? 'Booking request submitted. Complete the reservation fee payment to confirm the slot and generate your check-in QR code.'
-            : 'Booking request submitted. Staff will review it next.',
+            ? 'Booking request sent. Complete the reservation fee to secure your schedule and unlock staff confirmation.'
+            : 'Booking request sent. Staff will review the schedule next.',
         booking: createdBooking,
       });
       setBookingHistory((currentState) => ({
@@ -5545,8 +5663,8 @@ export default function Dashboard({
     const selectedVehicle = bookingDiscovery.vehicles.find(
       (vehicle) => vehicle.id === selectedBookingVehicleId,
     );
-    const selectedService = bookingDiscovery.services.find(
-      (service) => service.id === selectedBookingServiceKey,
+    const selectedServices = bookingDiscovery.services.filter((service) =>
+      selectedBookingServiceIds.includes(service.id),
     );
     const selectedTimeSlot = bookingDiscovery.timeSlots.find(
       (timeSlot) => timeSlot.id === selectedBookingTimeKey,
@@ -5580,7 +5698,9 @@ export default function Dashboard({
       subtitle: service.description || 'No service description has been published for this offering yet.',
       enabled: service.isActive,
       badgeLabel: service.isActive ? null : 'Inactive',
-      metaLabel: service.categoryId ? 'Categorized' : null,
+      metaLabel: [service.categoryId ? 'Categorized' : null, formatBookingServiceCurrency(service.basePriceCents)]
+        .filter(Boolean)
+        .join(' • '),
       durationLabel: formatBookingServiceDuration(service.durationMinutes),
     }));
     const totalServicePages = Math.max(
@@ -5615,7 +5735,7 @@ export default function Dashboard({
     const isBookingReady =
       bookingDiscoveryStateKey === 'ready' &&
       Boolean(selectedVehicle) &&
-      Boolean(selectedService?.isActive) &&
+      selectedServices.some((service) => service.isActive) &&
       Boolean(selectedTimeSlot?.isActive) &&
       Boolean(selectedBookingDateKey) &&
       Boolean(selectedBookingSlotAvailability ? selectedBookingSlotAvailability.isAvailable : selectedBookingDay?.isBookable) &&
@@ -5631,17 +5751,17 @@ export default function Dashboard({
       <>
       <View style={styles.bookingHeader}>
         <Text style={styles.bookingEyebrow}>SERVICE CENTER</Text>
-        <Text style={styles.bookingTitle}>Discover & Track</Text>
+        <Text style={styles.bookingTitle}>Service Booking</Text>
       </View>
 
       <View style={styles.bookingModeWrap}>
         <BookingModeTab
-          label="Discover Options"
+          label="Choose Services"
           isActive={bookingMode === 'book'}
           onPress={() => setBookingMode('book')}
         />
         <BookingModeTab
-          label="Track Progress"
+          label="Active Services"
           isActive={bookingMode === 'track'}
           onPress={() => setBookingMode('track')}
         />
@@ -5660,9 +5780,9 @@ export default function Dashboard({
                 <MaterialCommunityIcons name="source-branch-sync" size={18} color={colors.primary} />
               </View>
               <View style={styles.bookingDiscoveryBannerCopy}>
-                <Text style={styles.bookingDiscoveryBannerTitle}>Live booking discovery</Text>
+                <Text style={styles.bookingDiscoveryBannerTitle}>Build your appointment</Text>
                 <Text style={styles.bookingDiscoveryBannerText}>
-                  Choose a service, shop window, and available date. Capacity is confirmed only after you submit the booking request.
+                  Follow four steps: choose services, select a vehicle, pick a schedule, and review before you book.
                 </Text>
               </View>
             </View>
@@ -5691,8 +5811,8 @@ export default function Dashboard({
           ) : bookingDiscoveryStateKey === 'unauthorized' ? (
             <BookingDiscoveryStatePanel
               icon="lock-outline"
-              title="Your session needs attention"
-              message={bookingDiscovery.errorMessage || 'Sign in again to read your eligible vehicle list before booking.'}
+              title="Sign in again to keep booking"
+              message={bookingDiscovery.errorMessage || 'Sign in again so we can load your vehicles, services, and live schedule options.'}
               actionLabel="Retry"
               onAction={handleRefreshBookingDiscovery}
             />
@@ -5706,31 +5826,10 @@ export default function Dashboard({
             />
           ) : (
             <>
-              <Text style={styles.bookingSectionLabel}>Select Vehicle</Text>
-              {bookingVehicleOptions.length ? (
-                bookingVehicleOptions.map((vehicle) => (
-                  <BookingVehicleCard
-                    key={vehicle.id}
-                    item={vehicle}
-                    isSelected={selectedBookingVehicleId === vehicle.id}
-                    isCompact={isCompactPhone}
-                    onPress={() => {
-                      setSelectedBookingVehicleId(vehicle.id);
-                      if (bookingCreateState.status !== 'submitting') {
-                        setBookingCreateState(createInitialBookingCreateState());
-                      }
-                    }}
-                  />
-                ))
-              ) : (
-                <BookingDiscoveryStatePanel
-                  icon="car-off"
-                  title="No eligible vehicles found"
-                  message="Only vehicles already attached to your account can be used for booking discovery. Add one from your profile flow to continue."
-                />
-              )}
-
-              <Text style={styles.bookingSectionLabel}>Available Services</Text>
+              <Text style={styles.bookingSectionLabel}>Step 1: Choose Services</Text>
+              <Text style={styles.bookingDateHint}>
+                Choose one or more services for the same appointment. Your selections stay highlighted while you move through the flow.
+              </Text>
               <View style={[styles.bookingPagerRow, isCompactPhone && styles.bookingPagerRowCompact]}>
                 <Text style={styles.bookingPagerText}>
                   Page {Math.min(bookingServicePage + 1, totalServicePages)} of {totalServicePages}
@@ -5768,28 +5867,51 @@ export default function Dashboard({
                 <BookingDiscoveryStatePanel
                   icon="wrench-clock"
                   title="No services are available right now"
-                  message="No active booking services are published right now."
+                  message="There are no customer-bookable services available right now."
                 />
               ) : null}
               {paginatedBookingServiceOptions.map((service) => (
                 <BookingServiceCard
                   key={service.key}
                   item={service}
-                  isSelected={selectedBookingServiceKey === service.key}
+                  isSelected={selectedBookingServiceIds.includes(service.key)}
                   isCompact={isCompactPhone}
-                  onPress={() => {
-                    setSelectedBookingServiceKey(service.key);
-                    if (bookingCreateState.status !== 'submitting') {
-                      setBookingCreateState(createInitialBookingCreateState());
-                    }
-                  }}
+                  onPress={() => toggleBookingServiceSelection(service.key)}
                 />
               ))}
 
-              <Text style={styles.bookingSectionLabel}>Slot Definitions</Text>
+              <Text style={styles.bookingSectionLabel}>Step 2: Select Vehicle</Text>
               <Text style={styles.bookingDateHint}>
-                Pick the shop window that works best. Reservation payment must be completed before staff can confirm the slot and prepare your check-in QR code.
+                Pick the vehicle for this appointment. Plate numbers stay available below, but the booking starts with the service you need first.
               </Text>
+              {bookingVehicleOptions.length ? (
+                bookingVehicleOptions.map((vehicle) => (
+                  <BookingVehicleCard
+                    key={vehicle.id}
+                    item={vehicle}
+                    isSelected={selectedBookingVehicleId === vehicle.id}
+                    isCompact={isCompactPhone}
+                    onPress={() => {
+                      setSelectedBookingVehicleId(vehicle.id);
+                      if (bookingCreateState.status !== 'submitting') {
+                        setBookingCreateState(createInitialBookingCreateState());
+                      }
+                    }}
+                  />
+                ))
+              ) : (
+                <BookingDiscoveryStatePanel
+                  icon="car-off"
+                  title="No eligible vehicles found"
+                  message="Add a vehicle to your AUTOCARE account before continuing with this booking."
+                />
+              )}
+
+              <Text style={styles.bookingSectionLabel}>Step 3: Pick a Schedule</Text>
+              <Text style={styles.bookingDateHint}>
+                Pick a shop time first, then choose a live date. Reservation payment is only requested after you submit the booking request.
+              </Text>
+              <Text style={styles.bookingSectionLabel}>Choose Time</Text>
               {!bookingDiscovery.timeSlots.some(isBookableTimeSlot) ? (
                 <BookingDiscoveryStatePanel
                   icon="calendar-remove-outline"
@@ -5822,14 +5944,14 @@ export default function Dashboard({
                 />
               )}
 
-              <Text style={styles.bookingSectionLabel}>Appointment Date</Text>
+              <Text style={styles.bookingSectionLabel}>Choose Date</Text>
               <Text style={styles.bookingDateHint}>
-                Page through the live booking window and choose a date that is still available for your selected slot.
+                Browse the live booking window and choose a date that still has room for your selected time.
               </Text>
               <View style={styles.bookingAvailabilityWindowCard}>
                 <View style={[styles.bookingAvailabilityToolbar, isCompactPhone && styles.bookingAvailabilityToolbarCompact]}>
                   <View style={styles.bookingAvailabilityCopy}>
-                    <Text style={styles.bookingAvailabilityTitle}>Live Availability Window</Text>
+                    <Text style={styles.bookingAvailabilityTitle}>Available Booking Window</Text>
                     <Text style={styles.bookingAvailabilityText}>
                       {getBookingAvailabilityWindowLabel(bookingAvailability)}
                     </Text>
@@ -5924,11 +6046,11 @@ export default function Dashboard({
                   placeholder="Choose an appointment date"
                   helperText={
                     minimumDate && maximumDate
-                      ? `Supported booking horizon: ${formatDate(minimumDate)} to ${formatDate(maximumDate)}. The live cards above remain the source of truth.`
+                      ? `Supported booking horizon: ${formatDate(minimumDate)} to ${formatDate(maximumDate)}. Use the live date cards above as the final availability source.`
                       : 'Choose a date inside the live booking horizon.'
                   }
                   title="Jump To A Booking Date"
-                  subtitle="Pick a farther date inside the backend-supported booking horizon."
+                  subtitle="Use this if the date you want is farther into the supported booking window."
                   trailingLabel="Jump"
                   minimumDate={minimumDate}
                   maximumDate={maximumDate}
@@ -5990,7 +6112,7 @@ export default function Dashboard({
                       setBookingCreateState(createInitialBookingCreateState());
                     }
                   }}
-                  placeholder="Optional notes for the service team..."
+                  placeholder="Optional notes for the service team…"
                   placeholderTextColor={colors.mutedText}
                   multiline
                   textAlignVertical="top"
@@ -6000,7 +6122,7 @@ export default function Dashboard({
               </View>
 
               <View style={styles.bookingSummaryCard}>
-                <Text style={styles.bookingSummaryTitle}>Discovery Summary</Text>
+                <Text style={styles.bookingSummaryTitle}>Step 4: Review Booking</Text>
 
                 <View style={styles.bookingSummaryRow}>
                   <Text style={styles.bookingSummaryLabel}>Vehicle</Text>
@@ -6010,9 +6132,11 @@ export default function Dashboard({
                 </View>
 
                 <View style={styles.bookingSummaryRow}>
-                  <Text style={styles.bookingSummaryLabel}>Service</Text>
+                  <Text style={styles.bookingSummaryLabel}>Services</Text>
                   <Text style={styles.bookingSummaryValue}>
-                    {selectedService?.name || 'Choose a service'}
+                    {selectedServices.length
+                      ? selectedServices.map((service) => service.name).join(', ')
+                      : 'Choose one or more services'}
                   </Text>
                 </View>
 
@@ -6033,7 +6157,7 @@ export default function Dashboard({
                 </View>
 
                 <Text style={styles.bookingSummaryNote}>
-                  Submitting creates a pending booking request. Staff confirmation, decline, or reschedule decisions remain separate later booking states.
+                  Booking sends your request to AUTOCARE. Staff will confirm the schedule after submission, and reservation payment is only requested when needed to secure the slot.
                 </Text>
               </View>
 
@@ -6050,13 +6174,13 @@ export default function Dashboard({
                   }
                   title={
                     bookingCreateState.status === 'success'
-                      ? 'Booking request submitted'
+                      ? 'Booking request sent'
                       : bookingCreateState.status === 'conflict'
                         ? 'Slot conflict'
                         : bookingCreateState.status === 'submitting'
-                          ? 'Submitting request'
-                          : bookingCreateState.status === 'unauthorized'
-                            ? 'Session required'
+                          ? 'Sending Request'
+                      : bookingCreateState.status === 'unauthorized'
+                            ? 'Sign in again'
                             : 'Booking request needs attention'
                   }
                   message={bookingCreateState.message}
@@ -6083,10 +6207,10 @@ export default function Dashboard({
                   ]}
                 >
                   {bookingCreateState.status === 'submitting'
-                    ? 'Submitting...'
-                    : isBookingReady
-                      ? 'Submit Booking Request'
-                      : 'Select Vehicle, Service, Slot, And Date'}
+                      ? 'Sending…'
+                      : isBookingReady
+                        ? 'Book Appointment'
+                        : 'Complete all steps to book'}
                 </Text>
                 <MaterialCommunityIcons
                   name="chevron-right"
@@ -6101,9 +6225,9 @@ export default function Dashboard({
         <>
           <View style={styles.bookingHistoryToolbar}>
             <View>
-              <Text style={styles.bookingSectionLabel}>Booking History</Text>
+              <Text style={styles.bookingSectionLabel}>Active and Past Bookings</Text>
               <Text style={styles.bookingHistoryToolbarText}>
-                Customer-visible records from your booking history.
+                See confirmation, payment, and workshop progress in one place.
               </Text>
             </View>
             <TouchableOpacity
@@ -6123,14 +6247,14 @@ export default function Dashboard({
           {bookingHistory.status === 'loading' && !bookingHistory.bookings.length ? (
             <BookingDiscoveryStatePanel
               icon="timer-sand"
-              title="Loading booking history"
-              message="Fetching your customer booking history now."
+              title="Loading active services"
+              message="Fetching your customer booking activity now."
               isLoading
             />
           ) : bookingHistory.status === 'unauthorized' ? (
             <BookingDiscoveryStatePanel
               icon="lock-outline"
-              title="Session required"
+              title="Sign in again"
               message={bookingHistory.errorMessage || 'Sign in again to load booking history.'}
               actionLabel="Retry"
               onAction={handleRefreshBookingHistory}
@@ -6159,7 +6283,7 @@ export default function Dashboard({
             <BookingDiscoveryStatePanel
               icon="calendar-blank-outline"
               title="No bookings yet"
-              message="Submitted bookings will appear here after they are saved."
+              message="Your active bookings and completed appointment records will appear here."
             />
           )}
 
@@ -6175,7 +6299,7 @@ export default function Dashboard({
           {bookingDetailState.status === 'unauthorized' || bookingDetailState.status === 'error' ? (
             <BookingDiscoveryStatePanel
               icon="alert-circle-outline"
-              title="Detail unavailable"
+              title={bookingDetailState.status === 'unauthorized' ? 'Sign in again' : 'Detail unavailable'}
               message={bookingDetailState.errorMessage || 'Unable to load selected booking detail right now.'}
             />
           ) : null}
@@ -6195,8 +6319,12 @@ export default function Dashboard({
                 </View>
 
                 <Text style={styles.trackingSummaryTitle}>
-                  {getBookingServiceNames(selectedBookingDetail)}
+                  {getBookingServiceHeadline(selectedBookingDetail)}
                 </Text>
+                <View style={styles.trackingRequestedServicesSection}>
+                  <Text style={styles.bookingSectionLabel}>Requested services</Text>
+                  <BookingRequestedServiceChips booking={selectedBookingDetail} />
+                </View>
 
                 <View style={styles.trackingMetaGrid}>
                   <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
@@ -6233,7 +6361,7 @@ export default function Dashboard({
               </View>
 
               <View style={styles.trackingProgressCard}>
-                <Text style={styles.bookingSectionLabel}>Booking Status</Text>
+                <Text style={styles.bookingSectionLabel}>Booking Progress</Text>
                 {trackingSteps.map((step, index) => (
                   <TrackingStep
                     key={step.label}
@@ -6270,7 +6398,7 @@ export default function Dashboard({
                       </Text>
                     </View>
                     <View style={[styles.trackingMetaItem, isCompactPhone && styles.trackingMetaItemWide]}>
-                      <Text style={styles.trackingMetaLabel}>Expires</Text>
+                      <Text style={styles.trackingMetaLabel}>Pay By</Text>
                       <Text style={styles.trackingMetaValue}>
                         {selectedReservationPayment?.expiresAt
                           ? formatStoreDateTimeLabel(selectedReservationPayment.expiresAt)
@@ -6285,7 +6413,7 @@ export default function Dashboard({
                     </Text>
                   ) : selectedBookingDetail.status === 'pending_payment' ? (
                     <Text style={styles.bookingReservationPaymentHint}>
-                      Finish the reservation fee payment so staff can confirm this booking and release your QR check-in.
+                      {formatReservationFeeUrgency(selectedReservationPayment?.expiresAt)}
                     </Text>
                   ) : selectedReservationPayment?.status === 'paid' ? (
                     <Text style={styles.bookingReservationPaymentHint}>
@@ -6314,8 +6442,8 @@ export default function Dashboard({
                       >
                         <Text style={styles.primaryButtonText}>
                           {bookingReservationPaymentState.status === 'loading'
-                            ? 'Opening payment...'
-                            : 'Open Payment Checkout'}
+                            ? 'Opening Payment…'
+                            : 'Pay Reservation Fee'}
                         </Text>
                       </TouchableOpacity>
 
@@ -6568,6 +6696,7 @@ export default function Dashboard({
     const unreadCount = notificationsFeed.filter((item) => item.unread).length;
     const pinnedNotification = notificationsFeed[0] || null;
     const latestCustomerBooking = bookingHistory.bookings[0] ?? bookingCreateState.booking ?? null;
+    const latestReservationPayment = latestCustomerBooking?.reservationPayment ?? null;
     const totalBookingCount = bookingHistory.bookings.length;
     const latestBookingProgress =
       latestCustomerBooking?.status === 'completed' ||
@@ -6591,22 +6720,50 @@ export default function Dashboard({
         ? `Last completed service: ${latestCompletedService.title} on ${latestCompletedService.dateLabel}`
         : 'No live service reminder is available yet.';
     const topStatus = latestCustomerBooking
-      ? {
-          badge: getBookingStatusLabel(latestCustomerBooking.status).toUpperCase(),
-          title: getBookingServiceNames(latestCustomerBooking),
-          subtitle: `${getBookingVehicleLabel(latestCustomerBooking, bookingDiscovery.vehicles)} - ${getBookingTimeLabel(latestCustomerBooking)} - ${formatBookingDateLabel(latestCustomerBooking.scheduledDate)}`,
-          progressWidth: latestBookingProgress,
-          steps:
-            latestCustomerBooking.status === 'pending_payment'
-              ? ['Submitted', 'Payment', 'Staff Review', 'Outcome']
-              : ['Submitted', 'Staff Review', 'Appointment', 'Outcome'],
-        }
+      ? latestCustomerBooking.status === 'pending_payment'
+        ? {
+            badge: 'NEXT STEP',
+            title: 'Complete reservation fee',
+            subtitle: `${getBookingServiceNames(latestCustomerBooking)} for ${formatBookingDateLabel(latestCustomerBooking.scheduledDate)}`,
+            helperText: formatReservationFeeUrgency(latestReservationPayment?.expiresAt),
+            progressWidth: latestBookingProgress,
+            steps: ['Request sent', 'Reservation fee', 'Staff review', 'Appointment'],
+            buttonLabel: 'Pay Now',
+            onPress: () => navigateToBooking('track'),
+          }
+        : latestCustomerBooking.status === 'confirmed' ||
+            latestCustomerBooking.status === 'rescheduled' ||
+            latestCustomerBooking.status === 'in_service'
+          ? {
+              badge: 'NEXT STEP',
+              title: 'View active service',
+              subtitle: `${getBookingServiceNames(latestCustomerBooking)} - ${getBookingTimeLabel(latestCustomerBooking)}`,
+              helperText: `${getBookingVehicleLabel(latestCustomerBooking, bookingDiscovery.vehicles)} on ${formatBookingDateLabel(latestCustomerBooking.scheduledDate)}.`,
+              progressWidth: latestBookingProgress,
+              steps: ['Request sent', 'Staff review', 'Workshop', 'Ready'],
+              buttonLabel: 'View Status',
+              onPress: () => navigateToBooking('track'),
+            }
+          : {
+              badge: 'NEXT STEP',
+              title: 'Wait for staff review',
+              subtitle: `${getBookingServiceNames(latestCustomerBooking)} - ${getBookingTimeLabel(latestCustomerBooking)}`,
+              helperText:
+                'Your request is recorded. Staff will confirm, reschedule, or decline this booking after they review the slot.',
+              progressWidth: latestBookingProgress,
+              steps: ['Request sent', 'Staff review', 'Appointment', 'Ready'],
+              buttonLabel: 'View Status',
+              onPress: () => navigateToBooking('track'),
+            }
       : {
-          badge: 'NO ACTIVE SERVICE',
-          title: 'Vehicle standing by',
-          subtitle: 'No ongoing service right now. Book anytime when a slot is available.',
+          badge: 'START HERE',
+          title: 'Book your next service',
+          subtitle: 'Choose services, select a vehicle, and pick an available schedule in one guided flow.',
+          helperText: 'You can request multiple services in one appointment and track updates after you sign in.',
           progressWidth: '0%',
-          steps: ['Book', 'Check-In', 'Service', 'Ready'],
+          steps: ['Choose services', 'Select vehicle', 'Pick schedule', 'Review'],
+          buttonLabel: 'Start Booking',
+          onPress: () => navigateToBooking('book'),
         };
     const quickActions = [
       {
@@ -6685,6 +6842,48 @@ export default function Dashboard({
         </View>
       </View>
 
+      <Text style={styles.homeGreeting}>{greeting}</Text>
+      <View style={styles.homeNameRow}>
+        <Text style={styles.homeName}>
+          {firstName} {lastName}
+        </Text>
+        <Text style={styles.homeWave}>!</Text>
+      </View>
+
+      <View style={[styles.homeStatusCard, !latestCustomerBooking && styles.homeStatusCardIdle]}>
+        <View style={styles.homeStatusHeader}>
+          <View style={styles.homeStatusCopy}>
+            <Text style={[styles.homeStatusBadge, !latestCustomerBooking && styles.homeStatusBadgeIdle]}>
+              {topStatus.badge}
+            </Text>
+            <Text style={styles.homeStatusTitle}>{topStatus.title}</Text>
+            <Text style={styles.homeStatusSubtitle}>{topStatus.subtitle}</Text>
+            <Text style={styles.homeStatusHelper}>{topStatus.helperText}</Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.homeTrackButton, !latestCustomerBooking && styles.homeTrackButtonIdle]}
+            onPress={topStatus.onPress}
+            activeOpacity={0.86}
+          >
+            <Text style={[styles.homeTrackButtonText, !latestCustomerBooking && styles.homeTrackButtonTextIdle]}>
+              {topStatus.buttonLabel}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.homeProgressLabels}>
+          {topStatus.steps.map((step) => (
+            <Text key={step} style={styles.homeProgressLabel}>
+              {step}
+            </Text>
+          ))}
+        </View>
+        <View style={styles.homeProgressTrack}>
+          <View style={[styles.homeProgressFill, { width: topStatus.progressWidth }]} />
+        </View>
+      </View>
+
       {pinnedNotification ? (
         <View style={styles.homeNotificationBanner}>
           <View style={[styles.homeNotificationIconWrap, { backgroundColor: pinnedNotification.bgColor }]}>
@@ -6706,47 +6905,6 @@ export default function Dashboard({
           </TouchableOpacity>
         </View>
       ) : null}
-
-      <Text style={styles.homeGreeting}>{greeting}</Text>
-      <View style={styles.homeNameRow}>
-        <Text style={styles.homeName}>
-          {firstName} {lastName}
-        </Text>
-        <Text style={styles.homeWave}>!</Text>
-      </View>
-
-      <View style={[styles.homeStatusCard, !latestCustomerBooking && styles.homeStatusCardIdle]}>
-        <View style={styles.homeStatusHeader}>
-          <View style={styles.homeStatusCopy}>
-            <Text style={[styles.homeStatusBadge, !latestCustomerBooking && styles.homeStatusBadgeIdle]}>
-              {topStatus.badge}
-            </Text>
-            <Text style={styles.homeStatusTitle}>{topStatus.title}</Text>
-            <Text style={styles.homeStatusSubtitle}>{topStatus.subtitle}</Text>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.homeTrackButton, !latestCustomerBooking && styles.homeTrackButtonIdle]}
-            onPress={() => navigateToBooking('track')}
-            activeOpacity={0.86}
-          >
-            <Text style={[styles.homeTrackButtonText, !latestCustomerBooking && styles.homeTrackButtonTextIdle]}>
-              {latestCustomerBooking ? 'Track' : 'Open'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.homeProgressLabels}>
-          {topStatus.steps.map((step) => (
-            <Text key={step} style={styles.homeProgressLabel}>
-              {step}
-            </Text>
-          ))}
-        </View>
-        <View style={styles.homeProgressTrack}>
-          <View style={[styles.homeProgressFill, { width: topStatus.progressWidth }]} />
-        </View>
-      </View>
 
       <MotionPressable
         style={styles.homeVehicleCard}
@@ -7424,9 +7582,9 @@ export default function Dashboard({
                           </Text>
                         </View>
                         <View style={styles.productDetailInfoRow}>
-                          <Text style={styles.productDetailInfoLabel}>Product ID</Text>
+                          <Text style={styles.productDetailInfoLabel}>Product Code</Text>
                           <Text numberOfLines={1} style={styles.productDetailInfoValue}>
-                            {selectedCatalogProduct.id}
+                            {selectedCatalogProduct.sku || selectedCatalogProduct.slug || 'Catalog item'}
                           </Text>
                         </View>
                       </View>
@@ -8644,6 +8802,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     maxWidth: '100%',
+  },
+  homeStatusHelper: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 8,
+    opacity: 0.9,
   },
   homeTrackButton: {
     flexShrink: 0,
@@ -10328,6 +10493,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 8,
   },
+  bookingServiceChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  bookingServiceChipRowCompact: {
+    marginBottom: 8,
+  },
+  bookingServiceChip: {
+    minHeight: 28,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookingServiceChipText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   bookingHistoryMeta: {
     color: colors.mutedText,
     fontSize: 13,
@@ -10427,6 +10616,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 17,
     fontWeight: '800',
+    marginBottom: 10,
+  },
+  trackingRequestedServicesSection: {
     marginBottom: 16,
   },
   trackingMetaGrid: {

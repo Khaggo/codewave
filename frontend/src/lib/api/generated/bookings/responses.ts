@@ -5,6 +5,7 @@ export interface ServiceResponse {
   categoryId?: string | null;
   name: string;
   description?: string | null;
+  basePriceCents: number;
   durationMinutes: number;
   isActive: boolean;
   createdAt: string;
@@ -91,6 +92,7 @@ export interface BookingStatusHistoryResponse {
 
 export interface BookingResponse {
   id: string;
+  bookingReference?: string | null;
   userId: string;
   vehicleId: string;
   timeSlotId: string;

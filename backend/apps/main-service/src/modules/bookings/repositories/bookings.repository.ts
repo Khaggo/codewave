@@ -12,6 +12,8 @@ import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { UpdateBookingDateClosureDto } from '../dto/update-booking-date-closure.dto';
+import { UpdateServiceCategoryDto } from '../dto/update-service-category.dto';
+import { UpdateServiceDto } from '../dto/update-service.dto';
 import { UpdateTimeSlotDto } from '../dto/update-time-slot.dto';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto';
 import {
@@ -43,6 +45,15 @@ const isMissingBookingDateClosuresTableError = (error: unknown) =>
   error !== null &&
   'code' in error &&
   error.code === '42P01';
+
+const isUniqueViolationError = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  error.code === '23505';
+
+const buildBookingReference = (scheduledDate: string, sequenceNumber: number) =>
+  `BK-${String(scheduledDate ?? '').slice(0, 10).replace(/-/g, '')}-${String(Math.max(1, sequenceNumber)).padStart(4, '0')}`;
 
 @Injectable()
 export class BookingsRepository extends BaseRepository {
@@ -76,6 +87,12 @@ export class BookingsRepository extends BaseRepository {
     });
   }
 
+  async findServiceById(id: string) {
+    return this.db.query.services.findFirst({
+      where: eq(services.id, id),
+    });
+  }
+
   async createServiceCategory(payload: CreateServiceCategoryDto) {
     const [createdCategory] = await this.db
       .insert(serviceCategories)
@@ -96,12 +113,46 @@ export class BookingsRepository extends BaseRepository {
         categoryId: payload.categoryId ?? null,
         name: payload.name.trim(),
         description: payload.description?.trim() || null,
+        basePriceCents: payload.basePriceCents,
         durationMinutes: payload.durationMinutes,
         isActive: payload.isActive ?? true,
       })
       .returning();
 
     return createdService;
+  }
+
+  async updateServiceCategory(id: string, payload: UpdateServiceCategoryDto) {
+    const [updatedCategory] = await this.db
+      .update(serviceCategories)
+      .set({
+        name: payload.name?.trim(),
+        description: payload.description !== undefined ? payload.description?.trim() || null : undefined,
+        isActive: payload.isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(serviceCategories.id, id))
+      .returning();
+
+    return updatedCategory ?? null;
+  }
+
+  async updateService(id: string, payload: UpdateServiceDto) {
+    const [updatedService] = await this.db
+      .update(services)
+      .set({
+        categoryId: payload.categoryId !== undefined ? payload.categoryId ?? null : undefined,
+        name: payload.name?.trim(),
+        description: payload.description !== undefined ? payload.description?.trim() || null : undefined,
+        basePriceCents: payload.basePriceCents,
+        durationMinutes: payload.durationMinutes,
+        isActive: payload.isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(services.id, id))
+      .returning();
+
+    return updatedService ?? null;
   }
 
   async listTimeSlots() {
@@ -297,6 +348,27 @@ export class BookingsRepository extends BaseRepository {
     return rows.length;
   }
 
+  async findActiveBookingsForUserInRange(userId: string, startDate: string, endDate: string) {
+    return this.db.query.bookings.findMany({
+      where: and(
+        eq(bookings.userId, userId),
+        gte(bookings.scheduledDate, startDate),
+        lte(bookings.scheduledDate, endDate),
+        inArray(
+          bookings.status,
+          ['pending', 'pending_payment', 'confirmed', 'in_service', 'rescheduled'] as BookingStatus[],
+        ),
+      ),
+      columns: {
+        id: true,
+        timeSlotId: true,
+        scheduledDate: true,
+        status: true,
+      },
+      orderBy: [asc(bookings.scheduledDate), asc(bookings.createdAt)],
+    });
+  }
+
   async findByScheduledDateRange(
     startDate: string,
     endDate: string,
@@ -340,6 +412,8 @@ export class BookingsRepository extends BaseRepository {
       })
       .returning();
 
+    await this.assignBookingReference(createdBooking.id, createdBooking.scheduledDate);
+
     await this.db.insert(bookingServices).values(
       createBookingDto.serviceIds.map((serviceId) => ({
         bookingId: createdBooking.id,
@@ -356,6 +430,74 @@ export class BookingsRepository extends BaseRepository {
     });
 
     return this.findById(createdBooking.id);
+  }
+
+  async assignBookingReference(bookingId: string, scheduledDate: string) {
+    const sameDayBookings = await this.db
+      .select({
+        id: bookings.id,
+        bookingReference: bookings.bookingReference,
+      })
+      .from(bookings)
+      .where(eq(bookings.scheduledDate, scheduledDate))
+      .orderBy(asc(bookings.createdAt), asc(bookings.id));
+
+    const currentBooking = sameDayBookings.find((booking) => booking.id === bookingId);
+    if (currentBooking?.bookingReference) {
+      return currentBooking.bookingReference;
+    }
+
+    let sequenceNumber = sameDayBookings.findIndex((booking) => booking.id === bookingId) + 1;
+    if (sequenceNumber <= 0) {
+      sequenceNumber = sameDayBookings.length + 1;
+    }
+
+    while (sameDayBookings.some((booking) => booking.bookingReference === buildBookingReference(scheduledDate, sequenceNumber))) {
+      sequenceNumber += 1;
+    }
+
+    while (sequenceNumber < 100_000) {
+      const bookingReference = buildBookingReference(scheduledDate, sequenceNumber);
+
+      try {
+        const [updatedBooking] = await this.db
+          .update(bookings)
+          .set({
+            bookingReference,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(bookings.id, bookingId), isNull(bookings.bookingReference)))
+          .returning({
+            bookingReference: bookings.bookingReference,
+          });
+
+        if (updatedBooking?.bookingReference) {
+          return updatedBooking.bookingReference;
+        }
+
+        const existingBooking = await this.db.query.bookings.findFirst({
+          where: eq(bookings.id, bookingId),
+          columns: {
+            bookingReference: true,
+          },
+        });
+
+        if (existingBooking?.bookingReference) {
+          return existingBooking.bookingReference;
+        }
+      } catch (error) {
+        if (isUniqueViolationError(error)) {
+          sequenceNumber += 1;
+          continue;
+        }
+
+        throw error;
+      }
+
+      sequenceNumber += 1;
+    }
+
+    throw new Error(`Booking reference could not be assigned for booking ${bookingId}`);
   }
 
   async findById(id: string) {
@@ -486,7 +628,7 @@ export class BookingsRepository extends BaseRepository {
     });
   }
 
-  async findScheduledDatesByIds(ids: string[]) {
+  async findBookingReadModelByIds(ids: string[]) {
     if (!ids.length) {
       return [];
     }
@@ -495,6 +637,7 @@ export class BookingsRepository extends BaseRepository {
       .select({
         id: bookings.id,
         scheduledDate: bookings.scheduledDate,
+        bookingReference: bookings.bookingReference,
       })
       .from(bookings)
       .where(inArray(bookings.id, ids));

@@ -8,12 +8,15 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   Req,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { Request } from 'express';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBody,
@@ -356,6 +359,34 @@ export class InsuranceController {
       file,
       request.user as { userId: string; role: string },
     );
+  }
+
+  @Get('insurance/documents/:documentId/file')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Open or download one uploaded insurance document.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'documentId',
+    description: 'Insurance document identifier.',
+    example: '4c559c0b-4d1b-492f-a11f-e61271f4a32d',
+  })
+  @ApiOkResponse({ description: 'The insurance document file stream.' })
+  @ApiForbiddenResponse({ description: 'Customers can only open documents for their own inquiries.' })
+  @ApiNotFoundResponse({ description: 'Insurance document not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  async getDocumentFile(
+    @Param('documentId') documentId: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const file = await this.insuranceService.getDocumentBinary(
+      documentId,
+      request.user as { userId: string; role: string },
+    );
+    response.setHeader('Content-Type', file.mimeType);
+    response.setHeader('Content-Disposition', `inline; filename="${file.fileName}"`);
+    return new StreamableFile(file.buffer);
   }
 
   @Get('vehicles/:id/insurance-records')

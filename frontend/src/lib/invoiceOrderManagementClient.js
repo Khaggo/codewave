@@ -438,6 +438,59 @@ export const reconcileStaffEcommerceOrderInvoicePaymongoCheckout = async ({ orde
   return invoice;
 };
 
+export const recordStaffEcommerceInvoicePayment = async ({
+  invoiceId,
+  amountPaid,
+  paymentMethod,
+  reference,
+  notes,
+  receivedAt,
+  accessToken,
+} = {}) => {
+  const normalizedInvoiceId = String(invoiceId ?? '').trim();
+
+  if (!normalizedInvoiceId) {
+    throw new ApiError('Load an ecommerce invoice before recording a manual payment.', 400, {
+      path: '/api/invoices/:id/payments',
+      invoiceId,
+    });
+  }
+
+  const normalizedAmount = Number(amountPaid);
+  const normalizedReceivedAt = trimOrNull(receivedAt);
+
+  if (!Number.isInteger(normalizedAmount) || normalizedAmount < 1) {
+    throw new ApiError('Enter a positive payment amount in pesos before recording ecommerce payment.', 400, {
+      path: '/api/invoices/:id/payments',
+      invoiceId: normalizedInvoiceId,
+      amountPaid,
+    });
+  }
+
+  const invoice = normalizeInvoice(
+    await request(`/api/invoices/${encodeURIComponent(normalizedInvoiceId)}/payments`, {
+      accessToken,
+      method: 'POST',
+      body: {
+        amountCents: normalizedAmount * 100,
+        paymentMethod: trimOrNull(paymentMethod) ?? 'cash',
+        reference: trimOrNull(reference) ?? undefined,
+        notes: trimOrNull(notes) ?? undefined,
+        receivedAt: normalizedReceivedAt ? new Date(normalizedReceivedAt).toISOString() : undefined,
+      },
+    }),
+  );
+
+  if (!invoice) {
+    throw new ApiError('The ecommerce invoice payment response was missing required fields.', 500, {
+      path: '/api/invoices/:id/payments',
+      invoiceId: normalizedInvoiceId,
+    });
+  }
+
+  return invoice;
+};
+
 export const loadStaffEcommerceOrderSnapshot = async ({ orderId, accessToken } = {}) => {
   const [orderResult, invoiceResult] = await Promise.allSettled([
     getStaffEcommerceOrderDetail({ orderId, accessToken }),

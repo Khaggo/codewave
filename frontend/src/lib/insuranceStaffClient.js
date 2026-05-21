@@ -203,11 +203,19 @@ const normalizeInsuranceDocumentForStaff = (document) => {
     return null;
   }
 
+  const normalizedDocumentId = document.id ?? null
+  const normalizedFileUrl = String(document.fileUrl ?? '').trim()
+  const downloadUrl =
+    normalizedDocumentId && normalizedFileUrl.startsWith('upload://insurance/')
+      ? `${API_BASE_URL}/api/insurance/documents/${normalizedDocumentId}/file`
+      : null
+
   return {
-    id: document.id ?? null,
+    id: normalizedDocumentId,
     inquiryId: document.inquiryId ?? null,
     fileName: String(document.fileName ?? '').trim(),
-    fileUrl: String(document.fileUrl ?? '').trim(),
+    fileUrl: normalizedFileUrl,
+    downloadUrl,
     documentType: document.documentType ?? 'other',
     documentTypeLabel: formatDocumentTypeLabel(document.documentType),
     notes: trimOrNull(document.notes),
@@ -392,6 +400,50 @@ export const updateInsuranceInquiryStatus = async ({
     }),
   );
 };
+
+export const getInsuranceDocumentFile = async ({ documentId, accessToken }) => {
+  if (!documentId) {
+    throw new ApiError('Select an insurance document before opening it.', 400, {
+      path: '/api/insurance/documents/:documentId/file',
+    })
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/insurance/documents/${documentId}/file`, {
+    method: 'GET',
+    headers: {
+      ...(buildAuthorizedHeaders(accessToken) ?? {}),
+    },
+  })
+
+  if (!response.ok) {
+    let data = null
+    try {
+      data = await response.clone().json()
+    } catch {
+      data = null
+    }
+
+    if (response.status === 401) {
+      notifyStaffSessionUnauthorized({
+        path: '/api/insurance/documents/:documentId/file',
+        source: 'insuranceStaffClient',
+      })
+    }
+
+    const message =
+      data?.message && typeof data.message === 'string'
+        ? data.message
+        : `Request failed with status ${response.status}`
+
+    throw new ApiError(message, response.status, data)
+  }
+
+  return {
+    blob: await response.blob(),
+    contentType: response.headers.get('content-type') ?? null,
+    contentDisposition: response.headers.get('content-disposition') ?? null,
+  }
+}
 
 export const createInsuranceRenewalFollowUp = async ({
   userId,

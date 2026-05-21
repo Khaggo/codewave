@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 
 export class CreateServiceDto {
@@ -29,9 +30,20 @@ export class CreateServiceDto {
   description?: string;
 
   @ApiProperty({
+    example: 85000,
+    minimum: 0,
+    description: 'Base labor/service price in centavos for pricing and quote visibility.',
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  basePriceCents!: number;
+
+  @ApiProperty({
     example: 45,
     minimum: 1,
   })
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   durationMinutes!: number;

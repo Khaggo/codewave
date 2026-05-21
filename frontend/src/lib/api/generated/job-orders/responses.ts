@@ -78,6 +78,11 @@ export interface JobOrderResponse {
   vehicleId: string;
   serviceAdviserUserId: string;
   serviceAdviserCode: string;
+  customerLabel?: string | null;
+  vehicleLabel?: string | null;
+  jobOrderReference?: string | null;
+  sourceBookingReference?: string | null;
+  sourceBackJobReference?: string | null;
   status: JobOrderStatus;
   notes?: string | null;
   createdAt: string;

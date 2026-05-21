@@ -11,6 +11,7 @@ import {
   createStaffInventoryCategory,
   createStaffInventoryProduct,
   loadStaffInventorySnapshot,
+  updateStaffInventoryCategory,
   updateStaffInventoryProduct,
 } from '@/lib/inventoryAdminClient'
 import { useUser } from '@/lib/userContext'
@@ -29,6 +30,13 @@ const EMPTY_MODAL_FORM = {
   categoryId: '',
   price: '',
   sku: '',
+  description: '',
+  isActive: true,
+}
+
+const EMPTY_CATEGORY_MODAL_FORM = {
+  id: '',
+  name: '',
   description: '',
   isActive: true,
 }
@@ -58,6 +66,15 @@ function buildModalForm(product) {
     sku: product.sku ?? '',
     description: product.description ?? '',
     isActive: product.visibilityLabel === 'Published',
+  }
+}
+
+function buildCategoryModalForm(category) {
+  return {
+    id: category.id,
+    name: category.name ?? category.label ?? '',
+    description: category.description ?? '',
+    isActive: Boolean(category.isActive),
   }
 }
 
@@ -93,7 +110,7 @@ function ProductEditModal({
   onChange,
   onClose,
   onSave,
-  onArchive,
+  onToggleVisibility,
 }) {
   useEffect(() => {
     function handleEscape(event) {
@@ -199,11 +216,106 @@ function ProductEditModal({
                 <PencilLine size={14} />
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
-              <button type="button" disabled={archiving} className="ops-action-danger min-w-[144px]" onClick={onArchive}>
-                <Archive size={14} />
-                {archiving ? 'Archiving...' : 'Archive Product'}
+              <button
+                type="button"
+                disabled={archiving}
+                className="ops-action-danger min-w-[144px]"
+                onClick={onToggleVisibility}
+              >
+                {form.isActive ? <Archive size={14} /> : <Plus size={14} />}
+                {archiving
+                  ? form.isActive
+                    ? 'Archiving...'
+                    : 'Publishing...'
+                  : form.isActive
+                    ? 'Archive Product'
+                    : 'Republish Product'}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function CategoryEditModal({
+  form,
+  saving,
+  onChange,
+  onClose,
+  onSave,
+  onToggleStatus,
+}) {
+  useEffect(() => {
+    function handleEscape(event) {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [onClose])
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/70" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="card max-h-[90vh] w-full max-w-2xl overflow-hidden shadow-card-md">
+          <div className="flex items-start justify-between gap-4 border-b border-surface-border bg-surface-raised/70 px-5 py-4">
+            <div>
+              <p className="card-title">Edit Category</p>
+              <p className="mt-1 text-sm text-ink-muted">
+                Update live catalog category metadata and publish state.
+              </p>
+            </div>
+            <button type="button" className="btn-ghost !px-3 !py-2" onClick={onClose}>
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="grid gap-4 px-5 py-5">
+            <label>
+              <span className="label">Category Name</span>
+              <input
+                className="input"
+                value={form.name}
+                onChange={(event) => onChange('name', event.target.value)}
+                placeholder="Accessories"
+              />
+            </label>
+            <label>
+              <span className="label">Description</span>
+              <textarea
+                className="input min-h-[120px]"
+                value={form.description}
+                onChange={(event) => onChange('description', event.target.value)}
+                placeholder="Visible catalog grouping for staff and customer catalog teams."
+              />
+            </label>
+            <label className="inline-flex items-center gap-3 rounded-2xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-secondary">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(event) => onChange('isActive', event.target.checked)}
+              />
+              <span>{form.isActive ? 'Published in customer catalog' : 'Hidden from customer catalog'}</span>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-3 border-t border-surface-border bg-surface-raised/70 px-5 py-4">
+            <button type="button" className="btn-ghost" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="button" className="ops-action-danger min-w-[148px]" onClick={onToggleStatus} disabled={saving}>
+              <Archive size={14} />
+              {form.isActive ? 'Hide Category' : 'Publish Category'}
+            </button>
+            <button type="button" className="ops-action-primary min-w-[148px]" onClick={onSave} disabled={saving}>
+              <PencilLine size={14} />
+              {saving ? 'Saving...' : 'Save Category'}
+            </button>
           </div>
         </div>
       </div>
@@ -221,10 +333,14 @@ export default function ShopProductAdmin() {
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM)
   const [editForm, setEditForm] = useState(EMPTY_MODAL_FORM)
   const [editorProductId, setEditorProductId] = useState(null)
+  const [categoryEditForm, setCategoryEditForm] = useState(EMPTY_CATEGORY_MODAL_FORM)
+  const [editorCategoryId, setEditorCategoryId] = useState(null)
   const [submittingCategory, setSubmittingCategory] = useState(false)
   const [submittingProduct, setSubmittingProduct] = useState(false)
   const [savingProduct, setSavingProduct] = useState(false)
+  const [savingCategory, setSavingCategory] = useState(false)
   const [archivingProductId, setArchivingProductId] = useState(null)
+  const [togglingCategoryId, setTogglingCategoryId] = useState(null)
 
   const loadSnapshot = useCallback(async () => {
     if (!user?.accessToken) {
@@ -269,6 +385,10 @@ export default function ShopProductAdmin() {
   const editorProduct = useMemo(
     () => products.find((product) => product.id === editorProductId) ?? null,
     [editorProductId, products],
+  )
+  const editorCategory = useMemo(
+    () => categories.find((category) => category.id === editorCategoryId) ?? null,
+    [categories, editorCategoryId],
   )
 
   const visibleProducts = useMemo(() => {
@@ -319,6 +439,16 @@ export default function ShopProductAdmin() {
     setEditForm(EMPTY_MODAL_FORM)
   }
 
+  function openCategoryEditor(category) {
+    setEditorCategoryId(category.id)
+    setCategoryEditForm(buildCategoryModalForm(category))
+  }
+
+  function closeCategoryEditor() {
+    setEditorCategoryId(null)
+    setCategoryEditForm(EMPTY_CATEGORY_MODAL_FORM)
+  }
+
   async function handleAddCategory(event) {
     event.preventDefault()
     setSubmittingCategory(true)
@@ -344,6 +474,78 @@ export default function ShopProductAdmin() {
       })
     } finally {
       setSubmittingCategory(false)
+    }
+  }
+
+  function updateCategoryEditForm(field, value) {
+    setCategoryEditForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  async function handleSaveCategoryEdits() {
+    if (!editorCategory) return
+
+    setSavingCategory(true)
+    try {
+      const updatedCategory = await updateStaffInventoryCategory({
+        accessToken: user?.accessToken,
+        categoryId: editorCategory.id,
+        name: categoryEditForm.name,
+        description: categoryEditForm.description,
+        isActive: categoryEditForm.isActive,
+      })
+
+      setCategoryEditForm(buildCategoryModalForm(updatedCategory))
+      await loadSnapshot()
+      toast({
+        type: 'success',
+        title: 'Category updated',
+        message: `${updatedCategory.label} was updated successfully.`,
+      })
+    } catch (error) {
+      toast({
+        type: 'error',
+        title: 'Unable to update category',
+        message: error instanceof Error ? error.message : 'Unable to update the category right now.',
+      })
+    } finally {
+      setSavingCategory(false)
+    }
+  }
+
+  async function handleToggleCategoryStatus(category = editorCategory) {
+    if (!category) return
+
+    setTogglingCategoryId(category.id)
+    try {
+      const updatedCategory = await updateStaffInventoryCategory({
+        accessToken: user?.accessToken,
+        categoryId: category.id,
+        isActive: !category.isActive,
+      })
+
+      if (editorCategoryId === category.id) {
+        setCategoryEditForm(buildCategoryModalForm(updatedCategory))
+      }
+
+      await loadSnapshot()
+      toast({
+        type: 'info',
+        title: updatedCategory.isActive ? 'Category published' : 'Category hidden',
+        message: updatedCategory.isActive
+          ? `${updatedCategory.label} is now available in the live catalog.`
+          : `${updatedCategory.label} has been hidden from the live catalog.`,
+      })
+    } catch (error) {
+      toast({
+        type: 'error',
+        title: 'Unable to update category visibility',
+        message: error instanceof Error ? error.message : 'Unable to update the category right now.',
+      })
+    } finally {
+      setTogglingCategoryId(null)
     }
   }
 
@@ -466,6 +668,35 @@ export default function ShopProductAdmin() {
     }
   }
 
+  async function handleRestoreProduct(productId, productName) {
+    setArchivingProductId(productId)
+
+    try {
+      await updateStaffInventoryProduct({
+        accessToken: user?.accessToken,
+        productId,
+        isActive: true,
+      })
+      await loadSnapshot()
+      toast({
+        type: 'success',
+        title: 'Product republished',
+        message: `${productName} is visible in the live customer catalog again.`,
+      })
+      if (editorProductId === productId) {
+        setEditForm((current) => ({ ...current, isActive: true }))
+      }
+    } catch (error) {
+      toast({
+        type: 'error',
+        title: 'Unable to republish product',
+        message: error instanceof Error ? error.message : 'Unable to republish the product right now.',
+      })
+    } finally {
+      setArchivingProductId(null)
+    }
+  }
+
   const loadingAction = (
     <button type="button" className="btn-ghost" onClick={() => void loadSnapshot()} disabled={state.status === 'loading'}>
       <RefreshCcw size={14} className={state.status === 'loading' ? 'animate-spin' : ''} />
@@ -496,8 +727,8 @@ export default function ShopProductAdmin() {
       ) : null}
 
       <SectionShell
-        title="Published Products"
-        description="Search live catalog products, review visibility, and open a listing for editing."
+        title="Catalog Products"
+        description="Search live catalog products, review whether each listing is published or hidden, and open a listing for editing."
         action={<span className="badge badge-orange">{visibleProducts.length} shown</span>}
       >
         <div className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
@@ -578,12 +809,26 @@ export default function ShopProductAdmin() {
                           </button>
                           <button
                             type="button"
-                            className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300 transition-colors hover:bg-red-500/15"
-                            onClick={() => handleArchiveProduct(product.id, product.name)}
+                            className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+                              product.visibilityLabel === 'Published'
+                                ? 'border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/15'
+                                : 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15'
+                            }`}
+                            onClick={() =>
+                              product.visibilityLabel === 'Published'
+                                ? handleArchiveProduct(product.id, product.name)
+                                : handleRestoreProduct(product.id, product.name)
+                            }
                             disabled={archivingProductId === product.id}
                           >
-                            <Archive size={14} />
-                            {archivingProductId === product.id ? 'Archiving...' : 'Archive'}
+                            {product.visibilityLabel === 'Published' ? <Archive size={14} /> : <Plus size={14} />}
+                            {archivingProductId === product.id
+                              ? product.visibilityLabel === 'Published'
+                                ? 'Archiving...'
+                                : 'Publishing...'
+                              : product.visibilityLabel === 'Published'
+                                ? 'Archive'
+                                : 'Republish'}
                           </button>
                         </div>
                       </td>
@@ -622,13 +867,61 @@ export default function ShopProductAdmin() {
             </div>
 
             <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Active Categories</p>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-orange">Category Directory</p>
+                  <p className="mt-2 text-sm text-ink-muted">Edit, hide, or republish live catalog categories.</p>
+                </div>
+                <span className="badge badge-gray">{categories.length} categories</span>
+              </div>
+
+              <div className="mt-4 space-y-3">
                 {categories.length ? (
                   categories.map((category) => (
-                    <span key={category.id} className="badge badge-gray">
-                      {category.label}
-                    </span>
+                    <div key={category.id} className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-ink-primary">{category.label}</p>
+                          <p className="mt-1 text-xs text-ink-muted">
+                            {category.description || 'No category description saved yet.'}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span className={`badge ${category.isActive ? 'badge-green' : 'badge-gray'}`}>
+                              {category.isActive ? 'Published' : 'Hidden'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-card px-3 py-2 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
+                            onClick={() => openCategoryEditor(category)}
+                          >
+                            <PencilLine size={14} />
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+                              category.isActive
+                                ? 'border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/15'
+                                : 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15'
+                            }`}
+                            onClick={() => handleToggleCategoryStatus(category)}
+                            disabled={togglingCategoryId === category.id}
+                          >
+                            <Archive size={14} />
+                            {togglingCategoryId === category.id
+                              ? category.isActive
+                                ? 'Hiding...'
+                                : 'Publishing...'
+                              : category.isActive
+                                ? 'Deactivate Category'
+                                : 'Republish Category'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   ))
                 ) : (
                   <div className="empty-panel w-full px-4 py-6 text-sm text-ink-muted">
@@ -732,7 +1025,22 @@ export default function ShopProductAdmin() {
           onChange={updateEditForm}
           onClose={closeProductEditor}
           onSave={handleSaveProductEdits}
-          onArchive={() => handleArchiveProduct(editorProductId, editorProduct?.name ?? 'This product')}
+          onToggleVisibility={() =>
+            editForm.isActive
+              ? handleArchiveProduct(editorProductId, editorProduct?.name ?? 'This product')
+              : handleRestoreProduct(editorProductId, editorProduct?.name ?? 'This product')
+          }
+        />
+      ) : null}
+
+      {editorCategoryId ? (
+        <CategoryEditModal
+          form={categoryEditForm}
+          saving={savingCategory || togglingCategoryId === editorCategoryId}
+          onChange={updateCategoryEditForm}
+          onClose={closeCategoryEditor}
+          onSave={() => void handleSaveCategoryEdits()}
+          onToggleStatus={() => void handleToggleCategoryStatus(editorCategory)}
         />
       ) : null}
     </div>

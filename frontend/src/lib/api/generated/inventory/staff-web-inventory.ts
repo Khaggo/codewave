@@ -34,9 +34,12 @@ export type StaffInventoryStockState =
 
 export interface StaffInventoryCategoryPresentation {
   id: string;
+  name: string;
   label: string;
   slug: string;
+  description: string | null;
   isActive: boolean;
+  updatedAt: string;
 }
 
 export interface StaffInventoryProductPresentation {
@@ -231,9 +234,12 @@ export const buildStaffInventoryCategoryPresentation = (
   category: ProductCategoryResponse,
 ): StaffInventoryCategoryPresentation => ({
   id: category.id,
+  name: category.name,
   label: category.name,
   slug: category.slug,
+  description: category.description ?? null,
   isActive: category.isActive,
+  updatedAt: category.updatedAt,
 });
 
 export const buildStaffInventoryProductPresentation = (

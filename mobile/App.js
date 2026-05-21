@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { createNavigationContainerRef, DefaultTheme, NavigationContainer } from '@react-navigation/native';
@@ -52,6 +53,61 @@ const Stack = createStackNavigator();
 const AppSessionContext = createContext(null);
 const navigationRef = createNavigationContainerRef();
 const MOBILE_DEEP_LINK_SCHEME = 'autocarecc';
+const MOBILE_SESSION_STORAGE_KEY = '@autocare/mobile-session-v1';
+
+const normalizePersistedBirthday = (value) => cloneDate(value) ?? null;
+
+const normalizePersistedAccount = (account) => {
+  if (!account || typeof account !== 'object') {
+    return null;
+  }
+
+  return {
+    ...account,
+    birthday: normalizePersistedBirthday(account.birthday),
+    accessToken: account.accessToken ?? null,
+    refreshToken: account.refreshToken ?? null,
+    addresses: Array.isArray(account.addresses) ? account.addresses : [],
+    ownedVehicles: Array.isArray(account.ownedVehicles) ? account.ownedVehicles : [],
+    primaryVehicle: account.primaryVehicle ?? null,
+    defaultAddress: account.defaultAddress ?? null,
+  };
+};
+
+const normalizePersistedPendingAccount = (accountDraft) => {
+  if (!accountDraft || typeof accountDraft !== 'object') {
+    return null;
+  }
+
+  return {
+    ...accountDraft,
+    birthday: normalizePersistedBirthday(accountDraft.birthday),
+    ownedVehicles: Array.isArray(accountDraft.ownedVehicles) ? accountDraft.ownedVehicles : [],
+  };
+};
+
+const normalizePersistedOnboardingState = (state) => {
+  if (!state || typeof state !== 'object') {
+    return null;
+  }
+
+  return {
+    ...state,
+    draft: normalizePersistedPendingAccount(state.draft),
+  };
+};
+
+const buildPersistableSessionSnapshot = ({
+  registeredAccount,
+  pendingAccount,
+  activeAccount,
+  pendingOnboardingCompletion,
+}) => ({
+  registeredAccount,
+  pendingAccount,
+  activeAccount,
+  pendingOnboardingCompletion,
+});
 
 const parseMobileDeepLink = (url) => {
   if (!url) {
@@ -102,19 +158,32 @@ const useAppSessionContext = () => {
 
 function CustomerSurfaceStateScreen({
   navigation,
+  eyebrow = 'Customer Guardrail',
   title,
   message,
   primaryActionLabel = 'Sign In',
   onPrimaryAction,
   secondaryActionLabel = 'Back to Home',
   onSecondaryAction,
+  supportingPoints = [],
 }) {
   return (
     <View style={styles.guardScreen}>
       <View style={styles.guardCard}>
-        <Text style={styles.guardEyebrow}>Customer Guardrail</Text>
+        <Text style={styles.guardEyebrow}>{eyebrow}</Text>
         <Text style={styles.guardTitle}>{title}</Text>
         <Text style={styles.guardMessage}>{message}</Text>
+
+        {supportingPoints.length ? (
+          <View style={styles.guardPoints}>
+            {supportingPoints.map((point) => (
+              <View key={point} style={styles.guardPointRow}>
+                <View style={styles.guardPointDot} />
+                <Text style={styles.guardPointText}>{point}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.guardActions}>
           <TouchableOpacity
@@ -419,16 +488,20 @@ function BookingMobileScreen(props) {
     return (
       <CustomerSurfaceStateScreen
         navigation={props.navigation}
-        title="Customer session required"
-        message={
-          customerMobileGuardMessages[accessState] ??
-          customerMobileGuardMessages.unauthorized_session
-        }
+        eyebrow="BOOK SERVICE"
+        title="Sign in to continue booking"
+        message="Create or access your AUTOCARE account to book services, track repairs, and manage your vehicles in one place."
         primaryActionLabel="Sign In"
         onPrimaryAction={() => {
           clearCustomerSession();
           props.navigation.replace('Login');
         }}
+        secondaryActionLabel="Continue Browsing"
+        supportingPoints={[
+          'Book multiple services in one appointment request.',
+          'Track reservation payment, confirmation, and workshop updates.',
+          'Keep your vehicles and service history in one account.',
+        ]}
       />
     );
   }
@@ -521,6 +594,96 @@ export default function App() {
   const [activeAccount, setActiveAccount] = useState(null);
   const [pendingOnboardingCompletion, setPendingOnboardingCompletion] = useState(null);
   const [pendingSupportJump, setPendingSupportJump] = useState(null);
+  const [isSessionHydrated, setIsSessionHydrated] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydratePersistedMobileSession = async () => {
+      try {
+        const serializedSnapshot = await AsyncStorage.getItem(MOBILE_SESSION_STORAGE_KEY);
+
+        if (!serializedSnapshot) {
+          return;
+        }
+
+        const parsedSnapshot = JSON.parse(serializedSnapshot);
+        if (!parsedSnapshot || typeof parsedSnapshot !== 'object') {
+          return;
+        }
+
+        const nextRegisteredAccount = normalizePersistedAccount(parsedSnapshot.registeredAccount);
+        const nextActiveAccount = normalizePersistedAccount(parsedSnapshot.activeAccount);
+        const nextPendingAccount = normalizePersistedPendingAccount(parsedSnapshot.pendingAccount);
+        const nextPendingOnboardingCompletion = normalizePersistedOnboardingState(
+          parsedSnapshot.pendingOnboardingCompletion,
+        );
+        const activeAccessState = getMobileAppSessionAccessState(nextActiveAccount);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setRegisteredAccount(nextRegisteredAccount);
+        setPendingAccount(nextPendingAccount);
+        setPendingOnboardingCompletion(nextPendingOnboardingCompletion);
+        setActiveAccount(
+          activeAccessState === 'customer_session_active' ||
+            activeAccessState === 'technician_session_active'
+            ? nextActiveAccount
+            : null,
+        );
+      } catch (error) {
+        if (isMounted) {
+          setRegisteredAccount(null);
+          setPendingAccount(null);
+          setPendingOnboardingCompletion(null);
+          setActiveAccount(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsSessionHydrated(true);
+        }
+      }
+    };
+
+    void hydratePersistedMobileSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSessionHydrated) {
+      return;
+    }
+
+    const persistMobileSession = async () => {
+      const snapshot = buildPersistableSessionSnapshot({
+        registeredAccount,
+        pendingAccount,
+        activeAccount,
+        pendingOnboardingCompletion,
+      });
+      const hasPersistableState = Object.values(snapshot).some(Boolean);
+
+      if (!hasPersistableState) {
+        await AsyncStorage.removeItem(MOBILE_SESSION_STORAGE_KEY);
+        return;
+      }
+
+      await AsyncStorage.setItem(MOBILE_SESSION_STORAGE_KEY, JSON.stringify(snapshot));
+    };
+
+    void persistMobileSession();
+  }, [
+    isSessionHydrated,
+    registeredAccount,
+    pendingAccount,
+    activeAccount,
+    pendingOnboardingCompletion,
+  ]);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
@@ -1332,6 +1495,35 @@ export default function App() {
     handleOtpVerified,
   };
 
+  const initialSessionAccount = activeAccount ?? registeredAccount;
+  const currentMobileSessionAccessState = getMobileAppSessionAccessState(initialSessionAccount);
+  const appInitialRouteName =
+    pendingOnboardingCompletion?.draft && initialSessionAccount
+      ? 'CompleteOnboarding'
+      : currentMobileSessionAccessState === 'customer_session_active' ||
+          currentMobileSessionAccessState === 'technician_session_active'
+        ? 'Menu'
+        : 'Landing';
+
+  if (!isSessionHydrated) {
+    return (
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <View style={[styles.appRoot, styles.sessionLoadingScreen]}>
+            <StatusBar style="light" backgroundColor={colors.background} translucent={false} />
+            <View style={styles.sessionLoadingCard}>
+              <Text style={styles.guardEyebrow}>Restoring session</Text>
+              <Text style={styles.guardTitle}>Opening AUTOCARE</Text>
+              <Text style={styles.guardMessage}>
+                Checking your saved customer or workshop session before the app loads.
+              </Text>
+            </View>
+          </View>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <ThemeProvider>
@@ -1349,7 +1541,7 @@ export default function App() {
               }}
             >
           <Stack.Navigator
-            initialRouteName="Landing"
+            initialRouteName={appInitialRouteName}
             detachInactiveScreens={false}
             screenOptions={{
               headerStyle: {
@@ -1477,6 +1669,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 23,
   },
+  guardPoints: {
+    gap: 10,
+  },
+  guardPointRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  guardPointDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    marginTop: 7,
+    backgroundColor: colors.primary,
+  },
+  guardPointText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+  },
   guardActions: {
     marginTop: 8,
     gap: 12,
@@ -1523,5 +1736,21 @@ const styles = StyleSheet.create({
         overflowX: 'hidden',
       },
     }),
+  },
+  sessionLoadingScreen: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  sessionLoadingCard: {
+    width: '100%',
+    maxWidth: 440,
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 14,
   },
 });

@@ -190,6 +190,26 @@ export class InsuranceRepository extends BaseRepository {
     return this.attachActivitiesToInquiries(inquiries);
   }
 
+  async findInquiriesByVehicleId(vehicleId: string) {
+    const inquiries = await this.db.query.insuranceInquiries.findMany({
+      where: eq(insuranceInquiries.vehicleId, vehicleId),
+      orderBy: desc(insuranceInquiries.updatedAt),
+    });
+
+    return inquiries;
+  }
+
+  async findDocumentById(documentId: string) {
+    const document = await this.db.query.insuranceDocuments.findFirst({
+      where: eq(insuranceDocuments.id, documentId),
+      with: {
+        inquiry: true,
+      },
+    });
+
+    return this.assertFound(document, 'Insurance document not found');
+  }
+
   async listForStaff(query: ListInsuranceInquiriesQueryDto) {
     const inquiries = await this.db.query.insuranceInquiries.findMany({
       where: and(

@@ -110,6 +110,147 @@ const formatDateTime = (value) => {
   return date.toLocaleString()
 }
 
+const formatShortDate = (value) => {
+  if (!value) return 'No date'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return String(value)
+  }
+
+  return date.toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+const formatCompactDateToken = (value) => {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}${month}${day}`
+}
+
+const formatCompactTimeToken = (value) => {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${hours}${minutes}${seconds}`
+}
+
+const normalizeBusinessToken = (value, fallback = 'WORK') => {
+  const normalizedValue = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+
+  return normalizedValue || fallback
+}
+
+const formatVehicleDisplayLabel = (vehicle) => {
+  if (!vehicle) {
+    return 'Unknown vehicle'
+  }
+
+  const summary = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
+  return vehicle.plateNumber
+    ? summary
+      ? `${vehicle.plateNumber} · ${summary}`
+      : vehicle.plateNumber
+    : summary || 'Unknown vehicle'
+}
+
+const formatBackJobCaseReference = (backJob, vehicleLabel) => {
+  if (!backJob) {
+    return 'Back-job case'
+  }
+
+  const dateToken = formatCompactDateToken(backJob.createdAt)
+  const timeToken = formatCompactTimeToken(backJob.createdAt)
+  const vehicleToken = normalizeBusinessToken(vehicleLabel, 'VEHICLE')
+
+  return [dateToken, timeToken, vehicleToken].filter(Boolean).join('-').replace(/^/, 'BJ-')
+}
+
+const formatJobOrderDisplayReference = (jobOrder, fallbackId) => {
+  if (jobOrder?.jobOrderReference) {
+    return jobOrder.jobOrderReference
+  }
+
+  if (jobOrder?.sourceBackJobReference) {
+    return `JO-RW · ${jobOrder.sourceBackJobReference}`
+  }
+
+  if (jobOrder?.sourceBookingReference) {
+    return `JO · ${jobOrder.sourceBookingReference}`
+  }
+
+  const workDateToken = formatCompactDateToken(jobOrder?.workDate ?? jobOrder?.createdAt)
+  const updatedTimeToken = formatCompactTimeToken(jobOrder?.createdAt ?? jobOrder?.updatedAt)
+  const prefix = jobOrder?.jobType === 'back_job' ? 'JO-RW' : 'JO'
+
+  if (workDateToken) {
+    return `${prefix}-${workDateToken}${updatedTimeToken ? `-${updatedTimeToken}` : ''}`
+  }
+
+  return fallbackId ? `Job order ${String(fallbackId).slice(0, 8).toUpperCase()}` : 'Original job order'
+}
+
+const formatBookingDisplayReference = (booking, fallbackId) => {
+  if (booking?.bookingReference) {
+    return booking.bookingReference
+  }
+
+  if (booking?.reference) {
+    return booking.reference
+  }
+
+  return fallbackId ? `Booking ${String(fallbackId).slice(0, 8).toUpperCase()}` : 'No booking reference'
+}
+
+const formatReturnInspectionReference = (inspection, fallbackId) => {
+  if (inspection?.inspectionReference) {
+    return inspection.inspectionReference
+  }
+
+  const dateToken = formatCompactDateToken(inspection?.createdAt)
+  const timeToken = formatCompactTimeToken(inspection?.createdAt)
+
+  if (dateToken) {
+    return `INSP-${dateToken}${timeToken ? `-${timeToken}` : ''}`
+  }
+
+  return fallbackId ? 'Linked return inspection' : 'Not attached'
+}
+
+const formatReturnInspectionHelper = (inspection) => {
+  if (!inspection) {
+    return 'No return inspection linked yet'
+  }
+
+  return [
+    formatShortDate(inspection.createdAt),
+    inspection.status ? String(inspection.status).replaceAll('_', ' ') : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
 function StatCard({ icon: Icon, label, value, toneClass }) {
   return (
     <div className="card p-4 flex items-center gap-3">
@@ -124,7 +265,15 @@ function StatCard({ icon: Icon, label, value, toneClass }) {
   )
 }
 
-function BackJobDetail({ backJob }) {
+function BackJobDetail({
+  backJob,
+  caseReference,
+  customerLabel,
+  vehicleLabel,
+  originalJobOrderReference,
+  originalBookingReference,
+  reworkJobOrderReference,
+}) {
   if (!backJob) {
     return (
       <div className="empty-panel text-sm text-ink-muted">
@@ -136,13 +285,16 @@ function BackJobDetail({ backJob }) {
   const statusMeta = STATUS_META[backJob.status] ?? STATUS_META.reported
   const visibility = getBackJobCustomerVisibility(backJob.status)
   const validationState = getBackJobValidationState(backJob)
+  const returnInspectionReference = formatReturnInspectionReference(backJob.returnInspection, backJob.returnInspectionId)
+  const returnInspectionHelper = formatReturnInspectionHelper(backJob.returnInspection)
 
   return (
     <div className="card p-5 space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-orange">Live Back-Job Detail</p>
-          <h2 className="mt-2 text-xl font-bold text-ink-primary">{backJob.id}</h2>
+          <h2 className="mt-2 text-xl font-bold text-ink-primary">{caseReference}</h2>
+          <p className="mt-1 text-xs text-ink-muted">Opened {formatShortDate(backJob.createdAt)}</p>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-secondary">{backJob.complaint}</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -156,17 +308,17 @@ function BackJobDetail({ backJob }) {
       <div className="grid gap-3 md:grid-cols-3">
         <div className="rounded-xl border border-surface-border bg-surface-raised p-3">
           <p className="text-xs text-ink-muted">Customer / Vehicle</p>
-          <p className="mt-1 text-sm font-semibold text-ink-primary">{backJob.customerUserId}</p>
-          <p className="mt-1 text-xs text-ink-secondary">{backJob.vehicleId}</p>
+          <p className="mt-1 text-sm font-semibold text-ink-primary">{customerLabel}</p>
+          <p className="mt-1 text-xs text-ink-secondary">{vehicleLabel}</p>
         </div>
         <div className="rounded-xl border border-surface-border bg-surface-raised p-3">
           <p className="text-xs text-ink-muted">Original Work</p>
-          <p className="mt-1 text-sm font-semibold text-ink-primary">{backJob.originalJobOrderId}</p>
-          <p className="mt-1 text-xs text-ink-secondary">{backJob.originalBookingId ?? 'No booking reference'}</p>
+          <p className="mt-1 text-sm font-semibold text-ink-primary">{originalJobOrderReference}</p>
+          <p className="mt-1 text-xs text-ink-secondary">{originalBookingReference}</p>
         </div>
         <div className="rounded-xl border border-surface-border bg-surface-raised p-3">
           <p className="text-xs text-ink-muted">Rework Linkage</p>
-          <p className="mt-1 text-sm font-semibold text-ink-primary">{backJob.reworkJobOrderId ?? 'Not linked yet'}</p>
+          <p className="mt-1 text-sm font-semibold text-ink-primary">{reworkJobOrderReference}</p>
           <p className="mt-1 text-xs text-ink-secondary">Validation: {validationState.replaceAll('_', ' ')}</p>
         </div>
       </div>
@@ -175,7 +327,8 @@ function BackJobDetail({ backJob }) {
         <section className="rounded-xl border border-surface-border bg-surface-raised p-4">
           <p className="text-sm font-bold text-ink-primary">Review Notes</p>
           <p className="mt-2 text-sm leading-6 text-ink-secondary">{backJob.reviewNotes || 'No review notes recorded.'}</p>
-          <p className="mt-3 text-xs text-ink-muted">Return inspection: {backJob.returnInspectionId ?? 'not attached'}</p>
+          <p className="mt-3 text-xs text-ink-muted">Return inspection: {returnInspectionReference}</p>
+          <p className="mt-1 text-xs text-ink-muted">{returnInspectionHelper}</p>
         </section>
         <section className="rounded-xl border border-surface-border bg-surface-raised p-4">
           <p className="text-sm font-bold text-ink-primary">Resolution Notes</p>
@@ -310,6 +463,54 @@ export default function BackJobsContent() {
       ),
     [staffAccounts],
   )
+  const customerById = useMemo(
+    () => new Map(customers.map((customer) => [customer.id, customer])),
+    [customers],
+  )
+  const vehicleById = useMemo(
+    () =>
+      new Map(
+        customers.flatMap((customer) =>
+          (customer.vehicles ?? []).map((vehicle) => [vehicle.id, vehicle]),
+        ),
+      ),
+    [customers],
+  )
+  const jobOrderById = useMemo(
+    () => new Map(vehicleJobOrders.map((jobOrder) => [jobOrder.id, jobOrder])),
+    [vehicleJobOrders],
+  )
+  const bookingById = useMemo(
+    () => new Map(vehicleBookings.map((booking) => [booking.id, booking])),
+    [vehicleBookings],
+  )
+  const activeCustomer = activeBackJob ? customerById.get(activeBackJob.customerUserId) ?? null : null
+  const activeVehicle = activeBackJob ? vehicleById.get(activeBackJob.vehicleId) ?? null : null
+  const activeOriginalJobOrder = activeBackJob ? jobOrderById.get(activeBackJob.originalJobOrderId) ?? null : null
+  const activeOriginalBooking = activeBackJob?.originalBookingId
+    ? bookingById.get(activeBackJob.originalBookingId) ?? null
+    : null
+  const activeReworkJobOrder = activeBackJob?.reworkJobOrderId
+    ? jobOrderById.get(activeBackJob.reworkJobOrderId) ?? null
+    : null
+  const activeCustomerLabel =
+    activeCustomer?.displayName || activeCustomer?.email || activeBackJob?.customerUserId || 'Unknown customer'
+  const activeVehicleLabel = formatVehicleDisplayLabel(activeVehicle)
+  const activeCaseReference = formatBackJobCaseReference(
+    activeBackJob,
+    activeVehicle?.plateNumber || activeVehicle?.id,
+  )
+  const activeOriginalJobOrderReference = formatJobOrderDisplayReference(
+    activeOriginalJobOrder,
+    activeBackJob?.originalJobOrderId,
+  )
+  const activeOriginalBookingReference = formatBookingDisplayReference(
+    activeOriginalBooking,
+    activeBackJob?.originalBookingId,
+  )
+  const activeReworkJobOrderReference = activeBackJob?.reworkJobOrderId
+    ? formatJobOrderDisplayReference(activeReworkJobOrder, activeBackJob.reworkJobOrderId)
+    : 'Not linked yet'
 
   useEffect(() => {
     if (!user?.accessToken || !canManage) {
@@ -925,10 +1126,19 @@ export default function BackJobsContent() {
                 {backJobs.map((backJob) => {
                   const statusMeta = STATUS_META[backJob.status] ?? STATUS_META.reported
                   const visibility = getBackJobCustomerVisibility(backJob.status)
+                  const tableVehicle = vehicleById.get(backJob.vehicleId) ?? null
+                  const tableOriginalJobOrder = jobOrderById.get(backJob.originalJobOrderId) ?? null
                   return (
                     <tr key={backJob.id}>
-                      <td className="font-mono text-xs text-brand-orange">{backJob.id}</td>
-                      <td className="font-mono text-xs text-ink-secondary">{backJob.originalJobOrderId}</td>
+                      <td>
+                        <p className="text-sm font-semibold text-brand-orange">
+                          {formatBackJobCaseReference(backJob, tableVehicle?.plateNumber || tableVehicle?.id)}
+                        </p>
+                        <p className="mt-1 text-xs text-ink-muted">{formatVehicleDisplayLabel(tableVehicle)}</p>
+                      </td>
+                      <td className="text-xs text-ink-secondary">
+                        {formatJobOrderDisplayReference(tableOriginalJobOrder, backJob.originalJobOrderId)}
+                      </td>
                       <td>
                         <p className="max-w-[260px] truncate">{backJob.complaint}</p>
                       </td>
@@ -949,7 +1159,15 @@ export default function BackJobsContent() {
       ) : null}
 
       <div ref={detailSectionRef}>
-        <BackJobDetail backJob={activeBackJob} />
+        <BackJobDetail
+          backJob={activeBackJob}
+          caseReference={activeCaseReference}
+          customerLabel={activeCustomerLabel}
+          vehicleLabel={activeVehicleLabel}
+          originalJobOrderReference={activeOriginalJobOrderReference}
+          originalBookingReference={activeOriginalBookingReference}
+          reworkJobOrderReference={activeReworkJobOrderReference}
+        />
       </div>
 
       <section className="grid gap-5 xl:grid-cols-2">
@@ -1015,7 +1233,10 @@ export default function BackJobsContent() {
                   <div className="rounded-xl border border-surface-border bg-surface-card p-3">
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">Job order</p>
                     <p className="mt-2 text-sm font-semibold text-ink-primary">
-                      JO-{selectedCreateOriginalJobOrder.id.slice(0, 8).toUpperCase()}
+                      {formatJobOrderDisplayReference(
+                        selectedCreateOriginalJobOrder,
+                        selectedCreateOriginalJobOrder.id,
+                      )}
                     </p>
                     <p className="mt-1 text-xs text-ink-muted">{selectedCreateOriginalJobOrder.status}</p>
                   </div>
@@ -1025,7 +1246,10 @@ export default function BackJobsContent() {
                       {selectedCreateOriginalJobOrder.sourceType === 'booking' ? 'Completed booking service' : 'Manual staff source'}
                     </p>
                     <p className="mt-1 text-xs text-ink-muted">
-                      {selectedCreateOriginalJobOrder.sourceId || 'No booking reference'}
+                      {formatBookingDisplayReference(
+                        bookingById.get(selectedCreateOriginalJobOrder.sourceId) ?? null,
+                        selectedCreateOriginalJobOrder.sourceId,
+                      )}
                     </p>
                   </div>
                   <div className="rounded-xl border border-surface-border bg-surface-card p-3">
@@ -1095,8 +1319,8 @@ export default function BackJobsContent() {
                   .filter((inspection) => inspection.inspectionType === 'return')
                   .map((inspection) => ({
                     value: inspection.id,
-                    label: inspection.createdAt || inspection.id,
-                    helper: `${inspection.id} • ${inspection.status}`,
+                    label: formatReturnInspectionReference(inspection, inspection.id),
+                    helper: formatReturnInspectionHelper(inspection),
                   }))}
               />
             </label>
@@ -1201,8 +1425,8 @@ export default function BackJobsContent() {
                   .filter((inspection) => inspection.inspectionType === 'return')
                   .map((inspection) => ({
                     value: inspection.id,
-                    label: inspection.createdAt || inspection.id,
-                    helper: `${inspection.id} • ${inspection.status}`,
+                    label: formatReturnInspectionReference(inspection, inspection.id),
+                    helper: formatReturnInspectionHelper(inspection),
                   }))}
               />
             </label>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480">
+  <rect width="640" height="480" fill="#111827" />
+  <rect x="32" y="32" width="576" height="416" rx="24" fill="#1f2937" stroke="#f59e0b" stroke-width="4" />
+  <text x="320" y="190" text-anchor="middle" fill="#f9fafb" font-family="Arial, sans-serif" font-size="30" font-weight="700">
+    AUTOCARE QA EVIDENCE
+  </text>
+  <text x="320" y="245" text-anchor="middle" fill="#d1d5db" font-family="Arial, sans-serif" font-size="22">
+    Workshop progress proof
+  </text>
+  <text x="320" y="300" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="18">
+    Generated for Playwright upload coverage
+  </text>
+</svg>

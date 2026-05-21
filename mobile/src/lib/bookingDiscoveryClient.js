@@ -128,6 +128,21 @@ const formatClockLabel = (value) => {
   return `${displayHour}:${minutes} ${meridiem}`;
 };
 
+export const formatBookingServiceCurrency = (priceCents) => {
+  const normalizedAmount = Number(priceCents);
+
+  if (!Number.isFinite(normalizedAmount) || normalizedAmount < 0) {
+    return 'Price unavailable';
+  }
+
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: normalizedAmount % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(normalizedAmount / 100);
+};
+
 const buildVehicleLabel = (vehicle) =>
   [vehicle?.year, vehicle?.make, vehicle?.model]
     .map((part) => String(part ?? '').trim())
@@ -282,6 +297,7 @@ const normalizeBookingAvailability = (payload, query) => {
  * @property {string | null | undefined} categoryId
  * @property {string} name
  * @property {string | null | undefined} description
+ * @property {number} basePriceCents
  * @property {number} durationMinutes
  * @property {boolean} isActive
  * @property {string} createdAt
@@ -368,6 +384,7 @@ export const bookingDiscoveryFixtures = {
         categoryId: 'd248f7e9-3efc-4ab4-a880-676c8041a25f',
         name: 'Oil Change',
         description: 'Replace engine oil and inspect basic consumables.',
+        basePriceCents: 85000,
         durationMinutes: 45,
         isActive: true,
         createdAt: '2026-03-25T15:00:00.000Z',
@@ -471,6 +488,7 @@ export const bookingDiscoveryFixtures = {
         categoryId: 'd248f7e9-3efc-4ab4-a880-676c8041a25f',
         name: 'Oil Change',
         description: 'Replace engine oil and inspect basic consumables.',
+        basePriceCents: 85000,
         durationMinutes: 45,
         isActive: true,
         createdAt: '2026-03-25T15:00:00.000Z',

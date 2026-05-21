@@ -21,6 +21,7 @@ import {
   formatInvoiceOrderCurrency,
   listStaffEcommerceOrdersByUserId,
   loadStaffEcommerceOrderSnapshot,
+  recordStaffEcommerceInvoicePayment,
 } from '@/lib/invoiceOrderManagementClient'
 import { useUser } from '@/lib/userContext'
 import {
@@ -44,6 +45,21 @@ const LOAD_STATE_LABELS = {
   invoice_order_runtime_unavailable: 'Runtime Unavailable',
   invoice_order_failed: 'Unavailable',
 }
+
+const ECOMMERCE_PAYMENT_METHOD_OPTIONS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+  { value: 'check', label: 'Check' },
+  { value: 'other', label: 'Other' },
+]
+
+const createEmptyEcommercePaymentDraft = () => ({
+  amountPaid: '',
+  paymentMethod: 'cash',
+  reference: '',
+  notes: '',
+  receivedAt: '',
+})
 
 const formatDateTime = (value) => {
   if (!value) {
@@ -77,6 +93,66 @@ const formatLabel = (value, fallback = 'Unknown') => {
     .filter(Boolean)
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(' ')
+}
+
+const normalizeBusinessToken = (value, fallback = 'WORK') => {
+  const normalizedValue = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+
+  return normalizedValue || fallback
+}
+
+const formatCompactDateToken = (value) => {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}${month}${day}`
+}
+
+const formatCompactTimeToken = (value) => {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${hours}${minutes}${seconds}`
+}
+
+const formatJobOrderReference = (jobOrder) => {
+  if (jobOrder?.jobOrderReference) {
+    return jobOrder.jobOrderReference
+  }
+
+  if (jobOrder?.sourceBackJobReference) {
+    return `JO-RW · ${jobOrder.sourceBackJobReference}`
+  }
+
+  if (jobOrder?.sourceBookingReference) {
+    return `JO · ${jobOrder.sourceBookingReference}`
+  }
+
+  const compactDate = formatCompactDateToken(jobOrder?.workDate ?? jobOrder?.createdAt)
+  const timeToken = formatCompactTimeToken(jobOrder?.createdAt ?? jobOrder?.updatedAt)
+  const adviserToken = normalizeBusinessToken(jobOrder?.serviceAdviserCode, 'TEAM')
+  const sourceToken = normalizeBusinessToken(jobOrder?.sourceType === 'back_job' ? 'RW' : jobOrder?.sourceType, 'WORK')
+
+  return compactDate
+    ? `JO-${compactDate}-${timeToken || adviserToken}-${sourceToken}`
+    : `JO-${adviserToken}-${sourceToken}`
 }
 
 const getLoadMessageToneClass = (status) =>
@@ -204,6 +280,11 @@ export default function InvoiceOrderManagementWorkspace() {
     invoice: null,
     invoiceError: '',
   })
+  const [ecommercePaymentDraft, setEcommercePaymentDraft] = useState(() => createEmptyEcommercePaymentDraft())
+  const [ecommercePaymentState, setEcommercePaymentState] = useState({
+    status: 'invoice_order_ready',
+    message: '',
+  })
   const [agingState, setAgingState] = useState({
     status: 'invoice_order_loading',
     message: '',
@@ -263,7 +344,6 @@ export default function InvoiceOrderManagementWorkspace() {
     void Promise.all([
       listJobOrderWorkbenchSummaries({
         accessToken: user.accessToken,
-        month: new Date().toISOString().slice(0, 7),
         scope: 'history',
       }),
       listAdminCustomers(user.accessToken),
@@ -401,6 +481,8 @@ export default function InvoiceOrderManagementWorkspace() {
   const trackedInvoicePolicies = invoiceAging?.trackedInvoicePolicies ?? []
   const ecommerceOrder = ecommerceState.order ?? null
   const ecommerceInvoice = ecommerceState.invoice ?? null
+  const ecommerceInvoiceId = ecommerceInvoice?.id ?? ''
+  const ecommerceInvoiceAmountDueCents = ecommerceInvoice?.amountDueCents ?? 0
   const paymentEntries = ecommerceInvoice?.paymentEntries ?? []
   const ecommerceLoadLabel = LOAD_STATE_LABELS[ecommerceState.status] ?? 'Order Lookup'
   const jobOrderLoadLabel = LOAD_STATE_LABELS[jobOrderState.status] ?? 'Service Invoice Lookup'
@@ -449,6 +531,115 @@ export default function InvoiceOrderManagementWorkspace() {
     ],
   )
   const hasLookupData = activeMode === 'service' ? Boolean(jobOrderState.jobOrder) : Boolean(ecommerceOrder || ecommerceInvoice)
+
+  useEffect(() => {
+    setEcommercePaymentDraft((currentDraft) => {
+      if (!ecommerceInvoiceId) {
+        return createEmptyEcommercePaymentDraft()
+      }
+
+      const nextAmount =
+        ecommerceInvoiceAmountDueCents > 0
+          ? String(Math.max(1, Math.round(ecommerceInvoiceAmountDueCents / 100)))
+          : ''
+
+      if (
+        currentDraft.amountPaid === nextAmount &&
+        currentDraft.paymentMethod === 'cash' &&
+        !currentDraft.reference &&
+        !currentDraft.notes &&
+        !currentDraft.receivedAt
+      ) {
+        return currentDraft
+      }
+
+      return {
+        amountPaid: nextAmount,
+        paymentMethod: 'cash',
+        reference: '',
+        notes: '',
+        receivedAt: '',
+      }
+    })
+
+    setEcommercePaymentState({
+      status: 'invoice_order_ready',
+      message: '',
+    })
+  }, [ecommerceInvoiceAmountDueCents, ecommerceInvoiceId])
+
+  const handleRecordEcommercePayment = async () => {
+    if (!user?.accessToken) {
+      setEcommercePaymentState({
+        status: 'invoice_order_unauthorized',
+        message: 'A valid staff session is required before recording ecommerce payment.',
+      })
+      return
+    }
+
+    if (!ecommerceInvoice?.id) {
+      setEcommercePaymentState({
+        status: 'invoice_order_empty',
+        message: 'Load an ecommerce order invoice before recording a manual payment.',
+      })
+      return
+    }
+
+    if (ecommerceInvoice.status === 'paid') {
+      setEcommercePaymentState({
+        status: 'invoice_order_loaded',
+        message: 'This ecommerce invoice is already fully paid.',
+      })
+      return
+    }
+
+    setEcommercePaymentState({
+      status: 'invoice_order_loading',
+      message: '',
+    })
+
+    try {
+      const updatedInvoice = await recordStaffEcommerceInvoicePayment({
+        invoiceId: ecommerceInvoice.id,
+        amountPaid: ecommercePaymentDraft.amountPaid,
+        paymentMethod: ecommercePaymentDraft.paymentMethod,
+        reference: ecommercePaymentDraft.reference,
+        notes: ecommercePaymentDraft.notes,
+        receivedAt: ecommercePaymentDraft.receivedAt,
+        accessToken: user.accessToken,
+      })
+
+      setEcommerceState((currentState) => ({
+        ...currentState,
+        status: getStaffInvoiceOrderLoadState({
+          hasSession: true,
+          canRead,
+          hasData: Boolean(currentState.order || updatedInvoice),
+        }),
+        message:
+          updatedInvoice.status === 'paid'
+            ? 'Manual payment recorded and the ecommerce invoice is now settled.'
+            : 'Manual payment recorded and invoice balances were refreshed.',
+        invoice: updatedInvoice,
+        invoiceError: '',
+      }))
+      setEcommercePaymentState({
+        status: 'invoice_order_loaded',
+        message:
+          updatedInvoice.status === 'paid'
+            ? 'Manual payment recorded. This ecommerce invoice is now fully paid.'
+            : 'Manual payment recorded. The remaining balance is still visible below.',
+      })
+    } catch (error) {
+      setEcommercePaymentState({
+        status:
+          error instanceof ApiError && error.status === 0
+            ? 'invoice_order_runtime_unavailable'
+            : 'invoice_order_failed',
+        message: error?.message || 'Ecommerce payment could not be recorded.',
+      })
+    }
+  }
 
   if (!user?.accessToken) {
     return (
@@ -529,7 +720,7 @@ export default function InvoiceOrderManagementWorkspace() {
                   <option value="">Choose a finalized job order</option>
                   {jobOrderOptions.map((jobOrder) => (
                     <option key={jobOrder.id} value={jobOrder.id}>
-                      JO-{jobOrder.id.slice(0, 8).toUpperCase()} / {formatLabel(jobOrder.status)} / {jobOrder.workDate ?? 'No date'}
+                      {formatJobOrderReference(jobOrder)} / {formatLabel(jobOrder.status)} / {jobOrder.workDate ?? 'No date'}
                     </option>
                   ))}
                 </select>
@@ -668,11 +859,29 @@ export default function InvoiceOrderManagementWorkspace() {
                 <StatusBadge value={serviceInvoice?.paymentStatus ?? 'awaiting invoice'} />
               </div>
               {serviceInvoice ? (
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <DetailTile label="Total" value={formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)} />
-                  <DetailTile label="Amount recorded" value={formatInvoiceOrderCurrency(serviceInvoice.amountPaidCents)} />
-                  <DetailTile label="Receipt" value={serviceInvoice.officialReceiptReference ?? 'Generated on finalization'} />
-                  <DetailTile label="PDF delivery" value={getInvoicePdfStateLabel(serviceInvoice)} />
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl border border-brand-orange/20 bg-brand-orange/10 px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-orange">Invoice total</p>
+                    <p className="mt-2 text-2xl font-black tracking-tight text-ink-primary">
+                      {formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)}
+                    </p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      {serviceInvoice.reservationFeeDeductionCents > 0
+                        ? `Subtotal ${formatInvoiceOrderCurrency(serviceInvoice.subtotalAmountCents)} less reservation fee deduction ${formatInvoiceOrderCurrency(serviceInvoice.reservationFeeDeductionCents)}.`
+                        : 'No reservation fee deduction is applied to this service invoice.'}
+                    </p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <DetailTile label="Subtotal" value={formatInvoiceOrderCurrency(serviceInvoice.subtotalAmountCents)} />
+                    <DetailTile
+                      label="Reservation fee deduction"
+                      value={formatInvoiceOrderCurrency(serviceInvoice.reservationFeeDeductionCents)}
+                    />
+                    <DetailTile label="Total" value={formatInvoiceOrderCurrency(serviceInvoice.totalAmountCents)} />
+                    <DetailTile label="Amount recorded" value={formatInvoiceOrderCurrency(serviceInvoice.amountPaidCents)} />
+                    <DetailTile label="Receipt" value={serviceInvoice.officialReceiptReference ?? 'Generated on finalization'} />
+                    <DetailTile label="PDF delivery" value={getInvoicePdfStateLabel(serviceInvoice)} />
+                  </div>
                 </div>
               ) : (
                 <p className="mt-3 text-sm leading-6 text-ink-muted">
@@ -732,6 +941,134 @@ export default function InvoiceOrderManagementWorkspace() {
               <div className="ops-panel-muted">
                 <p className="text-sm font-bold text-ink-primary">Payment boundary</p>
                 <p className="mt-2 text-sm leading-6 text-ink-muted">{staffInvoiceOrderPaymentCopy}</p>
+              </div>
+
+              <div className="ops-panel-muted">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-ink-primary">Manual ecommerce payment</p>
+                    <p className="mt-2 text-sm leading-6 text-ink-muted">
+                      Record cashier or bank-collected order payments here so the invoice, order, and loyalty ledger stay in sync.
+                    </p>
+                  </div>
+                  <span className="badge badge-gray">
+                    {ecommerceInvoice?.amountDueLabel ?? 'Load invoice first'}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3">
+                  <label>
+                    <span className="label">Payment amount (PHP)</span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={ecommercePaymentDraft.amountPaid}
+                      onChange={(event) =>
+                        setEcommercePaymentDraft((currentDraft) => ({
+                          ...currentDraft,
+                          amountPaid: event.target.value,
+                        }))
+                      }
+                      className="input"
+                      disabled={!ecommerceInvoice || ecommerceInvoice.status === 'paid'}
+                    />
+                  </label>
+
+                  <label>
+                    <span className="label">Payment method</span>
+                    <select
+                      value={ecommercePaymentDraft.paymentMethod}
+                      onChange={(event) =>
+                        setEcommercePaymentDraft((currentDraft) => ({
+                          ...currentDraft,
+                          paymentMethod: event.target.value,
+                        }))
+                      }
+                      className="select"
+                      disabled={!ecommerceInvoice || ecommerceInvoice.status === 'paid'}
+                    >
+                      {ECOMMERCE_PAYMENT_METHOD_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span className="label">Reference</span>
+                    <input
+                      type="text"
+                      value={ecommercePaymentDraft.reference}
+                      onChange={(event) =>
+                        setEcommercePaymentDraft((currentDraft) => ({
+                          ...currentDraft,
+                          reference: event.target.value,
+                        }))
+                      }
+                      className="input"
+                      placeholder="Receipt number, transfer id, or bank ref"
+                      disabled={!ecommerceInvoice || ecommerceInvoice.status === 'paid'}
+                    />
+                  </label>
+
+                  <label>
+                    <span className="label">Received at</span>
+                    <input
+                      type="datetime-local"
+                      value={ecommercePaymentDraft.receivedAt}
+                      onChange={(event) =>
+                        setEcommercePaymentDraft((currentDraft) => ({
+                          ...currentDraft,
+                          receivedAt: event.target.value,
+                        }))
+                      }
+                      className="input"
+                      disabled={!ecommerceInvoice || ecommerceInvoice.status === 'paid'}
+                    />
+                  </label>
+
+                  <label>
+                    <span className="label">Notes</span>
+                    <textarea
+                      value={ecommercePaymentDraft.notes}
+                      onChange={(event) =>
+                        setEcommercePaymentDraft((currentDraft) => ({
+                          ...currentDraft,
+                          notes: event.target.value,
+                        }))
+                      }
+                      className="input min-h-[96px] resize-y"
+                      placeholder="Optional cashier note for the manual payment entry."
+                      disabled={!ecommerceInvoice || ecommerceInvoice.status === 'paid'}
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleRecordEcommercePayment}
+                    disabled={
+                      !ecommerceInvoice ||
+                      ecommerceInvoice.status === 'paid' ||
+                      ecommercePaymentState.status === 'invoice_order_loading'
+                    }
+                    className="ops-action-primary"
+                  >
+                    {ecommercePaymentState.status === 'invoice_order_loading' ? (
+                      <LoaderCircle size={14} className="animate-spin" />
+                    ) : (
+                      <ReceiptText size={14} />
+                    )}
+                    Record Ecommerce Payment
+                  </button>
+
+                  {ecommercePaymentState.message ? (
+                    <div className={getLoadMessageToneClass(ecommercePaymentState.status)}>
+                      {ecommercePaymentState.message}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
 

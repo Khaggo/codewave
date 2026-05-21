@@ -333,8 +333,33 @@ function compareSlotsByStartTime(left, right) {
   return String(left?.label ?? '').localeCompare(String(right?.label ?? ''))
 }
 
-function formatBookingReference(id) {
-  return id ? `BK-${id.slice(0, 8).toUpperCase()}` : 'BK-PENDING'
+function normalizeBusinessToken(value, fallback = 'PENDING') {
+  const normalizedValue = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+
+  return normalizedValue || fallback
+}
+
+function formatBookingReference(recordOrId, scheduledDate, plateNumber) {
+  if (recordOrId && typeof recordOrId === 'object') {
+    if (recordOrId.bookingReference) {
+      return recordOrId.bookingReference
+    }
+
+    const compactDate = String(recordOrId.scheduledDate ?? '').replace(/-/g, '')
+    const plateToken = normalizeBusinessToken(recordOrId.plateNumber, 'PENDING')
+    return compactDate ? `BK-${compactDate}-${plateToken}` : `BK-${plateToken}`
+  }
+
+  if (scheduledDate || plateNumber) {
+    const compactDate = String(scheduledDate ?? '').replace(/-/g, '')
+    const plateToken = normalizeBusinessToken(plateNumber, 'PENDING')
+    return compactDate ? `BK-${compactDate}-${plateToken}` : `BK-${plateToken}`
+  }
+
+  return 'BK-PENDING'
 }
 
 function getStatusMeta(status) {
@@ -354,7 +379,7 @@ function getCustomerLabel(record) {
 }
 
 function getVehicleLabel(record) {
-  return record?.vehicleLabel || record?.vehicleDisplayName || record?.plateNumber || `Vehicle ${record?.vehicleId ?? 'Unknown'}`
+  return record?.vehicleLabel || record?.vehicleDisplayName || record?.plateNumber || `Vehicle ${normalizeBusinessToken(record?.vehicleId, 'UNKNOWN')}`
 }
 
 function flattenScheduleBookings(schedule) {
@@ -871,7 +896,7 @@ function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId 
               <div key={booking.id} className="px-5 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <p className="font-mono text-[11px] font-bold tracking-wide text-brand-orange">
-                    {formatBookingReference(booking.id)}
+                    {formatBookingReference(booking)}
                   </p>
                   <div className="flex flex-wrap items-center justify-end gap-1.5">
                     {handoffStateMeta ? <span className={`badge ${handoffStateMeta.cls}`}>{handoffStateMeta.label}</span> : null}
@@ -1022,7 +1047,7 @@ function QueueTable({ queue }) {
                 </td>
                 <td>
                   <p className="font-mono text-xs font-bold text-brand-orange">
-                    {formatBookingReference(item.bookingId)}
+                    {formatBookingReference(item)}
                   </p>
                   <p className="mt-1 text-[11px] text-ink-secondary">{getCustomerLabel(item)}</p>
                   {item.customerEmail && item.customerEmail !== getCustomerLabel(item) ? (

@@ -21,6 +21,10 @@ import {
 import { ApiError } from '@/lib/authClient'
 import PageHeader from '@/components/ui/PageHeader'
 import {
+  listStaffInventoryCategories,
+  listStaffInventoryProducts,
+} from '@/lib/inventoryAdminClient'
+import {
   createLoyaltyEarningRule,
   createLoyaltyReward,
   getLoyaltyAnalytics,
@@ -107,6 +111,23 @@ const parseCsv = (value) =>
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean)
+
+const stringifyCsv = (values) => values.join(', ')
+
+const addCsvValue = (source, value) => {
+  const normalizedValue = String(value ?? '').trim()
+  if (!normalizedValue) {
+    return source
+  }
+
+  const currentValues = parseCsv(source)
+  return currentValues.includes(normalizedValue)
+    ? stringifyCsv(currentValues)
+    : stringifyCsv([...currentValues, normalizedValue])
+}
+
+const removeCsvValue = (source, value) =>
+  stringifyCsv(parseCsv(source).filter((entry) => entry !== value))
 
 const getErrorMessage = (error, fallback) =>
   error instanceof Error && error.message ? error.message : fallback
@@ -243,6 +264,87 @@ function StatCard({ label, value, helper }) {
   )
 }
 
+function MultiSelectIdPicker({
+  label,
+  value,
+  options,
+  placeholder,
+  emptyMessage,
+  onChange,
+}) {
+  const selectedValues = parseCsv(value)
+  const [draftValue, setDraftValue] = useState('')
+  const selectedOptions = selectedValues.map((selectedValue) => {
+    const matchedOption = options.find((option) => option.value === selectedValue)
+    return matchedOption ?? { value: selectedValue, label: selectedValue, helper: 'Saved selection' }
+  })
+  const availableOptions = options.filter((option) => !selectedValues.includes(option.value))
+
+  useEffect(() => {
+    if (!draftValue) {
+      return
+    }
+
+    if (!availableOptions.some((option) => option.value === draftValue)) {
+      setDraftValue('')
+    }
+  }, [availableOptions, draftValue])
+
+  return (
+    <div className="space-y-3">
+      <label className="label">{label}</label>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+        <select
+          value={draftValue}
+          onChange={(event) => setDraftValue(event.target.value)}
+          className="select"
+        >
+          <option value="">{placeholder}</option>
+          {availableOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="btn-secondary justify-center"
+          onClick={() => {
+            if (!draftValue) return
+            onChange(addCsvValue(value, draftValue))
+            setDraftValue('')
+          }}
+          disabled={!draftValue}
+        >
+          Add
+        </button>
+      </div>
+
+      {selectedOptions.length ? (
+        <div className="space-y-2">
+          {selectedOptions.map((option) => (
+            <div key={option.value} className="flex items-start justify-between gap-3 rounded-xl border border-surface-border bg-surface-card px-3 py-2">
+              <div>
+                <p className="text-sm font-semibold text-ink-primary">{option.label}</p>
+                <p className="text-xs text-ink-muted">{option.helper}</p>
+              </div>
+              <button
+                type="button"
+                className="btn-ghost !px-3 !py-2"
+                onClick={() => onChange(removeCsvValue(value, option.value))}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-ink-muted">{emptyMessage}</p>
+      )}
+    </div>
+  )
+}
+
 function RewardForm({ form, setForm, mode, onCancel, onSave, saving }) {
   return (
     <>
@@ -344,7 +446,16 @@ function RewardForm({ form, setForm, mode, onCancel, onSave, saving }) {
   )
 }
 
-function EarningRuleForm({ form, setForm, mode, onCancel, onSave, saving }) {
+function EarningRuleForm({
+  form,
+  setForm,
+  mode,
+  onCancel,
+  onSave,
+  saving,
+  productOptions,
+  productCategoryOptions,
+}) {
   return (
     <>
       <div>
@@ -463,24 +574,22 @@ function EarningRuleForm({ form, setForm, mode, onCancel, onSave, saving }) {
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label className="label">Eligible Product IDs</label>
-          <input
-            value={form.eligibleProductIds}
-            onChange={(event) => setForm((current) => ({ ...current, eligibleProductIds: event.target.value }))}
-            placeholder="Optional comma-separated IDs"
-            className="input"
-          />
-        </div>
-        <div>
-          <label className="label">Eligible Product Category IDs</label>
-          <input
-            value={form.eligibleProductCategoryIds}
-            onChange={(event) => setForm((current) => ({ ...current, eligibleProductCategoryIds: event.target.value }))}
-            placeholder="Optional comma-separated IDs"
-            className="input"
-          />
-        </div>
+        <MultiSelectIdPicker
+          label="Eligible Products"
+          value={form.eligibleProductIds}
+          options={productOptions}
+          placeholder="Choose a product"
+          emptyMessage="No product filter applied yet."
+          onChange={(nextValue) => setForm((current) => ({ ...current, eligibleProductIds: nextValue }))}
+        />
+        <MultiSelectIdPicker
+          label="Eligible Product Categories"
+          value={form.eligibleProductCategoryIds}
+          options={productCategoryOptions}
+          placeholder="Choose a product category"
+          emptyMessage="No product-category filter applied yet."
+          onChange={(nextValue) => setForm((current) => ({ ...current, eligibleProductCategoryIds: nextValue }))}
+        />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
@@ -638,6 +747,11 @@ export default function LoyaltyManager() {
   const [ruleQuery, setRuleQuery] = useState('')
   const [modal, setModal] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [catalogDirectory, setCatalogDirectory] = useState({
+    products: [],
+    categories: [],
+    error: '',
+  })
   const [rewardForm, setRewardForm] = useState(createEmptyRewardForm)
   const [ruleForm, setRuleForm] = useState(createEmptyRuleForm)
   const [actionState, setActionState] = useState({ status: 'idle', message: '' })
@@ -658,10 +772,12 @@ export default function LoyaltyManager() {
       errors: {},
     }))
 
-    const [rewardsResult, rulesResult, analyticsResult] = await Promise.allSettled([
+    const [rewardsResult, rulesResult, analyticsResult, productsResult, categoriesResult] = await Promise.allSettled([
       listLoyaltyRewards(user.accessToken),
       listLoyaltyEarningRules(user.accessToken),
       getLoyaltyAnalytics(user.accessToken),
+      listStaffInventoryProducts({ accessToken: user.accessToken }),
+      listStaffInventoryCategories({ accessToken: user.accessToken }),
     ])
     const nextErrors = {}
 
@@ -677,6 +793,14 @@ export default function LoyaltyManager() {
       nextErrors.analytics = getErrorMessage(analyticsResult.reason, 'Unable to load loyalty analytics.')
     }
 
+    const catalogErrorMessages = []
+    if (productsResult.status === 'rejected') {
+      catalogErrorMessages.push(getErrorMessage(productsResult.reason, 'Unable to load product picker options.'))
+    }
+    if (categoriesResult.status === 'rejected') {
+      catalogErrorMessages.push(getErrorMessage(categoriesResult.reason, 'Unable to load category picker options.'))
+    }
+
     setState((current) => ({
       status: 'ready',
       rewards: rewardsResult.status === 'fulfilled' ? rewardsResult.value : current.rewards,
@@ -684,6 +808,11 @@ export default function LoyaltyManager() {
       analytics: analyticsResult.status === 'fulfilled' ? analyticsResult.value : current.analytics,
       errors: nextErrors,
     }))
+    setCatalogDirectory({
+      products: productsResult.status === 'fulfilled' ? productsResult.value : [],
+      categories: categoriesResult.status === 'fulfilled' ? categoriesResult.value : [],
+      error: catalogErrorMessages.join(' '),
+    })
   }, [user?.accessToken])
 
   useEffect(() => {
@@ -699,6 +828,24 @@ export default function LoyaltyManager() {
   const filteredRules = useMemo(() => {
     return filterLoyaltyRules(state.earningRules, ruleQuery)
   }, [ruleQuery, state.earningRules])
+  const productPickerOptions = useMemo(
+    () =>
+      catalogDirectory.products.map((product) => ({
+        value: product.id,
+        label: `${product.name} (${product.sku})`,
+        helper: `${product.categoryLabel} · ${product.visibilityLabel}`,
+      })),
+    [catalogDirectory.products],
+  )
+  const productCategoryPickerOptions = useMemo(
+    () =>
+      catalogDirectory.categories.map((category) => ({
+        value: category.id,
+        label: category.label,
+        helper: category.description || (category.isActive ? 'Published category' : 'Hidden category'),
+      })),
+    [catalogDirectory.categories],
+  )
 
   const openCreateReward = () => {
     setSelected(null)
@@ -1154,11 +1301,16 @@ export default function LoyaltyManager() {
           {actionState.status === 'error' ? (
             <InfoPanel tone="warning" title="Unable to save" body={actionState.message} />
           ) : null}
+          {catalogDirectory.error ? (
+            <InfoPanel tone="warning" title="Picker options unavailable" body={catalogDirectory.error} />
+          ) : null}
           <EarningRuleForm
             form={ruleForm}
             setForm={setRuleForm}
             mode={modal === 'createRule' ? 'create' : 'edit'}
             saving={actionState.status === 'saving'}
+            productOptions={productPickerOptions}
+            productCategoryOptions={productCategoryPickerOptions}
             onCancel={() => setModal(null)}
             onSave={handleRuleSave}
           />

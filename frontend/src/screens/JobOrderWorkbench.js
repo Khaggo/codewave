@@ -65,6 +65,79 @@ const WORKSHOP_STATUS_ACTION_LABELS = {
   cancelled: 'Cancel job order',
 }
 
+function normalizeBusinessToken(value, fallback = 'UNSET') {
+  const normalizedValue = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+
+  return normalizedValue || fallback
+}
+
+function formatCompactDateToken(value) {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}${month}${day}`
+}
+
+function formatCompactTimeToken(value) {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${hours}${minutes}${seconds}`
+}
+
+function formatBookingReference(record) {
+  if (record?.bookingReference) {
+    return record.bookingReference
+  }
+
+  const compactDate = String(record?.scheduledDate ?? record?.workDate ?? '')
+    .slice(0, 10)
+    .replace(/-/g, '')
+  const plateToken = normalizeBusinessToken(record?.plateNumber ?? record?.vehicleDisplayName, 'PENDING')
+
+  return compactDate ? `BK-${compactDate}-${plateToken}` : `BK-${plateToken}`
+}
+
+function formatJobOrderReference(record) {
+  if (record?.jobOrderReference) {
+    return record.jobOrderReference
+  }
+
+  if (record?.sourceBackJobReference) {
+    return `JO-RW · ${record.sourceBackJobReference}`
+  }
+
+  if (record?.sourceBookingReference) {
+    return `JO · ${record.sourceBookingReference}`
+  }
+
+  const compactDate = String(record?.workDate ?? record?.createdAt ?? '')
+    ? formatCompactDateToken(record?.workDate ?? record?.createdAt)
+    : ''
+  const timeToken = formatCompactTimeToken(record?.createdAt ?? record?.updatedAt)
+  const plateToken = normalizeBusinessToken(record?.plateNumber ?? record?.vehicleDisplayName ?? record?.serviceAdviserCode, 'WORK')
+  const prefix = record?.jobType === 'back_job' ? 'JO-RW' : 'JO'
+
+  return compactDate ? `${prefix}-${compactDate}-${timeToken || plateToken}` : `${prefix}-${plateToken}`
+}
+
 const initialCreateState = {
   status: 'create_ready',
   message: '',
@@ -631,6 +704,9 @@ export default function JobOrderWorkbench() {
   const [workbenchScope, setWorkbenchScope] = useState('active')
   const [workbenchStage, setWorkbenchStage] = useState('queue')
   const [selectedDate, setSelectedDate] = useState(toDateKey())
+  const autoFocusedMonthRef = useRef('')
+  const hasManuallySelectedDateRef = useRef(false)
+  const handoffLoadRequestRef = useRef(0)
   const [handoffCandidates, setHandoffCandidates] = useState([])
   const [handoffState, setHandoffState] = useState({
     status: 'handoff_empty',
@@ -1191,6 +1267,27 @@ export default function JobOrderWorkbench() {
 
     return [...markers.values()].sort((left, right) => left.date.localeCompare(right.date))
   }, [datesWithBookingQueue, datesWithJobOrders])
+  useEffect(() => {
+    if (!canUseWorkbench || activeJobOrder?.id || markedWorkbenchDates.length === 0) {
+      return
+    }
+
+    if (hasManuallySelectedDateRef.current) {
+      return
+    }
+
+    if (autoFocusedMonthRef.current === selectedMonth) {
+      return
+    }
+
+    if (markedWorkbenchDates.some((entry) => entry.date === selectedDate)) {
+      autoFocusedMonthRef.current = selectedMonth
+      return
+    }
+
+    autoFocusedMonthRef.current = selectedMonth
+    setSelectedDate(markedWorkbenchDates[0].date)
+  }, [activeJobOrder?.id, canUseWorkbench, markedWorkbenchDates, selectedDate, selectedMonth])
   const selectedDateJobOrders = useMemo(
     () => monthJobOrders.filter((jobOrder) => jobOrder.workDate === selectedDate),
     [monthJobOrders, selectedDate],
@@ -1451,6 +1548,9 @@ export default function JobOrderWorkbench() {
   }, [activeJobOrder])
 
   const loadBookingHandoffs = useCallback(async () => {
+    const requestId = handoffLoadRequestRef.current + 1
+    handoffLoadRequestRef.current = requestId
+
     if (workbenchScope === 'history') {
       setHandoffCandidates([])
       setSelectedBookingId('')
@@ -1492,6 +1592,10 @@ export default function JobOrderWorkbench() {
         user.accessToken,
       )
 
+      if (handoffLoadRequestRef.current !== requestId) {
+        return
+      }
+
       const handoffEligibleBookings = (schedule?.slots ?? []).flatMap((slot) =>
         (slot?.bookings ?? []).filter((booking) =>
           ['confirmed', 'in_service'].includes(booking?.status),
@@ -1518,6 +1622,10 @@ export default function JobOrderWorkbench() {
             : 'No confirmed or workshop-handoff bookings are available for job-order handoff on this date.',
       })
     } catch (error) {
+      if (handoffLoadRequestRef.current !== requestId) {
+        return
+      }
+
       setHandoffCandidates([])
       setSelectedBookingId('')
       setHandoffState({
@@ -1530,6 +1638,13 @@ export default function JobOrderWorkbench() {
   useEffect(() => {
     void loadBookingHandoffs()
   }, [loadBookingHandoffs])
+
+  useEffect(() => {
+    setHandoffCandidates([])
+    setSelectedBookingId('')
+    setCreateDraft(emptyCreateDraft)
+    setCreateState(initialCreateState)
+  }, [selectedDate])
 
   useEffect(() => {
     if (!selectedCandidate) {
@@ -1681,6 +1796,16 @@ export default function JobOrderWorkbench() {
     }))
   }
 
+  const handleSelectHandoffCandidate = (candidate) => {
+    setSelectedBookingId(candidate.bookingId)
+    setCreateDraft({
+      notes: candidate.sourceNotes ?? '',
+      items: candidate.defaultItems,
+      assignedTechnicianId: '',
+    })
+    setCreateState(initialCreateState)
+  }
+
   const handleLoadJobOrder = async () => {
     if (!user?.accessToken) {
       setDetailState({
@@ -1703,6 +1828,7 @@ export default function JobOrderWorkbench() {
 
       clearBookingCreateContext()
       setActiveJobOrder(jobOrder)
+      setSelectedDate(jobOrder.workDate ?? selectedDate)
       setManualJobOrderId(jobOrder.id)
       setWorkbenchStage(getSuggestedControlCenterStage(jobOrder, 'overview'))
       setDetailState({
@@ -1772,9 +1898,10 @@ export default function JobOrderWorkbench() {
 
       clearBookingCreateContext({
         status: 'create_saved',
-        message: `Job order ${jobOrder.id.slice(0, 8).toUpperCase()} created from the selected booking handoff.`,
+        message: `Job order ${formatJobOrderReference(jobOrder)} created from the selected booking handoff.`,
       })
       setActiveJobOrder(jobOrder)
+      setSelectedDate(jobOrder.workDate ?? selectedDate)
       setManualJobOrderId(jobOrder.id)
       setWorkbenchStage(getSuggestedControlCenterStage(jobOrder, 'overview'))
       void loadJobOrderSummaries()
@@ -2101,7 +2228,7 @@ export default function JobOrderWorkbench() {
       })
 
       setActiveJobOrder(updatedJobOrder)
-      setWorkbenchStage(getSuggestedControlCenterStage(updatedJobOrder, 'overview'))
+      setWorkbenchStage('evidence')
       setPhotoDraft({
         ...emptyPhotoDraft,
         linkedEntityType: recommendedPhotoTargetOption?.linkedEntityType ?? photoTargetOptions[0]?.linkedEntityType ?? 'job_order',
@@ -2110,7 +2237,7 @@ export default function JobOrderWorkbench() {
       setPhotoInputResetKey((current) => current + 1)
       setPhotoState({
         status: 'photo_saved',
-        message: 'Photo evidence uploaded and job-order detail refreshed.',
+        message: 'Photo evidence uploaded and saved. Stay on Evidence to confirm the stored proof before continuing.',
       })
     } catch (error) {
       let nextStatus = 'photo_failed'
@@ -2511,7 +2638,7 @@ export default function JobOrderWorkbench() {
         <div className="grid gap-3 md:grid-cols-3 mt-4">
           <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
             <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Source booking</p>
-            <p className="text-sm text-ink-primary mt-1">BK-{selectedCandidate.bookingId.slice(0, 8).toUpperCase()}</p>
+            <p className="text-sm text-ink-primary mt-1">{formatBookingReference(selectedCandidate)}</p>
             <p className="text-xs text-ink-muted mt-2">{selectedCandidate.timeSlotLabel}</p>
           </div>
           <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
@@ -2753,7 +2880,7 @@ export default function JobOrderWorkbench() {
               value={activeJobOrder ? 'Loaded' : 'Awaiting load'}
               sub={
                 activeJobOrder
-                  ? `Job order ${activeJobOrder.id.slice(0, 8).toUpperCase()} is ready for technician updates`
+                  ? `Job order ${formatJobOrderReference(activeJobOrder)} is ready for technician updates`
                   : workbenchScope === 'history'
                     ? 'Choose one of your finalized or cancelled assigned job orders to review'
                     : 'Choose one of your assigned job orders to begin'
@@ -2866,7 +2993,7 @@ export default function JobOrderWorkbench() {
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-ink-secondary">
               <span className="badge badge-gray">Queue collapsed</span>
               <span>
-                <span className="font-semibold text-ink-primary">JO-{activeJobOrder.id.slice(0, 8).toUpperCase()}</span>{' '}
+                <span className="font-semibold text-ink-primary">{formatJobOrderReference(activeJobOrder)}</span>{' '}
                 is active - {controlCenterNextAction.stepLabel} - {controlCenterNextAction.title}
               </span>
             </div>
@@ -2919,7 +3046,7 @@ export default function JobOrderWorkbench() {
                   Queue is now supporting the loaded record
                 </p>
                 <p className="mt-1 text-sm text-ink-secondary">
-                  JO-{activeJobOrder.id.slice(0, 8).toUpperCase()} is active in the workspace. Use Queue again whenever you need to switch records or create a new job order from booking handoff.
+                  {formatJobOrderReference(activeJobOrder)} is active in the workspace. Use Queue again whenever you need to switch records or create a new job order from booking handoff.
                 </p>
               </div>
               <button
@@ -2944,7 +3071,10 @@ export default function JobOrderWorkbench() {
                 <input
                   type="date"
                   value={selectedDate}
-                  onChange={(event) => setSelectedDate(event.target.value || toDateKey())}
+                  onChange={(event) => {
+                    hasManuallySelectedDateRef.current = true
+                    setSelectedDate(event.target.value || toDateKey())
+                  }}
                   className="input"
                 />
               </label>
@@ -2963,6 +3093,56 @@ export default function JobOrderWorkbench() {
                         <span className="badge badge-orange">Create first job order</span>
                       </div>
                     </div>
+                    {handoffCandidates.length > 1 ? (
+                      <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-bold text-ink-primary">Choose Booking Handoff Source</p>
+                            <p className="text-xs text-ink-muted mt-1">
+                              More than one booking is ready for this date. Select the exact source before creating the first job order.
+                            </p>
+                          </div>
+                          <span className="badge badge-gray">{handoffCandidates.length} sources</span>
+                        </div>
+
+                        <div className="space-y-3 mt-4">
+                          {handoffCandidates.map((candidate) => {
+                            const isSelected = candidate.bookingId === selectedBookingId
+                            return (
+                              <button
+                                key={candidate.bookingId}
+                                type="button"
+                                onClick={() => handleSelectHandoffCandidate(candidate)}
+                                className={`w-full text-left rounded-xl border px-4 py-4 transition ${
+                                  isSelected
+                                    ? 'border-brand-orange/45 bg-brand-orange/10'
+                                    : 'border-surface-border bg-surface-raised hover:border-brand-orange/35'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="font-mono text-xs font-bold tracking-wide text-brand-orange">
+                                      {formatBookingReference(candidate)}
+                                    </p>
+                                    <p className="text-sm font-semibold text-ink-primary mt-1">
+                                      {candidate.serviceSummary}
+                                    </p>
+                                    <p className="text-xs text-ink-muted mt-2">{candidate.customerLabel}</p>
+                                    <p className="text-xs text-ink-muted mt-1">{candidate.vehicleLabel}</p>
+                                  </div>
+                                  <span className={isSelected ? 'badge badge-orange' : 'badge badge-green'}>
+                                    {isSelected ? 'Selected source' : 'Confirmed source'}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-ink-muted mt-3">
+                                  {formatDate(candidate.scheduledDate)} | {candidate.timeSlotLabel}
+                                </p>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
                     {renderBookingCreateWorkspace({ mode: 'primary' })}
                     {monthJobOrders.length > 0 ? (
                       <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-4">
@@ -2986,7 +3166,7 @@ export default function JobOrderWorkbench() {
                               <option value="">Choose a job order from this month</option>
                               {monthJobOrders.map((jobOrder) => (
                                 <option key={jobOrder.id} value={jobOrder.id}>
-                                  JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatDate(jobOrder.workDate)} - {formatStatusLabel(jobOrder.status)}
+                                  {formatJobOrderReference(jobOrder)} - {formatDate(jobOrder.workDate)} - {formatStatusLabel(jobOrder.status)}
                                 </option>
                               ))}
                             </select>
@@ -3023,7 +3203,7 @@ export default function JobOrderWorkbench() {
                           <optgroup label="Selected date">
                             {selectedDateJobOrders.map((jobOrder) => (
                               <option key={jobOrder.id} value={jobOrder.id}>
-                                JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatStatusLabel(jobOrder.status)} - {formatDate(jobOrder.workDate)}
+                                {formatJobOrderReference(jobOrder)} - {formatStatusLabel(jobOrder.status)} - {formatDate(jobOrder.workDate)}
                               </option>
                             ))}
                           </optgroup>
@@ -3034,7 +3214,7 @@ export default function JobOrderWorkbench() {
                               .filter((jobOrder) => jobOrder.workDate !== selectedDate)
                               .map((jobOrder) => (
                                 <option key={jobOrder.id} value={jobOrder.id}>
-                                  JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatDate(jobOrder.workDate)} - {formatStatusLabel(jobOrder.status)}
+                                  {formatJobOrderReference(jobOrder)} - {formatDate(jobOrder.workDate)} - {formatStatusLabel(jobOrder.status)}
                                 </option>
                               ))}
                           </optgroup>
@@ -3063,6 +3243,98 @@ export default function JobOrderWorkbench() {
                               : 'Use the selector to load a known live record.'}
                       </p>
                     )}
+
+                    {!isTechnician &&
+                    workbenchScope === 'active' &&
+                    selectedDateJobOrders.length > 0 &&
+                    handoffCandidates.length > 0 ? (
+                      <div className="sm:col-span-2 rounded-xl border border-surface-border bg-surface-card px-4 py-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-ink-primary">Choose the exact source for this shared queue date</p>
+                            <p className="mt-1 text-sm text-ink-secondary">
+                              {formatDate(selectedDate)} contains both an existing job order and a fresh booking handoff. Load the JO from the lookup above, or use the selected booking handoff below to create the next record.
+                            </p>
+                          </div>
+                          <span className="badge badge-orange">Mixed source date</span>
+                        </div>
+                        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                          <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+                            <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Existing job order selection</p>
+                            <p className="mt-2 text-sm text-ink-primary">
+                              {manualJobOrderId
+                                ? `${formatJobOrderReference({ id: manualJobOrderId, workDate: selectedDate })} is selected in the lookup above.`
+                                : 'Choose an existing JO in the lookup above before loading it into the control center.'}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-brand-orange/20 bg-brand-orange/10 px-4 py-3">
+                            <p className="text-[11px] font-bold uppercase tracking-widest text-brand-orange">Booking handoff selection</p>
+                            <p className="mt-2 text-sm text-ink-primary">
+                              {selectedCandidate
+                                ? `${formatBookingReference(selectedCandidate)} is selected as the next create-from-handoff source.`
+                                : 'Choose the handoff source below before creating the next job order for this same date.'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {!isTechnician && workbenchScope === 'active' && handoffCandidates.length > 0 ? (
+                      <div className="sm:col-span-2 rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-4 py-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-bold text-ink-primary">Booking Handoff Sources</p>
+                            <p className="text-xs text-ink-muted mt-1">
+                              This date already has a job order, but these confirmed booking handoffs can still create the next job order from the queue.
+                            </p>
+                          </div>
+                          <span className="badge badge-orange">Create from handoff</span>
+                        </div>
+
+                        {handoffState.message ? (
+                          <div className={`mt-4 ${handoffStateClassName}`}>{handoffState.message}</div>
+                        ) : null}
+
+                        <div className="space-y-3 mt-4">
+                          {handoffCandidates.map((candidate) => {
+                            const isSelected = candidate.bookingId === selectedBookingId
+                            return (
+                              <button
+                                key={candidate.bookingId}
+                                type="button"
+                                onClick={() => handleSelectHandoffCandidate(candidate)}
+                                className={`w-full text-left rounded-xl border px-4 py-4 transition ${
+                                  isSelected
+                                    ? 'border-brand-orange/45 bg-surface-card'
+                                    : 'border-brand-orange/20 bg-surface-raised hover:border-brand-orange/45'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="font-mono text-xs font-bold tracking-wide text-brand-orange">
+                                      {formatBookingReference(candidate)}
+                                    </p>
+                                    <p className="text-sm font-semibold text-ink-primary mt-1">
+                                      {candidate.serviceSummary}
+                                    </p>
+                                    <p className="text-xs text-ink-muted mt-2">{candidate.customerLabel}</p>
+                                    <p className="text-xs text-ink-muted mt-1">{candidate.vehicleLabel}</p>
+                                  </div>
+                                  <span className={isSelected ? 'badge badge-orange' : 'badge badge-green'}>
+                                    {isSelected ? 'Selected source' : 'Confirmed source'}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-ink-muted mt-3">
+                                  {formatDate(candidate.scheduledDate)} | {candidate.timeSlotLabel}
+                                </p>
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        {renderBookingCreateWorkspace({ mode: 'secondary' })}
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -3103,7 +3375,10 @@ export default function JobOrderWorkbench() {
                         <button
                           key={entry.date}
                           type="button"
-                          onClick={() => setSelectedDate(entry.date)}
+                          onClick={() => {
+                            hasManuallySelectedDateRef.current = true
+                            setSelectedDate(entry.date)
+                          }}
                           className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
                             isSelectedDate
                               ? 'border-brand-orange bg-brand-orange/10 text-ink-primary'
@@ -3160,7 +3435,7 @@ export default function JobOrderWorkbench() {
                 <div className="min-w-0 space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-[24px] font-medium tracking-tight text-ink-primary">
-                      JO-{activeJobOrder.id.slice(0, 8).toUpperCase()}
+                      {formatJobOrderReference(activeJobOrder)}
                     </p>
                     <StatusBadge status={activeJobOrder.status} />
                     <span className={`badge ${isBackJobRework ? 'badge-orange' : 'badge-green'}`}>
@@ -3171,21 +3446,21 @@ export default function JobOrderWorkbench() {
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Customer</p>
                       <p className="mt-1 truncate text-ink-primary">
-                        {activeSourceCandidate?.customerLabel ?? activeJobOrder.customerUserId}
+                        {activeSourceCandidate?.customerLabel ?? activeJobOrder.customerLabel ?? 'Unknown customer'}
                       </p>
                     </div>
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Vehicle</p>
                       <p className="mt-1 truncate text-ink-primary">
-                        {activeSourceCandidate?.vehicleLabel ?? activeJobOrder.vehicleId}
+                        {activeSourceCandidate?.vehicleLabel ?? activeJobOrder.vehicleLabel ?? 'Unknown vehicle'}
                       </p>
                     </div>
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Source</p>
                       <p className="mt-1 truncate text-ink-primary">
                         {activeJobOrder.sourceType === 'booking'
-                          ? `Booking ${activeJobOrder.sourceId.slice(0, 8).toUpperCase()}`
-                          : `Back-job ${activeJobOrder.sourceId.slice(0, 8).toUpperCase()}`}
+                          ? `Booking ${formatBookingReference({ scheduledDate: activeJobOrder.workDate, plateNumber: activeJobOrder.plateNumber, bookingReference: activeJobOrder.sourceBookingReference })}`
+                          : `Back-job ${normalizeBusinessToken(activeJobOrder.sourceId, 'REWORK')}`}
                       </p>
                     </div>
                     <div>
@@ -3764,7 +4039,7 @@ export default function JobOrderWorkbench() {
                                   <span className="min-w-0">
                                     <span className="block font-semibold">{item.name}</span>
                                     <span className="mt-1 block text-[11px] text-ink-muted">
-                                      {item.description || `Item ID ${item.id.slice(0, 8).toUpperCase()}`}
+                                      {item.description || `Item ${normalizeBusinessToken(item.id, 'PENDING')}`}
                                     </span>
                                   </span>
                                 </label>
@@ -4108,7 +4383,7 @@ export default function JobOrderWorkbench() {
                       return (
                         <button
                           key={candidate.bookingId}
-                          onClick={() => setSelectedBookingId(candidate.bookingId)}
+                          onClick={() => handleSelectHandoffCandidate(candidate)}
                           className={`w-full text-left rounded-xl border px-4 py-4 transition ${
                             isSelected
                               ? 'border-brand-orange/45 bg-brand-orange/10'
@@ -4118,7 +4393,7 @@ export default function JobOrderWorkbench() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="font-mono text-xs font-bold tracking-wide text-brand-orange">
-                                BK-{candidate.bookingId.slice(0, 8).toUpperCase()}
+                                {formatBookingReference(candidate)}
                               </p>
                               <p className="text-sm font-semibold text-ink-primary mt-1">
                                 {candidate.serviceSummary}
@@ -4257,7 +4532,7 @@ export default function JobOrderWorkbench() {
                               <span className="min-w-0">
                                 <span className="block font-semibold">{item.name}</span>
                                 <span className="mt-1 block text-[11px] text-ink-muted">
-                                  {item.description || `Item ID ${item.id.slice(0, 8).toUpperCase()}`}
+                                  {item.description || `Item ${normalizeBusinessToken(item.id, 'PENDING')}`}
                                 </span>
                               </span>
                             </label>

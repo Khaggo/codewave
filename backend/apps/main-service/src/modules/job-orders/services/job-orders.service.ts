@@ -71,6 +71,134 @@ const assignmentRepairCandidateStatuses: JobOrderStatus[] = [
 const activeWorkbenchStatuses: JobOrderStatus[] = ['draft', 'assigned', 'in_progress', 'blocked', 'ready_for_qa'];
 const historyWorkbenchStatuses: JobOrderStatus[] = ['finalized', 'cancelled'];
 
+const normalizeBusinessToken = (value: string | null | undefined, fallback = 'WORK') => {
+  const normalizedValue = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+
+  return normalizedValue || fallback;
+};
+
+const formatCompactDateToken = (value: Date | string | null | undefined) => {
+  if (!value) return '';
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+};
+
+const formatCompactTimeToken = (value: Date | string | null | undefined) => {
+  if (!value) return '';
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${hours}${minutes}${seconds}`;
+};
+
+const buildBackJobReadableReference = (backJob: { createdAt?: Date | string | null } | null | undefined) => {
+  const dateToken = formatCompactDateToken(backJob?.createdAt);
+  const timeToken = formatCompactTimeToken(backJob?.createdAt);
+
+  if (!dateToken) {
+    return null;
+  }
+
+  return `BJ-${dateToken}${timeToken ? `-${timeToken}` : ''}`;
+};
+
+const buildJobOrderReadableReference = ({
+  jobOrderReference,
+  sourceBookingReference,
+  sourceBackJobReference,
+  workDate,
+  createdAt,
+  updatedAt,
+  serviceAdviserCode,
+  jobType,
+}: {
+  jobOrderReference?: string | null;
+  sourceBookingReference?: string | null;
+  sourceBackJobReference?: string | null;
+  workDate?: string | null;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+  serviceAdviserCode?: string | null;
+  jobType?: 'normal' | 'back_job' | null;
+}) => {
+  if (jobOrderReference) {
+    return jobOrderReference;
+  }
+
+  if (sourceBackJobReference) {
+    return `JO-RW · ${sourceBackJobReference}`;
+  }
+
+  if (sourceBookingReference) {
+    return `JO · ${sourceBookingReference}`;
+  }
+
+  const dateToken = formatCompactDateToken(workDate ?? createdAt ?? updatedAt);
+  const timeToken = formatCompactTimeToken(createdAt ?? updatedAt);
+  const adviserToken = normalizeBusinessToken(serviceAdviserCode, jobType === 'back_job' ? 'RW' : 'WORK');
+  const prefix = jobType === 'back_job' ? 'JO-RW' : 'JO';
+
+  return dateToken
+    ? `${prefix}-${dateToken}-${timeToken || adviserToken}`
+    : `${prefix}-${adviserToken}`;
+};
+
+const buildCustomerDisplayName = (
+  profile:
+    | {
+        firstName?: string | null;
+        lastName?: string | null;
+      }
+    | null
+    | undefined,
+) => {
+  if (!profile) {
+    return 'Unknown customer';
+  }
+
+  const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ').trim();
+  return fullName || 'Unknown customer';
+};
+
+const buildVehicleDisplayLabel = (
+  vehicle:
+    | {
+        make?: string | null;
+        model?: string | null;
+        plateNumber?: string | null;
+      }
+    | null
+    | undefined,
+) => {
+  if (!vehicle) {
+    return 'Unknown vehicle';
+  }
+
+  const descriptor = [vehicle.make, vehicle.model].filter(Boolean).join(' ').trim();
+  if (descriptor && vehicle.plateNumber) {
+    return `${descriptor} (${vehicle.plateNumber})`;
+  }
+
+  return descriptor || vehicle.plateNumber || 'Unknown vehicle';
+};
+
 @Injectable()
 export class JobOrdersService {
   constructor(
@@ -137,7 +265,7 @@ export class JobOrdersService {
   async listWorkbenchSummaries(actor: JobOrderActor, query: ListJobOrderWorkbenchQueryDto) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
     const summaries =
-      ['technician', 'head_technician'].includes(resolvedActor.role)
+      resolvedActor.role === 'technician'
         ? await this.jobOrdersRepository.findAssignedSummaries(resolvedActor.id)
         : await this.jobOrdersRepository.findAllSummaries();
     const allowedStatuses = this.resolveWorkbenchStatuses(query.scope);
@@ -145,23 +273,65 @@ export class JobOrdersService {
     const bookingSourceIds = summaries
       .filter((jobOrder) => jobOrder.sourceType === 'booking')
       .map((jobOrder) => jobOrder.sourceId);
-    const scheduledDateRows = await this.bookingsRepository.findScheduledDatesByIds(bookingSourceIds);
-    const scheduledDateByBookingId = new Map(
-      scheduledDateRows.map((row) => [row.id, row.scheduledDate]),
+    const bookingSourceRows = await this.bookingsRepository.findBookingReadModelByIds(bookingSourceIds);
+    const bookingReadModelById = new Map(
+      bookingSourceRows.map((row) => [row.id, row]),
+    );
+    const backJobSourceIds = summaries
+      .filter((jobOrder) => jobOrder.sourceType === 'back_job')
+      .map((jobOrder) => jobOrder.sourceId);
+    const backJobRows = await Promise.all(
+      backJobSourceIds.map(async (backJobId) => [backJobId, await this.backJobsRepository.findOptionalById(backJobId)] as const),
+    );
+    const backJobById = new Map(backJobRows);
+    const backJobOriginalBookingIds = [...new Set(
+      backJobRows
+        .map(([, backJob]) => backJob?.originalBookingId ?? null)
+        .filter((value): value is string => Boolean(value)),
+    )];
+    const backJobOriginalBookingRows =
+      backJobOriginalBookingIds.length > 0
+        ? await this.bookingsRepository.findBookingReadModelByIds(backJobOriginalBookingIds)
+        : [];
+    const backJobOriginalBookingById = new Map(
+      backJobOriginalBookingRows.map((row) => [row.id, row]),
     );
 
     return summaries
       .map((jobOrder) => {
         const fallbackDate = jobOrder.createdAt.toISOString().slice(0, 10);
+        const sourceBookingReadModel =
+          jobOrder.sourceType === 'booking' ? bookingReadModelById.get(jobOrder.sourceId) : null;
+        const sourceBackJob = jobOrder.sourceType === 'back_job' ? backJobById.get(jobOrder.sourceId) ?? null : null;
+        const sourceBackJobBooking =
+          sourceBackJob?.originalBookingId ? backJobOriginalBookingById.get(sourceBackJob.originalBookingId) ?? null : null;
         const workDate =
           jobOrder.sourceType === 'booking'
-            ? scheduledDateByBookingId.get(jobOrder.sourceId) ?? fallbackDate
+            ? sourceBookingReadModel?.scheduledDate ?? fallbackDate
             : fallbackDate;
+        const sourceBookingReference = sourceBookingReadModel?.bookingReference ?? null;
+        const sourceBackJobReference = buildBackJobReadableReference(sourceBackJob);
+        const jobOrderReference = buildJobOrderReadableReference({
+          sourceBookingReference,
+          sourceBackJobReference,
+          workDate,
+          createdAt: jobOrder.createdAt,
+          updatedAt: jobOrder.updatedAt,
+          serviceAdviserCode: jobOrder.serviceAdviserCode,
+          jobType: jobOrder.jobType,
+        });
 
         return {
           id: jobOrder.id,
+          jobOrderReference,
           status: jobOrder.status,
           sourceType: jobOrder.sourceType,
+          sourceId: jobOrder.sourceId,
+          sourceBookingReference,
+          sourceBackJobReference:
+            sourceBackJobBooking?.bookingReference
+              ? `${sourceBackJobReference ?? 'BJ'} · ${sourceBackJobBooking.bookingReference}`
+              : sourceBackJobReference,
           workDate,
           vehicleId: jobOrder.vehicleId,
           serviceAdviserCode: jobOrder.serviceAdviserCode,
@@ -237,7 +407,39 @@ export class JobOrdersService {
       role: resolvedActor.role as JobOrderActorRole,
     });
 
-    return jobOrder;
+    const [customer, vehicle] = await Promise.all([
+      this.usersService.findById(jobOrder.customerUserId),
+      this.vehiclesRepository.findById(jobOrder.vehicleId),
+    ]);
+
+    const sourceBookingReference =
+      jobOrder.sourceType === 'booking'
+        ? (
+            await this.bookingsRepository.findBookingReadModelByIds([jobOrder.sourceId])
+          )[0]?.bookingReference ?? null
+        : null;
+    const sourceBackJobReference =
+      jobOrder.sourceType === 'back_job'
+        ? buildBackJobReadableReference(await this.backJobsRepository.findById(jobOrder.sourceId))
+        : null;
+
+    return {
+      ...jobOrder,
+      customerLabel: buildCustomerDisplayName(customer?.profile),
+      vehicleLabel: buildVehicleDisplayLabel(vehicle),
+      sourceBookingReference,
+      sourceBackJobReference,
+      jobOrderReference: buildJobOrderReadableReference({
+        jobOrderReference: null,
+        sourceBookingReference,
+        sourceBackJobReference,
+        workDate: sourceBookingReference ? undefined : null,
+        createdAt: jobOrder.createdAt,
+        updatedAt: jobOrder.updatedAt,
+        serviceAdviserCode: jobOrder.serviceAdviserCode,
+        jobType: jobOrder.jobType,
+      }),
+    };
   }
 
   async findInvoiceLookupById(id: string, actor: JobOrderActor) {
@@ -276,9 +478,9 @@ export class JobOrdersService {
     const bookingSourceIds = jobOrders
       .filter((jobOrder) => jobOrder.sourceType === 'booking')
       .map((jobOrder) => jobOrder.sourceId);
-    const scheduledDateRows = await this.bookingsRepository.findScheduledDatesByIds(bookingSourceIds);
+    const scheduledDateRows = await this.bookingsRepository.findBookingReadModelByIds(bookingSourceIds);
     const scheduledDateByBookingId = new Map(
-      scheduledDateRows.map((row) => [row.id, row.scheduledDate]),
+      scheduledDateRows.map((row: { id: string; scheduledDate: string }) => [row.id, row.scheduledDate]),
     );
     const uniqueVehicleIds = [...new Set(jobOrders.map((jobOrder) => jobOrder.vehicleId).filter(Boolean))];
     const vehicles = await Promise.all(
@@ -1232,13 +1434,21 @@ export class JobOrdersService {
   }
 
   private generateInvoiceReference(jobOrderId: string) {
-    const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    return `INV-JO-${compactDate}-${jobOrderId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    const now = new Date();
+    const compactDate = now.toISOString().slice(0, 10).replace(/-/g, '');
+    const timeToken = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(
+      now.getSeconds(),
+    ).padStart(2, '0')}${String(now.getMilliseconds()).padStart(3, '0')}`;
+    return `INV-SVC-${compactDate}-${timeToken}`;
   }
 
-  private generateOfficialReceiptReference(jobOrderId: string) {
-    const compactDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    return `OR-${compactDate}-${jobOrderId.replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+  private generateOfficialReceiptReference(_jobOrderId: string) {
+    const now = new Date();
+    const compactDate = now.toISOString().slice(0, 10).replace(/-/g, '');
+    const timeToken = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(
+      now.getSeconds(),
+    ).padStart(2, '0')}${String(now.getMilliseconds()).padStart(3, '0')}`;
+    return `OR-${compactDate}-${timeToken}`;
   }
 
   private normalizePesoAmountToCents(amountPaid?: number) {

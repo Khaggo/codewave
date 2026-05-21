@@ -61,6 +61,7 @@ export const services = pgTable('services', {
   categoryId: uuid('category_id').references(() => serviceCategories.id, { onDelete: 'set null' }),
   name: varchar('name', { length: 120 }).notNull().unique(),
   description: text('description'),
+  basePriceCents: integer('base_price_cents').notNull().default(0),
   durationMinutes: integer('duration_minutes').notNull(),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -101,6 +102,7 @@ export const bookingDateClosures = pgTable(
 
 export const bookings = pgTable('bookings', {
   id: uuid('id').defaultRandom().primaryKey(),
+  bookingReference: varchar('booking_reference', { length: 40 }),
   userId: uuid('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
@@ -117,7 +119,9 @@ export const bookings = pgTable('bookings', {
   qrCodeIssuedAt: timestamp('qr_code_issued_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  bookingReferenceUnique: uniqueIndex('bookings_booking_reference_idx').on(table.bookingReference),
+}));
 
 export const bookingPaymentPolicies = pgTable('booking_payment_policies', {
   id: uuid('id').defaultRandom().primaryKey(),

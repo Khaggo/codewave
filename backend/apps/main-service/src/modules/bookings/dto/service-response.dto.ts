@@ -22,6 +22,12 @@ export class ServiceResponseDto {
   description?: string | null;
 
   @ApiProperty({
+    example: 85000,
+    description: 'Configured base labor/service price in centavos.',
+  })
+  basePriceCents!: number;
+
+  @ApiProperty({
     example: 45,
   })
   durationMinutes!: number;
