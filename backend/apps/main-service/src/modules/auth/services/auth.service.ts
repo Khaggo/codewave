@@ -488,6 +488,30 @@ export class AuthService {
     });
   }
 
+  async updateCustomerAccountStatus(
+    userId: string,
+    payload: UpdateStaffAccountStatusDto,
+    actor: { userId: string; role: string },
+  ) {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role !== 'customer') {
+      throw new BadRequestException('Only customer accounts can be managed through this endpoint');
+    }
+
+    await this.usersService.setActivationStatus(userId, payload.isActive);
+    await this.authRepository.updateAccountStatus(userId, payload.isActive);
+
+    if (!payload.isActive) {
+      await this.authRepository.revokeActiveRefreshTokens(userId);
+    }
+
+    return this.usersService.findById(userId);
+  }
+
   private resolveStaffAccountType(payload: CreateStaffAccountDto): StaffAccountType {
     if (payload.accountType) {
       return payload.accountType;

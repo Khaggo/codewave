@@ -1709,6 +1709,42 @@ class InMemoryBookingsRepository {
       }));
   }
 
+  async findDetailedByScheduledDateRange(
+    startDate: string,
+    endDate: string,
+    options?: {
+      statuses?: BookingStatus[];
+    },
+  ) {
+    return Array.from(this.bookings.values())
+      .filter((booking) => {
+        const matchesWindow = booking.scheduledDate >= startDate && booking.scheduledDate <= endDate;
+        const matchesStatus = options?.statuses?.length
+          ? options.statuses.includes(booking.status)
+          : true;
+
+        return matchesWindow && matchesStatus;
+      })
+      .sort((left, right) => {
+        if (left.scheduledDate !== right.scheduledDate) {
+          return left.scheduledDate.localeCompare(right.scheduledDate);
+        }
+
+        return left.createdAt.getTime() - right.createdAt.getTime();
+      })
+      .map((booking) =>
+        cloneBooking(
+          booking,
+          this.services,
+          this.timeSlots,
+          this.bookingServices,
+          this.bookingStatusHistory,
+          this.usersRepository.peekById(booking.userId),
+          this.vehiclesRepository.peekById(booking.vehicleId),
+        ),
+      );
+  }
+
   async create(createBookingDto: CreateBookingDto) {
     const now = new Date();
     const booking: BookingRecord = {
@@ -2004,6 +2040,35 @@ class InMemoryJobOrdersRepository {
       .map((jobOrder) =>
         cloneJobOrder(jobOrder, this.items, this.assignments, this.progressEntries, this.photos, this.invoiceRecords),
       );
+  }
+
+  async findAssignedToTechnician(technicianUserId: string) {
+    const assignedJobOrderIds = new Set(
+      this.assignments
+        .filter((assignment) => assignment.technicianUserId === technicianUserId)
+        .map((assignment) => assignment.jobOrderId),
+    );
+
+    return Array.from(this.jobOrders.values())
+      .filter((jobOrder) => assignedJobOrderIds.has(jobOrder.id))
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+      .map((jobOrder) =>
+        cloneJobOrder(jobOrder, this.items, this.assignments, this.progressEntries, this.photos, this.invoiceRecords),
+      );
+  }
+
+  async listAll() {
+    return Array.from(this.jobOrders.values())
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((jobOrder) =>
+        cloneJobOrder(jobOrder, this.items, this.assignments, this.progressEntries, this.photos, this.invoiceRecords),
+      );
+  }
+
+  async listBookingSourceIds() {
+    return Array.from(this.jobOrders.values())
+      .filter((jobOrder) => jobOrder.sourceType === 'booking')
+      .map((jobOrder) => jobOrder.sourceId);
   }
 
   async listForAnalytics() {

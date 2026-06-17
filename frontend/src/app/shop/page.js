@@ -1,8 +1,14 @@
 import Link from 'next/link'
+import EcommerceUnavailableCard from '@/components/EcommerceUnavailableCard'
+import { isEcommerceEnabled } from '@/lib/runtimeFlags'
 
 export const metadata = { title: 'Shop & Inventory' }
 
 export default function ShopPage() {
+  if (!isEcommerceEnabled()) {
+    return <EcommerceUnavailableCard title="Shop & Inventory is offline on the cheapest deployment" />
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div className="card p-6">

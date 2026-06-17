@@ -141,6 +141,71 @@ export class JobOrdersRepository extends BaseRepository {
     });
   }
 
+  async findAssignedToTechnician(technicianUserId: string) {
+    const assignmentRows = await this.db
+      .select({ jobOrderId: jobOrderAssignments.jobOrderId })
+      .from(jobOrderAssignments)
+      .where(eq(jobOrderAssignments.technicianUserId, technicianUserId));
+
+    const jobOrderIds = assignmentRows.map((row) => row.jobOrderId);
+    if (jobOrderIds.length === 0) {
+      return [];
+    }
+
+    return this.db.query.jobOrders.findMany({
+      where: inArray(jobOrders.id, jobOrderIds),
+      orderBy: [desc(jobOrders.updatedAt)],
+      with: {
+        items: {
+          orderBy: asc(jobOrderItems.sortOrder),
+        },
+        assignments: {
+          orderBy: asc(jobOrderAssignments.assignedAt),
+        },
+        progressEntries: {
+          orderBy: desc(jobOrderProgressLogs.createdAt),
+        },
+        photos: {
+          orderBy: desc(jobOrderPhotos.createdAt),
+        },
+        invoiceRecord: true,
+      },
+    });
+  }
+
+  async findAssignedSummaries(technicianUserId: string) {
+    const assignmentRows = await this.db
+      .select({ jobOrderId: jobOrderAssignments.jobOrderId })
+      .from(jobOrderAssignments)
+      .where(eq(jobOrderAssignments.technicianUserId, technicianUserId));
+
+    const jobOrderIds = assignmentRows.map((row) => row.jobOrderId);
+    if (jobOrderIds.length === 0) {
+      return [];
+    }
+
+    return this.db.query.jobOrders.findMany({
+      where: inArray(jobOrders.id, jobOrderIds),
+      orderBy: [desc(jobOrders.updatedAt)],
+      with: {
+        assignments: {
+          orderBy: asc(jobOrderAssignments.assignedAt),
+        },
+      },
+    });
+  }
+
+  async findAllSummaries() {
+    return this.db.query.jobOrders.findMany({
+      orderBy: [desc(jobOrders.updatedAt)],
+      with: {
+        assignments: {
+          orderBy: asc(jobOrderAssignments.assignedAt),
+        },
+      },
+    });
+  }
+
   async findByVehicleId(vehicleId: string) {
     return this.db.query.jobOrders.findMany({
       where: eq(jobOrders.vehicleId, vehicleId),

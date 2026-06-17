@@ -26,6 +26,7 @@ import {
   getStaffPortalNavigationForRole,
   isStaffPortalRole,
 } from '@/lib/api/generated/auth/staff-web-session'
+import { isEcommerceEnabled } from '@/lib/runtimeFlags'
 
 const NAV = [
   {
@@ -71,14 +72,18 @@ const NAV = [
 export default function Sidebar({ collapsed, onToggle }) {
   const pathname = usePathname()
   const user = useUser()
+  const ecommerceEnabled = isEcommerceEnabled()
   const visiblePaths = new Set(
     getStaffPortalNavigationForRole(user?.role).map((entry) => entry.href),
   )
+  const ecommerceBlockedPaths = new Set(['/admin/catalog', '/admin/inventory'])
 
   const visibleSections = NAV.map((section) => ({
     ...section,
     items: section.items.filter(({ href }) =>
-      isStaffPortalRole(user?.role) ? visiblePaths.has(href) : false,
+      isStaffPortalRole(user?.role)
+        ? visiblePaths.has(href) && (ecommerceEnabled || !ecommerceBlockedPaths.has(href))
+        : false,
     ),
   })).filter((section) => section.items.length > 0)
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ArrowRight, Bell, ChevronDown, LogOut, Menu, Search, X } from 'lucide-react'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
+import { isEcommerceEnabled } from '@/lib/runtimeFlags'
 
 const ROUTE_TITLES = {
   '/': 'Dashboard',
@@ -41,6 +42,7 @@ const SEARCH_DESTINATIONS = [
 
 function GlobalSearch() {
   const router = useRouter()
+  const ecommerceEnabled = isEcommerceEnabled()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [results, setResults] = useState([])
@@ -57,6 +59,10 @@ function GlobalSearch() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  const destinations = SEARCH_DESTINATIONS.filter((destination) =>
+    ecommerceEnabled ? true : !['/admin/catalog', '/admin/inventory'].includes(destination.href),
+  )
+
   useEffect(() => {
     const normalizedQuery = query.trim().toLowerCase()
     if (!normalizedQuery) {
@@ -65,14 +71,14 @@ function GlobalSearch() {
     }
 
     setResults(
-      SEARCH_DESTINATIONS.filter((destination) =>
+      destinations.filter((destination) =>
         [destination.label, destination.sub, destination.href]
           .join(' ')
           .toLowerCase()
           .includes(normalizedQuery),
       ).slice(0, 8),
     )
-  }, [query])
+  }, [destinations, query])
 
   function navigate(href) {
     setOpen(false)

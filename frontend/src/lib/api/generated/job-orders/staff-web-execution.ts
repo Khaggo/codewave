@@ -72,8 +72,8 @@ export const staffJobOrderProgressRules: StaffJobOrderExecutionRule<
     surface: 'staff-admin-web',
     truth: 'client-guard',
     routeKey: 'addJobOrderProgress',
-    allowedRoles: ['technician'],
-    description: 'An assigned technician can append structured progress to a loaded job order.',
+    allowedRoles: ['technician', 'super_admin'],
+    description: 'An assigned technician or super admin can append structured progress to a loaded job order.',
   },
   {
     state: 'progress_not_assigned',
@@ -88,7 +88,7 @@ export const staffJobOrderProgressRules: StaffJobOrderExecutionRule<
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'addJobOrderProgress',
-    allowedRoles: ['technician'],
+    allowedRoles: ['technician', 'super_admin'],
     description: 'The backend accepted the progress entry and returned the updated job order.',
   },
   {
@@ -96,7 +96,7 @@ export const staffJobOrderProgressRules: StaffJobOrderExecutionRule<
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'addJobOrderProgress',
-    allowedRoles: ['technician'],
+    allowedRoles: ['technician', 'super_admin'],
     description: 'The job order cannot accept the progress evidence in its current state.',
   },
   {
@@ -104,7 +104,7 @@ export const staffJobOrderProgressRules: StaffJobOrderExecutionRule<
     surface: 'staff-admin-web',
     truth: 'synchronous-job-order-record',
     routeKey: 'addJobOrderProgress',
-    allowedRoles: ['technician'],
+    allowedRoles: ['technician', 'super_admin'],
     description: 'A non-classified API or network failure blocked progress submission.',
   },
 ];
@@ -238,12 +238,17 @@ export const canStaffAppendProgress = ({
   role?: StaffPortalRole | null;
   jobOrder?: JobOrderResponse | null;
   userId?: string | null;
-}): boolean =>
-  Boolean(
+}): boolean => {
+  if (role === 'super_admin') {
+    return true;
+  }
+
+  return Boolean(
     role === 'technician' &&
     userId &&
     jobOrder?.assignments?.some((assignment) => assignment.technicianUserId === userId),
   );
+};
 
 export const canStaffFinalizeOrRecordPayment = ({
   role,

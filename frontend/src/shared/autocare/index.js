@@ -80,6 +80,7 @@ export {
   sanitizeProductInput,
   addCatalogCategory,
   addInventoryProduct,
+  updateInventoryProduct,
   archiveInventoryProduct,
   checkoutCart,
   createAppointment,

@@ -287,6 +287,37 @@ const normalizeOrder = (order) => {
 
 export const getEcommerceInvoiceOrderApiBaseUrl = () => ECOMMERCE_API_BASE_URL;
 
+export const listStaffEcommerceOrdersByUserId = async ({
+  customerUserId,
+  accessToken,
+  status,
+  invoiceStatus,
+} = {}) => {
+  const normalizedCustomerUserId = trimOrNull(customerUserId);
+
+  if (!normalizedCustomerUserId) {
+    throw new ApiError('Select a customer before loading ecommerce orders.', 400, {
+      path: '/api/users/:id/orders',
+      customerUserId,
+    });
+  }
+
+  const params = new URLSearchParams();
+  if (trimOrNull(status)) {
+    params.set('status', status);
+  }
+  if (trimOrNull(invoiceStatus)) {
+    params.set('invoiceStatus', invoiceStatus);
+  }
+
+  const suffix = params.size ? `?${params.toString()}` : '';
+  const orders = await request(`/api/users/${encodeURIComponent(normalizedCustomerUserId)}/orders${suffix}`, {
+    accessToken,
+  });
+
+  return Array.isArray(orders) ? orders.map((order) => normalizeOrder(order)).filter(Boolean) : [];
+};
+
 export const getStaffEcommerceOrderDetail = async ({ orderId, accessToken } = {}) => {
   const normalizedOrderId = String(orderId ?? '').trim();
 

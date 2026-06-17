@@ -278,4 +278,34 @@ export class AuthController {
       request.user as { userId: string; role: string },
     );
   }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @Patch('admin/customers/:id/status')
+  @ApiOperation({ summary: 'Activate or deactivate a customer account without deleting its history.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'User identifier for the customer account being managed.',
+    example: 'a3cce1f2-a6eb-4fdd-bf11-8b17d3ddfc17',
+  })
+  @ApiOkResponse({
+    description: 'The updated customer identity record.',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'The target user is not a customer account or the payload is invalid.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can change customer account status.' })
+  @ApiNotFoundResponse({ description: 'User not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  updateCustomerAccountStatus(
+    @Param('id') userId: string,
+    @Body() payload: UpdateStaffAccountStatusDto,
+    @Req() request: Request,
+  ) {
+    return this.authService.updateCustomerAccountStatus(
+      userId,
+      payload,
+      request.user as { userId: string; role: string },
+    );
+  }
 }

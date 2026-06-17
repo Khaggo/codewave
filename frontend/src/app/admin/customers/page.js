@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CarFront, MapPin, RefreshCw, ShieldAlert, UserRound } from 'lucide-react'
 
-import { ApiError, listAdminCustomers } from '@/lib/authClient'
+import { ApiError, listAdminCustomers, updateAdminCustomerStatus } from '@/lib/authClient'
 import { useUser } from '@/lib/userContext'
 
 const buildAddressLabel = (address) => {
@@ -21,10 +21,11 @@ const buildVehicleLabel = (vehicle) =>
     .filter(Boolean)
     .join(' ') || vehicle?.plateNumber || 'Vehicle details pending'
 
-function CustomerCard({ customer }) {
+function CustomerCard({ customer, actionState, onToggleStatus }) {
   const profile = customer.profile ?? {}
   const vehicles = customer.vehicles ?? []
   const address = customer.defaultAddress ?? customer.addresses?.[0] ?? null
+  const isUpdating = actionState.status === 'loading' && actionState.customerId === customer.id
 
   return (
     <article className="card p-5">
@@ -54,9 +55,20 @@ function CustomerCard({ customer }) {
             </div>
           </div>
         </div>
-        <span className={`badge ${customer.isActive ? 'badge-green' : 'badge-gray'}`}>
-          {customer.isActive ? 'Active customer' : 'Inactive customer'}
-        </span>
+        <div className="flex flex-col items-start gap-3 lg:items-end">
+          <span className={`badge ${customer.isActive ? 'badge-green' : 'badge-gray'}`}>
+            {customer.isActive ? 'Active customer' : 'Inactive customer'}
+          </span>
+          <button
+            type="button"
+            onClick={() => onToggleStatus(customer)}
+            disabled={isUpdating}
+            className="btn-ghost text-xs"
+          >
+            <RefreshCw size={14} className={isUpdating ? 'animate-spin' : ''} />
+            {customer.isActive ? 'Deactivate Account' : 'Activate Account'}
+          </button>
+        </div>
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
@@ -97,6 +109,9 @@ export default function AdminCustomersPage() {
   const canReadCustomers = ['service_adviser', 'super_admin'].includes(user?.role)
   const [state, setState] = useState({ status: 'idle', customers: [], error: '' })
   const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [vehicleFilter, setVehicleFilter] = useState('all')
+  const [actionState, setActionState] = useState({ status: 'idle', customerId: '', message: '' })
 
   const loadCustomers = useCallback(async () => {
     if (!user?.accessToken || !canReadCustomers) return
@@ -121,27 +136,85 @@ export default function AdminCustomersPage() {
     void loadCustomers()
   }, [loadCustomers])
 
+  const handleToggleStatus = useCallback(async (customer) => {
+    if (!user?.accessToken) {
+      return
+    }
+
+    setActionState({
+      status: 'loading',
+      customerId: customer.id,
+      message: '',
+    })
+
+    try {
+      const updatedCustomer = await updateAdminCustomerStatus(
+        customer.id,
+        {
+          isActive: !customer.isActive,
+          reason: customer.isActive
+            ? 'Deactivated from customer administration.'
+            : 'Reactivated from customer administration.',
+        },
+        user.accessToken,
+      )
+
+      setState((current) => ({
+        ...current,
+        customers: current.customers.map((entry) => (entry.id === updatedCustomer.id ? updatedCustomer : entry)),
+      }))
+      setActionState({
+        status: 'success',
+        customerId: updatedCustomer.id,
+        message: `${updatedCustomer.displayName} is now ${updatedCustomer.isActive ? 'active' : 'inactive'}.`,
+      })
+    } catch (error) {
+      setActionState({
+        status: 'error',
+        customerId: customer.id,
+        message:
+          error instanceof ApiError
+            ? error.message
+            : 'Unable to update this customer account right now.',
+      })
+    }
+  }, [user?.accessToken])
+
   const filteredCustomers = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
-    if (!normalizedQuery) return state.customers
 
-    return state.customers.filter((customer) =>
-      [
-        customer.displayName,
-        customer.email,
-        customer.profile?.phone,
-        ...(customer.vehicles ?? []).flatMap((vehicle) => [
-          vehicle.plateNumber,
-          vehicle.make,
-          vehicle.model,
-          vehicle.year,
-        ]),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(normalizedQuery),
-    )
-  }, [query, state.customers])
+    return state.customers.filter((customer) => {
+      const matchesQuery =
+        !normalizedQuery ||
+        [
+          customer.displayName,
+          customer.email,
+          customer.profile?.phone,
+          ...(customer.vehicles ?? []).flatMap((vehicle) => [
+            vehicle.plateNumber,
+            vehicle.make,
+            vehicle.model,
+            vehicle.year,
+          ]),
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedQuery)
+
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'active' && customer.isActive) ||
+        (statusFilter === 'inactive' && !customer.isActive)
+
+      const vehicleCount = customer.vehicles?.length ?? 0
+      const matchesVehicleFilter =
+        vehicleFilter === 'all' ||
+        (vehicleFilter === 'with_vehicles' && vehicleCount > 0) ||
+        (vehicleFilter === 'without_vehicles' && vehicleCount === 0)
+
+      return matchesQuery && matchesStatus && matchesVehicleFilter
+    })
+  }, [query, state.customers, statusFilter, vehicleFilter])
 
   if (!canReadCustomers) {
     return (
@@ -164,8 +237,7 @@ export default function AdminCustomersPage() {
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-orange">Customer Records</p>
             <h1 className="mt-3 text-3xl font-black text-ink-primary">Customers & Vehicles</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-secondary">
-              Review customer profile details and every vehicle currently attached to each account.
-              This is a read-focused demo surface for staff coordination.
+              Review customer profile details, filter account state, and manage whether each customer account can still sign in.
             </p>
           </div>
           <button type="button" onClick={loadCustomers} className="btn-primary" disabled={state.status === 'loading'}>
@@ -179,14 +251,26 @@ export default function AdminCustomersPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-bold text-ink-primary">{filteredCustomers.length} customer records</p>
-            <p className="mt-1 text-xs text-ink-muted">Search by name, email, phone, plate, make, or model.</p>
+            <p className="mt-1 text-xs text-ink-muted">Search and filter by account state, vehicle presence, name, email, phone, plate, make, or model.</p>
           </div>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className="input md:max-w-sm"
-            placeholder="Search customers or vehicles..."
-          />
+          <div className="flex flex-col gap-3 md:flex-row">
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="input md:w-[170px]">
+              <option value="all">All accounts</option>
+              <option value="active">Active only</option>
+              <option value="inactive">Inactive only</option>
+            </select>
+            <select value={vehicleFilter} onChange={(event) => setVehicleFilter(event.target.value)} className="input md:w-[190px]">
+              <option value="all">All vehicle states</option>
+              <option value="with_vehicles">With vehicles</option>
+              <option value="without_vehicles">Without vehicles</option>
+            </select>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              className="input md:max-w-sm"
+              placeholder="Search customers or vehicles..."
+            />
+          </div>
         </div>
       </section>
 
@@ -200,10 +284,27 @@ export default function AdminCustomersPage() {
         </div>
       ) : null}
 
+      {actionState.message ? (
+        <div className={`rounded-xl border px-4 py-3 text-sm ${
+          actionState.status === 'success'
+            ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+            : actionState.status === 'error'
+              ? 'border-red-500/25 bg-red-500/10 text-red-300'
+              : 'border-surface-border bg-surface-raised text-ink-secondary'
+        }`}>
+          {actionState.message}
+        </div>
+      ) : null}
+
       {filteredCustomers.length ? (
         <div className="space-y-4">
           {filteredCustomers.map((customer) => (
-            <CustomerCard key={customer.id} customer={customer} />
+            <CustomerCard
+              key={customer.id}
+              customer={customer}
+              actionState={actionState}
+              onToggleStatus={handleToggleStatus}
+            />
           ))}
         </div>
       ) : state.status !== 'loading' ? (

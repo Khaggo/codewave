@@ -36,6 +36,8 @@ import {
   addJobOrderProgressEntry,
   finalizeJobOrder,
   getJobOrderById,
+  listJobOrderWorkbenchCalendar,
+  listJobOrderWorkbenchSummaries,
   recordJobOrderInvoicePayment,
   updateJobOrderStatus,
 } from '@/lib/jobOrderWorkbenchClient'
@@ -54,6 +56,12 @@ const STATUS_META = {
 const initialCreateState = {
   status: 'create_ready',
   message: '',
+}
+
+const emptyCreateDraft = {
+  notes: '',
+  items: [],
+  assignedTechnicianId: '',
 }
 
 const initialReadState = {
@@ -136,12 +144,6 @@ const formatStatusLabel = (value) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
 
-const splitCommaSeparatedIds = (value) =>
-  String(value ?? '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
 function StatusBadge({ status }) {
   const meta = STATUS_META[status] ?? { label: formatStatusLabel(status), cls: 'badge-gray' }
   return <span className={`badge ${meta.cls}`}>{meta.label}</span>
@@ -180,6 +182,7 @@ function BlockingState({ title, copy }) {
 export default function JobOrderWorkbench() {
   const user = useUser()
   const role = user?.role ?? null
+  const isTechnician = role === 'technician'
   const canUseWorkbench = canStaffReadExecutionJobOrder(role)
   const canManageHandoffs = staffJobOrderWorkbenchRoles.includes(role)
 
@@ -190,11 +193,7 @@ export default function JobOrderWorkbench() {
     message: 'Choose a schedule date and refresh to load confirmed bookings.',
   })
   const [selectedBookingId, setSelectedBookingId] = useState('')
-  const [createDraft, setCreateDraft] = useState({
-    notes: '',
-    items: [],
-    assignedTechnicianIdsText: '',
-  })
+  const [createDraft, setCreateDraft] = useState(emptyCreateDraft)
   const [createState, setCreateState] = useState(initialCreateState)
   const [activeJobOrder, setActiveJobOrder] = useState(null)
   const [manualJobOrderId, setManualJobOrderId] = useState('')
@@ -207,7 +206,7 @@ export default function JobOrderWorkbench() {
   const [progressDraft, setProgressDraft] = useState({
     entryType: 'work_started',
     message: '',
-    completedItemIdsText: '',
+    completedItemIds: [],
   })
   const [progressState, setProgressState] = useState(initialProgressState)
   const [photoDraft, setPhotoDraft] = useState({
@@ -230,6 +229,17 @@ export default function JobOrderWorkbench() {
   const [staffDirectoryState, setStaffDirectoryState] = useState({
     status: 'idle',
     accounts: [],
+    message: '',
+  })
+  const [jobOrderSummaryState, setJobOrderSummaryState] = useState({
+    status: 'idle',
+    items: [],
+    message: '',
+  })
+  const [jobOrderCalendarState, setJobOrderCalendarState] = useState({
+    status: 'idle',
+    jobOrderDates: [],
+    bookingQueueDates: [],
     message: '',
   })
 
@@ -268,6 +278,40 @@ export default function JobOrderWorkbench() {
       ),
     [staffDirectoryState.accounts],
   )
+  const selectedMonth = selectedDate.slice(0, 7)
+  const monthJobOrders = useMemo(
+    () => [...jobOrderSummaryState.items].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+    [jobOrderSummaryState.items],
+  )
+  const datesWithJobOrders = jobOrderCalendarState.jobOrderDates
+  const datesWithBookingQueue = jobOrderCalendarState.bookingQueueDates
+  const markedWorkbenchDates = useMemo(() => {
+    const markers = new Map()
+
+    datesWithJobOrders.forEach((entry) => {
+      markers.set(entry.date, {
+        date: entry.date,
+        jobOrderCount: entry.count,
+        bookingQueueCount: 0,
+      })
+    })
+
+    datesWithBookingQueue.forEach((entry) => {
+      const current = markers.get(entry.date) ?? {
+        date: entry.date,
+        jobOrderCount: 0,
+        bookingQueueCount: 0,
+      }
+      current.bookingQueueCount = entry.count
+      markers.set(entry.date, current)
+    })
+
+    return [...markers.values()].sort((left, right) => left.date.localeCompare(right.date))
+  }, [datesWithBookingQueue, datesWithJobOrders])
+  const selectedDateJobOrders = useMemo(
+    () => monthJobOrders.filter((jobOrder) => jobOrder.workDate === selectedDate),
+    [monthJobOrders, selectedDate],
+  )
 
   const loadStaffDirectory = useCallback(async () => {
     if (!user?.accessToken || !['service_adviser', 'super_admin'].includes(role)) {
@@ -294,6 +338,100 @@ export default function JobOrderWorkbench() {
   useEffect(() => {
     void loadStaffDirectory()
   }, [loadStaffDirectory])
+
+  const loadJobOrderSummaries = useCallback(async () => {
+    if (!user?.accessToken || !canUseWorkbench) {
+      setJobOrderSummaryState({
+        status: 'idle',
+        items: [],
+        message: '',
+      })
+      return
+    }
+
+    setJobOrderSummaryState((current) => ({
+      ...current,
+      status: 'loading',
+      message: '',
+    }))
+
+    try {
+      const items = await listJobOrderWorkbenchSummaries({
+        accessToken: user.accessToken,
+        month: selectedMonth,
+      })
+
+      setJobOrderSummaryState({
+        status: 'success',
+        items,
+        message: items.length ? '' : 'No job orders are mapped to this month yet.',
+      })
+    } catch (error) {
+      setJobOrderSummaryState({
+        status: 'error',
+        items: [],
+        message: error?.message || 'Job-order date indicators could not be loaded.',
+      })
+    }
+  }, [canUseWorkbench, selectedMonth, user?.accessToken])
+
+  useEffect(() => {
+    void loadJobOrderSummaries()
+  }, [loadJobOrderSummaries])
+
+  const loadJobOrderCalendar = useCallback(async () => {
+    if (!user?.accessToken || !canUseWorkbench) {
+      setJobOrderCalendarState({
+        status: 'idle',
+        jobOrderDates: [],
+        bookingQueueDates: [],
+        message: '',
+      })
+      return
+    }
+
+    setJobOrderCalendarState((current) => ({
+      ...current,
+      status: 'loading',
+      message: '',
+    }))
+
+    try {
+      const data = await listJobOrderWorkbenchCalendar({
+        accessToken: user.accessToken,
+        month: selectedMonth,
+      })
+
+      setJobOrderCalendarState({
+        status: 'success',
+        jobOrderDates: data.jobOrderDates,
+        bookingQueueDates: data.bookingQueueDates,
+        message:
+          data.jobOrderDates.length || data.bookingQueueDates.length
+            ? ''
+            : 'No job-order or booking-handoff dates are mapped to this month yet.',
+      })
+    } catch (error) {
+      setJobOrderCalendarState({
+        status: 'error',
+        jobOrderDates: [],
+        bookingQueueDates: [],
+        message: error?.message || 'Workbench date markers could not be loaded.',
+      })
+    }
+  }, [canUseWorkbench, selectedMonth, user?.accessToken])
+
+  useEffect(() => {
+    void loadJobOrderCalendar()
+  }, [loadJobOrderCalendar])
+
+  useEffect(() => {
+    if (manualJobOrderId || selectedDateJobOrders.length === 0) {
+      return
+    }
+
+    setManualJobOrderId(selectedDateJobOrders[0].id)
+  }, [manualJobOrderId, selectedDateJobOrders])
 
   const loadBookingHandoffs = useCallback(async () => {
     if (!canManageHandoffs) {
@@ -367,21 +505,23 @@ export default function JobOrderWorkbench() {
 
   useEffect(() => {
     if (!selectedCandidate) {
-      setCreateDraft({
-        notes: '',
-        items: [],
-        assignedTechnicianIdsText: '',
-      })
+      setCreateDraft(emptyCreateDraft)
       return
     }
 
     setCreateDraft({
       notes: selectedCandidate.sourceNotes ?? '',
       items: selectedCandidate.defaultItems,
-      assignedTechnicianIdsText: '',
+      assignedTechnicianId: '',
     })
     setCreateState(initialCreateState)
   }, [selectedCandidate])
+
+  const clearBookingCreateContext = useCallback((nextCreateState = initialCreateState) => {
+    setSelectedBookingId('')
+    setCreateDraft(emptyCreateDraft)
+    setCreateState(nextCreateState)
+  }, [])
 
   useEffect(() => {
     if (!activeJobOrder) {
@@ -432,7 +572,7 @@ export default function JobOrderWorkbench() {
     }
 
     setDetailState({
-      status: 'detail_loaded',
+      status: 'detail_loading',
       message: 'Loading job-order detail...',
     })
 
@@ -442,11 +582,13 @@ export default function JobOrderWorkbench() {
         accessToken: user.accessToken,
       })
 
+      clearBookingCreateContext()
       setActiveJobOrder(jobOrder)
       setManualJobOrderId(jobOrder.id)
       setDetailState({
         status: 'detail_loaded',
-        message: 'Live job-order detail loaded.',
+        message:
+          'Live job-order detail loaded. Booking handoff creation was cleared so this screen stays scoped to the loaded job order.',
       })
     } catch (error) {
       let nextStatus = 'load_failed'
@@ -503,17 +645,18 @@ export default function JobOrderWorkbench() {
         ...seededDraft,
         notes: createDraft.notes,
         items: createDraft.items,
-        assignedTechnicianIds: createDraft.assignedTechnicianIdsText
-          ? [createDraft.assignedTechnicianIdsText]
+        assignedTechnicianIds: createDraft.assignedTechnicianId
+          ? [createDraft.assignedTechnicianId]
           : [],
       })
 
-      setActiveJobOrder(jobOrder)
-      setManualJobOrderId(jobOrder.id)
-      setCreateState({
+      clearBookingCreateContext({
         status: 'create_saved',
         message: `Job order ${jobOrder.id.slice(0, 8).toUpperCase()} created from confirmed booking handoff.`,
       })
+      setActiveJobOrder(jobOrder)
+      setManualJobOrderId(jobOrder.id)
+      void loadJobOrderSummaries()
       setHandoffCandidates((current) =>
         current.filter((candidate) => candidate.bookingId !== selectedCandidate.bookingId),
       )
@@ -569,6 +712,7 @@ export default function JobOrderWorkbench() {
 
       setActiveJobOrder(updatedJobOrder)
       setManualJobOrderId(updatedJobOrder.id)
+      void loadJobOrderSummaries()
       setStatusState({
         status: 'status_update_saved',
         message: `Job order moved to ${formatStatusLabel(updatedJobOrder.status)}.`,
@@ -629,7 +773,7 @@ export default function JobOrderWorkbench() {
         jobOrderId: activeJobOrder.id,
         entryType: progressDraft.entryType,
         message: progressDraft.message,
-        completedItemIds: splitCommaSeparatedIds(progressDraft.completedItemIdsText),
+        completedItemIds: progressDraft.completedItemIds,
         accessToken: user.accessToken,
       })
 
@@ -637,7 +781,7 @@ export default function JobOrderWorkbench() {
       setProgressDraft({
         entryType: 'note',
         message: '',
-        completedItemIdsText: '',
+        completedItemIds: [],
       })
       setProgressState({
         status: 'progress_saved',
@@ -766,6 +910,7 @@ export default function JobOrderWorkbench() {
       })
 
       setActiveJobOrder(updatedJobOrder)
+      void loadJobOrderSummaries()
       setFinalizeState({
         status: 'finalize_saved',
         message: `Invoice-ready record ${updatedJobOrder.invoiceRecord?.invoiceReference ?? ''} generated.`,
@@ -845,6 +990,7 @@ export default function JobOrderWorkbench() {
       })
 
       setActiveJobOrder(updatedJobOrder)
+      void loadJobOrderSummaries()
       setPaymentState({
         status: 'payment_saved',
         message: 'Invoice payment recorded and job-order detail refreshed.',
@@ -868,9 +1014,16 @@ export default function JobOrderWorkbench() {
     }
   }
 
+  const detailStateClassName =
+    detailState.status === 'detail_loading'
+      ? 'border-surface-border bg-surface-raised text-ink-primary'
+      : detailState.status === 'detail_loaded'
+        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+        : 'border-red-500/25 bg-red-500/10 text-red-200'
+
   if (!canUseWorkbench) {
     return (
-      <div className="space-y-5">
+      <div className="ops-page-shell">
         <BlockingState
           title="Job-order workbench is staff-only"
           copy="This workspace is reserved for technicians, service advisers, and super admins. Customer accounts remain mobile-only."
@@ -880,159 +1033,827 @@ export default function JobOrderWorkbench() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="card p-4 md:p-5">
-        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-muted">Job Order Workbench</p>
-            <h1 className="text-xl md:text-2xl font-black text-ink-primary mt-1">
-              Booking Handoff, Execution Evidence, and Invoice-Ready Finalization
-            </h1>
-            <p className="text-sm text-ink-muted mt-2 max-w-3xl">
-              Start from a confirmed booking, create a job order, assign workshop staff, then move the work
-              through progress, evidence, QA-ready finalization, and payment tracking.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="badge badge-green">Confirmed handoff</span>
-            <span className="badge badge-blue">Workshop execution</span>
-            <span className="badge badge-orange">QA-ready finish</span>
-            <span className="badge badge-gray">Invoice follow-up</span>
-          </div>
+    <div className="ops-page-shell">
+      <section className="ops-page-header">
+        <div className="space-y-2">
+          <p className="ops-page-kicker">Workshop Operations</p>
+          <h1 className="ops-page-title">Job Order Workbench</h1>
+          <p className="ops-page-copy">
+            {isTechnician
+              ? 'Load your assigned job order, update execution status, add workshop progress, and attach evidence from one technician-focused control surface.'
+              : 'Move confirmed bookings into workshop execution, track progress and evidence, then finalize invoice-ready work from one guided control surface.'}
+          </p>
         </div>
-      </div>
+        {!isTechnician ? (
+          <button
+            onClick={loadBookingHandoffs}
+            className="ops-action-secondary min-w-[148px] self-start xl:self-auto"
+          >
+            <RefreshCw size={14} />
+            Refresh
+          </button>
+        ) : null}
+      </section>
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
-        <SummaryTile
-          icon={ClipboardList}
-          label="Confirmed Handoffs"
-          value={handoffCandidates.length}
-          sub={
-            handoffState.status === 'handoff_empty'
-              ? 'No confirmed booking source is ready today'
-              : 'Ready for job-order handoff'
-          }
-        />
-        <SummaryTile
-          icon={Wrench}
-          label="Selected Source"
-          value={selectedCandidate ? selectedCandidate.timeSlotLabel : 'None'}
-          sub={selectedCandidate ? selectedCandidate.serviceSummary : 'Pick a confirmed booking handoff'}
-        />
-        <SummaryTile
-          icon={FileStack}
-          label="Loaded Job Order"
-          value={activeJobOrder ? formatStatusLabel(activeJobOrder.status) : 'None'}
-          sub={activeJobOrder ? `${activeJobOrder.itemCount} work item(s)` : 'Load or create one from this page'}
-        />
-        <SummaryTile
-          icon={ShieldCheck}
-          label="Execution Phase"
-          value={String(executionPhase).replaceAll('_', ' ')}
-          sub={activeJobOrder?.invoiceRecord ? activeJobOrder.invoiceRecord.invoiceReference : 'Progress/photos stay job-order-owned'}
-        />
-      </div>
+      <section className="ops-control-strip">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,200px)_minmax(0,1fr)]">
+          <label className="text-xs text-ink-muted">
+            {isTechnician ? 'Assigned work date' : 'Schedule date'}
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value || toDateKey())}
+              className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+            />
+          </label>
 
-      <div className="grid 2xl:grid-cols-[420px_minmax(0,1fr)] gap-5">
-        <div className="card p-4">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="card-title">Confirmed Booking Handoffs</p>
-              <p className="text-xs text-ink-muted mt-1">
-                Select a confirmed booking, then create the matching workshop job order on the right.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value || toDateKey())}
-                className="rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-              />
-              <button onClick={loadBookingHandoffs} className="btn-ghost">
-                <RefreshCw size={14} /> Refresh
-              </button>
-            </div>
-          </div>
-
-          {handoffState.message ? (
-            <div
-              className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
-                handoffState.status === 'handoff_load_failed' || handoffState.status === 'handoff_forbidden_role'
-                  ? 'border-red-500/25 bg-red-500/10 text-red-200'
-                  : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-              }`}
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <label className="text-xs text-ink-muted">
+              {isTechnician ? 'Assigned job order' : 'Job-order lookup'}
+              <select
+                value={manualJobOrderId}
+                onChange={(event) => setManualJobOrderId(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              >
+                <option value="">
+                  {selectedDateJobOrders.length > 0
+                    ? 'Choose a job order for the selected date'
+                    : monthJobOrders.length > 0
+                      ? 'No job orders on this date - choose from this month'
+                      : 'No job orders available in this month'}
+                </option>
+                {selectedDateJobOrders.length > 0 ? (
+                  <optgroup label="Selected date">
+                    {selectedDateJobOrders.map((jobOrder) => (
+                      <option key={jobOrder.id} value={jobOrder.id}>
+                        JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatStatusLabel(jobOrder.status)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {monthJobOrders.filter((jobOrder) => jobOrder.workDate !== selectedDate).length > 0 ? (
+                  <optgroup label={`Other dates in ${selectedMonth}`}>
+                    {monthJobOrders
+                      .filter((jobOrder) => jobOrder.workDate !== selectedDate)
+                      .map((jobOrder) => (
+                        <option key={jobOrder.id} value={jobOrder.id}>
+                          JO-{jobOrder.id.slice(0, 8).toUpperCase()} - {formatDate(jobOrder.workDate)} - {formatStatusLabel(jobOrder.status)}
+                        </option>
+                      ))}
+                  </optgroup>
+                ) : null}
+              </select>
+            </label>
+            <button
+              onClick={handleLoadJobOrder}
+              className="ops-action-primary sm:min-w-[168px] sm:self-end"
+              disabled={!manualJobOrderId}
             >
-              {handoffState.message}
-            </div>
-          ) : null}
+              <RefreshCw size={14} />
+              Load Job Order
+            </button>
 
-          <div className="space-y-3 mt-4">
-            {handoffCandidates.length === 0 ? (
-              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-8 text-center">
-                <p className="text-sm font-bold text-ink-primary">No confirmed handoffs for this date</p>
-                <p className="text-xs text-ink-muted mt-2">
-                  Booking handoff remains schedule-derived. Only confirmed bookings can move into job-order creation.
-                </p>
+            {detailState.message ? (
+              <div
+                className={`sm:col-span-2 rounded-xl border px-4 py-3 text-xs ${detailStateClassName}`}
+              >
+                {detailState.message}
               </div>
             ) : (
-              handoffCandidates.map((candidate) => {
-                const isSelected = candidate.bookingId === selectedBookingId
-                return (
-                  <button
-                    key={candidate.bookingId}
-                    onClick={() => setSelectedBookingId(candidate.bookingId)}
-                    className={`w-full text-left rounded-xl border px-4 py-4 transition ${
-                      isSelected
-                        ? 'border-[#f07c00] bg-[#f07c00]/10'
-                        : 'border-surface-border bg-surface-card hover:border-[#f07c00]/60'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-mono font-bold" style={{ color: '#f07c00' }}>
-                          BK-{candidate.bookingId.slice(0, 8).toUpperCase()}
-                        </p>
-                        <p className="text-sm font-semibold text-ink-primary mt-1">{candidate.serviceSummary}</p>
-                        <p className="text-xs text-ink-muted mt-2">{candidate.customerLabel}</p>
-                        <p className="text-xs text-ink-muted mt-1">{candidate.vehicleLabel}</p>
-                      </div>
-                      <span className="badge badge-green">Confirmed source</span>
-                    </div>
-                    <p className="text-[11px] text-ink-muted mt-3">
-                      {formatDate(candidate.scheduledDate)} | {candidate.timeSlotLabel}
-                    </p>
-                  </button>
-                )
-              })
+              <p className="sm:col-span-2 text-[11px] text-ink-muted">
+                {isTechnician
+                  ? 'Pick one of your assigned job orders from the selector before updating status, progress, or evidence.'
+                  : 'Use the selector instead of pasting raw job-order IDs so this workbench stays tied to known live records.'}
+              </p>
             )}
           </div>
 
-          <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3 mt-4">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Workflow rule</p>
-            <p className="text-sm text-ink-primary mt-1">
-              Pending, cancelled, and completed bookings are hidden from handoff creation.
+          <div className="lg:col-span-2 rounded-xl border border-surface-border bg-surface-card px-4 py-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-bold text-ink-primary">Dates with job orders and booking handoff queue</p>
+                <p className="text-xs text-ink-muted mt-1">
+                  {isTechnician
+                    ? 'These dates already have assigned job orders in the selected month.'
+                    : 'These dates already have job orders or booking handoff queue in the selected month.'}
+                </p>
+              </div>
+              <span className="badge badge-gray">
+                {markedWorkbenchDates.length} date{markedWorkbenchDates.length === 1 ? '' : 's'} marked
+              </span>
+            </div>
+
+            {(jobOrderCalendarState.message || jobOrderSummaryState.message) ? (
+              <div
+                className={`mt-3 rounded-xl border px-4 py-3 text-xs ${
+                  jobOrderCalendarState.status === 'error' || jobOrderSummaryState.status === 'error'
+                    ? 'border-red-500/25 bg-red-500/10 text-red-200'
+                    : 'border-surface-border bg-surface-raised text-ink-muted'
+                }`}
+              >
+                {jobOrderCalendarState.message || jobOrderSummaryState.message}
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {markedWorkbenchDates.length > 0 ? (
+                markedWorkbenchDates.map((entry) => {
+                  const isSelectedDate = entry.date === selectedDate
+
+                  return (
+                    <button
+                      key={entry.date}
+                      type="button"
+                      onClick={() => setSelectedDate(entry.date)}
+                      className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
+                        isSelectedDate
+                          ? 'border-[#f07c00] bg-[#f07c00]/10 text-white'
+                          : 'border-surface-border bg-surface-raised text-ink-secondary hover:border-[#f07c00]/50 hover:text-ink-primary'
+                      }`}
+                    >
+                      <span className="block font-semibold">{formatDate(entry.date)}</span>
+                      <span className="mt-1 block text-[11px] opacity-80">
+                        {entry.jobOrderCount} job order{entry.jobOrderCount === 1 ? '' : 's'}
+                        {entry.bookingQueueCount > 0 ? ` / ${entry.bookingQueueCount} queue` : ''}
+                      </span>
+                    </button>
+                  )
+                })
+              ) : (
+                <p className="text-xs text-ink-muted">
+                  No job-order or booking-handoff dates are marked for {selectedMonth} yet.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="ops-summary-grid">
+        {isTechnician ? (
+          <SummaryTile
+            icon={ClipboardList}
+            label="Assigned Queue"
+            value={activeJobOrder ? 'Loaded' : 'Awaiting load'}
+            sub={
+              activeJobOrder
+                ? `Job order ${activeJobOrder.id.slice(0, 8).toUpperCase()} is ready for technician updates`
+                : 'Choose one of your assigned job orders to begin'
+            }
+          />
+        ) : (
+          <SummaryTile
+            icon={ClipboardList}
+            label="Booking Handoff Queue"
+            value={handoffCandidates.length}
+            sub={
+              handoffState.status === 'handoff_empty'
+                ? 'No confirmed booking source is ready today'
+                : 'Ready for job-order handoff'
+            }
+          />
+        )}
+        <SummaryTile
+          icon={Wrench}
+          label="Active Phase"
+          value={activeJobOrder ? formatStatusLabel(executionPhase) : 'Awaiting load'}
+          sub={
+            activeJobOrder
+              ? `Current status: ${formatStatusLabel(activeJobOrder.status)}`
+              : 'Load or create a job order to begin execution'
+          }
+        />
+        <SummaryTile
+          icon={ShieldCheck}
+          label={isTechnician ? 'Progress Access' : 'Assignment State'}
+          value={
+            isTechnician
+              ? activeJobOrder
+                ? canAppendProgress
+                  ? 'Assigned'
+                  : 'Read only'
+                : 'Awaiting load'
+              : activeJobOrder
+                ? activeJobOrder.assignedTechnicianIds.length > 0
+                  ? `${activeJobOrder.assignedTechnicianIds.length} assigned`
+                  : 'Unassigned'
+                : selectedCandidate
+                  ? 'Ready to assign'
+                  : 'Awaiting source'
+          }
+          sub={
+            isTechnician
+              ? activeJobOrder
+                ? canAppendProgress
+                  ? 'You can append technician progress entries to this job order.'
+                  : 'Only the assigned technician can append progress for this job order.'
+                : 'Load a job order to confirm assignment access.'
+              : activeJobOrder
+                ? activeJobOrder.assignedTechnicianIds.join(', ') || 'No technician assigned'
+                : selectedCandidate
+                  ? selectedCandidate.serviceSummary
+                  : 'Select a confirmed booking handoff first'
+          }
+        />
+        <SummaryTile
+          icon={isTechnician ? FileStack : FileStack}
+          label={isTechnician ? 'Photo Evidence' : 'Finalize & Payment'}
+          value={
+            isTechnician
+              ? activeJobOrder
+                ? `${activeJobOrder.photos.length} attached`
+                : 'Awaiting load'
+              : activeJobOrder?.invoiceRecord
+                ? formatStatusLabel(activeJobOrder.invoiceRecord.paymentStatus)
+                : activeJobOrder
+                  ? 'Not finalized'
+                  : 'No invoice record'
+          }
+          sub={
+            isTechnician
+              ? activeJobOrder?.photos[0]?.caption ??
+                activeJobOrder?.photos[0]?.fileName ??
+                'Attach before-and-after evidence while the work is active.'
+              : activeJobOrder?.invoiceRecord
+                ? activeJobOrder.invoiceRecord.invoiceReference
+                : 'Finalization creates the invoice-ready record'
+          }
+        />
+      </section>
+
+      <section
+        className="ops-panel border-[#f07c00]/35 bg-[linear-gradient(180deg,rgba(240,124,0,0.14),rgba(15,23,42,0.94))] shadow-[0_24px_60px_rgba(15,23,42,0.28)]"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="card-title">Active Job Order</p>
+            <p className="text-xs text-ink-muted mt-1">
+              {isTechnician
+                ? 'The loaded technician assignment stays pinned above your controls so status, progress, and workshop evidence remain in view while you work.'
+                : 'The live workshop surface stays pinned above intake so status, assignments, evidence, and invoice readiness remain the primary context after a load or creation event.'}
             </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className={`badge ${isTechnician ? 'badge-orange' : 'badge-blue'}`}>
+              {isTechnician ? 'Technician live surface' : 'Pinned live surface'}
+            </span>
+            <span className="badge badge-gray">
+              {activeJobOrder ? `JO-${activeJobOrder.id.slice(0, 8).toUpperCase()}` : 'Awaiting live detail'}
+            </span>
+          </div>
+        </div>
+
+        {activeJobOrder ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] mt-4">
+            <div className="grid gap-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-[#f07c00]/30 bg-surface-raised px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                    Job Order
+                  </p>
+                  <p className="text-sm text-ink-primary mt-1">
+                    JO-{activeJobOrder.id.slice(0, 8).toUpperCase()}
+                  </p>
+                  <p className="text-xs text-ink-muted mt-2">{activeJobOrder.sourceType} source</p>
+                </div>
+                <div className="rounded-xl border border-[#f07c00]/30 bg-surface-raised px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                    Current Status
+                  </p>
+                  <div className="mt-1">
+                    <StatusBadge status={activeJobOrder.status} />
+                  </div>
+                  <p className="text-xs text-ink-muted mt-2">
+                    Updated {formatDateTime(activeJobOrder.updatedAt)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#f07c00]/30 bg-surface-raised px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                  Work Items
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {activeJobOrder.items.map((item) => (
+                    <li key={item.id} className="text-sm text-ink-primary">
+                      {item.name}
+                      {item.isCompleted ? ' (completed)' : ''}
+                      {item.estimatedHours ? ` - ${item.estimatedHours}h` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                  Assignments
+                </p>
+                <p className="text-sm text-ink-primary mt-1">
+                  {activeJobOrder.assignedTechnicianIds.length > 0
+                    ? activeJobOrder.assignedTechnicianIds.join(', ')
+                    : 'No technician assigned'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                  Latest Progress
+                </p>
+                <p className="text-sm text-ink-primary mt-1">
+                  {activeJobOrder.latestProgressEntry?.message ?? 'No progress entry yet'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                  Photo Evidence
+                </p>
+                <p className="text-sm text-ink-primary mt-1">{activeJobOrder.photos.length} attached</p>
+                <p className="text-xs text-ink-muted mt-2">
+                  {activeJobOrder.photos[0]?.caption ??
+                    activeJobOrder.photos[0]?.fileName ??
+                    'No photo evidence yet'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                  {isTechnician ? 'Completion Handoff' : 'Invoice Record'}
+                </p>
+                <p className="text-sm text-ink-primary mt-1">
+                  {isTechnician
+                    ? activeJobOrder.status === 'ready_for_qa'
+                      ? 'Ready for QA review'
+                      : 'Still in workshop'
+                    : activeJobOrder.invoiceRecord?.invoiceReference ?? 'Not finalized yet'}
+                </p>
+                <p className="text-xs text-ink-muted mt-2">
+                  {isTechnician
+                    ? activeJobOrder.status === 'ready_for_qa'
+                      ? 'Execution work is staged for the next review step.'
+                      : 'Keep progress and evidence current until the work is ready for handoff.'
+                    : activeJobOrder.invoiceRecord
+                      ? `Payment: ${activeJobOrder.invoiceRecord.paymentStatus}`
+                      : 'Finalization creates the invoice-ready record.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-10 text-center mt-4">
+            <AlertTriangle size={28} className="mx-auto text-ink-dim mb-3" />
+            <p className="text-sm font-bold text-ink-primary">No job order loaded yet</p>
+            <p className="text-xs text-ink-muted mt-2">
+              {isTechnician
+                ? 'Choose one of your assigned job orders to start technician execution updates.'
+                : 'Create a job order from confirmed booking handoff or choose an existing job order from the selector.'}
+            </p>
+          </div>
+        )}
+      </section>
+
+      {isTechnician ? (
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
+          <div className="space-y-5">
+            <div className="ops-panel">
+              <div>
+                <p className="card-title">Technician Workflow Notes</p>
+                <p className="text-xs text-ink-muted mt-1">
+                  This workspace is focused on execution updates. Booking handoff, invoice finalization, and payment ownership stay with adviser or admin roles.
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+                  <p className="text-sm font-bold text-ink-primary">1. Load the assigned job order</p>
+                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                    Start from the assigned job-order selector so your status changes and evidence stay attached to the correct workshop record.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+                  <p className="text-sm font-bold text-ink-primary">2. Keep progress current</p>
+                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                    Add a concise workshop note whenever work starts, issues appear, or service items are completed.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+                  <p className="text-sm font-bold text-ink-primary">3. Attach reviewable proof</p>
+                  <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                    Before-and-after photos help the next QA or adviser handoff without changing booking truth.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="ops-panel">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                <div>
+                  <p className="card-title">Execution Control</p>
+                  <p className="text-xs text-ink-muted mt-1">
+                    Move the loaded job order through valid execution states as workshop work progresses.
+                  </p>
+                </div>
+                <span className="badge badge-gray">
+                  Next states: {nextStatuses.length > 0 ? nextStatuses.join(', ') : 'none'}
+                </span>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-3 mt-4">
+                <label className="text-xs text-ink-muted">
+                  Next status
+                  <select
+                    value={statusDraft.status}
+                    onChange={(event) =>
+                      setStatusDraft((current) => ({
+                        ...current,
+                        status: event.target.value,
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                    disabled={!activeJobOrder || nextStatuses.length === 0}
+                  >
+                    {nextStatuses.length > 0 ? (
+                      nextStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {formatStatusLabel(status)}
+                        </option>
+                      ))
+                    ) : (
+                      <option value={activeJobOrder?.status ?? 'draft'}>
+                        {activeJobOrder ? 'No valid transition available' : 'Load a job order first'}
+                      </option>
+                    )}
+                  </select>
+                </label>
+                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                    Transition Guide
+                  </p>
+                  <p className="text-sm text-ink-primary mt-1">
+                    Use status updates to reflect the real workshop phase of the assigned job.
+                  </p>
+                  <p className="text-xs text-ink-muted mt-2">
+                    If no transition appears, this job order is waiting on another workflow step or is already complete.
+                  </p>
+                </div>
+                <label className="text-xs text-ink-muted md:col-span-2">
+                  Transition reason
+                  <textarea
+                    value={statusDraft.reason}
+                    onChange={(event) =>
+                      setStatusDraft((current) => ({
+                        ...current,
+                        reason: event.target.value,
+                      }))
+                    }
+                    rows={3}
+                    className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                    placeholder="Optional workshop reason for the selected transition."
+                  />
+                </label>
+              </div>
+
+              {statusState.message ? (
+                <div
+                  className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
+                    statusState.status === 'status_update_saved'
+                      ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                      : 'border-red-500/25 bg-red-500/10 text-red-200'
+                  }`}
+                >
+                  {statusState.message}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2 mt-4">
+                <button
+                  onClick={handleStatusUpdate}
+                  disabled={
+                    !activeJobOrder ||
+                    nextStatuses.length === 0 ||
+                    statusState.status === 'status_update_submitting'
+                  }
+                  className="ops-action-primary"
+                >
+                  {statusState.status === 'status_update_submitting' ? (
+                    <RefreshCw size={14} className="animate-spin" />
+                  ) : (
+                    <CheckCircle2 size={14} />
+                  )}
+                  Save Status Update
+                </button>
+                <span className="badge badge-gray">Execution states only</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="ops-panel">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                <div>
+                  <p className="card-title">Progress & Evidence</p>
+                  <p className="text-xs text-ink-muted mt-1">
+                    Keep the workshop trail current with technician notes and reviewable media.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="badge badge-gray">Progress: technician-owned</span>
+                  <span className="badge badge-gray">Evidence: attached to job order</span>
+                </div>
+              </div>
+
+              <div className="grid xl:grid-cols-2 gap-4 mt-4">
+                <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+                  <p className="text-sm font-bold text-ink-primary">Technician Progress Entry</p>
+                  <p className="text-xs text-ink-muted mt-1">
+                    Only the assigned technician can append workshop progress.
+                  </p>
+                  <div className="grid md:grid-cols-2 gap-3 mt-3">
+                    <label className="text-xs text-ink-muted">
+                      Entry type
+                      <select
+                        value={progressDraft.entryType}
+                        onChange={(event) =>
+                          setProgressDraft((current) => ({
+                            ...current,
+                            entryType: event.target.value,
+                          }))
+                        }
+                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                      >
+                        {progressEntryTypeOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="text-xs text-ink-muted md:col-span-2">
+                      Completed work items
+                      <div className="mt-1 rounded-lg border border-surface-border bg-surface-raised p-3">
+                        {activeJobOrder?.items?.length ? (
+                          <div className="grid gap-2">
+                            {activeJobOrder.items.map((item) => {
+                              const checked = progressDraft.completedItemIds.includes(item.id)
+
+                              return (
+                                <label
+                                  key={item.id}
+                                  className="flex items-start gap-3 rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(event) =>
+                                      setProgressDraft((current) => ({
+                                        ...current,
+                                        completedItemIds: event.target.checked
+                                          ? [...current.completedItemIds, item.id]
+                                          : current.completedItemIds.filter((entry) => entry !== item.id),
+                                      }))
+                                    }
+                                    className="mt-0.5"
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block font-semibold">{item.name}</span>
+                                    <span className="mt-1 block text-[11px] text-ink-muted">
+                                      {item.description || `Item ID ${item.id.slice(0, 8).toUpperCase()}`}
+                                    </span>
+                                  </span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-ink-muted">
+                            Load a job order with work items first, then mark completed items from this checklist.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <label className="text-xs text-ink-muted md:col-span-2">
+                      Progress message
+                      <textarea
+                        value={progressDraft.message}
+                        onChange={(event) =>
+                          setProgressDraft((current) => ({
+                            ...current,
+                            message: event.target.value,
+                          }))
+                        }
+                        rows={3}
+                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                        placeholder="Describe the work performed or issue found."
+                      />
+                    </label>
+                  </div>
+                  {progressState.message ? (
+                    <div
+                      className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
+                        progressState.status === 'progress_saved'
+                          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                          : 'border-red-500/25 bg-red-500/10 text-red-200'
+                      }`}
+                    >
+                      {progressState.message}
+                    </div>
+                  ) : null}
+                  <button
+                    onClick={handleAddProgressEntry}
+                    disabled={!activeJobOrder || progressState.status === 'progress_submitting'}
+                    className="ops-action-primary mt-3"
+                  >
+                    {progressState.status === 'progress_submitting' ? (
+                      <RefreshCw size={14} className="animate-spin" />
+                    ) : (
+                      <Wrench size={14} />
+                    )}
+                    Save Progress Entry
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+                  <p className="text-sm font-bold text-ink-primary">Photo Evidence</p>
+                  <p className="text-xs text-ink-muted mt-1">
+                    Add a photo link or file reference that the next reviewer can understand quickly.
+                  </p>
+                  <div className="grid md:grid-cols-2 gap-3 mt-3">
+                    <label className="text-xs text-ink-muted">
+                      File name
+                      <input
+                        value={photoDraft.fileName}
+                        onChange={(event) =>
+                          setPhotoDraft((current) => ({
+                            ...current,
+                            fileName: event.target.value,
+                          }))
+                        }
+                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                        placeholder="front-brake-after.jpg"
+                      />
+                    </label>
+                    <label className="text-xs text-ink-muted">
+                      File URL
+                      <input
+                        value={photoDraft.fileUrl}
+                        onChange={(event) =>
+                          setPhotoDraft((current) => ({
+                            ...current,
+                            fileUrl: event.target.value,
+                          }))
+                        }
+                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                        placeholder="https://files.example.com/job-orders/photo.jpg"
+                      />
+                    </label>
+                    <label className="text-xs text-ink-muted md:col-span-2">
+                      Caption
+                      <textarea
+                        value={photoDraft.caption}
+                        onChange={(event) =>
+                          setPhotoDraft((current) => ({
+                            ...current,
+                            caption: event.target.value,
+                          }))
+                        }
+                        rows={3}
+                        className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+                        placeholder="Customer-safe evidence caption."
+                      />
+                    </label>
+                  </div>
+                  {photoState.message ? (
+                    <div
+                      className={`rounded-xl border px-4 py-3 text-xs mt-3 ${
+                        photoState.status === 'photo_saved'
+                          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                          : 'border-red-500/25 bg-red-500/10 text-red-200'
+                      }`}
+                    >
+                      {photoState.message}
+                    </div>
+                  ) : null}
+                  <button
+                    onClick={handleAddPhotoEvidence}
+                    disabled={!activeJobOrder || photoState.status === 'photo_submitting'}
+                    className="ops-action-primary mt-3"
+                  >
+                    {photoState.status === 'photo_submitting' ? (
+                      <RefreshCw size={14} className="animate-spin" />
+                    ) : (
+                      <FileStack size={14} />
+                    )}
+                    Attach Photo Evidence
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="ops-workspace-grid">
+        <div className="space-y-5">
+          <div className="ops-panel">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="card-title">Booking Handoff Queue</p>
+                <p className="text-xs text-ink-muted mt-1">
+                  Select a confirmed booking, then create the matching workshop job order from the
+                  guided surface on the right.
+                </p>
+              </div>
+              <span className="badge badge-gray">{formatDate(selectedDate)}</span>
+            </div>
+
+            {handoffState.message ? (
+              <div
+                className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
+                  handoffState.status === 'handoff_load_failed' ||
+                  handoffState.status === 'handoff_forbidden_role'
+                    ? 'border-red-500/25 bg-red-500/10 text-red-200'
+                    : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                }`}
+              >
+                {handoffState.message}
+              </div>
+            ) : null}
+
+            <div className="space-y-3 mt-4">
+              {handoffCandidates.length === 0 ? (
+                <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-8 text-center">
+                  <p className="text-sm font-bold text-ink-primary">No confirmed handoffs for this date</p>
+                  <p className="text-xs text-ink-muted mt-2">
+                    Booking handoff remains schedule-derived. Only confirmed bookings can move into
+                    job-order creation.
+                  </p>
+                </div>
+              ) : (
+                handoffCandidates.map((candidate) => {
+                  const isSelected = candidate.bookingId === selectedBookingId
+                  return (
+                    <button
+                      key={candidate.bookingId}
+                      onClick={() => setSelectedBookingId(candidate.bookingId)}
+                      className={`w-full text-left rounded-xl border px-4 py-4 transition ${
+                        isSelected
+                          ? 'border-[#f07c00] bg-[#f07c00]/10'
+                          : 'border-surface-border bg-surface-card hover:border-[#f07c00]/60'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-mono font-bold" style={{ color: '#f07c00' }}>
+                            BK-{candidate.bookingId.slice(0, 8).toUpperCase()}
+                          </p>
+                          <p className="text-sm font-semibold text-ink-primary mt-1">
+                            {candidate.serviceSummary}
+                          </p>
+                          <p className="text-xs text-ink-muted mt-2">{candidate.customerLabel}</p>
+                          <p className="text-xs text-ink-muted mt-1">{candidate.vehicleLabel}</p>
+                        </div>
+                        <span className="badge badge-green">Confirmed source</span>
+                      </div>
+                      <p className="text-[11px] text-ink-muted mt-3">
+                        {formatDate(candidate.scheduledDate)} | {candidate.timeSlotLabel}
+                      </p>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="ops-panel-muted mt-4">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Workflow rule</p>
+              <p className="text-sm text-ink-primary mt-1">
+                Pending, cancelled, and completed bookings are hidden from handoff creation.
+              </p>
               <p className="text-xs text-ink-muted mt-2">
                 Confirm the booking on the schedule page first, then refresh this workbench.
               </p>
+            </div>
           </div>
         </div>
 
         <div className="space-y-5">
-          <div className="card p-4 md:p-5">
+          <div className="ops-panel">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
               <div>
-                <p className="card-title">Create Job Order From Booking</p>
+                <p className="card-title">Create / Load Job Order</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Review the service work, assign a technician when ready, and keep booking details separate
-                  from workshop execution notes.
+                  Use this secondary intake surface to convert a confirmed booking into a new job
+                  order. Manual lookup stays in the control strip, while the live job-order
+                  surface remains pinned above.
                 </p>
               </div>
-              <span className={`badge ${staffDirectoryState.status === 'error' ? 'badge-red' : 'badge-green'}`}>
+              <span
+                className={`badge ${
+                  staffDirectoryState.status === 'error' ? 'badge-red' : 'badge-green'
+                }`}
+              >
                 {staffDirectoryState.status === 'loading'
                   ? 'Loading technicians'
-                  : `${technicianOptions.length} technician option${technicianOptions.length === 1 ? '' : 's'}`}
+                  : `${technicianOptions.length} technician option${
+                      technicianOptions.length === 1 ? '' : 's'
+                    }`}
               </span>
             </div>
 
@@ -1048,14 +1869,24 @@ export default function JobOrderWorkbench() {
               <div className="space-y-4 mt-4">
                 <div className="grid md:grid-cols-2 gap-3">
                   <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Source Booking</p>
-                    <p className="text-sm text-ink-primary mt-1">BK-{selectedCandidate.bookingId.slice(0, 8).toUpperCase()}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                      Source Booking
+                    </p>
+                    <p className="text-sm text-ink-primary mt-1">
+                      BK-{selectedCandidate.bookingId.slice(0, 8).toUpperCase()}
+                    </p>
                     <p className="text-xs text-ink-muted mt-2">{selectedCandidate.customerLabel}</p>
                   </div>
                   <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Adviser Snapshot</p>
-                    <p className="text-sm text-ink-primary mt-1">{user?.staffCode ?? 'Missing staff code'}</p>
-                    <p className="text-xs text-ink-muted mt-2">This identifies who prepared the job order.</p>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                      Adviser Snapshot
+                    </p>
+                    <p className="text-sm text-ink-primary mt-1">
+                      {user?.staffCode ?? 'Missing staff code'}
+                    </p>
+                    <p className="text-xs text-ink-muted mt-2">
+                      This identifies who prepared the job order.
+                    </p>
                   </div>
                 </div>
 
@@ -1063,11 +1894,16 @@ export default function JobOrderWorkbench() {
                   Work items
                   <div className="space-y-3 mt-2">
                     {createDraft.items.map((item, index) => (
-                      <div key={`${item.name}-${index}`} className="rounded-xl border border-surface-border bg-surface-raised p-3">
+                      <div
+                        key={`${item.name}-${index}`}
+                        className="rounded-xl border border-surface-border bg-surface-raised p-3"
+                      >
                         <div className="grid md:grid-cols-[minmax(0,1fr)_120px] gap-3">
                           <input
                             value={item.name}
-                            onChange={(event) => handleCreateItemChange(index, { name: event.target.value })}
+                            onChange={(event) =>
+                              handleCreateItemChange(index, { name: event.target.value })
+                            }
                             className="w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
                             placeholder="Work item name"
                           />
@@ -1090,7 +1926,9 @@ export default function JobOrderWorkbench() {
                         </div>
                         <textarea
                           value={item.description ?? ''}
-                          onChange={(event) => handleCreateItemChange(index, { description: event.target.value })}
+                          onChange={(event) =>
+                            handleCreateItemChange(index, { description: event.target.value })
+                          }
                           rows={2}
                           className="mt-3 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
                           placeholder="Optional work-item description"
@@ -1103,11 +1941,11 @@ export default function JobOrderWorkbench() {
                 <label className="text-xs text-ink-muted block">
                   Assigned technician
                   <select
-                    value={createDraft.assignedTechnicianIdsText}
+                    value={createDraft.assignedTechnicianId}
                     onChange={(event) =>
                       setCreateDraft((current) => ({
                         ...current,
-                        assignedTechnicianIdsText: event.target.value,
+                        assignedTechnicianId: event.target.value,
                       }))
                     }
                     className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
@@ -1121,10 +1959,13 @@ export default function JobOrderWorkbench() {
                     ))}
                   </select>
                   <span className="block text-[11px] text-ink-muted mt-1">
-                    Leaving this blank creates a draft job order instead of sending an invalid technician ID.
+                    Leaving this blank creates a draft job order instead of sending an invalid
+                    technician ID.
                   </span>
                   {staffDirectoryState.message ? (
-                    <span className="block text-[11px] text-ink-muted mt-1">{staffDirectoryState.message}</span>
+                    <span className="block text-[11px] text-ink-muted mt-1">
+                      {staffDirectoryState.message}
+                    </span>
                   ) : null}
                 </label>
 
@@ -1147,7 +1988,7 @@ export default function JobOrderWorkbench() {
                 {createState.message ? (
                   <div
                     className={`rounded-xl border px-4 py-3 text-xs ${
-                      ['create_saved'].includes(createState.status)
+                      createState.status === 'create_saved'
                         ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
                         : 'border-red-500/25 bg-red-500/10 text-red-200'
                     }`}
@@ -1159,7 +2000,7 @@ export default function JobOrderWorkbench() {
                 <button
                   onClick={handleCreateJobOrder}
                   disabled={createState.status === 'create_submitting'}
-                  className="btn-primary"
+                  className="ops-action-primary"
                 >
                   {createState.status === 'create_submitting' ? (
                     <RefreshCw size={14} className="animate-spin" />
@@ -1172,115 +2013,13 @@ export default function JobOrderWorkbench() {
             )}
           </div>
 
-          <div className="card p-4 md:p-5">
-            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
-              <div>
-                <p className="card-title">Job-Order Detail</p>
-                <p className="text-xs text-ink-muted mt-1">
-                  Load a created job order or paste a known job-order id.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
-                <input
-                  value={manualJobOrderId}
-                  onChange={(event) => setManualJobOrderId(event.target.value)}
-                  placeholder="Job-order id"
-                  className="w-full lg:w-[320px] rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                />
-                <button onClick={handleLoadJobOrder} className="btn-primary justify-center">
-                  <RefreshCw size={14} /> Load Detail
-                </button>
-              </div>
-            </div>
-
-            {detailState.message ? (
-              <div
-                className={`rounded-xl border px-4 py-3 text-xs mt-4 ${
-                  detailState.status === 'detail_loaded'
-                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                    : 'border-red-500/25 bg-red-500/10 text-red-200'
-                }`}
-              >
-                {detailState.message}
-              </div>
-            ) : null}
-
-            {activeJobOrder ? (
-              <div className="grid md:grid-cols-2 gap-3 mt-4">
-                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Job Order</p>
-                  <p className="text-sm text-ink-primary mt-1">JO-{activeJobOrder.id.slice(0, 8).toUpperCase()}</p>
-                  <p className="text-xs text-ink-muted mt-2">{activeJobOrder.sourceType} source</p>
-                </div>
-                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Current Status</p>
-                  <div className="mt-1">
-                    <StatusBadge status={activeJobOrder.status} />
-                  </div>
-                  <p className="text-xs text-ink-muted mt-2">Updated {formatDateTime(activeJobOrder.updatedAt)}</p>
-                </div>
-                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3 md:col-span-2">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Work Items</p>
-                  <ul className="mt-2 space-y-2">
-                    {activeJobOrder.items.map((item) => (
-                      <li key={item.id} className="text-sm text-ink-primary">
-                        {item.name}
-                        {item.isCompleted ? ' (completed)' : ''}
-                        {item.estimatedHours ? ` - ${item.estimatedHours}h` : ''}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Assignments</p>
-                  <p className="text-sm text-ink-primary mt-1">
-                    {activeJobOrder.assignedTechnicianIds.length > 0
-                      ? activeJobOrder.assignedTechnicianIds.join(', ')
-                      : 'No technician assigned'}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Latest Progress</p>
-                  <p className="text-sm text-ink-primary mt-1">
-                    {activeJobOrder.latestProgressEntry?.message ?? 'No progress entry yet'}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Photo Evidence</p>
-                  <p className="text-sm text-ink-primary mt-1">{activeJobOrder.photos.length} attached</p>
-                  <p className="text-xs text-ink-muted mt-2">
-                    {activeJobOrder.photos[0]?.caption ?? activeJobOrder.photos[0]?.fileName ?? 'No photo evidence yet'}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Invoice Record</p>
-                  <p className="text-sm text-ink-primary mt-1">
-                    {activeJobOrder.invoiceRecord?.invoiceReference ?? 'Not finalized yet'}
-                  </p>
-                  <p className="text-xs text-ink-muted mt-2">
-                    {activeJobOrder.invoiceRecord
-                      ? `Payment: ${activeJobOrder.invoiceRecord.paymentStatus}`
-                      : 'Finalization creates the invoice-ready record.'}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-10 text-center mt-4">
-                <AlertTriangle size={28} className="mx-auto text-ink-dim mb-3" />
-                <p className="text-sm font-bold text-ink-primary">No job order loaded yet</p>
-                <p className="text-xs text-ink-muted mt-2">
-                  Create a job order from confirmed booking handoff or load a known job-order id.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="card p-4 md:p-5">
+          <div className="ops-panel">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
               <div>
-                <p className="card-title">Status Update</p>
+                <p className="card-title">Execution Control</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Only valid status transitions are shown. Progress, photos, finalization, and payment have separate actions below.
+                  Only valid status transitions are shown. Progress, photos, finalization, and
+                  payment stay in their dedicated workbench sections below.
                 </p>
               </div>
               <span className="badge badge-gray">
@@ -1316,12 +2055,15 @@ export default function JobOrderWorkbench() {
                 </select>
               </label>
               <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Transition Guide</p>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">
+                  Transition Guide
+                </p>
                 <p className="text-sm text-ink-primary mt-1">
                   Choose the next allowed status for the loaded job order.
                 </p>
                 <p className="text-xs text-ink-muted mt-2">
-                  If no transition appears, the job order is already blocked, finalized, or waiting for another workflow step.
+                  If no transition appears, the job order is already blocked, finalized, or waiting
+                  for another workflow step.
                 </p>
               </div>
               <label className="text-xs text-ink-muted md:col-span-2">
@@ -1356,8 +2098,12 @@ export default function JobOrderWorkbench() {
             <div className="flex flex-wrap gap-2 mt-4">
               <button
                 onClick={handleStatusUpdate}
-                disabled={!activeJobOrder || nextStatuses.length === 0 || statusState.status === 'status_update_submitting'}
-                className="btn-primary"
+                disabled={
+                  !activeJobOrder ||
+                  nextStatuses.length === 0 ||
+                  statusState.status === 'status_update_submitting'
+                }
+                className="ops-action-primary"
               >
                 {statusState.status === 'status_update_submitting' ? (
                   <RefreshCw size={14} className="animate-spin" />
@@ -1370,17 +2116,19 @@ export default function JobOrderWorkbench() {
             </div>
           </div>
 
-          <div className="card p-4 md:p-5">
+          <div className="ops-panel">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
               <div>
-                <p className="card-title">Progress, Photos, Finalization, and Payment</p>
+                <p className="card-title">Progress & Evidence</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Execution evidence stays job-order-owned. Finalization creates the invoice-ready record only after backend QA and work-completion rules pass.
+                  Execution evidence stays job-order-owned so the workshop team can record work and
+                  attach reviewable media without changing booking truth.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <span className="badge badge-gray">Progress: technician-owned</span>
-                <span className="badge badge-gray">Finalize: adviser/admin</span>
+                {role === 'super_admin' ? <span className="badge badge-green">Super admin override access</span> : null}
+                <span className="badge badge-gray">Evidence: technician/adviser/admin</span>
               </div>
             </div>
 
@@ -1388,7 +2136,7 @@ export default function JobOrderWorkbench() {
               <div className="rounded-xl border border-surface-border bg-surface-card p-4">
                 <p className="text-sm font-bold text-ink-primary">Technician Progress Entry</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Only the assigned technician can append workshop progress.
+                  Assigned technicians own workshop progress, and super admins can append or correct entries when needed.
                 </p>
                 <div className="grid md:grid-cols-2 gap-3 mt-3">
                   <label className="text-xs text-ink-muted">
@@ -1410,20 +2158,49 @@ export default function JobOrderWorkbench() {
                       ))}
                     </select>
                   </label>
-                  <label className="text-xs text-ink-muted">
-                    Completed item ids
-                    <input
-                      value={progressDraft.completedItemIdsText}
-                      onChange={(event) =>
-                        setProgressDraft((current) => ({
-                          ...current,
-                          completedItemIdsText: event.target.value,
-                        }))
-                      }
-                      className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                      placeholder="Comma-separated item ids"
-                    />
-                  </label>
+                  <div className="text-xs text-ink-muted md:col-span-2">
+                    Completed work items
+                    <div className="mt-1 rounded-lg border border-surface-border bg-surface-raised p-3">
+                      {activeJobOrder?.items?.length ? (
+                        <div className="grid gap-2">
+                          {activeJobOrder.items.map((item) => {
+                            const checked = progressDraft.completedItemIds.includes(item.id)
+
+                            return (
+                              <label
+                                key={item.id}
+                                className="flex items-start gap-3 rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(event) =>
+                                    setProgressDraft((current) => ({
+                                      ...current,
+                                      completedItemIds: event.target.checked
+                                        ? [...current.completedItemIds, item.id]
+                                        : current.completedItemIds.filter((entry) => entry !== item.id),
+                                    }))
+                                  }
+                                  className="mt-0.5"
+                                />
+                                <span className="min-w-0">
+                                  <span className="block font-semibold">{item.name}</span>
+                                  <span className="mt-1 block text-[11px] text-ink-muted">
+                                    {item.description || `Item ID ${item.id.slice(0, 8).toUpperCase()}`}
+                                  </span>
+                                </span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-ink-muted">
+                          Load a job order with work items first, then mark completed items from this checklist.
+                        </p>
+                      )}
+                    </div>
+                  </div>
                   <label className="text-xs text-ink-muted md:col-span-2">
                     Progress message
                     <textarea
@@ -1454,7 +2231,7 @@ export default function JobOrderWorkbench() {
                 <button
                   onClick={handleAddProgressEntry}
                   disabled={!activeJobOrder || progressState.status === 'progress_submitting'}
-                  className="btn-primary mt-3"
+                  className="ops-action-primary mt-3"
                 >
                   {progressState.status === 'progress_submitting' ? (
                     <RefreshCw size={14} className="animate-spin" />
@@ -1529,7 +2306,7 @@ export default function JobOrderWorkbench() {
                 <button
                   onClick={handleAddPhotoEvidence}
                   disabled={!activeJobOrder || photoState.status === 'photo_submitting'}
-                  className="btn-primary mt-3"
+                  className="ops-action-primary mt-3"
                 >
                   {photoState.status === 'photo_submitting' ? (
                     <RefreshCw size={14} className="animate-spin" />
@@ -1539,11 +2316,30 @@ export default function JobOrderWorkbench() {
                   Attach Photo Evidence
                 </button>
               </div>
+            </div>
+          </div>
 
+          <div className="ops-panel">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+              <div>
+                <p className="card-title">Finalize & Payment</p>
+                <p className="text-xs text-ink-muted mt-1">
+                  Finalization creates the invoice-ready record only after backend QA and
+                  work-completion rules pass, then payment updates stay attached to that record.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="badge badge-gray">Finalize: adviser/admin</span>
+                <span className="badge badge-gray">Payment: invoice-record only</span>
+              </div>
+            </div>
+
+            <div className="grid xl:grid-cols-2 gap-4 mt-4">
               <div className="rounded-xl border border-surface-border bg-surface-card p-4">
                 <p className="text-sm font-bold text-ink-primary">Finalize Invoice-Ready Work</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Finalization is separate from status updates and stays blocked when QA or work-item rules fail.
+                  Finalization is separate from status updates and stays blocked when QA or
+                  work-item rules fail.
                 </p>
                 <label className="text-xs text-ink-muted block mt-3">
                   Finalization summary
@@ -1574,7 +2370,7 @@ export default function JobOrderWorkbench() {
                 <button
                   onClick={handleFinalizeJobOrder}
                   disabled={!activeJobOrder || finalizeState.status === 'finalize_submitting'}
-                  className="btn-primary mt-3"
+                  className="ops-action-primary mt-3"
                 >
                   {finalizeState.status === 'finalize_submitting' ? (
                     <RefreshCw size={14} className="animate-spin" />
@@ -1588,7 +2384,8 @@ export default function JobOrderWorkbench() {
               <div className="rounded-xl border border-surface-border bg-surface-card p-4">
                 <p className="text-sm font-bold text-ink-primary">Record Invoice Payment</p>
                 <p className="text-xs text-ink-muted mt-1">
-                  Payment tracking belongs to the invoice-ready record and does not mutate booking truth.
+                  Payment tracking belongs to the invoice-ready record and does not mutate booking
+                  truth.
                 </p>
                 <div className="grid md:grid-cols-2 gap-3 mt-3">
                   <label className="text-xs text-ink-muted">
@@ -1670,7 +2467,7 @@ export default function JobOrderWorkbench() {
                 <button
                   onClick={handleRecordInvoicePayment}
                   disabled={!activeJobOrder || paymentState.status === 'payment_submitting'}
-                  className="btn-primary mt-3"
+                  className="ops-action-primary mt-3"
                 >
                   {paymentState.status === 'payment_submitting' ? (
                     <RefreshCw size={14} className="animate-spin" />
@@ -1683,7 +2480,8 @@ export default function JobOrderWorkbench() {
             </div>
           </div>
         </div>
-      </div>
+        </section>
+      )}
     </div>
   )
 }

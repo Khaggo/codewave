@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -13,7 +13,7 @@ import {
   Wrench,
 } from 'lucide-react'
 
-import { ApiError } from '@/lib/authClient'
+import { ApiError, listAdminCustomers, listStaffAccounts } from '@/lib/authClient'
 import {
   createBackJobCase,
   createReworkJobOrderFromBackJob,
@@ -21,6 +21,9 @@ import {
   listBackJobsByVehicle,
   updateBackJobStatus,
 } from '@/lib/backJobsClient'
+import { listVehicleBookings } from '@/lib/bookingStaffClient'
+import { listVehicleInspections } from '@/lib/inspectionStaffClient'
+import { listVehicleJobOrders } from '@/lib/jobOrderWorkbenchClient'
 import { useUser } from '@/lib/userContext'
 import {
   backJobReviewContractSources,
@@ -75,6 +78,14 @@ const initialReworkState = {
   status: 'rework_ready',
   message: '',
 }
+
+const findingCategoryOptions = [
+  { value: 'return_inspection', label: 'Return Inspection' },
+  { value: 'warranty', label: 'Warranty' },
+  { value: 'repair_quality', label: 'Repair Quality' },
+  { value: 'parts', label: 'Parts' },
+  { value: 'customer_report', label: 'Customer Report' },
+]
 
 const splitCommaSeparatedIds = (value) =>
   String(value ?? '')
@@ -216,6 +227,12 @@ export default function BackJobsContent() {
   const [vehicleId, setVehicleId] = useState('')
   const [backJobId, setBackJobId] = useState('')
   const [backJobs, setBackJobs] = useState([])
+  const [customers, setCustomers] = useState([])
+  const [staffAccounts, setStaffAccounts] = useState([])
+  const [vehicleBookings, setVehicleBookings] = useState([])
+  const [vehicleJobOrders, setVehicleJobOrders] = useState([])
+  const [vehicleInspections, setVehicleInspections] = useState([])
+  const [selectedCustomerUserId, setSelectedCustomerUserId] = useState('')
   const [activeBackJob, setActiveBackJob] = useState(null)
   const [loadState, setLoadState] = useState(initialLoadState)
   const [createState, setCreateState] = useState(initialCreateState)
@@ -261,6 +278,69 @@ export default function BackJobsContent() {
 
   const allowedStatusTargets = getAllowedBackJobStatusTargets(activeBackJob?.status)
   const canSubmitRework = canCreateReworkJobOrder(activeBackJob)
+  const selectedCustomer = useMemo(
+    () => customers.find((customer) => customer.id === selectedCustomerUserId) ?? null,
+    [customers, selectedCustomerUserId],
+  )
+  const selectedCustomerVehicles = selectedCustomer?.vehicles ?? []
+  const technicianOptions = useMemo(
+    () =>
+      staffAccounts.filter(
+        (account) =>
+          account.isActive &&
+          (account.accountType === 'mechanic' ||
+            account.accountType === 'technician' ||
+            account.role === 'technician'),
+      ),
+    [staffAccounts],
+  )
+
+  useEffect(() => {
+    if (!user?.accessToken || !canManage) {
+      setCustomers([])
+      setStaffAccounts([])
+      return
+    }
+
+    void Promise.all([
+      listAdminCustomers(user.accessToken),
+      listStaffAccounts(user.accessToken),
+    ])
+      .then(([loadedCustomers, loadedStaffAccounts]) => {
+        setCustomers(loadedCustomers)
+        setStaffAccounts(loadedStaffAccounts)
+      })
+      .catch(() => {
+        setCustomers([])
+        setStaffAccounts([])
+      })
+  }, [canManage, user?.accessToken])
+
+  useEffect(() => {
+    const activeVehicleId = createDraft.vehicleId || vehicleId || activeBackJob?.vehicleId || ''
+    if (!activeVehicleId || !user?.accessToken || !canManage) {
+      setVehicleBookings([])
+      setVehicleJobOrders([])
+      setVehicleInspections([])
+      return
+    }
+
+    void Promise.all([
+      listVehicleBookings(activeVehicleId, user.accessToken),
+      listVehicleJobOrders({ vehicleId: activeVehicleId, accessToken: user.accessToken }),
+      listVehicleInspections({ vehicleId: activeVehicleId, accessToken: user.accessToken }),
+    ])
+      .then(([loadedBookings, loadedJobOrders, loadedInspections]) => {
+        setVehicleBookings(loadedBookings)
+        setVehicleJobOrders(loadedJobOrders)
+        setVehicleInspections(loadedInspections)
+      })
+      .catch(() => {
+        setVehicleBookings([])
+        setVehicleJobOrders([])
+        setVehicleInspections([])
+      })
+  }, [activeBackJob?.vehicleId, canManage, createDraft.vehicleId, user?.accessToken, vehicleId])
 
   function requireStaffSession(stateSetter, failedStatus, message) {
     if (!canManage) {
@@ -576,15 +656,39 @@ export default function BackJobsContent() {
             }}
           >
             <p className="text-sm font-bold text-ink-primary">Load Vehicle Back-Jobs</p>
-            <p className="mt-1 text-xs text-ink-muted">Enter a vehicle id to review the return cases tied to that vehicle.</p>
+            <p className="mt-1 text-xs text-ink-muted">Choose a customer vehicle to review the return cases tied to that vehicle.</p>
             <label className="mt-3 block text-xs text-ink-muted">
-              Vehicle id
-              <input
+              Customer
+              <select
+                value={selectedCustomerUserId}
+                onChange={(event) => {
+                  setSelectedCustomerUserId(event.target.value)
+                  setVehicleId('')
+                }}
+                className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              >
+                <option value="">Choose customer</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.displayName} / {customer.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-3 block text-xs text-ink-muted">
+              Vehicle
+              <select
                 value={vehicleId}
                 onChange={(event) => setVehicleId(event.target.value)}
                 className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                placeholder="Vehicle UUID"
-              />
+              >
+                <option value="">Choose vehicle</option>
+                {selectedCustomerVehicles.map((vehicle) => (
+                  <option key={vehicle.id} value={vehicle.id}>
+                    {vehicle.plateNumber || vehicle.id} / {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')}
+                  </option>
+                ))}
+              </select>
             </label>
             <button type="submit" className="btn-primary mt-3" disabled={loadState.status === 'back_jobs_loading'}>
               {loadState.status === 'back_jobs_loading' ? <RefreshCw size={15} className="animate-spin" /> : <Search size={15} />}
@@ -600,15 +704,21 @@ export default function BackJobsContent() {
             }}
           >
             <p className="text-sm font-bold text-ink-primary">Load Case Detail</p>
-            <p className="mt-1 text-xs text-ink-muted">Enter a case id when staff need to review one specific back-job.</p>
+            <p className="mt-1 text-xs text-ink-muted">Choose one loaded case when staff need to review specific back-job detail.</p>
             <label className="mt-3 block text-xs text-ink-muted">
-              Back-job id
-              <input
+              Back-job
+              <select
                 value={backJobId}
                 onChange={(event) => setBackJobId(event.target.value)}
                 className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                placeholder="Back-job UUID"
-              />
+              >
+                <option value="">Choose loaded case</option>
+                {backJobs.map((backJob) => (
+                  <option key={backJob.id} value={backJob.id}>
+                    {backJob.complaint} / {backJob.status}
+                  </option>
+                ))}
+              </select>
             </label>
             <button type="submit" className="btn-primary mt-3" disabled={loadState.status === 'back_jobs_loading'}>
               {loadState.status === 'back_jobs_loading' ? <RefreshCw size={15} className="animate-spin" /> : <Search size={15} />}
@@ -686,22 +796,102 @@ export default function BackJobsContent() {
             <Plus size={18} className="text-brand-orange" />
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            {[
-              ['customerUserId', 'Customer user id'],
-              ['vehicleId', 'Vehicle id'],
-              ['originalJobOrderId', 'Original finalized job order id'],
-              ['originalBookingId', 'Original booking id (optional)'],
-              ['returnInspectionId', 'Return inspection id (optional)'],
-            ].map(([key, label]) => (
-              <label key={key} className="text-xs text-ink-muted">
-                {label}
-                <input
-                  value={createDraft[key]}
-                  onChange={(event) => setCreateDraft((current) => ({ ...current, [key]: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
-                />
-              </label>
-            ))}
+            <label className="text-xs text-ink-muted">
+              Customer
+              <select
+                value={createDraft.customerUserId}
+                onChange={(event) =>
+                  setCreateDraft((current) => ({
+                    ...current,
+                    customerUserId: event.target.value,
+                    vehicleId: '',
+                    originalJobOrderId: '',
+                    originalBookingId: '',
+                    returnInspectionId: '',
+                  }))
+                }
+                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              >
+                <option value="">Choose customer</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.displayName} / {customer.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-ink-muted">
+              Vehicle
+              <select
+                value={createDraft.vehicleId}
+                onChange={(event) =>
+                  setCreateDraft((current) => ({
+                    ...current,
+                    vehicleId: event.target.value,
+                    originalJobOrderId: '',
+                    originalBookingId: '',
+                    returnInspectionId: '',
+                  }))
+                }
+                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              >
+                <option value="">Choose vehicle</option>
+                {(customers.find((customer) => customer.id === createDraft.customerUserId)?.vehicles ?? []).map((vehicle) => (
+                  <option key={vehicle.id} value={vehicle.id}>
+                    {vehicle.plateNumber || vehicle.id} / {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-ink-muted">
+              Original job order
+              <select
+                value={createDraft.originalJobOrderId}
+                onChange={(event) => setCreateDraft((current) => ({ ...current, originalJobOrderId: event.target.value }))}
+                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              >
+                <option value="">Choose finalized job order</option>
+                {vehicleJobOrders
+                  .filter((jobOrder) => jobOrder.status === 'finalized')
+                  .map((jobOrder) => (
+                    <option key={jobOrder.id} value={jobOrder.id}>
+                      JO-{jobOrder.id.slice(0, 8).toUpperCase()}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="text-xs text-ink-muted">
+              Original booking
+              <select
+                value={createDraft.originalBookingId}
+                onChange={(event) => setCreateDraft((current) => ({ ...current, originalBookingId: event.target.value }))}
+                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              >
+                <option value="">No booking reference</option>
+                {vehicleBookings.map((booking) => (
+                  <option key={booking.id} value={booking.id}>
+                    {booking.scheduledDate} / {booking.status}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-ink-muted md:col-span-2">
+              Return inspection
+              <select
+                value={createDraft.returnInspectionId}
+                onChange={(event) => setCreateDraft((current) => ({ ...current, returnInspectionId: event.target.value }))}
+                className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]"
+              >
+                <option value="">No return inspection yet</option>
+                {vehicleInspections
+                  .filter((inspection) => inspection.inspectionType === 'return')
+                  .map((inspection) => (
+                    <option key={inspection.id} value={inspection.id}>
+                      {inspection.createdAt} / {inspection.status}
+                    </option>
+                  ))}
+              </select>
+            </label>
           </div>
           <label className="block text-xs text-ink-muted">
             Complaint
@@ -727,7 +917,9 @@ export default function BackJobsContent() {
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <label className="text-xs text-ink-muted">
                 Category
-                <input value={createDraft.findingCategory} onChange={(event) => setCreateDraft((current) => ({ ...current, findingCategory: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+                <select value={createDraft.findingCategory} onChange={(event) => setCreateDraft((current) => ({ ...current, findingCategory: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]">
+                  {findingCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
               </label>
               <label className="text-xs text-ink-muted">
                 Severity
@@ -776,8 +968,17 @@ export default function BackJobsContent() {
               </select>
             </label>
             <label className="block text-xs text-ink-muted">
-              Return inspection id
-              <input value={statusDraft.returnInspectionId} onChange={(event) => setStatusDraft((current) => ({ ...current, returnInspectionId: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
+              Return inspection
+              <select value={statusDraft.returnInspectionId} onChange={(event) => setStatusDraft((current) => ({ ...current, returnInspectionId: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" >
+                <option value="">Choose return inspection</option>
+                {vehicleInspections
+                  .filter((inspection) => inspection.inspectionType === 'return')
+                  .map((inspection) => (
+                    <option key={inspection.id} value={inspection.id}>
+                      {inspection.createdAt} / {inspection.status}
+                    </option>
+                  ))}
+              </select>
             </label>
             <label className="block text-xs text-ink-muted">
               Review notes
@@ -820,8 +1021,15 @@ export default function BackJobsContent() {
                 <input type="number" min="1" step="1" value={reworkDraft.estimatedHours} onChange={(event) => setReworkDraft((current) => ({ ...current, estimatedHours: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" />
               </label>
               <label className="text-xs text-ink-muted">
-                Technician ids
-                <input value={reworkDraft.assignedTechnicianIdsText} onChange={(event) => setReworkDraft((current) => ({ ...current, assignedTechnicianIdsText: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]" placeholder="Comma-separated UUIDs" />
+                Technician
+                <select value={reworkDraft.assignedTechnicianIdsText} onChange={(event) => setReworkDraft((current) => ({ ...current, assignedTechnicianIdsText: event.target.value }))} className="mt-1 w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary outline-none focus:border-[#f07c00]">
+                  <option value="">Unassigned</option>
+                  {technicianOptions.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.displayName} / {account.staffCode || account.roleLabel}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
             <label className="block text-xs text-ink-muted">
