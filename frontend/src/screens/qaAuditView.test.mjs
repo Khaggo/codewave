@@ -1,7 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { getGroupedQualityFindings, sortQualityFindings } from './qaAuditView.mjs'
+import {
+  buildQaVerdictCompletionState,
+  getGroupedQualityFindings,
+  sortQualityFindings,
+} from './qaAuditView.mjs'
 
 const findings = [
   {
@@ -55,4 +59,34 @@ test('getGroupedQualityFindings keeps blocking findings ahead of review-needed f
 
   assert.equal(grouped[0].key, 'critical')
   assert.equal(grouped[1].key, 'warning')
+})
+
+test('a passing QA verdict completes the queue action and prompts the next review', () => {
+  assert.deepEqual(
+    buildQaVerdictCompletionState({
+      verdict: 'passed',
+      reference: 'JO-1001',
+    }),
+    {
+      wasBlocked: false,
+      status: 'qa_completed',
+      message: 'JO-1001 passed QA. You can take the next review.',
+      toastMessage: 'JO-1001 is now cleared for finalization.',
+    },
+  )
+})
+
+test('a blocked QA verdict returns work to Job Orders and releases QA for the next review', () => {
+  assert.deepEqual(
+    buildQaVerdictCompletionState({
+      verdict: 'blocked',
+      reference: 'JO-1002',
+    }),
+    {
+      wasBlocked: true,
+      status: 'qa_completed',
+      message: 'JO-1002 was returned to Job Orders. You can take the next QA review.',
+      toastMessage: 'JO-1002 was returned for technician remediation.',
+    },
+  )
 })

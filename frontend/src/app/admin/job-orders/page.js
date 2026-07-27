@@ -1,9 +1,17 @@
-import JobOrderWorkbench from '@/screens/JobOrderWorkbench'
+import JobOrdersOperationsBoard from '@/screens/JobOrdersOperationsBoard'
+import { redirect } from 'next/navigation'
 
 export const metadata = {
-  title: 'Job Order Workbench',
+  title: 'Job Order Operations',
 }
 
-export default function JobOrdersPage() {
-  return <JobOrderWorkbench />
+export default async function JobOrdersPage({ searchParams }) {
+  const resolvedSearchParams = await searchParams
+  const legacyJobOrderId = resolvedSearchParams?.jobOrderId
+
+  if (legacyJobOrderId) {
+    redirect(`/admin/job-orders/${encodeURIComponent(legacyJobOrderId)}`)
+  }
+
+  return <JobOrdersOperationsBoard />
 }

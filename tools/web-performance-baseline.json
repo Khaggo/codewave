@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-07-27",
+  "allowedGrowthPercent": 5,
+  "routes": {
+    "/admin/job-orders/page": {
+      "rawJavaScriptBytes": 677821,
+      "reportedFirstLoadKb": 114
+    },
+    "/admin/job-orders/[id]/page": {
+      "rawJavaScriptBytes": 829985,
+      "reportedFirstLoadKb": 146
+    },
+    "/admin/qa-audit/page": {
+      "rawJavaScriptBytes": 702001,
+      "reportedFirstLoadKb": 161
+    }
+  },
+  "mobile": {
+    "androidExportBytes": 3921674,
+    "displayValue": "3.74 MiB",
+    "capturedAt": "2026-07-26"
+  }
+}

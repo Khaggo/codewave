@@ -1,6 +1,6 @@
 # UX Audit Backlog
 
-Last updated: 2026-05-21
+Last updated: 2026-07-25
 
 Use this file to track findings from the combined UX Audit Pro plus Vercel `web-design-guidelines` workflow.
 
@@ -30,22 +30,31 @@ Status legend:
 
 ## Active Review
 
-- Current focus: Customer mobile Book flow
-- Current status: UX Audit Pro findings received on 2026-05-21; Codex Mobile Book rebuild completed and awaiting QA verification
-- External input to request first: remove or merge steps, clarify copy/labels, reduce navigation confusion, and identify what Codex should rebuild first
-- Likely implementation files after findings return: `mobile/App.js`, `mobile/src/screens/Dashboard.js`
-- Handoff rule: this chat restructures the flow; the QA chat owns Playwright/manual verification and closure
+- Current focus: End-to-end customer booking and staff service-delivery flow
+- Current status: Mobile booking and staff workflow redesign implemented; fresh booking-to-cash, role-access, lifecycle, build/export, and responsive evidence passed on 2026-07-25
+- Remaining follow-up: first-time booking sign-in comprehension, mobile vehicle-card polish, timed session proof, and legacy Billing form-field naming
+- Primary implementation files: `mobile/src/screens/Dashboard.js`, `frontend/src/app/bookings/BookingsList.js`, and the Intake, Job Orders, QA, and Billing workspaces
+- Handoff rule: keep workflow changes tied to fresh browser evidence and record remaining usability findings without overstating closure
 
 ## Current Findings - Mobile Book First Pass
 
 | ID | Source | Severity | Status | Screen / Flow | Finding | Recommended Fix | Acceptance Criteria | QA Check | Linked Objective / Panel Feedback |
 |---|---|---|---|---|---|---|---|---|---|
 | UX-001 | UX Audit Pro mobile book flow report | Critical | QA Needed | Book entry guardrail | `Customer session required` is too technical and blocks the user before explaining the value of signing in. | Rewrite the guardrail as a booking-focused onboarding step with clear benefits, friendly copy, and a `Continue Browsing` escape hatch. | First-time customers understand why sign-in is needed before they are interrupted. | Manual 5-second comprehension check on the Book entry screen. | Objective 1, Objective 6, Ms. Abad `Mobile UX`, Ms. Abad `Mobile Auth` |
-| UX-002 | UX Audit Pro mobile book flow report | Critical | QA Needed | Customer dashboard after login | Dashboard hierarchy mixes notifications, booking status, greeting, and payment urgency without a single obvious next action. | Rebuild the home booking surface around one primary next-step card per booking state, then place alerts and secondary modules underneath. | A customer can identify the required next action in under 3 seconds. | Manual screenshot review plus targeted mobile QA of the post-login dashboard state. | Objective 1, Objective 6, Ms. Abad `Mobile UX` |
-| UX-003 | UX Audit Pro mobile book flow report | Critical | QA Needed | Mobile Book information architecture | `Discover & Track`, `Discover Options`, `Track Progress`, and lifecycle/tracking concepts overlap and force users to decode system language. | Rename the Book module to customer language and split the two modes into `Choose Services` and `Active Services`. | Navigation labels read like customer tasks instead of internal workflow terms. | Playwright/manual check for updated Book labels and navigation clarity. | Objective 1, Objective 6, Ms. Abad `Mobile UX` |
-| UX-004 | UX Audit Pro mobile book flow report | Critical | QA Needed | Mobile booking hierarchy | The booking tab leads with vehicle selection instead of helping the customer understand what they are booking first. | Reorder the booking flow into a guided journey: services, vehicle, schedule, then review and submit. | The screen presents one dominant decision at a time and ends with a clear review state. | Playwright booking flow rerun with screenshot checkpoints for each step. | Objective 1, Ms. Abad `Mobile Booking`, Ms. Abad `Mobile UX` |
-| UX-005 | UX Audit Pro mobile book flow report | Critical | QA Needed | Reservation payment state | Reservation payment urgency is described with technical phrasing and timestamp formatting instead of clear human urgency. | Replace technical deadline copy with plain-language urgency and clearer payment actions on home/track surfaces. | Users understand when to pay and what happens if they do not. | Manual screenshot check plus targeted booking payment-state QA. | Objective 1, Objective 3, Objective 6, Ms. Abad `Billing`, Ms. Abad `Mobile UX` |
+| UX-002 | UX Audit Pro mobile book flow report | Critical | QA Passed | Customer dashboard after login | Dashboard hierarchy mixes notifications, booking status, greeting, and payment urgency without a single obvious next action. | Rebuild the home booking surface around one primary next-step card per booking state, then place alerts and secondary modules underneath. | A customer can identify the required next action in under 3 seconds. | Fresh mobile helper tests and booking-to-cash browser flow passed on 2026-07-25. | Objective 1, Objective 6, Ms. Abad `Mobile UX` |
+| UX-003 | UX Audit Pro mobile book flow report | Critical | QA Passed | Mobile Book information architecture | `Discover & Track`, `Discover Options`, `Track Progress`, and lifecycle/tracking concepts overlap and force users to decode system language. | Rename the Book module to customer language and split the two modes into `Choose Services` and `Active Services`. | Navigation labels read like customer tasks instead of internal workflow terms. | Fresh mobile web snapshot and booking-to-cash browser flow passed on 2026-07-25. | Objective 1, Objective 6, Ms. Abad `Mobile UX` |
+| UX-004 | UX Audit Pro mobile book flow report | Critical | QA Passed | Mobile booking hierarchy | The booking tab leads with vehicle selection instead of helping the customer understand what they are booking first. | Reorder the booking flow into a guided journey: services, vehicle, schedule, then review and submit. | The screen presents one dominant decision at a time and ends with a clear review state. | Fresh booking-to-cash browser flow and Android export passed on 2026-07-25. | Objective 1, Ms. Abad `Mobile Booking`, Ms. Abad `Mobile UX` |
+| UX-005 | UX Audit Pro mobile book flow report | Critical | QA Passed | Reservation payment state | Reservation payment urgency is described with technical phrasing and timestamp formatting instead of clear human urgency. | Replace technical deadline copy with plain-language urgency and clearer payment actions on home/track surfaces. | Users understand when to pay and what happens if they do not. | Fresh booking-to-cash flow passed reservation payment through final invoice payment on 2026-07-25. | Objective 1, Objective 3, Objective 6, Ms. Abad `Billing`, Ms. Abad `Mobile UX` |
 | UX-006 | UX Audit Pro mobile book flow report | High | In Progress | Mobile vehicle cards | Vehicle cards lean on plate metadata and operational tags more than customer recognition cues. | Reduce plate prominence, keep the owned state secondary, and present the vehicle choice as part of a booking step instead of the first decision on the page. | Vehicle selection feels like a customer choice rather than an internal record lookup. | Screenshot comparison of old/new Mobile Book vehicle cards. | Objective 1, Objective 6, Ms. Abad `Mobile UX` |
+
+## Current Findings - Staff Service Flow
+
+| ID | Source | Severity | Status | Screen / Flow | Finding | Recommended Fix | Acceptance Criteria | QA Check | Linked Objective / Panel Feedback |
+|---|---|---|---|---|---|---|---|---|---|
+| UX-007 | Panelist usability review and staff booking screenshot | Critical | QA Passed | Booking Schedule | The watchlist, schedule controls, filters, closures, slot administration, and booking actions competed for attention before staff could see what needed action. | Default to a `Needs Attention` queue, show one primary action per booking, and place filters and schedule administration behind disclosure controls. | The first viewport shows the work queue and a clear next action without exposing routine administration. | Desktop/mobile screenshots and booking-to-cash Playwright passed on 2026-07-25. | Objective 3, Objective 6, panelist user-friendly workflow feedback |
+| UX-008 | End-to-end service-flow review | Critical | QA Passed | Booking to Billing | Staff lost the selected booking/job context while moving through Intake, Job Orders, QA, and Billing. | Preserve record IDs in route handoffs and show one shared lifecycle header with owner, blocker, and next action. | Staff can move forward or back without reselecting the record, and every stage explains the next step. | Booking-to-cash, role-access, and lifecycle/readable-ID Playwright passed on 2026-07-25. | Objectives 1, 2, 3, 5, 6 |
+| UX-009 | Staff queue review | High | QA Passed | QA Audit and Invoices & Orders | Long native dropdowns made record selection slow and error-prone. | Add visible searchable queues while retaining the native select as an accessible compatibility control. | Staff can find and open a job or invoice directly from a scan-friendly queue. | Responsive screenshots, direct-link checks, and targeted Playwright passed on 2026-07-25. | Objectives 3, 5, 6 |
+| UX-010 | Chrome accessibility issue scan | Medium | Deferred | Invoices & Orders | Chrome reports seven legacy form fields without an `id` or `name`. | Add stable field identifiers during the next Billing form cleanup. | Chrome reports no unnamed form controls on the Billing workspace. | Re-run the Chrome issue scan after the focused accessibility patch. | Objective 6 |
 
 ## Codex Rebuild Instructions - Mobile Book
 
@@ -75,5 +84,5 @@ Status legend:
 | 1 | Mobile Book | Panelists called out confusing mobile UX, multi-service booking, and session clarity. |
 | 2 | Mobile Garage / Lifecycle | Panelists requested multiple cars, garage pagination, and Objective 2 lifecycle polish. |
 | 3 | Staff Job Orders | Mixed handoff/source-picking can still be cognitively heavy and risks wrong-job selection. |
-| 4 | Staff QA Audit | Objective 5 must be immediately understandable to panelists and head technicians. |
+| 4 | Staff QA Audit | Objective 5 must be immediately understandable to panelists and Service Advisers. |
 | 5 | Staff Invoices & Orders | Billing/payment completion must be clear before booking moves to completed history. |

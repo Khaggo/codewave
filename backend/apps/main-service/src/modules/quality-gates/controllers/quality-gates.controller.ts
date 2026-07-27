@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import {
   ApiBearerAuth,
@@ -16,6 +16,8 @@ import {
 import { Roles } from '@main-modules/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
+import { RequiresWorkClaim } from '@main-modules/staff-work-queues/decorators/requires-work-claim.decorator';
+import { StaffWorkClaimGuard } from '@main-modules/staff-work-queues/guards/staff-work-claim.guard';
 
 import { JobOrderQualityGateResponseDto } from '../dto/job-order-quality-gate-response.dto';
 import { OverrideQualityGateDto } from '../dto/override-quality-gate.dto';
@@ -29,7 +31,7 @@ export class QualityGatesController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Get the current QA gate state for a job order.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
@@ -42,7 +44,7 @@ export class QualityGatesController {
     type: JobOrderQualityGateResponseDto,
   })
   @ApiConflictResponse({ description: 'The job order has not entered QA yet.' })
-  @ApiForbiddenResponse({ description: 'Only assigned technicians or staff reviewers can access this quality gate.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can access this quality gate.' })
   @ApiNotFoundResponse({ description: 'Job order or quality-gate actor not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   findByJobOrderId(@Param('jobOrderId') jobOrderId: string, @Req() request: Request) {
@@ -53,8 +55,13 @@ export class QualityGatesController {
   }
 
   @Patch('verdict')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('head_technician', 'super_admin')
+  @UseGuards(JwtAuthGuard, RolesGuard, StaffWorkClaimGuard)
+  @RequiresWorkClaim({
+    queueType: 'qa',
+    entityType: 'job_order',
+    entityIdKey: 'jobOrderId',
+  })
+  @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Record the QA verdict after reviewing the pre-check summary.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
@@ -73,19 +80,21 @@ export class QualityGatesController {
     description: 'The job order is not currently available for QA review.',
   })
   @ApiForbiddenResponse({
-    description: 'Only head technicians or super admins can record the final QA verdict.',
+    description: 'Only service advisers or super admins can record the final QA verdict.',
   })
   @ApiNotFoundResponse({ description: 'Job order or quality-gate actor not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   recordVerdict(
     @Param('jobOrderId') jobOrderId: string,
     @Body() payload: RecordQualityGateVerdictDto,
+    @Headers('if-match') ifMatch: string | undefined,
     @Req() request: Request,
   ) {
     return this.qualityGatesService.recordReviewerVerdict(
       jobOrderId,
       payload,
       request.user as { userId: string; role: string },
+      ifMatch && /^\d+$/.test(ifMatch) ? Number(ifMatch) : undefined,
     );
   }
 

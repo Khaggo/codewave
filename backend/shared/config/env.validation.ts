@@ -6,10 +6,67 @@ const requiredKeys = [
   'JWT_REFRESH_SECRET',
 ] as const;
 
+const productionSecretKeys = ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'] as const;
+const insecureSecretValues = new Set([
+  'change-me-access',
+  'change-me-refresh',
+  'secret',
+  'password',
+]);
+
 export const validateEnv = (config: EnvRecord): EnvRecord => {
   for (const key of requiredKeys) {
     if (!config[key]) {
       throw new Error(`Missing required environment variable: ${key}`);
+    }
+  }
+
+  const isProduction = config.NODE_ENV?.trim().toLowerCase() === 'production';
+  for (const key of ['STAFF_WORK_JOB_ORDER_CAPACITY', 'STAFF_WORK_QA_CAPACITY'] as const) {
+    const rawValue = config[key]?.trim();
+    if (!rawValue) continue;
+    const value = Number(rawValue);
+    if (!Number.isInteger(value) || value < 1 || value > 100) {
+      throw new Error(`${key} must be an integer between 1 and 100`);
+    }
+  }
+
+  if (isProduction) {
+    const claimEnforcementMode = config.STAFF_WORK_CLAIM_ENFORCEMENT?.trim().toLowerCase();
+    if (!claimEnforcementMode) {
+      throw new Error(
+        'Missing required environment variable: STAFF_WORK_CLAIM_ENFORCEMENT',
+      );
+    }
+    if (!['observe', 'strict'].includes(claimEnforcementMode)) {
+      throw new Error(
+        'STAFF_WORK_CLAIM_ENFORCEMENT must be observe or strict in production',
+      );
+    }
+
+    for (const key of productionSecretKeys) {
+      const value = config[key]?.trim() ?? '';
+      if (value.length < 32 || insecureSecretValues.has(value.toLowerCase())) {
+        throw new Error(`${key} must be a non-placeholder secret of at least 32 characters in production`);
+      }
+    }
+
+    if (config.JWT_ACCESS_SECRET === config.JWT_REFRESH_SECRET) {
+      throw new Error('JWT access and refresh secrets must be different in production');
+    }
+
+    if (config.AUTH_BYPASS_CUSTOMER_REGISTRATION_OTP?.trim().toLowerCase() === 'true') {
+      throw new Error('Customer registration OTP bypass cannot be enabled in production');
+    }
+
+    const databaseUrl = new URL(config.DATABASE_URL as string);
+    if (['localhost', '127.0.0.1', '::1'].includes(databaseUrl.hostname.toLowerCase())) {
+      throw new Error('DATABASE_URL cannot target localhost in production');
+    }
+
+    const corsOrigins = config.CORS_ORIGINS?.split(',').map((entry) => entry.trim()).filter(Boolean);
+    if (!corsOrigins?.length || corsOrigins.includes('*')) {
+      throw new Error('CORS_ORIGINS must contain explicit trusted origins in production');
     }
   }
 

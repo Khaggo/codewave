@@ -50,3 +50,13 @@ This file defines the canonical account-enrollment and activation model for AUTO
 - Minimal sensitive data should be retained for OTP challenge records and Google identity linkage.
 - Notifications must expose delivery status clearly enough for auth to distinguish provider failure from invalid user input.
 - Repeated failed activation attempts should remain observable without leaking implementation secrets to clients.
+
+## Runtime and Abuse Protection
+
+- Production startup requires distinct, non-placeholder JWT access and refresh secrets with at least 32 characters each.
+- Production services ignore repository env files and reject localhost database URLs, wildcard CORS, and enabled OTP bypass.
+- OTP values must use a cryptographically secure generator.
+- OTP verification allows at most five failed attempts. Attempt increments and challenge consumption must be atomic.
+- Global throttling is the baseline for both backend services. Registration, activation, login, and password-reset routes use tighter limits.
+- Helmet security headers are required for both HTTP services. Swagger remains usable without weakening the rest of the response-header baseline.
+- Responses and logs must not expose OTP values, token secrets, credential material, or storage-internal paths.

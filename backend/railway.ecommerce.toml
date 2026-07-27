@@ -1,12 +1,15 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "npm run build:ecommerce"
+buildCommand = "npm --workspace backend run build:ecommerce"
 watchPatterns = [
   "/backend/**",
+  "/packages/**",
+  "/package.json",
+  "/package-lock.json",
 ]
 
 [deploy]
-startCommand = "npm run start:ecommerce"
+startCommand = "npm --workspace backend run start:ecommerce"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

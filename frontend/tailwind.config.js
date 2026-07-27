@@ -24,7 +24,7 @@ module.exports = {
         'ink-dim': 'rgb(var(--ink-dim) / <alpha-value>)',
       },
       fontFamily: {
-        sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'Segoe UI', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         card: '0 1px 4px rgba(0,0,0,0.28)',

@@ -5,7 +5,8 @@ import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
 type TestApp = Awaited<ReturnType<typeof createMainServiceTestApp>>;
 type SeedAuthPayload = Parameters<TestApp['seedAuthUser']>[0];
-type SeededUser = Awaited<ReturnType<TestApp['seedAuthUser']>> & {
+type SeededIdentity = Awaited<ReturnType<TestApp['seedAuthUser']>>;
+type SeededUser = SeededIdentity & {
   accessToken: string;
 };
 
@@ -15,11 +16,10 @@ describe('RBAC regression matrix', () => {
 
   let ownerCustomer: SeededUser;
   let foreignCustomer: SeededUser;
-  let assignedTechnician: SeededUser;
-  let unassignedTechnician: SeededUser;
+  let assignedTechnician: SeededIdentity;
   let serviceAdviser: SeededUser;
   let superAdmin: SeededUser;
-  let staffTarget: SeededUser;
+  let staffTarget: SeededIdentity;
 
   let vehicleId: string;
   let insuranceInquiryId: string;
@@ -40,6 +40,18 @@ describe('RBAC regression matrix', () => {
       ...user,
       accessToken: loginResponse.body.accessToken as string,
     };
+  }
+
+  async function seedRetiredTechnician(payload: SeedAuthPayload): Promise<SeededIdentity> {
+    const user = await seedAuthUser(payload);
+    const loginResponse = await request(app.getHttpServer()).post('/api/auth/login').send({
+      email: payload.email,
+      password: payload.password,
+    });
+
+    expect(loginResponse.status).toBe(401);
+    expect(loginResponse.body.message).toContain('Technician login has been retired');
+    return user;
   }
 
   async function createConfirmedBooking(scheduledDate: string, timeSlotId: string, serviceId: string) {
@@ -120,22 +132,13 @@ describe('RBAC regression matrix', () => {
       role: 'customer',
     });
 
-    assignedTechnician = await seedAndLogin({
+    assignedTechnician = await seedRetiredTechnician({
       email: 'rbac.technician.assigned@example.com',
       password: 'password123',
       firstName: 'Tino',
       lastName: 'Assigned',
       role: 'technician',
       staffCode: 'TECH-RBAC-1',
-    });
-
-    unassignedTechnician = await seedAndLogin({
-      email: 'rbac.technician.unassigned@example.com',
-      password: 'password123',
-      firstName: 'Una',
-      lastName: 'Assigned',
-      role: 'technician',
-      staffCode: 'TECH-RBAC-2',
     });
 
     serviceAdviser = await seedAndLogin({
@@ -156,7 +159,7 @@ describe('RBAC regression matrix', () => {
       staffCode: 'ADMIN-RBAC-1',
     });
 
-    staffTarget = await seedAndLogin({
+    staffTarget = await seedRetiredTechnician({
       email: 'rbac.staff.target@example.com',
       password: 'password123',
       firstName: 'Taylor',
@@ -211,7 +214,7 @@ describe('RBAC regression matrix', () => {
 
     const moveAssignedJobOrderInProgressResponse = await request(app.getHttpServer())
       .patch(`/api/job-orders/${assignedJobOrderId}/status`)
-      .set('Authorization', `Bearer ${assignedTechnician.accessToken}`)
+      .set('Authorization', `Bearer ${serviceAdviser.accessToken}`)
       .send({
         status: 'in_progress',
       });
@@ -225,7 +228,7 @@ describe('RBAC regression matrix', () => {
 
     const moveBlockedQaInProgressResponse = await request(app.getHttpServer())
       .patch(`/api/job-orders/${blockedQaJobOrderId}/status`)
-      .set('Authorization', `Bearer ${assignedTechnician.accessToken}`)
+      .set('Authorization', `Bearer ${serviceAdviser.accessToken}`)
       .send({
         status: 'in_progress',
       });
@@ -233,7 +236,7 @@ describe('RBAC regression matrix', () => {
 
     const moveBlockedQaReadyResponse = await request(app.getHttpServer())
       .patch(`/api/job-orders/${blockedQaJobOrderId}/status`)
-      .set('Authorization', `Bearer ${assignedTechnician.accessToken}`)
+      .set('Authorization', `Bearer ${serviceAdviser.accessToken}`)
       .send({
         status: 'ready_for_qa',
       });
@@ -263,7 +266,6 @@ describe('RBAC regression matrix', () => {
   it('keeps route-level staff and admin boundaries closed for lower roles', async () => {
     const meExpectations = [
       { actor: ownerCustomer, expectedStatus: 200, expectedRole: 'customer' },
-      { actor: unassignedTechnician, expectedStatus: 200, expectedRole: 'technician' },
       { actor: serviceAdviser, expectedStatus: 200, expectedRole: 'service_adviser' },
       { actor: superAdmin, expectedStatus: 200, expectedRole: 'super_admin' },
     ] as const;
@@ -279,7 +281,6 @@ describe('RBAC regression matrix', () => {
 
     const scheduleExpectations = [
       { actor: ownerCustomer, expectedStatus: 403 },
-      { actor: unassignedTechnician, expectedStatus: 403 },
       { actor: serviceAdviser, expectedStatus: 200 },
       { actor: superAdmin, expectedStatus: 200 },
     ] as const;
@@ -295,7 +296,6 @@ describe('RBAC regression matrix', () => {
 
     const chatbotIntentExpectations = [
       { actor: ownerCustomer, expectedStatus: 403 },
-      { actor: unassignedTechnician, expectedStatus: 403 },
       { actor: serviceAdviser, expectedStatus: 200 },
       { actor: superAdmin, expectedStatus: 200 },
     ] as const;
@@ -308,7 +308,7 @@ describe('RBAC regression matrix', () => {
       expect(response.status).toBe(expectation.expectedStatus);
     }
 
-    const deniedProvisionActors = [ownerCustomer, unassignedTechnician, serviceAdviser] as const;
+    const deniedProvisionActors = [ownerCustomer, serviceAdviser] as const;
 
     for (const actor of deniedProvisionActors) {
       const deniedResponse = await request(app.getHttpServer())
@@ -340,7 +340,7 @@ describe('RBAC regression matrix', () => {
 
     expect(createStaffAccountResponse.status).toBe(201);
 
-    const deniedStatusActors = [ownerCustomer, unassignedTechnician, serviceAdviser] as const;
+    const deniedStatusActors = [ownerCustomer, serviceAdviser] as const;
 
     for (const actor of deniedStatusActors) {
       const deniedResponse = await request(app.getHttpServer())
@@ -368,7 +368,6 @@ describe('RBAC regression matrix', () => {
     const insuranceReadExpectations = [
       { actor: ownerCustomer, expectedStatus: 200 },
       { actor: foreignCustomer, expectedStatus: 403 },
-      { actor: unassignedTechnician, expectedStatus: 403 },
       { actor: serviceAdviser, expectedStatus: 200 },
       { actor: superAdmin, expectedStatus: 200 },
     ] as const;
@@ -384,7 +383,6 @@ describe('RBAC regression matrix', () => {
     const notificationPreferenceExpectations = [
       { actor: ownerCustomer, targetUserId: ownerCustomer.id, expectedStatus: 200 },
       { actor: foreignCustomer, targetUserId: ownerCustomer.id, expectedStatus: 403 },
-      { actor: unassignedTechnician, targetUserId: ownerCustomer.id, expectedStatus: 403 },
       { actor: serviceAdviser, targetUserId: ownerCustomer.id, expectedStatus: 200 },
       { actor: superAdmin, targetUserId: ownerCustomer.id, expectedStatus: 200 },
     ] as const;
@@ -398,10 +396,8 @@ describe('RBAC regression matrix', () => {
     }
   });
 
-  it('enforces assignment, technician-only progress, and super-admin-only QA override paths', async () => {
+  it('enforces service-adviser workshop progress and super-admin-only QA override paths', async () => {
     const jobOrderReadExpectations = [
-      { actor: assignedTechnician, expectedStatus: 200 },
-      { actor: unassignedTechnician, expectedStatus: 403 },
       { actor: serviceAdviser, expectedStatus: 200 },
       { actor: superAdmin, expectedStatus: 200 },
       { actor: ownerCustomer, expectedStatus: 403 },
@@ -415,7 +411,7 @@ describe('RBAC regression matrix', () => {
       expect(response.status).toBe(expectation.expectedStatus);
     }
 
-    const progressDeniedActors = [ownerCustomer, unassignedTechnician] as const;
+    const progressDeniedActors = [ownerCustomer] as const;
 
     for (const actor of progressDeniedActors) {
       const deniedResponse = await request(app.getHttpServer())
@@ -443,19 +439,7 @@ describe('RBAC regression matrix', () => {
       expect(allowedResponse.status).toBe(200);
     }
 
-    const addProgressResponse = await request(app.getHttpServer())
-      .post(`/api/job-orders/${assignedJobOrderId}/progress`)
-      .set('Authorization', `Bearer ${assignedTechnician.accessToken}`)
-      .send({
-        entryType: 'work_started',
-        message: 'Assigned technician can append progress evidence.',
-      });
-
-    expect(addProgressResponse.status).toBe(200);
-
     const qaReadExpectations = [
-      { actor: assignedTechnician, expectedStatus: 200 },
-      { actor: unassignedTechnician, expectedStatus: 403 },
       { actor: serviceAdviser, expectedStatus: 200 },
       { actor: superAdmin, expectedStatus: 200 },
       { actor: ownerCustomer, expectedStatus: 403 },
@@ -469,7 +453,7 @@ describe('RBAC regression matrix', () => {
       expect(response.status).toBe(expectation.expectedStatus);
     }
 
-    const overrideDeniedActors = [ownerCustomer, assignedTechnician, serviceAdviser] as const;
+    const overrideDeniedActors = [ownerCustomer, serviceAdviser] as const;
 
     for (const actor of overrideDeniedActors) {
       const deniedResponse = await request(app.getHttpServer())

@@ -15,7 +15,7 @@ import {
 
 import PageHeader from '@/components/ui/PageHeader'
 import PortalSelect from '@/components/ui/PortalSelect'
-import { ApiError, listAdminCustomers, listStaffAccounts } from '@/lib/authClient'
+import { ApiError, listAdminCustomers, listTechnicianProfiles } from '@/lib/authClient'
 import {
   createBackJobCase,
   createReworkJobOrderFromBackJob,
@@ -379,7 +379,7 @@ export default function BackJobsContent() {
   const [backJobId, setBackJobId] = useState('')
   const [backJobs, setBackJobs] = useState([])
   const [customers, setCustomers] = useState([])
-  const [staffAccounts, setStaffAccounts] = useState([])
+  const [technicianProfiles, setTechnicianProfiles] = useState([])
   const [vehicleBookings, setVehicleBookings] = useState([])
   const [vehicleJobOrders, setVehicleJobOrders] = useState([])
   const [vehicleInspections, setVehicleInspections] = useState([])
@@ -452,16 +452,10 @@ export default function BackJobsContent() {
   )
   const technicianOptions = useMemo(
     () =>
-      staffAccounts.filter(
-        (account) =>
-          account.isActive &&
-          (account.accountType === 'mechanic' ||
-            account.accountType === 'technician' ||
-            account.accountType === 'head_technician' ||
-            account.role === 'technician' ||
-            account.role === 'head_technician'),
+      technicianProfiles.filter(
+        (profile) => profile?.isActive !== false && Array.isArray(profile?.specialties) && profile.specialties.length > 0,
       ),
-    [staffAccounts],
+    [technicianProfiles],
   )
   const customerById = useMemo(
     () => new Map(customers.map((customer) => [customer.id, customer])),
@@ -515,21 +509,21 @@ export default function BackJobsContent() {
   useEffect(() => {
     if (!user?.accessToken || !canManage) {
       setCustomers([])
-      setStaffAccounts([])
+      setTechnicianProfiles([])
       return
     }
 
     void Promise.all([
       listAdminCustomers(user.accessToken),
-      listStaffAccounts(user.accessToken),
+      listTechnicianProfiles(user.accessToken, { activeOnly: false }),
     ])
-      .then(([loadedCustomers, loadedStaffAccounts]) => {
+      .then(([loadedCustomers, loadedTechnicianProfiles]) => {
         setCustomers(loadedCustomers)
-        setStaffAccounts(loadedStaffAccounts)
+        setTechnicianProfiles(loadedTechnicianProfiles)
       })
       .catch(() => {
         setCustomers([])
-        setStaffAccounts([])
+        setTechnicianProfiles([])
       })
   }, [canManage, user?.accessToken])
 
@@ -931,6 +925,18 @@ export default function BackJobsContent() {
     setReworkState({ status: 'rework_submitting', message: '' })
 
     try {
+      const reworkAssignments = splitCommaSeparatedIds(reworkDraft.assignedTechnicianIdsText)
+        .map((technicianProfileId) => {
+          const technicianProfile = technicianOptions.find((entry) => entry.id === technicianProfileId)
+          const selectedSpecialty = technicianProfile?.specialties?.[0]
+          return technicianProfile && selectedSpecialty
+            ? {
+                technicianProfileId,
+                selectedSpecialty,
+              }
+            : null
+        })
+        .filter(Boolean)
       const createdJobOrder = await createReworkJobOrderFromBackJob({
         backJob: activeBackJob,
         serviceAdviserUserId: reworkServiceAdviserSnapshot.serviceAdviserUserId,
@@ -941,7 +947,7 @@ export default function BackJobsContent() {
           description: reworkDraft.itemDescription,
           estimatedHours: reworkDraft.estimatedHours,
         }],
-        assignedTechnicianIds: splitCommaSeparatedIds(reworkDraft.assignedTechnicianIdsText),
+        assignments: reworkAssignments,
         accessToken: user.accessToken,
       })
       const refreshedBackJob = await getBackJobById({
@@ -1493,11 +1499,11 @@ export default function BackJobsContent() {
                   </p>
                   <div className="mt-3 space-y-2">
                     {technicianOptions.length > 0 ? (
-                      technicianOptions.map((account) => {
-                        const checked = selectedReworkTechnicianIds.includes(account.id)
+                      technicianOptions.map((profile) => {
+                        const checked = selectedReworkTechnicianIds.includes(profile.id)
                         return (
                           <label
-                            key={account.id}
+                            key={profile.id}
                             className="flex items-start gap-3 rounded-xl border border-surface-border bg-surface-card px-3 py-3 text-sm text-ink-primary"
                           >
                             <input
@@ -1508,7 +1514,7 @@ export default function BackJobsContent() {
                                   ...current,
                                   assignedTechnicianIdsText: toggleDelimitedIdValue(
                                     current.assignedTechnicianIdsText,
-                                    account.id,
+                                    profile.id,
                                     event.target.checked,
                                   ),
                                 }))
@@ -1516,9 +1522,9 @@ export default function BackJobsContent() {
                               className="mt-0.5 h-4 w-4 rounded border-surface-border bg-surface-input accent-[rgb(var(--brand-orange))]"
                             />
                             <span className="min-w-0">
-                              <span className="block font-medium text-ink-primary">{account.displayName}</span>
+                              <span className="block font-medium text-ink-primary">{profile.fullName || profile.code || 'Technician profile'}</span>
                               <span className="mt-1 block text-xs text-ink-secondary">
-                                {account.staffCode || account.roleLabel}
+                                {profile.code || (profile.specialties ?? []).join(' · ') || 'Specialty profile'}
                               </span>
                             </span>
                           </label>

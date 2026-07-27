@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const createJiti = require('../../../node_modules/jiti')
+const createJiti = require('jiti')
 const jiti = createJiti(import.meta.url)
 
 test.beforeEach(() => {

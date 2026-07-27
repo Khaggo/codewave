@@ -417,17 +417,24 @@ async function findOrderByNote(request, customerSession, noteMarker) {
 
 async function ensureMobileCustomerSignedIn(page) {
   await page.goto(runtimeConfig.mobileBaseUrl);
+  const emailInput = page.getByPlaceholder('Email');
+  const signInEntryPoint = page.getByText('Sign in', { exact: true }).last();
+  const authenticatedSurface = page
+    .getByText(/Book Service|Track Progress|View Garage|Active and Past Bookings|Reservation Fee|Owned vehicle|Good afternoon/i)
+    .first();
 
-  if (await page.getByText('Book Service', { exact: true }).isVisible({ timeout: 5_000 }).catch(() => false)) {
+  await Promise.allSettled([
+    authenticatedSurface.waitFor({ state: 'visible', timeout: 12_000 }),
+    emailInput.waitFor({ state: 'visible', timeout: 12_000 }),
+    signInEntryPoint.waitFor({ state: 'visible', timeout: 12_000 }),
+  ]);
+
+  if (await authenticatedSurface.isVisible().catch(() => false)) {
     return;
   }
 
-  const emailInput = page.getByPlaceholder('Email');
-  if (!(await emailInput.isVisible().catch(() => false))) {
-    const signInEntryPoint = page.getByText('Sign in', { exact: true }).last();
-    if (await signInEntryPoint.isVisible().catch(() => false)) {
-      await signInEntryPoint.click();
-    }
+  if (!(await emailInput.isVisible().catch(() => false)) && (await signInEntryPoint.isVisible().catch(() => false))) {
+    await signInEntryPoint.click();
   }
 
   await page.getByPlaceholder('Email').fill(qaAccounts.customer.email);
@@ -484,6 +491,8 @@ async function openCustomerShopAndCheckout(page, product, noteMarker) {
 }
 
 async function verifyStaffInvoiceSurface(page, { customerEmail, orderNumber, invoiceNumber, expectedStatus }) {
+  await page.goto(`${runtimeConfig.staffBaseUrl}/admin/invoices`);
+  await page.getByRole('heading', { name: 'Invoices & Orders' }).waitFor();
   await page.getByRole('button', { name: 'Order Invoices' }).click();
   const customerSelect = page.getByRole('combobox', { name: 'Customer' });
   await selectOptionContaining(customerSelect, customerEmail);

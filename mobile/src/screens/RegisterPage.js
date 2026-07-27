@@ -12,6 +12,7 @@ import {
   cloneDate,
   formatVehicleDisplayName,
   normalizeEmail,
+  normalizeLicensePlate,
   normalizePhoneNumber,
   normalizeVehicleYear,
   validateRegisterForm,
@@ -50,7 +51,7 @@ export default function RegisterPage({ navigation, onRegister }) {
     }
 
     if (key === 'licensePlate') {
-      nextValue = String(value ?? '').toUpperCase();
+      nextValue = normalizeLicensePlate(value);
     }
 
     setForm((currentForm) => ({
@@ -78,11 +79,11 @@ export default function RegisterPage({ navigation, onRegister }) {
       lastName: form.lastName.trim(),
       email: normalizeEmail(form.email),
       phoneNumber: normalizePhoneNumber(form.phoneNumber),
-      address: '',
-      username: buildUsername(form.email, form.firstName, form.lastName),
-      birthday: cloneDate(form.birthday),
-      licensePlate: form.licensePlate.trim().toUpperCase(),
-      vehicleMake: form.vehicleMake.trim(),
+        address: '',
+        username: buildUsername(form.email, form.firstName, form.lastName),
+        birthday: cloneDate(form.birthday),
+        licensePlate: normalizeLicensePlate(form.licensePlate).trim(),
+        vehicleMake: form.vehicleMake.trim(),
       vehicleModel: form.vehicleModel.trim(),
       vehicleColor: form.vehicleColor.trim(),
       vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),

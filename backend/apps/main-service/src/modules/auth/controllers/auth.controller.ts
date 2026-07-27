@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
+import { seconds, Throttle } from '@nestjs/throttler';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -45,6 +46,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('auth/register')
+  @Throttle({ default: { limit: 10, ttl: seconds(60), blockDuration: seconds(60) } })
   @ApiOperation({ summary: 'Start password-based customer signup and send an email OTP when registration OTP is enabled.' })
   @ApiCreatedResponse({
     description: 'Registration either returned an OTP enrollment or auto-activated the customer session when the temporary bypass is enabled.',
@@ -71,6 +73,7 @@ export class AuthController {
   }
 
   @Post('auth/google/signup/start')
+  @Throttle({ default: { limit: 10, ttl: seconds(60), blockDuration: seconds(60) } })
   @ApiOperation({ summary: 'Start customer signup with Google verification and email OTP delivery.' })
   @ApiCreatedResponse({
     description: 'The enrollment was created and an OTP was sent.',
@@ -97,6 +100,7 @@ export class AuthController {
   }
 
   @Post('auth/staff-activation/google/start')
+  @Throttle({ default: { limit: 10, ttl: seconds(60), blockDuration: seconds(60) } })
   @ApiOperation({ summary: 'Start staff activation with Google verification and email OTP delivery.' })
   @ApiCreatedResponse({
     description: 'The staff activation enrollment was created and an OTP was sent.',
@@ -124,6 +128,7 @@ export class AuthController {
   }
 
   @Post('auth/login')
+  @Throttle({ default: { limit: 30, ttl: seconds(60), blockDuration: seconds(60) } })
   @ApiOperation({ summary: 'Authenticate a user and issue access + refresh tokens.' })
   @ApiOkResponse({
     description: 'Login succeeded.',
@@ -150,6 +155,7 @@ export class AuthController {
   }
 
   @Post('auth/password/forgot/request')
+  @Throttle({ default: { limit: 5, ttl: seconds(60), blockDuration: seconds(60) } })
   @ApiOperation({ summary: 'Send a forgot-password OTP to the customer email.' })
   @ApiCreatedResponse({
     description: 'The forgot-password OTP was sent successfully.',
@@ -215,7 +221,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Roles('service_adviser', 'super_admin')
   @Post('auth/staff/profile/phone/change/request')
   @ApiOperation({ summary: 'Send an email OTP before saving a new staff phone number.' })
   @ApiBearerAuth('access-token')
@@ -385,7 +391,7 @@ export class AuthController {
   })
   @ApiForbiddenResponse({
     description:
-      'Only technicians, head technicians, service advisers, or super admins can load customer records for staff workflows.',
+      'Only service advisers or super admins can load customer records for staff workflows.',
   })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   listAdminCustomers(@Req() request: Request) {

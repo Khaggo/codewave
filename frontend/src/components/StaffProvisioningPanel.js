@@ -41,30 +41,6 @@ const accountTypeOptions = [
     staffCodeExample: 'STA-####',
   },
   {
-    value: 'mechanic',
-    label: 'Mechanic',
-    role: 'technician',
-    roleLabel: 'Technician Access',
-    helper: 'Mechanic label for workshop accounts that currently use technician permissions.',
-    staffCodeExample: 'MEC-####',
-  },
-  {
-    value: 'technician',
-    label: 'Technician',
-    role: 'technician',
-    roleLabel: 'Technician Access',
-    helper: 'Assigned technical work, workshop progress, and execution-focused access.',
-    staffCodeExample: 'TEC-####',
-  },
-  {
-    value: 'head_technician',
-    label: 'Head Technician',
-    role: 'head_technician',
-    roleLabel: 'Head Technician',
-    helper: 'Final QA verdict authority for release review. Limited to 2 active accounts at the same time.',
-    staffCodeExample: 'HTC-####',
-  },
-  {
     value: 'admin',
     label: 'Admin',
     role: 'super_admin',
@@ -76,9 +52,6 @@ const accountTypeOptions = [
 
 const groupedAccountTypes = [
   { value: 'staff', label: 'Staff' },
-  { value: 'mechanic', label: 'Mechanics' },
-  { value: 'technician', label: 'Technicians' },
-  { value: 'head_technician', label: 'Head Technicians' },
   { value: 'admin', label: 'Admins' },
 ]
 
@@ -355,14 +328,14 @@ export default function StaffProvisioningPanel() {
         <MetricCard label="Managed accounts" value={summary.total} hint="All staff-capable accounts in the directory" />
         <MetricCard label="Active accounts" value={summary.activeCount} hint="Accounts that can sign in right now" />
         <MetricCard label="Inactive accounts" value={summary.inactiveCount} hint="Accounts currently blocked from sign-in" />
-        <MetricCard label="Active head technicians" value={`${summary.activeHeadTechnicianCount}/2`} hint="Only 2 head technicians can stay active at the same time" />
+        <MetricCard label="Legacy workshop logins" value={summary.activeHeadTechnicianCount} hint="Retired technician/head-tech accounts should trend toward zero." />
         <MetricCard label="Admin accounts" value={summary.adminCount} hint="Protected admin identities in the directory" />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
         <SectionShell
           title="Provision Operations Accounts"
-          description="Create staff, mechanic, technician, head-technician, and admin identities from one protected workspace. Emails and staff IDs are generated automatically, and new accounts can sign in immediately with the password you set."
+          description="Create service-adviser and admin identities from one protected workspace. Technician access is now handled through the profile directory instead of login accounts."
           action={
             <div className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary">
               <ShieldPlus size={14} />
@@ -514,7 +487,7 @@ export default function StaffProvisioningPanel() {
 
         <SectionShell
           title="Account Status Control"
-          description="Choose a staff-capable account from the directory and activate or deactivate access without deleting its history. Admin accounts appear as Admin, not Super Admin, and only 2 head technicians may stay active at once."
+          description="Choose a staff-capable account from the directory and activate or deactivate access without deleting its history. Admin accounts appear as Admin, not Super Admin."
           action={
             <button
               type="button"
@@ -684,7 +657,7 @@ export default function StaffProvisioningPanel() {
                 <div className="empty-panel">
                   <p className="text-sm font-semibold text-ink-primary">No managed staff accounts yet</p>
                   <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                    New staff, technician, head-technician, mechanic, and admin accounts will appear here after they are provisioned.
+                    New service-adviser and admin accounts will appear here after they are provisioned.
                   </p>
                 </div>
               )}

@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';
-import { Test } from '@nestjs/testing';
+import { Test as NestTest } from '@nestjs/testing';
 
 import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jobs.repository';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
@@ -10,9 +10,28 @@ import { QualityGatesRepository } from '@main-modules/quality-gates/repositories
 import { QualityGateDiscrepancyEngineService } from '@main-modules/quality-gates/services/quality-gate-discrepancy-engine.service';
 import { QualityGateSemanticAuditorService } from '@main-modules/quality-gates/services/quality-gate-semantic-auditor.service';
 import { QualityGatesService } from '@main-modules/quality-gates/services/quality-gates.service';
+import { StaffWorkQueuesService } from '@main-modules/staff-work-queues/services/staff-work-queues.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { AI_WORKER_QUEUE_NAME } from '@shared/queue/ai-worker.constants';
+
+const staffWorkQueuesProvider = () => ({
+  provide: StaffWorkQueuesService,
+  useValue: {
+    completeClaim: jest.fn().mockResolvedValue(null),
+  },
+});
+
+const Test = {
+  createTestingModule(
+    metadata: Parameters<typeof NestTest.createTestingModule>[0],
+  ) {
+    return NestTest.createTestingModule({
+      ...metadata,
+      providers: [staffWorkQueuesProvider(), ...(metadata.providers ?? [])],
+    });
+  },
+};
 
 describe('QualityGatesService', () => {
   it('starts a pending quality gate and queues an audit for ready-for-QA job orders', async () => {
@@ -781,7 +800,7 @@ describe('QualityGatesService', () => {
     await expect(service.assertReleaseAllowed('job-order-1')).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('prevents release when the quality gate is still pending', async () => {
+  it('prevents release when automated checks pass but reviewer verdict is still pending', async () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         QualityGatesService,
@@ -793,7 +812,8 @@ describe('QualityGatesService', () => {
             findOptionalByJobOrderId: jest.fn().mockResolvedValue({
               id: 'quality-gate-1',
               jobOrderId: 'job-order-1',
-              status: 'pending',
+              status: 'passed',
+              reviewerVerdict: 'pending',
             }),
           },
         },
@@ -1047,7 +1067,7 @@ describe('QualityGatesService', () => {
     expect(result.status).toBe('passed');
   });
 
-  it('allows a head technician to record a QA pass verdict', async () => {
+  it('allows a service adviser to record a QA pass verdict', async () => {
     const qualityGatesRepository = {
       findOptionalByJobOrderId: jest.fn().mockResolvedValue({
         id: 'quality-gate-1',
@@ -1060,6 +1080,9 @@ describe('QualityGatesService', () => {
         status: 'passed',
         reviewerVerdict: 'passed',
       }),
+    };
+    const staffWorkQueuesService = {
+      completeClaim: jest.fn().mockResolvedValue(null),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -1086,13 +1109,14 @@ describe('QualityGatesService', () => {
           provide: UsersService,
           useValue: {
             findById: jest.fn().mockResolvedValue({
-              id: 'head-tech-1',
-              role: 'head_technician',
+              id: 'adviser-1',
+              role: 'service_adviser',
               isActive: true,
             }),
           },
         },
         { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
+        { provide: StaffWorkQueuesService, useValue: staffWorkQueuesService },
         { provide: getQueueToken(AI_WORKER_QUEUE_NAME), useValue: { add: jest.fn() } },
       ],
     }).compile();
@@ -1103,20 +1127,26 @@ describe('QualityGatesService', () => {
       'job-order-1',
       {
         verdict: 'passed',
-        note: 'Head technician release sign-off.',
+        note: 'Service adviser release sign-off.',
       },
       {
-        userId: 'head-tech-1',
-        role: 'head_technician',
+        userId: 'adviser-1',
+        role: 'service_adviser',
       },
     );
 
     expect(qualityGatesRepository.recordReviewerVerdict).toHaveBeenCalledWith(
       'job-order-1',
       expect.objectContaining({
-        reviewerUserId: 'head-tech-1',
+        reviewerUserId: 'adviser-1',
         reviewerVerdict: 'passed',
       }),
+    );
+    expect(staffWorkQueuesService.completeClaim).toHaveBeenCalledWith(
+      'qa',
+      'job_order',
+      'job-order-1',
+      'adviser-1',
     );
     expect(result.status).toBe('passed');
   });

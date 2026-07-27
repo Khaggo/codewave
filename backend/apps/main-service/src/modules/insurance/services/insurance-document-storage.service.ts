@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { access, mkdir, readFile, readdir, rm, writeFile } from 'fs/promises';
-import { dirname, extname, join, resolve } from 'path';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'path';
 
 type SupportedInsuranceUploadMimeType =
   | 'application/pdf'
@@ -15,11 +15,13 @@ export class InsuranceDocumentStorageService {
   private readonly backendWorkspaceRoot = resolve(__dirname, '..', '..', '..', '..', '..', '..');
   private readonly repoWorkspaceRoot = resolve(this.backendWorkspaceRoot, '..');
   private readonly currentWorkingDirectoryRoot = resolve(process.cwd());
-  private readonly rootDirectory = join(
-    this.backendWorkspaceRoot,
-    '.runtime',
-    'uploads',
-    'insurance-documents',
+  private readonly rootDirectory = resolve(
+    process.env.INSURANCE_DOCUMENT_STORAGE_ROOT?.trim()
+      || join(this.backendWorkspaceRoot, '.runtime', 'uploads', 'insurance-documents'),
+  );
+  private readonly legacyRootDirectory = resolve(
+    process.env.INSURANCE_DOCUMENT_LEGACY_ROOT?.trim()
+      || join(this.repoWorkspaceRoot, '.runtime', 'uploads', 'insurance-documents'),
   );
 
   async saveDocument(payload: {
@@ -63,7 +65,10 @@ export class InsuranceDocumentStorageService {
     }
 
     for (const rootDirectory of this.resolveCandidateRootDirectories()) {
-      const absolutePath = join(rootDirectory, normalizedStorageKey);
+      const absolutePath = this.resolveContainedPath(rootDirectory, normalizedStorageKey);
+      if (!absolutePath) {
+        continue;
+      }
       await rm(absolutePath, { force: true });
       await this.pruneEmptyDirectories(dirname(absolutePath), rootDirectory);
     }
@@ -91,7 +96,7 @@ export class InsuranceDocumentStorageService {
     }
 
     const storageKey = normalizedFileUrl.slice(prefix.length).replace(/\\/g, '/').trim();
-    if (!storageKey) {
+    if (!storageKey || storageKey.split('/').includes('..') || isAbsolute(storageKey)) {
       throw new BadRequestException('Insurance document storage key is missing');
     }
 
@@ -100,10 +105,8 @@ export class InsuranceDocumentStorageService {
 
   private async resolveAbsolutePath(storageKey: string) {
     for (const rootDirectory of this.resolveCandidateRootDirectories()) {
-      const absolutePath = resolve(rootDirectory, storageKey);
-      const rootPath = resolve(rootDirectory);
-
-      if (!absolutePath.startsWith(rootPath)) {
+      const absolutePath = this.resolveContainedPath(rootDirectory, storageKey);
+      if (!absolutePath) {
         continue;
       }
 
@@ -116,6 +119,18 @@ export class InsuranceDocumentStorageService {
     }
 
     throw new NotFoundException('Insurance document file not found');
+  }
+
+  private resolveContainedPath(rootDirectory: string, storageKey: string) {
+    const rootPath = resolve(rootDirectory);
+    const absolutePath = resolve(rootPath, storageKey);
+    const relativePath = relative(rootPath, absolutePath);
+
+    if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) {
+      return null;
+    }
+
+    return absolutePath;
   }
 
   private resolveMimeTypeFromFileName(fileName: string): SupportedInsuranceUploadMimeType {
@@ -231,7 +246,7 @@ export class InsuranceDocumentStorageService {
   private resolveCandidateRootDirectories() {
     return [...new Set([
       this.rootDirectory,
-      join(this.repoWorkspaceRoot, '.runtime', 'uploads', 'insurance-documents'),
+      this.legacyRootDirectory,
       join(this.currentWorkingDirectoryRoot, '.runtime', 'uploads', 'insurance-documents'),
     ])];
   }

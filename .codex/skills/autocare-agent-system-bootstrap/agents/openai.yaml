@@ -1,4 +1,4 @@
 interface:
   display_name: "AUTOCARE Agent System Bootstrap"
-  short_description: "Bootstrap MCPs, skills, task queue context, and handoffs."
-  default_prompt: "Activate the AUTOCARE agent system for the next build-order task: bootstrap MCPs and repo skills, read the task queue, prepare role handoffs, and avoid spawning subagents unless explicitly requested."
+  short_description: "Opt into role-aware queued work without background automation."
+  default_prompt: "Activate the opt-in AUTOCARE role workflow for my selected or queued task. Preserve unrelated changes, use one Codex session by default, report an empty queue honestly, and spawn subagents only when I explicitly request parallel work."

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -30,6 +30,18 @@ export class VehiclesRepository extends BaseRepository {
     return this.db.query.vehicles.findFirst({
       where: eq(vehicles.plateNumber, plateNumber),
     });
+  }
+
+  async findByPlateSignature(plateSignature: string) {
+    const [vehicle] = await this.db
+      .select()
+      .from(vehicles)
+      .where(
+        sql`regexp_replace(upper(${vehicles.plateNumber}), '[^A-Z0-9]', '', 'g') = ${plateSignature}`,
+      )
+      .limit(1);
+
+    return vehicle ?? null;
   }
 
   async findByUserId(userId: string) {

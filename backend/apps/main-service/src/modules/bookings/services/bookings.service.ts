@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  forwardRef,
   Inject,
   Injectable,
   NotFoundException,
@@ -10,6 +11,7 @@ import {
 import { randomUUID } from 'crypto';
 
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
+import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
 import { createNotificationTrigger } from '@shared/events/contracts/notification-triggers';
@@ -67,6 +69,7 @@ const allowedStatusTransitions: Record<BookingStatus, BookingStatus[]> = {
 const activeScheduleStatuses: BookingStatus[] = ['pending', 'pending_payment', 'confirmed', 'in_service', 'rescheduled'];
 const historyScheduleStatuses: BookingStatus[] = ['completed', 'declined', 'cancelled'];
 const staleOpenBookingStatuses: BookingStatus[] = ['pending', 'pending_payment', 'confirmed', 'rescheduled'];
+const activeVehicleServiceJobOrderStatuses = ['assigned', 'in_progress', 'blocked', 'ready_for_qa'] as const;
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -126,6 +129,7 @@ export class BookingsService {
     private readonly bookingReservationPaymentGateway: BookingReservationPaymentGatewayService,
     @Optional() @Inject(BOOKINGS_CLOCK) private readonly bookingsClock?: BookingsClock,
     @Optional() private readonly notificationsService?: NotificationsService,
+    @Optional() @Inject(forwardRef(() => JobOrdersRepository)) private readonly jobOrdersRepository?: JobOrdersRepository,
   ) {}
 
   async listServices() {
@@ -254,6 +258,9 @@ export class BookingsService {
     const customerSlotConflicts = new Set(
       customerActiveBookings.map((booking) => `${booking.scheduledDate}:${booking.timeSlotId}`),
     );
+    const vehicleHasActiveServiceConflict = query.vehicleId
+      ? await this.hasVehicleServiceConflict(query.vehicleId, actor ?? null)
+      : false;
     const activeBookings = activeTimeSlots.length
       ? await this.bookingsRepository.findByScheduledDateRange(startDate, endDate, {
           timeSlotId,
@@ -321,7 +328,10 @@ export class BookingsService {
         const bookingCount = bookingCountsBySlotAndDate.get(`${scheduledDate}:${timeSlot.id}`) ?? 0;
         const hasCustomerConflict = customerSlotConflicts.has(`${scheduledDate}:${timeSlot.id}`);
         const remainingCapacity = Math.max(0, timeSlot.capacity - bookingCount);
-        const isAvailable = remainingCapacity > 0 && !hasCustomerConflict;
+        const isAvailable =
+          remainingCapacity > 0 &&
+          !hasCustomerConflict &&
+          !vehicleHasActiveServiceConflict;
 
         return {
           timeSlotId: timeSlot.id,
@@ -364,6 +374,7 @@ export class BookingsService {
       generatedAt: this.getCurrentDate().toISOString(),
       startDate,
       endDate,
+      vehicleId: query.vehicleId ?? null,
       minBookableDate,
       maxBookableDate,
       days,
@@ -427,6 +438,7 @@ export class BookingsService {
     const user = await this.assertUserExists(createBookingDto.userId);
     await this.assertVehicleOwnership(createBookingDto.userId, createBookingDto.vehicleId);
     await this.assertServicesExist(createBookingDto.serviceIds);
+    await this.assertNoVehicleServiceConflict(createBookingDto.vehicleId);
     await this.assertNoCustomerSlotConflict(createBookingDto.userId, createBookingDto.timeSlotId, createBookingDto.scheduledDate);
     await this.assertTimeSlotAvailability(createBookingDto.timeSlotId, createBookingDto.scheduledDate);
 
@@ -701,6 +713,62 @@ export class BookingsService {
     }
   }
 
+  private async assertNoVehicleServiceConflict(vehicleId: string) {
+    const conflictingJobOrder = await this.findVehicleServiceConflict(vehicleId);
+
+    if (conflictingJobOrder) {
+      throw new ConflictException(
+        `This vehicle already has an active service in progress under job order ${conflictingJobOrder.id}`,
+      );
+    }
+  }
+
+  private async hasVehicleServiceConflict(
+    vehicleId: string,
+    actor?: { userId: string; role: string } | null,
+  ) {
+    await this.assertAvailabilityVehicleAccess(vehicleId, actor ?? null);
+    const conflictingJobOrder = await this.findVehicleServiceConflict(vehicleId);
+    return Boolean(conflictingJobOrder);
+  }
+
+  private async findVehicleServiceConflict(vehicleId: string) {
+    if (!this.jobOrdersRepository) {
+      return null;
+    }
+
+    const vehicleJobOrders = await this.jobOrdersRepository.findByVehicleId(vehicleId);
+    return (
+      vehicleJobOrders.find((jobOrder) =>
+        activeVehicleServiceJobOrderStatuses.includes(
+          jobOrder.status as (typeof activeVehicleServiceJobOrderStatuses)[number],
+        ),
+      ) ?? null
+    );
+  }
+
+  private async assertAvailabilityVehicleAccess(
+    vehicleId: string,
+    actor?: { userId: string; role: string } | null,
+  ) {
+    if (!vehicleId) {
+      return;
+    }
+
+    if (actor?.role === 'customer') {
+      const ownedVehicle = await this.vehiclesRepository.findOwnedByUser(vehicleId, actor.userId);
+      if (!ownedVehicle) {
+        throw new NotFoundException('Vehicle not found for user');
+      }
+      return;
+    }
+
+    const vehicle = await this.vehiclesRepository.findById(vehicleId);
+    if (!vehicle) {
+      throw new NotFoundException('Vehicle not found');
+    }
+  }
+
   private assertTimeWindow(startTime: string, endTime: string) {
     if (startTime >= endTime) {
       throw new BadRequestException('Time slot start time must be earlier than end time');
@@ -924,7 +992,7 @@ export class BookingsService {
       );
     }
 
-    return refreshedBooking;
+    return this.attachWorkshopTracking(refreshedBooking);
   }
 
   async getPaymentPolicy(actorUserId: string) {
@@ -1131,6 +1199,39 @@ export class BookingsService {
       vehicleDisplayName: this.getVehicleDisplayName(booking?.vehicle),
       plateNumber: booking?.vehicle?.plateNumber ?? null,
       reservationPayment: booking?.reservationPayment ?? null,
+      currentWorkshopStage: booking?.currentWorkshopStage ?? null,
+      workshopStageHistory: Array.isArray(booking?.workshopStageHistory) ? booking.workshopStageHistory : [],
+    };
+  }
+
+  private async attachWorkshopTracking(booking: any) {
+    if (!this.jobOrdersRepository || !booking?.id) {
+      return booking;
+    }
+
+    const linkedJobOrder = await this.jobOrdersRepository.findLatestByBookingSourceId(booking.id);
+    if (!linkedJobOrder) {
+      return {
+        ...booking,
+        currentWorkshopStage: null,
+        workshopStageHistory: [],
+      };
+    }
+
+    const workshopStageHistory = (linkedJobOrder.progressEntries ?? [])
+      .filter((entry) => entry?.entryType === 'stage_update' && entry?.workshopStage)
+      .map((entry) => ({
+        id: entry.id,
+        stage: entry.workshopStage,
+        note: entry.message ?? null,
+        createdAt: entry.createdAt.toISOString(),
+      }))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+
+    return {
+      ...booking,
+      currentWorkshopStage: linkedJobOrder.currentWorkshopStage ?? null,
+      workshopStageHistory,
     };
   }
 
@@ -1171,9 +1272,9 @@ export class BookingsService {
       throw new NotFoundException('Booking operator not found');
     }
 
-    if (!['technician', 'head_technician', 'service_adviser', 'super_admin'].includes(user.role)) {
+    if (!['service_adviser', 'super_admin'].includes(user.role)) {
       throw new ForbiddenException(
-        'Only technicians, head technicians, service advisers, or super admins can load intake booking references',
+        'Only service advisers or super admins can load intake booking references',
       );
     }
 

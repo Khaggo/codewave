@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 
 import PortalLink from '@/components/PortalLink'
@@ -25,6 +25,12 @@ import {
 } from '@/lib/api/generated/auth/staff-web-session'
 import { getStaffPortalRouteGuardDecision } from '@/lib/api/generated/auth/client-surface-guardrails'
 import { getSidebarWidth } from './layoutShellView.mjs'
+import {
+  heartbeatStaffWorkClaim,
+  listStaffWorkQueue,
+} from '@/lib/staffWorkQueueClient'
+
+const STAFF_SESSION_REFRESH_INTERVAL_MS = 10 * 60 * 1000
 
 function StaffRouteGuardState({ guard, onLogout }) {
   const suggestedRoutes = guard.allowedNavigation.slice(0, 4)
@@ -86,15 +92,129 @@ export default function AppShell({ children }) {
   const [session, setSession] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [authError, setAuthError] = useState('')
+  const [jobWorkState, setJobWorkState] = useState({
+    item: null,
+    summary: { mine: 0, blocked: 0, overdue: 0 },
+    session: { currentClaimId: null, currentClaim: null },
+  })
+  const sessionRef = useRef(null)
+  const sessionRefreshInFlightRef = useRef(null)
+
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+
+  useEffect(() => {
+    const accessToken = session?.accessToken
+    if (!accessToken) {
+      setJobWorkState({
+        item: null,
+        summary: { mine: 0, blocked: 0, overdue: 0 },
+        session: { currentClaimId: null, currentClaim: null },
+      })
+      return undefined
+    }
+
+    let active = true
+    const loadWorkState = async () => {
+      try {
+        const [result, qaResult] = await Promise.all([
+          listStaffWorkQueue({
+            queueType: 'job_order',
+            accessToken,
+            view: 'my',
+            limit: 25,
+          }),
+          listStaffWorkQueue({
+            queueType: 'qa',
+            accessToken,
+            view: 'my',
+            limit: 25,
+          }),
+        ])
+        if (!active) return
+        const item = (result?.items ?? []).find((entry) => entry.claim?.isMine) ?? result?.items?.[0] ?? null
+        setJobWorkState({
+          item,
+          summary: result?.summary ?? { mine: 0, blocked: 0, overdue: 0 },
+          session: result?.session ?? { currentClaimId: null, currentClaim: null },
+        })
+        const claims = [
+          ...(result?.session?.activeClaims ?? []),
+          ...(qaResult?.session?.activeClaims ?? []),
+        ]
+        await Promise.allSettled(
+          claims.map((claim) => heartbeatStaffWorkClaim({
+            claimId: claim.id,
+            accessToken,
+          })),
+        )
+      } catch {
+        // Keep the shell usable if the operational queue is temporarily unavailable.
+      }
+    }
+
+    void loadWorkState()
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadWorkState()
+    }, 15_000)
+
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [session?.accessToken])
+
+  const applyBlockedAccess = useCallback((state) => {
+    clearStoredSession()
+    setSession(null)
+    setAuthError(staffPortalStateMessages[state] ?? '')
+  }, [])
+
+  const refreshPortalSession = useCallback(async (sessionOverride = null) => {
+    if (sessionRefreshInFlightRef.current) {
+      return sessionRefreshInFlightRef.current
+    }
+
+    const currentSession = sessionOverride ?? sessionRef.current ?? loadStoredSession()
+    if (!currentSession?.refreshToken) {
+      clearStoredSession()
+      setSession(null)
+      setAuthError(staffPortalStateMessages.session_restore_failed)
+      return null
+    }
+
+    const refreshPromise = (async () => {
+      const refreshedSession = await refreshAuthSession(currentSession.refreshToken)
+      const accessState = getStaffPortalAccessState(refreshedSession?.user)
+
+      if (!isActiveStaffPortalState(accessState)) {
+        applyBlockedAccess(accessState)
+        return null
+      }
+
+      saveStoredSession(refreshedSession)
+      setSession(refreshedSession)
+      setAuthError('')
+      return refreshedSession
+    })()
+
+    sessionRefreshInFlightRef.current = refreshPromise
+
+    try {
+      return await refreshPromise
+    } catch (error) {
+      clearStoredSession()
+      setSession(null)
+      setAuthError(staffPortalStateMessages.session_restore_failed)
+      throw error
+    } finally {
+      sessionRefreshInFlightRef.current = null
+    }
+  }, [applyBlockedAccess])
 
   useEffect(() => {
     let isMounted = true
-
-    const applyBlockedAccess = (state) => {
-      clearStoredSession()
-      setSession(null)
-      setAuthError(staffPortalStateMessages[state] ?? '')
-    }
 
     const restoreSession = async () => {
       const savedSession = loadStoredSession()
@@ -121,23 +241,16 @@ export default function AppShell({ children }) {
         }
       } catch {
         try {
-          const refreshedSession = await refreshAuthSession(savedSession.refreshToken)
+          const refreshedSession = await refreshPortalSession(savedSession)
 
           if (isMounted) {
-            const accessState = getStaffPortalAccessState(refreshedSession?.user)
-            if (isActiveStaffPortalState(accessState)) {
-              saveStoredSession(refreshedSession)
-              setSession(refreshedSession)
-              setAuthError('')
-            } else {
-              applyBlockedAccess(accessState)
+            if (!refreshedSession) {
+              setSession(null)
             }
           }
         } catch {
-          clearStoredSession()
           if (isMounted) {
             setSession(null)
-            setAuthError(staffPortalStateMessages.session_restore_failed)
           }
         }
       } finally {
@@ -152,7 +265,7 @@ export default function AppShell({ children }) {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [applyBlockedAccess, refreshPortalSession])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -160,14 +273,65 @@ export default function AppShell({ children }) {
     }
 
     const handleUnauthorizedSession = () => {
-      clearStoredSession()
-      setSession(null)
-      setAuthError(staffPortalStateMessages.session_restore_failed)
+      void refreshPortalSession().catch(() => {})
     }
 
     window.addEventListener(STAFF_SESSION_UNAUTHORIZED_EVENT, handleUnauthorizedSession)
     return () => window.removeEventListener(STAFF_SESSION_UNAUTHORIZED_EVENT, handleUnauthorizedSession)
-  }, [])
+  }, [refreshPortalSession])
+
+  useEffect(() => {
+    if (!session?.refreshToken || !session?.user) {
+      return undefined
+    }
+
+    const accessState = getStaffPortalAccessState(session.user)
+    if (!isActiveStaffPortalState(accessState)) {
+      return undefined
+    }
+
+    const refreshInterval = setInterval(() => {
+      void refreshPortalSession(session).catch(() => {})
+    }, STAFF_SESSION_REFRESH_INTERVAL_MS)
+
+    return () => {
+      clearInterval(refreshInterval)
+    }
+  }, [session, refreshPortalSession])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+
+    const refreshWhenInteractive = () => {
+      const currentSession = sessionRef.current
+      if (!currentSession?.refreshToken || !currentSession?.user) {
+        return
+      }
+
+      const accessState = getStaffPortalAccessState(currentSession.user)
+      if (!isActiveStaffPortalState(accessState)) {
+        return
+      }
+
+      void refreshPortalSession(currentSession).catch(() => {})
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshWhenInteractive()
+      }
+    }
+
+    window.addEventListener('focus', refreshWhenInteractive)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', refreshWhenInteractive)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [refreshPortalSession])
 
   function handleAuthenticated(nextSession) {
     const accessState = getStaffPortalAccessState(nextSession?.user)
@@ -240,17 +404,7 @@ export default function AppShell({ children }) {
   }
 
   if (!authReady) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface-bg px-4">
-        <div className="empty-panel max-w-lg">
-          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-ink-muted">Restoring Session</p>
-          <p className="mt-3 text-lg font-semibold text-ink-primary">Loading the staff workspace...</p>
-          <p className="mt-2 text-sm leading-6 text-ink-secondary">
-            Reconnecting your portal session and checking available workspaces.
-          </p>
-        </div>
-      </div>
-    )
+    return <Login restoring />
   }
 
   if (!session?.user) {
@@ -287,13 +441,22 @@ export default function AppShell({ children }) {
           className={`fixed inset-y-0 left-0 z-30 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-200 md:translate-x-0`}
           style={sidebarWidthStyle}
         >
-          <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
+          <Sidebar
+            collapsed={collapsed}
+            onToggle={() => setCollapsed((value) => !value)}
+            jobWorkCount={jobWorkState.summary?.mine ?? (jobWorkState.item ? 1 : 0)}
+          />
         </div>
 
         <div className="hidden md:block md:flex-shrink-0" style={sidebarSpacerStyle} aria-hidden="true" />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-all duration-200">
-          <Topbar user={providerUser} onMenuToggle={() => setMobileOpen((value) => !value)} onLogout={handleLogout} />
+          <Topbar
+            user={providerUser}
+            workState={jobWorkState}
+            onMenuToggle={() => setMobileOpen((value) => !value)}
+            onLogout={handleLogout}
+          />
           <main className="cc-scrollbar min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-8 pt-4 md:px-6 md:pb-10 md:pt-6 xl:px-8">
             <div className="mx-auto w-full min-w-0 max-w-[1500px] animate-fade-in">
               {routeGuard.status === 'allowed' ? (

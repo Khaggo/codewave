@@ -51,6 +51,42 @@ class JobOrderHeadTechnicianVerdictDto {
   reviewedAt?: string | null;
 }
 
+class JobOrderWorkshopStageHistoryEntryDto {
+  @ApiProperty({
+    example: 'edc6a182-575b-4e35-aef5-7f26372d8eb5',
+  })
+  id!: string;
+
+  @ApiProperty({
+    enum: ['received', 'diagnosis', 'in_repair', 'quality_check', 'ready'],
+    example: 'diagnosis',
+  })
+  stage!: 'received' | 'diagnosis' | 'in_repair' | 'quality_check' | 'ready';
+
+  @ApiPropertyOptional({
+    example: 'Adviser confirmed the repair scope and started diagnostics.',
+  })
+  note?: string | null;
+
+  @ApiPropertyOptional({
+    example: '5d9be480-c0be-4cc2-b89d-5c2ad7fc1c4d',
+  })
+  recordedByUserId?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    example: ['985a8d3f-a4db-4197-8720-fd23676d4344'],
+  })
+  attachedPhotoIds?: string[];
+
+  @ApiProperty({
+    example: '2026-05-22T10:00:00.000Z',
+    format: 'date-time',
+  })
+  createdAt!: string;
+}
+
 export class JobOrderResponseDto {
   @ApiProperty({
     example: '7bc8926d-8eb7-4c97-85ab-4597a58e1f43',
@@ -131,6 +167,12 @@ export class JobOrderResponseDto {
   status!: (typeof jobOrderStatusEnum.enumValues)[number];
 
   @ApiPropertyOptional({
+    enum: ['received', 'diagnosis', 'in_repair', 'quality_check', 'ready'],
+    example: 'diagnosis',
+  })
+  currentWorkshopStage?: 'received' | 'diagnosis' | 'in_repair' | 'quality_check' | 'ready' | null;
+
+  @ApiPropertyOptional({
     example: 'Customer reported engine noise after cold start.',
   })
   notes?: string | null;
@@ -164,6 +206,12 @@ export class JobOrderResponseDto {
     isArray: true,
   })
   progressEntries!: JobOrderProgressEntryResponseDto[];
+
+  @ApiProperty({
+    type: () => JobOrderWorkshopStageHistoryEntryDto,
+    isArray: true,
+  })
+  workshopStageHistory!: JobOrderWorkshopStageHistoryEntryDto[];
 
   @ApiProperty({
     type: () => JobOrderPhotoResponseDto,

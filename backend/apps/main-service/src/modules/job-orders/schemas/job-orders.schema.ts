@@ -14,6 +14,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import { users } from '@main-modules/users/schemas/users.schema';
+import { technicianProfiles } from '@main-modules/technician-profiles/schemas/technician-profiles.schema';
 import { vehicles } from '@main-modules/vehicles/schemas/vehicles.schema';
 
 export const jobOrderSourceTypeEnum = pgEnum('job_order_source_type', ['booking', 'back_job']);
@@ -34,6 +35,15 @@ export const jobOrderProgressEntryTypeEnum = pgEnum('job_order_progress_entry_ty
   'work_started',
   'work_completed',
   'issue_found',
+  'stage_update',
+]);
+
+export const jobOrderWorkshopStageEnum = pgEnum('job_order_workshop_stage', [
+  'received',
+  'diagnosis',
+  'in_repair',
+  'quality_check',
+  'ready',
 ]);
 
 export const jobOrderInvoicePaymentStatusEnum = pgEnum('job_order_invoice_payment_status', [
@@ -65,6 +75,7 @@ export const jobOrderPhotoLinkTypeEnum = pgEnum('job_order_photo_link_type', [
   'progress_entry',
   'work_item',
   'qa_review',
+  'workshop_stage',
 ]);
 
 export const jobOrders = pgTable('job_orders', {
@@ -84,10 +95,13 @@ export const jobOrders = pgTable('job_orders', {
     .references(() => users.id, { onDelete: 'restrict' }),
   serviceAdviserCode: varchar('service_adviser_code', { length: 40 }).notNull(),
   status: jobOrderStatusEnum('status').notNull().default('draft'),
+  currentWorkshopStage: jobOrderWorkshopStageEnum('current_workshop_stage'),
   notes: text('notes'),
+  version: integer('version').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
+  sourceUnique: uniqueIndex('job_orders_source_type_source_id_idx').on(table.sourceType, table.sourceId),
   parentJobOrderForeignKey: foreignKey({
     columns: [table.parentJobOrderId],
     foreignColumns: [table.id],
@@ -117,15 +131,18 @@ export const jobOrderAssignments = pgTable(
     jobOrderId: uuid('job_order_id')
       .notNull()
       .references(() => jobOrders.id, { onDelete: 'cascade' }),
-    technicianUserId: uuid('technician_user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
+    technicianUserId: uuid('technician_user_id').references(() => users.id, { onDelete: 'set null' }),
+    technicianProfileId: uuid('technician_profile_id')
+      .references(() => technicianProfiles.id, { onDelete: 'restrict' }),
+    technicianCode: varchar('technician_code', { length: 40 }),
+    technicianName: varchar('technician_name', { length: 160 }),
+    selectedSpecialty: varchar('selected_specialty', { length: 120 }),
     assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    technicianAssignmentUnique: uniqueIndex('job_order_assignments_job_order_id_technician_user_id_idx').on(
+    technicianAssignmentUnique: uniqueIndex('job_order_assignments_job_order_id_technician_profile_id_idx').on(
       table.jobOrderId,
-      table.technicianUserId,
+      table.technicianProfileId,
     ),
   }),
 );
@@ -135,9 +152,13 @@ export const jobOrderProgressLogs = pgTable('job_order_progress_logs', {
   jobOrderId: uuid('job_order_id')
     .notNull()
     .references(() => jobOrders.id, { onDelete: 'cascade' }),
-  technicianUserId: uuid('technician_user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'restrict' }),
+  technicianUserId: uuid('technician_user_id').references(() => users.id, { onDelete: 'set null' }),
+  recordedByUserId: uuid('recorded_by_user_id')
+    .references(() => users.id, { onDelete: 'set null' }),
+  technicianProfileId: uuid('technician_profile_id')
+    .references(() => technicianProfiles.id, { onDelete: 'set null' }),
+  workshopStage: jobOrderWorkshopStageEnum('workshop_stage'),
+  workItemId: uuid('work_item_id').references(() => jobOrderItems.id, { onDelete: 'set null' }),
   entryType: jobOrderProgressEntryTypeEnum('entry_type').notNull(),
   message: text('message').notNull(),
   completedItemIds: jsonb('completed_item_ids')
@@ -275,6 +296,10 @@ export const jobOrderAssignmentsRelations = relations(jobOrderAssignments, ({ on
     fields: [jobOrderAssignments.technicianUserId],
     references: [users.id],
   }),
+  technicianProfile: one(technicianProfiles, {
+    fields: [jobOrderAssignments.technicianProfileId],
+    references: [technicianProfiles.id],
+  }),
 }));
 
 export const jobOrderProgressLogsRelations = relations(jobOrderProgressLogs, ({ one }) => ({
@@ -285,6 +310,18 @@ export const jobOrderProgressLogsRelations = relations(jobOrderProgressLogs, ({ 
   technician: one(users, {
     fields: [jobOrderProgressLogs.technicianUserId],
     references: [users.id],
+  }),
+  recordedBy: one(users, {
+    fields: [jobOrderProgressLogs.recordedByUserId],
+    references: [users.id],
+  }),
+  technicianProfile: one(technicianProfiles, {
+    fields: [jobOrderProgressLogs.technicianProfileId],
+    references: [technicianProfiles.id],
+  }),
+  workItem: one(jobOrderItems, {
+    fields: [jobOrderProgressLogs.workItemId],
+    references: [jobOrderItems.id],
   }),
 }));
 

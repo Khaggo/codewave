@@ -84,25 +84,89 @@ async function fillDateInputReliably(page, dateInput, scheduledDate, { testInfo 
 }
 
 function bookingCardByNote(page, noteMarker) {
-  return page
-    .locator(
-      `xpath=//div[contains(concat(" ", normalize-space(@class), " "), " px-5 ") and contains(concat(" ", normalize-space(@class), " "), " py-4 ")][.//*[contains(normalize-space(.), ${xpathLiteral(noteMarker)})]]`,
-    )
-    .first();
+  return page.locator('[data-booking-row]').filter({ hasText: noteMarker }).first();
 }
 
 export async function loginStaff(page, account, startPath = '/bookings') {
+  await page.goto(runtimeConfig.staffBaseUrl);
+  await page.evaluate(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
   await page.goto(`${runtimeConfig.staffBaseUrl}${startPath}`);
 
   const emailInput = page.getByPlaceholder('email@example.com');
-  await emailInput.waitFor({ state: 'visible' });
-  await emailInput.fill(account.email);
-  await page.getByPlaceholder('Enter your password').fill(account.password);
-  await page.getByRole('button', { name: 'Sign In' }).click();
-  await Promise.race([
-    page.getByRole('heading', { name: /Booking Schedule|Job Orders|QA Audit|Invoices & Orders/i }).waitFor(),
-    page.getByRole('heading', { name: 'This workspace is not available for your role.' }).waitFor(),
+  const workspaceHeading = page.getByRole('heading', {
+    name: /Booking Schedule|Job Orders|QA Audit|Invoices & Orders|Front-Desk Arrival Intake/i,
+  });
+  const unavailableHeading = page.getByRole('heading', { name: 'This workspace is not available for your role.' });
+  const restoringSessionMarker = page.getByText('Restoring Session', { exact: true });
+
+  await Promise.allSettled([
+    emailInput.waitFor({ state: 'visible', timeout: 30_000 }),
+    workspaceHeading.waitFor({ timeout: 30_000 }),
+    unavailableHeading.waitFor({ timeout: 30_000 }),
   ]);
+
+  if (
+    (await workspaceHeading.isVisible().catch(() => false)) ||
+    (await unavailableHeading.isVisible().catch(() => false))
+  ) {
+    return;
+  }
+
+  if (await restoringSessionMarker.isVisible().catch(() => false)) {
+    await page.evaluate(() => {
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+    });
+    await page.goto(runtimeConfig.staffBaseUrl);
+  }
+
+  if (!(await emailInput.isVisible({ timeout: 5_000 }).catch(() => false))) {
+    await page.evaluate(
+      async ({ apiBaseUrl, email, password }) => {
+        const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`Staff API login failed with ${response.status}: ${body}`);
+        }
+
+        const session = await response.json();
+        window.localStorage.setItem('cc_auth_session', JSON.stringify(session));
+      },
+      {
+        apiBaseUrl: runtimeConfig.apiBaseUrl,
+        email: account.email,
+        password: account.password,
+      },
+    );
+    await page.goto(`${runtimeConfig.staffBaseUrl}${startPath}`);
+  } else {
+    await emailInput.fill(account.email);
+    await page.getByPlaceholder('Enter your password').fill(account.password);
+    await page.getByRole('button', { name: 'Sign In' }).click();
+  }
+
+  await Promise.race([
+    workspaceHeading.waitFor({ timeout: 30_000 }),
+    unavailableHeading.waitFor({ timeout: 30_000 }),
+  ]);
+
+  if (startPath && startPath !== '/') {
+    await page.goto(`${runtimeConfig.staffBaseUrl}${startPath}`);
+    await Promise.race([
+      workspaceHeading.waitFor(),
+      unavailableHeading.waitFor(),
+    ]);
+  }
 }
 
 export async function loginMobileCustomer(page, account) {
@@ -124,23 +188,43 @@ export async function loginMobileCustomer(page, account) {
 
 export async function createMobileBooking(
   page,
-  { serviceName, serviceNames = null, alreadySelectedServiceNames = [], timeSlotLabel, scheduledDate, noteMarker },
+  {
+    serviceName,
+    serviceNames = null,
+    alreadySelectedServiceNames = [],
+    timeSlotLabel,
+    scheduledDate,
+    noteMarker,
+    vehiclePlateNumber = seededVehicle.plateNumber,
+    vehicleLabel = seededVehicle.label,
+  },
 ) {
   await page.getByText('Book Service', { exact: true }).click();
   await waitForMobileBookingComposer(page);
-
-  const vehicleCard = page.getByText(seededVehicle.plateNumber, { exact: false }).first();
-  if (await vehicleCard.isVisible().catch(() => false)) {
-    await vehicleCard.click();
-  } else {
-    await page.getByText(seededVehicle.label, { exact: false }).first().click();
-  }
 
   const requestedServiceNames = Array.isArray(serviceNames) && serviceNames.length
     ? serviceNames
     : serviceName
       ? [serviceName]
       : [];
+
+  const vehiclePlateEntry = page.getByText(vehiclePlateNumber, { exact: true }).first();
+  const vehicleCard = vehiclePlateEntry
+    .locator(`xpath=ancestor::*[contains(normalize-space(.), ${xpathLiteral(vehicleLabel)})][1]`)
+    .first();
+  if (await vehicleCard.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await vehicleCard.scrollIntoViewIfNeeded();
+    await vehicleCard.click();
+  } else if (await vehiclePlateEntry.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await vehiclePlateEntry.scrollIntoViewIfNeeded();
+    await vehiclePlateEntry.click();
+  } else {
+    await page.getByText(vehicleLabel, { exact: false }).first().click();
+  }
+  const availabilityRefreshPanel = page.getByText('Refreshing live availability', { exact: true });
+  if (await availabilityRefreshPanel.isVisible().catch(() => false)) {
+    await availabilityRefreshPanel.waitFor({ state: 'hidden', timeout: 20_000 }).catch(() => null);
+  }
 
   for (const requestedServiceName of requestedServiceNames) {
     if (alreadySelectedServiceNames.includes(requestedServiceName)) {
@@ -150,7 +234,11 @@ export async function createMobileBooking(
     await page.getByText(requestedServiceName, { exact: true }).first().click();
     await page.waitForTimeout(300);
   }
+
   await page.getByText(timeSlotLabel, { exact: true }).first().click();
+  if (await availabilityRefreshPanel.isVisible().catch(() => false)) {
+    await availabilityRefreshPanel.waitFor({ state: 'hidden', timeout: 20_000 }).catch(() => null);
+  }
   await selectMobileBookingDate(page, scheduledDate);
   await page.getByPlaceholder(/Optional notes for the service team/i).fill(noteMarker);
   const submitBookingButton = page.getByText(/^(Book Appointment|Submit Booking Request)$/, { exact: true }).last();
@@ -192,7 +280,8 @@ async function waitForMobileBookingComposer(page) {
 async function ensureMobileBookingModuleVisible(page) {
   const bookingHeadingCandidates = [
     page.getByText('Service Booking', { exact: true }),
-    page.getByText('Discover & Track', { exact: true }),
+    page.getByText('Choose Services', { exact: true }),
+    page.getByText('Active and Past Bookings', { exact: true }),
   ];
 
   const isBookingModuleVisible = async () => {
@@ -255,7 +344,6 @@ async function waitForTrackedBookingHistory(page, bookingReference) {
         const readinessChecks = [
           () => page.getByText('Active and Past Bookings', { exact: true }).isVisible().catch(() => false),
           () => page.getByText('Track Progress', { exact: true }).isVisible().catch(() => false),
-          () => page.getByText('Loading active services', { exact: true }).isVisible().catch(() => false),
           () => page.getByText('No bookings yet', { exact: true }).isVisible().catch(() => false),
         ];
 
@@ -305,16 +393,33 @@ async function restoreMobileCustomerSessionIfNeeded(page, { testInfo } = {}) {
 async function selectMobileBookingDate(page, scheduledDate) {
   const selectedDateLabel = formatLongUiDateLabel(scheduledDate);
   const selectedDateSummary = page.getByText(selectedDateLabel, { exact: true }).first();
+  const availabilityRefreshPanel = page.getByText('Refreshing live availability', { exact: true });
+
+  if (await availabilityRefreshPanel.isVisible().catch(() => false)) {
+    await availabilityRefreshPanel.waitFor({ state: 'hidden', timeout: 20_000 }).catch(() => null);
+  }
 
   if (await selectedDateSummary.isVisible().catch(() => false)) {
     return;
   }
 
-  const [, , day] = String(scheduledDate).split('-').map(Number);
-  const dayCardNumber = page.getByText(String(day), { exact: true }).first();
+  const [year, month, day] = String(scheduledDate).split('-').map(Number);
+  const scheduledDateObject = new Date(year, month - 1, day);
+  const labeledDateCard = page.getByLabel(`Booking date ${selectedDateLabel}`, { exact: true }).first();
+  const monthShort = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(scheduledDateObject);
+  const weekdayShort = new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(scheduledDateObject);
+  const exactDateCard = page
+    .getByText(new RegExp(`\\b${weekdayShort}\\b[\\s\\S]*\\b${day}\\b[\\s\\S]*\\b${monthShort}\\b`, 'i'))
+    .first();
+  const fallbackDayCardNumber = page.getByText(String(day), { exact: true }).first();
 
-  await dayCardNumber.scrollIntoViewIfNeeded();
-  await dayCardNumber.click();
+  const dateCardToClick = (await labeledDateCard.isVisible().catch(() => false))
+    ? labeledDateCard
+    : (await exactDateCard.isVisible().catch(() => false))
+      ? exactDateCard
+      : fallbackDayCardNumber;
+  await dateCardToClick.scrollIntoViewIfNeeded();
+  await dateCardToClick.click();
   await selectedDateSummary.waitFor();
 }
 
@@ -419,6 +524,12 @@ async function selectJobOrderOptionById(selectLocator, { jobOrderId, scheduledDa
 
 export async function openTrackedBooking(page, bookingOrId, { forceRefresh = false, testInfo } = {}) {
   const bookingReference = getMobileBookingReference(bookingOrId);
+  const bookingId =
+    bookingOrId && typeof bookingOrId === 'object'
+      ? String(bookingOrId.id ?? '')
+      : String(bookingOrId ?? '');
+  const loadingActiveServices = page.getByText('Loading active services', { exact: true });
+  const bookingHistoryRefreshButton = page.getByRole('button', { name: /Refresh/i }).first();
 
   if (forceRefresh) {
     await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => null);
@@ -446,8 +557,55 @@ export async function openTrackedBooking(page, bookingOrId, { forceRefresh = fal
     await trackProgressTab.click();
   }
 
-  await waitForTrackedBookingHistory(page, bookingReference);
-  await page.getByText(bookingReference, { exact: true }).first().click();
+  if (await loadingActiveServices.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await loadingActiveServices.waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => null);
+  }
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await waitForTrackedBookingHistory(page, bookingReference);
+
+    let bookingEntry = page.getByText(bookingReference, { exact: true }).first();
+    if (await bookingEntry.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await bookingEntry.click();
+      return;
+    }
+
+    if (await bookingHistoryRefreshButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await bookingHistoryRefreshButton.click();
+    } else {
+      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => null);
+      await restoreMobileCustomerSessionIfNeeded(page, { testInfo });
+      await ensureMobileBookingModuleVisible(page);
+      if (await trackProgressTab.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await trackProgressTab.click().catch(() => null);
+      }
+    }
+
+    if (await loadingActiveServices.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await loadingActiveServices.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => null);
+    }
+  }
+
+  if (bookingId) {
+    await page.goto(`${runtimeConfig.mobileBaseUrl}/checkout/booking/${bookingId}`, { waitUntil: 'domcontentloaded' }).catch(() => null);
+    await restoreMobileCustomerSessionIfNeeded(page, { testInfo });
+    await ensureMobileBookingModuleVisible(page);
+
+    const bookingDetailHeading = page.getByText(`Booking ${bookingReference}`, { exact: false }).first();
+    if (await bookingDetailHeading.isVisible({ timeout: 10_000 }).catch(() => false)) {
+      return;
+    }
+  }
+
+  if (await trackProgressTab.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await trackProgressTab.click().catch(() => null);
+  }
+  if (await loadingActiveServices.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await loadingActiveServices.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => null);
+  }
+
+  const bookingEntry = page.getByText(bookingReference, { exact: true }).first();
+  await bookingEntry.click();
 }
 
 async function openStaffBookingsOnDate(page, scheduledDate) {
@@ -458,6 +616,15 @@ async function openStaffBookingsOnDate(page, scheduledDate) {
     const dateInput = page.locator('input[type="date"]').first();
     await dateInput.fill(scheduledDate);
     await expect(dateInput).toHaveValue(scheduledDate);
+    const expectedDateLabel = new Date(`${scheduledDate}T00:00:00`).toLocaleDateString('en-PH', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    await expect(page.getByText(expectedDateLabel, { exact: true }).first()).toBeVisible({
+      timeout: 30_000,
+    });
   }
 }
 
@@ -498,138 +665,133 @@ export async function confirmReservationPaymentFromBookings(page, { noteMarker, 
 export async function sendBookingToWorkshop(page, { noteMarker, scheduledDate }) {
   await openStaffBookingsOnDate(page, scheduledDate);
   const bookingCard = await waitForStaffBookingCardByNote(page, noteMarker);
-  await bookingCard.getByRole('button', { name: 'Send To Workshop' }).click();
+  const sendToWorkshopButton = bookingCard.getByRole('button', { name: 'Send To Workshop' });
+  if (!(await sendToWorkshopButton.isVisible({ timeout: 1_000 }).catch(() => false))) {
+    await bookingCard.getByText('More Actions', { exact: true }).click();
+  }
+  await sendToWorkshopButton.click();
   await expect(bookingCard.locator('span.badge').filter({ hasText: 'Workshop Handoff' })).toBeVisible();
 }
 
 export async function createJobOrderFromHandoff(
   page,
-  { bookingId, bookingReference, scheduledDate, technicianCode, noteMarker, testInfo, expectMixedSourceDate = false },
+  {
+    bookingId,
+    bookingReference,
+    scheduledDate,
+    technicianCode,
+    technicianSelectorText,
+    noteMarker,
+    testInfo,
+    expectMixedSourceDate = false,
+  },
 ) {
-  await page.goto(`${runtimeConfig.staffBaseUrl}/admin/job-orders`);
-  await page.getByRole('heading', { name: 'Job Orders' }).waitFor();
-
   const expectedBookingReference =
     bookingReference || `BK-${String(scheduledDate ?? '').replace(/-/g, '')}-${seededVehicle.plateNumber}`;
-  const dateInput = page.getByRole('textbox', { name: 'Schedule date' });
-  await fillDateInputReliably(page, dateInput, scheduledDate, { testInfo });
+  await openStaffBookingsOnDate(page, scheduledDate);
+  const bookingCard = await waitForStaffBookingCardByNote(page, noteMarker);
+  await expect(bookingCard).toContainText(expectedBookingReference);
 
-  if (expectMixedSourceDate) {
-    const mixedSourceGuidance = page.getByText('Choose the exact source for this shared queue date', {
-      exact: true,
-    });
-    const existingJobOrderGuidance = page.getByText('Existing job order selection', { exact: true });
-    const bookingHandoffGuidance = page.getByText('Booking handoff selection', { exact: true });
-    const guidanceVisible =
-      (await mixedSourceGuidance.isVisible({ timeout: 3_000 }).catch(() => false)) &&
-      (await existingJobOrderGuidance.isVisible({ timeout: 3_000 }).catch(() => false)) &&
-      (await bookingHandoffGuidance.isVisible({ timeout: 3_000 }).catch(() => false));
-
-    if (!guidanceVisible && testInfo) {
-      addFinding(testInfo, {
-        severity: 'medium',
-        summary:
-          'This run covers a mixed Job Orders queue date where an existing job order and a new booking handoff share the same work date; advisers still need clearer source-picking UX in this state.',
-      });
-    }
-  }
-
-  const sourceBookingCard = page
-    .locator(
-      `xpath=//div[p[normalize-space(.)="Source booking"] and p[contains(normalize-space(.), "${expectedBookingReference}")]]`,
-    )
-    .first();
-
-  if (!(await sourceBookingCard.isVisible({ timeout: 5_000 }).catch(() => false))) {
-    const handoffCard = page.locator('button').filter({ hasText: expectedBookingReference }).first();
-    if (!(await handoffCard.isVisible({ timeout: 5_000 }).catch(() => false))) {
-      if (testInfo) {
-        addFinding(testInfo, {
-          severity: 'critical',
-          summary:
-            'Job Orders did not render the selected booking handoff in either the create workspace or source picker after staff moved the booking to workshop handoff.',
-        });
-      }
-    }
-    await handoffCard.waitFor();
-    await handoffCard.click();
-  }
-
-  await expect(sourceBookingCard, 'Create workspace should be bound to the selected booking handoff.').toBeVisible();
-
-  if (noteMarker) {
-    await expect(page.getByRole('textbox', { name: 'Job-order notes' })).toHaveValue(
-      new RegExp(escapeRegExp(noteMarker)),
-    );
-  }
-
-  const assigneeSelect = page.locator('select').filter({ hasText: 'Create as draft - assign later' }).first();
-  await selectOptionContaining(assigneeSelect, technicianCode);
-
-  const createResponsePromise = page.waitForResponse(
-    (response) => response.request().method() === 'POST' && /\/api\/job-orders$/.test(response.url()),
+  const handoffResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST'
+      && response.url().includes(`/api/job-orders/booking-handoffs/${bookingId}`),
     { timeout: 30_000 },
   );
-  await page.getByRole('button', { name: 'Create Job Order - adviser/admin' }).click();
-  const createResponse = await createResponsePromise;
-  expect(createResponse.ok(), `Job order creation failed with ${createResponse.status()}`).toBeTruthy();
+  await bookingCard.getByRole('button', { name: 'Send to Workshop' }).click();
+  const handoffResponse = await handoffResponsePromise;
+  expect(handoffResponse.ok(), `Workshop handoff failed with ${handoffResponse.status()}`).toBeTruthy();
 
-  const jobOrder = await createResponse.json();
-  if (jobOrder?.sourceId !== bookingId && testInfo) {
+  await page.waitForURL(
+    /\/admin\/job-orders\/[^/?#]+(?:[/?#]|$)/,
+    { timeout: 30_000 },
+  );
+  const jobOrderId = decodeURIComponent(new URL(page.url()).pathname.split('/').filter(Boolean).at(-1) || '');
+  expect(jobOrderId, 'Workshop handoff should open its focused Job Order route.').toBeTruthy();
+  const handoff = {
+    jobOrderId,
+    reference: expectedBookingReference,
+  };
+
+  const takeThisJobButton = page.getByRole('button', { name: 'Take this job' });
+  await takeThisJobButton.waitFor({ state: 'visible', timeout: 30_000 });
+  const claimResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST'
+      && response.url().includes('/api/staff-work-queues/job_order/claims'),
+    { timeout: 30_000 },
+  );
+  await takeThisJobButton.click();
+  const claimResponse = await claimResponsePromise;
+  expect(claimResponse.ok(), `Job Order claim failed with ${claimResponse.status()}`).toBeTruthy();
+
+  const technicianMatcher = new RegExp(
+    escapeRegExp(technicianSelectorText || technicianCode),
+    'i',
+  );
+  const technicianCheckbox = page.getByRole('checkbox', { name: technicianMatcher }).first();
+  await technicianCheckbox.waitFor();
+  await technicianCheckbox.check();
+
+  const assignmentResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PATCH'
+      && response.url().includes(`/api/job-orders/${jobOrderId}/assignments`),
+    { timeout: 30_000 },
+  );
+  const saveAssignmentsButton = page.getByRole('button', { name: 'Save Assignments - adviser/admin' });
+  await expect(saveAssignmentsButton).toBeEnabled({ timeout: 30_000 });
+  await saveAssignmentsButton.click();
+  const assignmentResponse = await assignmentResponsePromise;
+  expect(assignmentResponse.ok(), `Job Order assignment failed with ${assignmentResponse.status()}`).toBeTruthy();
+
+  if (expectMixedSourceDate && testInfo) {
     addFinding(testInfo, {
-      severity: 'critical',
+      severity: 'low',
       summary:
-        'Job Orders created a job order from a different booking handoff than the visibly selected source, which can attach workshop work to the wrong customer booking.',
+        'The booking handoff used the focused Booking-to-Job-Order route successfully even though the work date also contained another Job Order.',
     });
   }
-  expect(jobOrder?.sourceId, 'Created job order should be linked to the selected booking handoff.').toBe(bookingId);
 
-  return jobOrder;
+  return handoff;
 }
 
 export async function loadJobOrderById(page, { jobOrderId, technicianView = false, scheduledDate, testInfo }) {
-  await page.goto(`${runtimeConfig.staffBaseUrl}/admin/job-orders`);
-  await page.getByRole('heading', { name: 'Job Orders' }).waitFor();
-
-  if (scheduledDate) {
-    const dateInput = page.locator('input[type="date"]').first();
-    await fillDateInputReliably(page, dateInput, scheduledDate, { testInfo });
-  }
-
-  const comboboxLabel = technicianView ? 'Assigned job order' : 'Job-order lookup';
-  const select = page.getByRole('combobox', { name: comboboxLabel });
-  await selectJobOrderOptionById(select, {
-    jobOrderId,
-    scheduledDate,
-    testInfo,
-    label: comboboxLabel,
-  });
   const detailResponsePromise = page
     .waitForResponse(
       (response) => response.request().method() === 'GET' && response.url().includes(`/api/job-orders/${jobOrderId}`),
       { timeout: 30_000 },
     )
     .catch(() => null);
-  await page.getByRole('button', { name: 'Load Job Order' }).click();
-  await detailResponsePromise;
+  await page.goto(`${runtimeConfig.staffBaseUrl}/admin/job-orders/${encodeURIComponent(jobOrderId)}`);
+  const detailResponse = await detailResponsePromise;
+  if (detailResponse) {
+    expect(detailResponse.ok(), `Job Order detail failed with ${detailResponse.status()}`).toBeTruthy();
+  }
+  await expect(page).toHaveURL(
+    new RegExp(`/admin/job-orders/${escapeRegExp(jobOrderId)}(?:[/?#]|$)`),
+  );
+  await expect(page.getByText('Service Progress', { exact: true }).first()).toBeVisible();
+}
+
+async function submitServiceProgressAction(page, buttonName) {
+  const saveResponsePromise = page.waitForResponse(
+    (response) => {
+      const request = response.request();
+      return request.method() === 'POST' && /\/api\/job-orders\/[^/]+\/progress$/.test(response.url());
+    },
+    { timeout: 30_000 },
+  );
+
+  await page.getByRole('button', { name: buttonName }).click();
+  const saveResponse = await saveResponsePromise;
+  expect(saveResponse.ok(), `Progress save failed with ${saveResponse.status()}`).toBeTruthy();
 }
 
 export async function progressJobOrderForQa(page, { evidencePath, progressMessage, testInfo }) {
-  await page.getByRole('textbox', { name: 'Progress message' }).fill(progressMessage);
-
-  const completionCheckbox = page.locator('input[type="checkbox"]').first();
-  if ((await completionCheckbox.count()) > 0) {
-    if (await completionCheckbox.isChecked()) {
-      await completionCheckbox.uncheck();
-    }
-  }
-
-  await page.getByRole('button', { name: 'Save Progress Entry - technician/head tech' }).click();
+  await submitServiceProgressAction(page, 'Start service');
 
   const uploadEvidenceButton = page.getByText('Upload Photo Evidence - workshop', { exact: true });
-  if (!(await uploadEvidenceButton.isVisible({ timeout: 5_000 }).catch(() => false))) {
-    await page.getByRole('button', { name: /Evidence/i }).first().click();
-  }
   await uploadEvidenceButton.waitFor();
   const evidenceTargetSelect = page.getByLabel('Evidence target');
   const selectedEvidenceTarget = await evidenceTargetSelect.evaluate((select) => {
@@ -664,7 +826,17 @@ export async function progressJobOrderForQa(page, { evidencePath, progressMessag
     });
   }
 
-  await page.locator('input[type="file"]').setInputFiles(evidencePath);
+  const evidenceInput = /\.(?:avif|gif|hei[cf]|jpe?g|png|webp)$/i.test(evidencePath)
+    ? evidencePath
+    : {
+        name: 'workshop-evidence.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+          'base64',
+        ),
+      };
+  await page.locator('input[type="file"]').setInputFiles(evidenceInput);
   const uploadResponsePromise = page.waitForResponse(
     (response) => {
       const request = response.request();
@@ -693,26 +865,39 @@ export async function progressJobOrderForQa(page, { evidencePath, progressMessag
     }
   }
 
-  await page.getByRole('button', { name: /Progress/i }).first().click();
-  await page.getByRole('textbox', { name: 'Progress message' }).fill(`${progressMessage} Work item completed.`);
-  await page.locator('input[type="checkbox"]').first().check();
-  await page.getByRole('button', { name: 'Save Progress Entry - technician/head tech' }).click();
-  await page.getByText('Progress entry saved', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Review services' }).click();
+  await page.getByRole('button', { name: 'Add update' }).click();
+  await page.getByRole('textbox', { name: 'Service update' }).fill(progressMessage);
+  await submitServiceProgressAction(page, 'Save update');
+  await submitServiceProgressAction(page, 'Mark complete');
 
-  await page.locator('#job-order-stage-progress').getByRole('button', { name: 'Send to QA' }).click();
+  await page.getByRole('button', { name: 'Send to QA' }).click();
   await page.locator('span.badge').filter({ hasText: 'Ready For QA' }).waitFor();
 }
 
-export async function recordQaVerdict(page, { jobOrderId, scheduledDate, note, testInfo }) {
+export async function recordQaVerdict(
+  page,
+  { jobOrderId, jobOrderReference, scheduledDate, note, testInfo },
+) {
   await page.goto(`${runtimeConfig.staffBaseUrl}/admin/qa-audit`);
-  const select = page.getByRole('combobox', { name: 'Job order' });
-  await selectJobOrderOptionById(select, {
-    jobOrderId,
-    scheduledDate,
-    testInfo,
-    label: 'QA Audit job order',
+  await page.getByRole('heading', { name: 'QA Audit' }).waitFor();
+  await page.getByRole('button', { name: 'Unassigned' }).click();
+  const queueSearchTerm = jobOrderReference || jobOrderId;
+  await page.getByPlaceholder('Search reference, customer, vehicle').fill(queueSearchTerm);
+  const targetReference = page.getByText(queueSearchTerm, { exact: true }).first();
+  await expect(targetReference).toBeVisible({
+    timeout: 30_000,
   });
-  await page.getByRole('button', { name: 'Load Review' }).click();
+  const targetQueueRow = targetReference.locator(
+    'xpath=ancestor::div[.//button[normalize-space(.)="Take this"]][1]',
+  );
+  const takeQaWorkButton = targetQueueRow.getByRole('button', { name: 'Take this' });
+  await takeQaWorkButton.waitFor({ state: 'visible', timeout: 30_000 });
+  await takeQaWorkButton.click();
+  await expect(page.getByRole('combobox', { name: 'Verdict' })).toBeEnabled({
+    timeout: 30_000,
+  });
+  await expect(page.getByText(queueSearchTerm, { exact: true }).first()).toBeVisible();
   await page.getByRole('combobox', { name: 'Verdict' }).selectOption('passed');
   await page.getByRole('textbox', { name: 'Note' }).fill(note);
   await page.getByRole('button', { name: 'Record Verdict' }).click();
@@ -734,8 +919,25 @@ export async function finalizeAndRecordPayment(page, { jobOrderId, scheduledDate
   }
 }
 
-export async function verifyInvoiceLookup(page, jobOrderId, { scheduledDate, testInfo } = {}) {
+export async function verifyInvoiceLookup(page, jobOrderId, { scheduledDate, testInfo, account } = {}) {
   await page.goto(`${runtimeConfig.staffBaseUrl}/admin/invoices`);
+  const invoicesHeading = page.getByRole('heading', { name: 'Invoices & Orders' });
+  const restoringSessionMarker = page.getByText('Restoring Session', { exact: true });
+
+  await Promise.allSettled([
+    invoicesHeading.waitFor({ timeout: 15_000 }),
+    restoringSessionMarker.waitFor({ timeout: 15_000 }),
+  ]);
+
+  if (await restoringSessionMarker.isVisible().catch(() => false)) {
+    if (account) {
+      await loginStaff(page, account, '/admin/invoices');
+    } else {
+      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => null);
+    }
+  }
+
+  await invoicesHeading.waitFor({ timeout: 30_000 });
   const select = page.getByRole('combobox', { name: 'Service record' });
   try {
     await selectJobOrderOptionById(select, {

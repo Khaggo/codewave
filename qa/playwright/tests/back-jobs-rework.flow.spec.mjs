@@ -3,7 +3,14 @@ import path from 'node:path';
 import { test, expect } from '@playwright/test';
 
 import { addFinding, annotateSeverity } from '../helpers/assertions.mjs';
-import { apiLogin, ensureLocalQaRuntime, listCustomerBookings, listVehicleJobOrders, pollUntil } from '../helpers/api.mjs';
+import {
+  apiLogin,
+  ensureLocalQaRuntime,
+  getAssignableTechnicianProfile,
+  listCustomerBookings,
+  listVehicleJobOrders,
+  pollUntil,
+} from '../helpers/api.mjs';
 import { createRunMarker, qaAccounts, runtimeConfig, seededVehicle } from '../helpers/config.mjs';
 import {
   finalizeAndRecordPayment,
@@ -21,6 +28,10 @@ function authHeaders(accessToken) {
   return {
     Authorization: `Bearer ${accessToken}`,
   };
+}
+
+function escapeRegex(value) {
+  return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function expectJson(response, contextLabel) {
@@ -513,6 +524,7 @@ test.describe('AUTOCARE Back-Jobs / rework QA', () => {
       apiLogin(request, qaAccounts.customer),
       apiLogin(request, qaAccounts.adviser),
     ]);
+    const assignableTechnicianProfile = await getAssignableTechnicianProfile(request, adviserSession);
     const origin = await findBackJobOrigin(request, customerSession, adviserSession);
     const vehicle = await getCustomerVehicle(request, customerSession, origin.vehicleId);
     const adminCustomer = await getAdminCustomer(request, adviserSession, customerSession.user.id);
@@ -615,7 +627,11 @@ test.describe('AUTOCARE Back-Jobs / rework QA', () => {
         .getByLabel('Work item description')
         .fill('Repeat concern repair after completed original service.');
       await reworkCard.getByLabel('Rework notes').fill(`${runMarker}: created from approved back-job case.`);
-      await reworkCard.getByLabel(/Queue Technician.*QA-JO-TEC/i).check();
+      const technicianProfileLabel = new RegExp(
+        `${escapeRegex(assignableTechnicianProfile.fullName || '')}[\\s\\S]*${escapeRegex(assignableTechnicianProfile.code || '')}`,
+        'i',
+      );
+      await reworkCard.getByLabel(technicianProfileLabel).check();
 
       const createReworkResponsePromise = adviserPage.waitForResponse(
         (response) => response.request().method() === 'POST' && /\/api\/job-orders$/.test(response.url()),
@@ -668,17 +684,16 @@ test.describe('AUTOCARE Back-Jobs / rework QA', () => {
     const technicianContext = await browser.newContext();
     const technicianPage = await technicianContext.newPage();
 
-    await test.step('Technician progresses the rework job order, uploads evidence, and sends it to QA', async () => {
-      await loginStaff(technicianPage, qaAccounts.technician, '/admin/job-orders');
+    await test.step('Service adviser progresses the rework job order, uploads evidence, and sends it to QA', async () => {
+      await loginStaff(technicianPage, qaAccounts.adviser, '/admin/job-orders');
       await loadJobOrderById(technicianPage, {
         jobOrderId,
-        technicianView: true,
         scheduledDate: jobOrderWorkDate,
         testInfo,
       });
       await progressJobOrderForQa(technicianPage, {
         evidencePath,
-        progressMessage: `Technician rework progress recorded for ${runMarker}.`,
+        progressMessage: `Workshop rework progress recorded for ${runMarker}.`,
         testInfo,
       });
     });
@@ -686,12 +701,12 @@ test.describe('AUTOCARE Back-Jobs / rework QA', () => {
     const headTechContext = await browser.newContext();
     const headTechPage = await headTechContext.newPage();
 
-    await test.step('Head technician QA-releases the rework job order', async () => {
-      await loginStaff(headTechPage, qaAccounts.headTechnician, '/admin/qa-audit');
+    await test.step('Service adviser QA-releases the rework job order', async () => {
+      await loginStaff(headTechPage, qaAccounts.adviser, '/admin/qa-audit');
       await recordQaVerdict(headTechPage, {
         jobOrderId,
         scheduledDate: jobOrderWorkDate,
-        note: `Head technician QA release approved rework for ${runMarker}.`,
+        note: `Adviser QA release approved rework for ${runMarker}.`,
         testInfo,
       });
     });

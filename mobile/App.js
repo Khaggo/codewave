@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useContext, useEffect, useState } from 'react';
-import { Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { AppState, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { createNavigationContainerRef, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
@@ -12,7 +12,6 @@ import LoginPage from './src/screens/LoginPage';
 import OTPScreen from './src/screens/OTPScreen';
 import CompleteOnboardingPage from './src/screens/CompleteOnboardingPage';
 import Dashboard from './src/screens/Dashboard';
-import TechnicianDashboard from './src/screens/TechnicianDashboard';
 import ForgotPasswordEmail from './src/screens/ForgotPasswordEmail';
 import ForgotPasswordOTP from './src/screens/ForgotPasswordOTP';
 import ResetPassword from './src/screens/ResetPassword';
@@ -30,6 +29,7 @@ import {
   getCustomerMobileSessionAccessState,
   isAuthSessionResponse,
   loginAccount,
+  refreshAuthSession,
   setCustomerSessionExpiredHandler,
   requestChangePasswordOtp,
   registerAccount,
@@ -54,6 +54,7 @@ const AppSessionContext = createContext(null);
 const navigationRef = createNavigationContainerRef();
 const MOBILE_DEEP_LINK_SCHEME = 'autocarecc';
 const MOBILE_SESSION_STORAGE_KEY = '@autocare/mobile-session-v1';
+const MOBILE_SESSION_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 const normalizePersistedBirthday = (value) => cloneDate(value) ?? null;
 
@@ -263,22 +264,6 @@ function MenuScreen(props) {
   } = useAppSessionContext();
   const currentAccount = activeAccount || registeredAccount;
   const accessState = getMobileAppSessionAccessState(currentAccount);
-
-  if (accessState === 'technician_session_active') {
-    return (
-      <TechnicianDashboard
-        {...props}
-        account={currentAccount}
-        onSignOut={() => {
-          clearCustomerSession();
-          props.navigation.reset({
-            index: 0,
-            routes: [{ name: 'Landing' }],
-          });
-        }}
-      />
-    );
-  }
 
   if (accessState !== 'customer_session_active') {
     return (
@@ -595,6 +580,69 @@ export default function App() {
   const [pendingOnboardingCompletion, setPendingOnboardingCompletion] = useState(null);
   const [pendingSupportJump, setPendingSupportJump] = useState(null);
   const [isSessionHydrated, setIsSessionHydrated] = useState(false);
+  const registeredAccountRef = useRef(null);
+  const activeAccountRef = useRef(null);
+  const customerSessionRefreshRef = useRef(null);
+
+  useEffect(() => {
+    registeredAccountRef.current = registeredAccount;
+    activeAccountRef.current = activeAccount;
+  }, [registeredAccount, activeAccount]);
+
+  const clearCustomerSession = () => {
+    setPendingAccount(null);
+    setPendingOnboardingCompletion(null);
+    setActiveAccount(null);
+    setRegisteredAccount((currentAccount) =>
+      currentAccount
+        ? {
+            ...currentAccount,
+            accessToken: null,
+            refreshToken: null,
+          }
+        : currentAccount,
+    );
+  };
+
+  const refreshCustomerSession = async (accountOverride = null) => {
+    if (customerSessionRefreshRef.current) {
+      return customerSessionRefreshRef.current;
+    }
+
+    const currentAccount = normalizePersistedAccount(
+      accountOverride ?? activeAccountRef.current ?? registeredAccountRef.current,
+    );
+
+    if (!currentAccount?.refreshToken) {
+      clearCustomerSession();
+      return null;
+    }
+
+    const refreshPromise = (async () => {
+      const refreshedSession = await refreshAuthSession(currentAccount.refreshToken);
+      const nextAccount = buildMobileAccountProfile({
+        session: refreshedSession,
+        password: currentAccount.password,
+        existingAccount: currentAccount,
+      });
+
+      assertMobileAppSessionAllowed(nextAccount);
+      rememberKnownAccount(nextAccount);
+      setActiveAccount(nextAccount);
+      return nextAccount;
+    })();
+
+    customerSessionRefreshRef.current = refreshPromise;
+
+    try {
+      return await refreshPromise;
+    } catch (error) {
+      clearCustomerSession();
+      throw error;
+    } finally {
+      customerSessionRefreshRef.current = null;
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -618,19 +666,51 @@ export default function App() {
         const nextPendingOnboardingCompletion = normalizePersistedOnboardingState(
           parsedSnapshot.pendingOnboardingCompletion,
         );
-        const activeAccessState = getMobileAppSessionAccessState(nextActiveAccount);
+        let hydratedRegisteredAccount = nextRegisteredAccount;
+        let hydratedActiveAccount = nextActiveAccount;
+        const activeAccessState = getMobileAppSessionAccessState(hydratedActiveAccount);
+
+        if (activeAccessState === 'customer_session_active' && hydratedActiveAccount?.refreshToken) {
+          try {
+            const refreshedSession = await refreshAuthSession(hydratedActiveAccount.refreshToken);
+            const refreshedAccount = buildMobileAccountProfile({
+              session: refreshedSession,
+              password: hydratedActiveAccount.password ?? hydratedRegisteredAccount?.password,
+              existingAccount: hydratedActiveAccount,
+            });
+
+            assertMobileAppSessionAllowed(refreshedAccount);
+            hydratedActiveAccount = refreshedAccount;
+            hydratedRegisteredAccount =
+              normalizeEmail(hydratedRegisteredAccount?.email) ===
+              normalizeEmail(refreshedAccount.email)
+                ? {
+                    ...hydratedRegisteredAccount,
+                    ...refreshedAccount,
+                  }
+                : refreshedAccount;
+          } catch {
+            hydratedActiveAccount = null;
+            hydratedRegisteredAccount = hydratedRegisteredAccount
+              ? {
+                  ...hydratedRegisteredAccount,
+                  accessToken: null,
+                  refreshToken: null,
+                }
+              : hydratedRegisteredAccount;
+          }
+        }
 
         if (!isMounted) {
           return;
         }
 
-        setRegisteredAccount(nextRegisteredAccount);
+        setRegisteredAccount(hydratedRegisteredAccount);
         setPendingAccount(nextPendingAccount);
         setPendingOnboardingCompletion(nextPendingOnboardingCompletion);
         setActiveAccount(
-          activeAccessState === 'customer_session_active' ||
-            activeAccessState === 'technician_session_active'
-            ? nextActiveAccount
+          getMobileAppSessionAccessState(hydratedActiveAccount) === 'customer_session_active'
+            ? hydratedActiveAccount
             : null,
         );
       } catch (error) {
@@ -684,6 +764,50 @@ export default function App() {
     activeAccount,
     pendingOnboardingCompletion,
   ]);
+
+  useEffect(() => {
+    if (!isSessionHydrated) {
+      return undefined;
+    }
+
+    if (getMobileAppSessionAccessState(activeAccount) !== 'customer_session_active') {
+      return undefined;
+    }
+
+    if (!activeAccount?.refreshToken) {
+      return undefined;
+    }
+
+    const refreshInterval = setInterval(() => {
+      void refreshCustomerSession(activeAccount).catch(() => {});
+    }, MOBILE_SESSION_REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(refreshInterval);
+    };
+  }, [isSessionHydrated, activeAccount]);
+
+  useEffect(() => {
+    if (!isSessionHydrated) {
+      return undefined;
+    }
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        return;
+      }
+
+      if (getMobileAppSessionAccessState(activeAccountRef.current) !== 'customer_session_active') {
+        return;
+      }
+
+      void refreshCustomerSession(activeAccountRef.current).catch(() => {});
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isSessionHydrated, activeAccount]);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
@@ -766,24 +890,13 @@ export default function App() {
 
   useEffect(() => {
     setCustomerSessionExpiredHandler(() => {
-      setPendingAccount(null);
-      setPendingOnboardingCompletion(null);
-      setActiveAccount(null);
-      setRegisteredAccount((currentAccount) =>
-        currentAccount
-          ? {
-              ...currentAccount,
-              accessToken: null,
-              refreshToken: null,
-            }
-          : currentAccount,
-      );
+      void refreshCustomerSession().catch(() => {});
     });
 
     return () => {
       setCustomerSessionExpiredHandler(null);
     };
-  }, []);
+  }, [registeredAccount, activeAccount]);
 
   useEffect(() => {
     const buildSupportJumpFromUrl = (url) => {
@@ -917,21 +1030,6 @@ export default function App() {
 
       return nextAccount;
     });
-  };
-
-  const clearCustomerSession = () => {
-    setPendingAccount(null);
-    setPendingOnboardingCompletion(null);
-    setActiveAccount(null);
-    setRegisteredAccount((currentAccount) =>
-      currentAccount
-        ? {
-            ...currentAccount,
-            accessToken: null,
-            refreshToken: null,
-          }
-        : currentAccount,
-    );
   };
 
   const handleDeleteAccount = () => {
@@ -1500,8 +1598,7 @@ export default function App() {
   const appInitialRouteName =
     pendingOnboardingCompletion?.draft && initialSessionAccount
       ? 'CompleteOnboarding'
-      : currentMobileSessionAccessState === 'customer_session_active' ||
-          currentMobileSessionAccessState === 'technician_session_active'
+      : currentMobileSessionAccessState === 'customer_session_active'
         ? 'Menu'
         : 'Landing';
 
@@ -1515,7 +1612,7 @@ export default function App() {
               <Text style={styles.guardEyebrow}>Restoring session</Text>
               <Text style={styles.guardTitle}>Opening AUTOCARE</Text>
               <Text style={styles.guardMessage}>
-                Checking your saved customer or workshop session before the app loads.
+                Checking your saved customer session before the app loads.
               </Text>
             </View>
           </View>

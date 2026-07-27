@@ -1,4 +1,15 @@
-import { isAllowedCorsOrigin } from './cors';
+import {
+  isAllowedCorsOrigin,
+  STAFF_API_CORS_ALLOWED_HEADERS,
+} from './cors';
+
+describe('STAFF_API_CORS_ALLOWED_HEADERS', () => {
+  it('allows the work claim and optimistic-concurrency headers used by staff workflows', () => {
+    expect(STAFF_API_CORS_ALLOWED_HEADERS).toEqual(
+      expect.arrayContaining(['X-Work-Claim-Id', 'If-Match']),
+    );
+  });
+});
 
 describe('isAllowedCorsOrigin', () => {
   it('allows localhost and private LAN staff web origins during development', () => {

@@ -1,4 +1,4 @@
 interface:
   display_name: "AUTOCARE Continuous Task Runner"
-  short_description: "Keep AUTOCARE task work moving with minimal pauses and MCP-first token-efficient exploration."
-  default_prompt: "Use this skill to continue AUTOCARE implementation with MCP-first exploration, reasonable assumptions, safe commands, batched approvals, and minimal interruptions while respecting sandbox and destructive-action boundaries."
+  short_description: "Continue an explicitly active queue task in the foreground."
+  default_prompt: "Continue the explicitly selected AUTOCARE task with MCP-first exploration and safe local execution. Keep the user's current objective authoritative, do not start background workers, and stop when that objective is complete."

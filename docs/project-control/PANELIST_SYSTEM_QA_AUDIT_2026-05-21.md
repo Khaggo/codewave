@@ -53,7 +53,7 @@ However, several panel-facing promises are still not safe to claim as fully comp
 | Technician should only be able to do checklists. | Partial | Backend restricts technician status/progress access; Playwright blocks technician from booking/invoice workspaces. UI still exposes progress/evidence rather than a checklist-only experience. | High | Convert technician workspace to assigned checklist/tasks plus evidence only. |
 | Garage pagination. | Failed / Open | Booking service picker has pagination, but garage vehicle lists are not paginated; web vehicle records show all filtered records. | Medium | Add pagination/search limits to mobile garage and web vehicle directory. |
 | Objective 2 lifecycle polish. | Partial | Vehicle lifecycle service specs passed; timeline module exists. Needs panel-ready UI proof with service, inspection, insurance, invoice, and QA events together. | High | Create demo vehicle timeline and QA evidence. |
-| Objective 5 QA/NLP/rule/AI module. | Partial | Quality-gates service specs include semantic/rule findings and head-tech verdict; Playwright covers QA release. Customer-facing generated summary still lacks dedicated demo proof. | High | Add discrepancy scenario and generated customer summary QA. |
+| Objective 5 QA/NLP/rule/AI module. | Partial | Quality-gates service specs include semantic/rule findings and adviser verdict; Playwright covers QA release. Customer-facing generated summary still lacks dedicated demo proof. | High | Add discrepancy scenario and generated customer summary QA. |
 | Duplicate booking data for same day/time/service. | QA Passed | Booking service tests cover same-slot conflict and availability hiding; full Playwright evidence has no duplicate finding. | High | Keep regression in suite. |
 | Billing details not fully functional. | Partial | Booking-to-cash Playwright passed finalization/payment/invoice lookup; invoice UI helper tests passed. Pricing/quotation completeness still not panel-ready. | High | Add quotation/pricing fields and invoice-detail E2E. |
 | Shop/catalog/service data entry. | Partial | Staff web build includes catalog/inventory/service routes; inventory and booking service view helper tests passed. No live CRUD E2E yet. | Medium | Add CRUD validation QA for shop/catalog/service setup. |
@@ -71,7 +71,7 @@ However, several panel-facing promises are still not safe to claim as fully comp
 | Objective 2: unified vehicle lifecycle timeline | Partial / At Risk | Backend lifecycle works, but full UI proof with insurance + service + inspection + invoice is still needed. |
 | Objective 3: admin web booking, inventory, loyalty rules | Partial | Booking/job-order/invoice path passed; inventory/catalog/loyalty CRUD needs live E2E proof. |
 | Objective 4: back-job/rework module | Backend QA Passed, E2E Needed | Back-job service specs passed; customer-to-staff rework demo still needs end-to-end evidence. |
-| Objective 5: QA audit with NLP/rules/generative summary | Partial | QA gate/rule logic and head-tech release passed; generated customer summary/discrepancy demo remains. |
+| Objective 5: QA audit with NLP/rules/generative summary | Partial | QA gate/rule logic and adviser release passed; generated customer summary/discrepancy demo remains. |
 | Objective 6: ISO/IEC 25010 evaluation | In Progress | Automated QA evidence exists, but formal usability/compatibility/security evaluation table is still needed. |
 
 ## Recommended Next QA Order

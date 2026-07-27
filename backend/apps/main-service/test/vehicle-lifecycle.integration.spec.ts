@@ -362,7 +362,7 @@ describe('VehicleLifecycleController integration', () => {
         }),
       ]);
       expect(adviserLogin.status).toBe(200);
-      expect(technicianLogin.status).toBe(200);
+      expect(technicianLogin.status).toBe(401);
       expect(superAdminLogin.status).toBe(200);
       expect(customerLogin.status).toBe(200);
 
@@ -426,7 +426,7 @@ describe('VehicleLifecycleController integration', () => {
 
       const inProgressResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'in_progress',
         });
@@ -434,7 +434,7 @@ describe('VehicleLifecycleController integration', () => {
 
       const evidencePhotoResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           fileName: 'timeline-expansion-work-item.jpg',
           fileUrl: 'https://files.example.com/job-orders/timeline-expansion-work-item.jpg',
@@ -446,7 +446,7 @@ describe('VehicleLifecycleController integration', () => {
 
       const addProgressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           entryType: 'work_completed',
           message: 'Balancing and steering inspection completed.',
@@ -456,7 +456,7 @@ describe('VehicleLifecycleController integration', () => {
 
       const readyForQaResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'ready_for_qa',
         });

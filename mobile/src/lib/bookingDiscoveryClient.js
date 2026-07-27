@@ -10,6 +10,11 @@ const buildAuthHeaders = (accessToken) =>
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
+const trimOrNull = (value) => {
+  const normalizedValue = String(value ?? '').trim();
+  return normalizedValue ? normalizedValue : null;
+};
+
 const request = async (path, options = {}) => {
   const {
     body,
@@ -268,6 +273,7 @@ export const createEmptyBookingAvailability = () => ({
   generatedAt: '',
   startDate: '',
   endDate: '',
+  vehicleId: null,
   minBookableDate: '',
   maxBookableDate: '',
   days: [],
@@ -285,6 +291,7 @@ const normalizeBookingAvailability = (payload, query) => {
     generatedAt: String(payload?.generatedAt ?? '').trim(),
     startDate: normalizeIsoDateOnly(payload?.startDate, fallbackStartDate),
     endDate: normalizeIsoDateOnly(payload?.endDate, fallbackEndDate),
+    vehicleId: trimOrNull(payload?.vehicleId) ?? trimOrNull(query?.vehicleId),
     minBookableDate: normalizeIsoDateOnly(payload?.minBookableDate, fallbackStartDate),
     maxBookableDate: normalizeIsoDateOnly(payload?.maxBookableDate, fallbackEndDate),
     days,
@@ -617,6 +624,7 @@ export const getBookingAvailability = async ({
   startDate,
   endDate,
   timeSlotId,
+  vehicleId,
   accessToken,
 }) => {
   const normalizedStartDate = normalizeIsoDateOnly(startDate);
@@ -639,6 +647,10 @@ export const getBookingAvailability = async ({
     query.set('timeSlotId', String(timeSlotId).trim());
   }
 
+  if (String(vehicleId ?? '').trim()) {
+    query.set('vehicleId', String(vehicleId).trim());
+  }
+
   return normalizeBookingAvailability(
     await request(`/api/bookings/availability?${query.toString()}`, {
       method: 'GET',
@@ -648,6 +660,7 @@ export const getBookingAvailability = async ({
       startDate: normalizedStartDate,
       endDate: normalizedEndDate,
       timeSlotId,
+      vehicleId,
     },
   );
 };
@@ -696,6 +709,7 @@ export const loadBookingDiscoverySnapshot = async ({
           startDate: availabilityWindow.startDate,
           endDate: availabilityWindow.endDate,
           timeSlotId: availabilityWindow.timeSlotId,
+          vehicleId: availabilityWindow.vehicleId,
         }
       : null;
   const [services, timeSlots, vehicles, availability] = await Promise.all([
@@ -713,6 +727,7 @@ export const loadBookingDiscoverySnapshot = async ({
           normalizedAvailabilityWindow?.endDate ??
           toBookingDateString(addDays(addDays(new Date(), 1) ?? new Date(), 13) ?? new Date()),
         timeSlotId: normalizedAvailabilityWindow?.timeSlotId,
+        vehicleId: normalizedAvailabilityWindow?.vehicleId,
         accessToken,
       }),
     ),

@@ -218,6 +218,10 @@ function fieldWithinLabel(scope, labelText, selector = 'input') {
   return scope.locator('label').filter({ hasText: labelText }).locator(selector).first();
 }
 
+function cardPanel(scope, titleText) {
+  return scope.getByText(titleText, { exact: true }).locator('xpath=ancestor::div[1]');
+}
+
 function rawUuidPattern() {
   return /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 }
@@ -298,6 +302,8 @@ async function createApiBackedEcommerceOrder(request, customerSession, { product
 }
 
 async function verifyStaffInvoiceSurface(page, { customerEmail, orderNumber, invoiceNumber, expectedStatus }) {
+  await page.goto(`${runtimeConfig.staffBaseUrl}/admin/invoices`);
+  await page.getByRole('heading', { name: 'Invoices & Orders' }).waitFor();
   await page.getByRole('button', { name: 'Order Invoices' }).click();
   const customerSelect = page.getByRole('combobox', { name: 'Customer' });
   await selectOptionContaining(customerSelect, customerEmail);
@@ -440,14 +446,18 @@ test.describe('AUTOCARE Admin CRUD / pricing / billing QA', () => {
       await page.getByRole('heading', { name: /Inventory/i }).waitFor();
 
       const inventorySection = page.locator('section').filter({ hasText: 'Inventory Control Center' }).first();
-      const createPanel = inventorySection.locator('div').filter({ hasText: 'Create inventory item' }).first();
+      const createPanel = cardPanel(inventorySection, 'Create inventory item');
       await fieldWithinLabel(createPanel, 'Category', 'select').selectOption({ label: catalogCategoryName });
       await fieldWithinLabel(createPanel, 'SKU').fill(inventorySku);
       await fieldWithinLabel(createPanel, 'Product name').fill(inventoryProductName);
       await fieldWithinLabel(createPanel, 'Description', 'textarea').fill('Stock-backed QA item for admin CRUD billing proof.');
       await fieldWithinLabel(createPanel, 'Price (PHP)').fill('880');
-      await fieldWithinLabel(createPanel, 'Opening quantity').fill('5');
-      await fieldWithinLabel(createPanel, 'Low-stock threshold').fill('3');
+      const openingQuantityInput = fieldWithinLabel(createPanel, 'Opening quantity');
+      const createThresholdInput = fieldWithinLabel(createPanel, 'Low-stock threshold');
+      await openingQuantityInput.fill('5');
+      await createThresholdInput.fill('3');
+      await expect(openingQuantityInput).toHaveValue('5');
+      await expect(createThresholdInput).toHaveValue('3');
 
       const createInventoryResponsePromise = page.waitForResponse(
         (response) => response.request().method() === 'POST' && response.url().includes('/api/products'),
@@ -456,11 +466,17 @@ test.describe('AUTOCARE Admin CRUD / pricing / billing QA', () => {
       await createPanel.getByRole('button', { name: /Create inventory item/i }).click();
       inventoryProduct = await expectJson(await createInventoryResponsePromise, 'Create inventory-backed product from staff UI');
       expect(inventoryProduct.sku).toBe(inventorySku);
+      expect(inventoryProduct.quantityOnHand).toBe(5);
+      expect(inventoryProduct.reorderThreshold).toBe(3);
 
-      const stockActions = inventorySection.locator('div').filter({ hasText: 'Stock actions' }).first();
+      const stockActions = cardPanel(inventorySection, 'Stock actions');
       await fieldWithinLabel(stockActions, 'Selected product', 'select').selectOption(inventoryProduct.id);
-      await fieldWithinLabel(stockActions, 'Quantity on hand').fill('7');
-      await fieldWithinLabel(stockActions, 'Low-stock threshold').fill('6');
+      const quantityOnHandInput = fieldWithinLabel(stockActions, 'Quantity on hand');
+      const reorderThresholdInput = fieldWithinLabel(stockActions, 'Low-stock threshold');
+      await expect(quantityOnHandInput).toHaveValue('5');
+      await expect(reorderThresholdInput).toHaveValue('3');
+      await quantityOnHandInput.fill('7');
+      await reorderThresholdInput.fill('6');
 
       const policyResponsePromise = page.waitForResponse(
         (response) =>

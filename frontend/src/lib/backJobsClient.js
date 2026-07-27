@@ -187,6 +187,7 @@ export const createReworkJobOrderFromBackJob = async ({
   notes,
   items,
   assignedTechnicianIds,
+  assignments,
 }) => {
   if (!backJob?.id) {
     throw new ApiError('Load an approved back-job before creating rework.', 400, {
@@ -224,10 +225,15 @@ export const createReworkJobOrderFromBackJob = async ({
       serviceAdviserCode,
       notes: trimOrUndefined(notes),
       items: normalizedItems,
-      assignedTechnicianIds:
-        Array.isArray(assignedTechnicianIds) && assignedTechnicianIds.length > 0
-          ? assignedTechnicianIds
-          : undefined,
+      assignments:
+        Array.isArray(assignments) && assignments.length > 0
+          ? assignments
+          : Array.isArray(assignedTechnicianIds) && assignedTechnicianIds.length > 0
+            ? assignedTechnicianIds.map((technicianProfileId) => ({
+                technicianProfileId,
+                selectedSpecialty: 'general repair',
+              }))
+            : undefined,
     },
   });
 };

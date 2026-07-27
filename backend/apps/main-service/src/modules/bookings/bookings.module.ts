@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 
 import { AuthModule } from '@main-modules/auth/auth.module';
+import { JobOrdersModule } from '@main-modules/job-orders/job-orders.module';
 import { NotificationsModule } from '@main-modules/notifications/notifications.module';
 import { UsersModule } from '@main-modules/users/users.module';
 import { VehiclesModule } from '@main-modules/vehicles/vehicles.module';
@@ -12,7 +13,7 @@ import { BookingsService } from './services/bookings.service';
 import { BookingReservationPaymentGatewayService } from './services/booking-reservation-payment-gateway.service';
 
 @Module({
-  imports: [AuthModule, UsersModule, VehiclesModule, NotificationsModule],
+  imports: [AuthModule, UsersModule, VehiclesModule, NotificationsModule, forwardRef(() => JobOrdersModule)],
   controllers: [BookingsController],
   providers: [
     BookingsRepository,

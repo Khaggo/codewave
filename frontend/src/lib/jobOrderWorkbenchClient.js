@@ -1,5 +1,6 @@
 import { ApiError } from './authClient';
 import { normalizeOptionalScopeQuery } from './apiScopeCompatibility.mjs';
+import { requireWorkClaimHeaders } from './staffWorkQueueClient';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 
@@ -91,8 +92,10 @@ export const normalizeJobOrderForWorkbench = (jobOrder) => {
     itemCount: items.length,
     completedItemCount: items.filter((item) => item?.isCompleted).length,
     assignedTechnicianIds: assignments
-      .map((assignment) => assignment?.technicianUserId)
+      .map((assignment) => assignment?.technicianProfileId ?? assignment?.technicianUserId)
       .filter(Boolean),
+    currentWorkshopStage: jobOrder?.currentWorkshopStage ?? null,
+    workshopStageHistory: Array.isArray(jobOrder?.workshopStageHistory) ? jobOrder.workshopStageHistory : [],
     latestProgressEntry: progressEntries.length > 0 ? progressEntries[progressEntries.length - 1] : null,
     hasInvoiceRecord: Boolean(jobOrder.invoiceRecord),
   };
@@ -112,6 +115,8 @@ export const normalizeJobOrderWorkbenchSummary = (jobOrder) => ({
   assignedTechnicianIds: Array.isArray(jobOrder?.assignedTechnicianIds)
     ? jobOrder.assignedTechnicianIds.filter(Boolean)
     : [],
+  assignments: Array.isArray(jobOrder?.assignments) ? jobOrder.assignments : [],
+  currentWorkshopStage: jobOrder?.currentWorkshopStage ?? null,
   updatedAt: jobOrder?.updatedAt ?? null,
 });
 
@@ -124,7 +129,7 @@ export const getJobOrderAssetUrl = (path) => {
   return new URL(normalizedPath, `${API_BASE_URL}/`).toString();
 };
 
-export const listJobOrderWorkbenchSummaries = async ({ accessToken, month, scope }) => {
+export const listJobOrderWorkbenchSummaries = async ({ accessToken, month, scope, limit = 25 }) => {
   const params = new URLSearchParams();
   const normalizedMonth = trimOrUndefined(month);
   if (normalizedMonth) {
@@ -134,6 +139,7 @@ export const listJobOrderWorkbenchSummaries = async ({ accessToken, month, scope
   if (normalizedScope) {
     params.set('scope', normalizedScope);
   }
+  params.set('limit', String(Math.min(Math.max(Number(limit) || 25, 1), 50)));
 
   const path = params.size ? `/api/job-orders/workbench-summaries?${params.toString()}` : '/api/job-orders/workbench-summaries';
   const summaries = await request(path, {
@@ -186,6 +192,7 @@ export const listVehicleJobOrders = async ({ vehicleId, accessToken }) => {
 
 export const createJobOrderFromBooking = async ({
   accessToken,
+  claimId,
   sourceId,
   customerUserId,
   vehicleId,
@@ -194,6 +201,7 @@ export const createJobOrderFromBooking = async ({
   notes,
   items,
   assignedTechnicianIds,
+  assignments,
 }) => {
   const normalizedItems = Array.isArray(items)
     ? items
@@ -229,7 +237,10 @@ export const createJobOrderFromBooking = async ({
   return normalizeJobOrderForWorkbench(
     await request('/api/job-orders', {
       method: 'POST',
-      headers: buildAuthorizedHeaders(accessToken),
+      headers: {
+        ...buildAuthorizedHeaders(accessToken),
+        ...requireWorkClaimHeaders(claimId),
+      },
       body: {
         sourceType: 'booking',
         sourceId,
@@ -239,13 +250,31 @@ export const createJobOrderFromBooking = async ({
         serviceAdviserCode,
         notes: trimOrUndefined(notes),
         items: normalizedItems,
-        assignedTechnicianIds:
-          Array.isArray(assignedTechnicianIds) && assignedTechnicianIds.length > 0
-            ? assignedTechnicianIds
-            : undefined,
+        assignments:
+          Array.isArray(assignments) && assignments.length > 0
+            ? assignments
+            : Array.isArray(assignedTechnicianIds) && assignedTechnicianIds.length > 0
+              ? assignedTechnicianIds.map((technicianProfileId) => ({
+                  technicianProfileId,
+                  selectedSpecialty: 'general repair',
+                }))
+              : undefined,
       },
     }),
   );
+};
+
+export const sendBookingToWorkshop = async ({ bookingId, accessToken }) => {
+  if (!bookingId) {
+    throw new ApiError('Select a confirmed booking before sending work to the workshop.', 400, {
+      path: '/api/job-orders/booking-handoffs/:bookingId',
+    });
+  }
+
+  return request(`/api/job-orders/booking-handoffs/${bookingId}`, {
+    method: 'POST',
+    headers: buildAuthorizedHeaders(accessToken),
+  });
 };
 
 export const getJobOrderById = async ({ jobOrderId, accessToken }) => {
@@ -266,8 +295,10 @@ export const getJobOrderById = async ({ jobOrderId, accessToken }) => {
 export const replaceJobOrderAssignments = async ({
   jobOrderId,
   assignedTechnicianIds,
+  assignments,
   expectedUpdatedAt,
   accessToken,
+  claimId,
 }) => {
   if (!jobOrderId) {
     throw new ApiError('Load a job order before saving technician assignments.', 400, {
@@ -278,11 +309,50 @@ export const replaceJobOrderAssignments = async ({
   return normalizeJobOrderForWorkbench(
     await request(`/api/job-orders/${jobOrderId}/assignments`, {
       method: 'PATCH',
-      headers: buildAuthorizedHeaders(accessToken),
+      headers: {
+        ...buildAuthorizedHeaders(accessToken),
+        ...requireWorkClaimHeaders(claimId),
+      },
       body: {
-        assignedTechnicianIds: Array.isArray(assignedTechnicianIds)
-          ? [...new Set(assignedTechnicianIds.filter(Boolean))]
-          : [],
+        assignments:
+          Array.isArray(assignments) && assignments.length > 0
+            ? assignments
+            : Array.isArray(assignedTechnicianIds)
+              ? [...new Set(assignedTechnicianIds.filter(Boolean))].map((technicianProfileId) => ({
+                  technicianProfileId,
+                  selectedSpecialty: 'general repair',
+                }))
+              : [],
+        expectedUpdatedAt: trimOrUndefined(expectedUpdatedAt),
+      },
+    }),
+  );
+};
+
+export const updateJobOrderWorkshopStage = async ({
+  jobOrderId,
+  stage,
+  note,
+  expectedUpdatedAt,
+  accessToken,
+  claimId,
+}) => {
+  if (!jobOrderId) {
+    throw new ApiError('Load a job order before saving a workshop stage update.', 400, {
+      path: '/api/job-orders/:id/workshop-stage',
+    });
+  }
+
+  return normalizeJobOrderForWorkbench(
+    await request(`/api/job-orders/${jobOrderId}/workshop-stage`, {
+      method: 'PATCH',
+      headers: {
+        ...buildAuthorizedHeaders(accessToken),
+        ...requireWorkClaimHeaders(claimId),
+      },
+      body: {
+        stage,
+        note: trimOrUndefined(note),
         expectedUpdatedAt: trimOrUndefined(expectedUpdatedAt),
       },
     }),
@@ -295,6 +365,7 @@ export const updateJobOrderStatus = async ({
   reason,
   expectedUpdatedAt,
   accessToken,
+  claimId,
 }) => {
   if (!jobOrderId) {
     throw new ApiError('Load a job order before saving a status update.', 400, {
@@ -305,7 +376,10 @@ export const updateJobOrderStatus = async ({
   return normalizeJobOrderForWorkbench(
     await request(`/api/job-orders/${jobOrderId}/status`, {
       method: 'PATCH',
-      headers: buildAuthorizedHeaders(accessToken),
+      headers: {
+        ...buildAuthorizedHeaders(accessToken),
+        ...requireWorkClaimHeaders(claimId),
+      },
       body: {
         status,
         reason: trimOrUndefined(reason),
@@ -317,11 +391,13 @@ export const updateJobOrderStatus = async ({
 
 export const addJobOrderProgressEntry = async ({
   jobOrderId,
+  workItemId,
   entryType,
   message,
   completedItemIds,
   expectedUpdatedAt,
   accessToken,
+  claimId,
 }) => {
   if (!jobOrderId) {
     throw new ApiError('Load a job order before appending progress.', 400, {
@@ -332,8 +408,12 @@ export const addJobOrderProgressEntry = async ({
   return normalizeJobOrderForWorkbench(
     await request(`/api/job-orders/${jobOrderId}/progress`, {
       method: 'POST',
-      headers: buildAuthorizedHeaders(accessToken),
+      headers: {
+        ...buildAuthorizedHeaders(accessToken),
+        ...requireWorkClaimHeaders(claimId),
+      },
       body: {
+        workItemId: trimOrUndefined(workItemId),
         entryType,
         message: String(message ?? '').trim(),
         completedItemIds:
@@ -354,6 +434,7 @@ export const addJobOrderPhotoEvidence = async ({
   linkedEntityId,
   expectedUpdatedAt,
   accessToken,
+  claimId,
 }) => {
   if (!jobOrderId) {
     throw new ApiError('Load a job order before uploading photo evidence.', 400, {
@@ -389,7 +470,10 @@ export const addJobOrderPhotoEvidence = async ({
   return normalizeJobOrderForWorkbench(
     await request(`/api/job-orders/${jobOrderId}/photos/upload`, {
       method: 'POST',
-      headers: buildAuthorizedHeaders(accessToken),
+      headers: {
+        ...buildAuthorizedHeaders(accessToken),
+        ...requireWorkClaimHeaders(claimId),
+      },
       body: formData,
     }),
   );
@@ -404,6 +488,7 @@ export const finalizeJobOrder = async ({
   receivedAt,
   expectedUpdatedAt,
   accessToken,
+  claimId,
 }) => {
   if (!jobOrderId) {
     throw new ApiError('Load a job order before finalizing invoice-ready work.', 400, {
@@ -414,7 +499,10 @@ export const finalizeJobOrder = async ({
   return normalizeJobOrderForWorkbench(
     await request(`/api/job-orders/${jobOrderId}/finalize`, {
       method: 'POST',
-      headers: buildAuthorizedHeaders(accessToken),
+      headers: {
+        ...buildAuthorizedHeaders(accessToken),
+        ...requireWorkClaimHeaders(claimId),
+      },
       body: {
         summary: trimOrUndefined(summary),
         amountPaid: Number.isInteger(Number(amountPaid)) && Number(amountPaid) > 0 ? Number(amountPaid) : undefined,
@@ -435,6 +523,20 @@ export const exportJobOrderInvoicePdf = async ({ jobOrderId, accessToken }) => {
   }
 
   return request(`/api/job-orders/${jobOrderId}/invoice/pdf`, {
+    method: 'GET',
+    headers: buildAuthorizedHeaders(accessToken),
+    responseType: 'blob',
+  });
+};
+
+export const exportTechnicianChecklistPdf = async ({ jobOrderId, assignmentId, accessToken }) => {
+  if (!jobOrderId || !assignmentId) {
+    throw new ApiError('Load a saved assignment before exporting the technician checklist.', 400, {
+      path: '/api/job-orders/:id/assignments/:assignmentId/checklist.pdf',
+    });
+  }
+
+  return request(`/api/job-orders/${jobOrderId}/assignments/${assignmentId}/checklist.pdf`, {
     method: 'GET',
     headers: buildAuthorizedHeaders(accessToken),
     responseType: 'blob',

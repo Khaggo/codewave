@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { Pool } from 'pg';
 
+import { assertOperationalSafety, parseOperationalArgs } from './operational-safety';
+
 type StaffRole = 'technician' | 'head_technician' | 'service_adviser';
 type CustomerSeedAccount = {
   email: string;
@@ -248,6 +250,28 @@ async function upsertStaffAccount(input: {
 }
 
 async function main() {
+  const args = parseOperationalArgs(process.argv.slice(2));
+  const safety = assertOperationalSafety({
+    command: 'seed:booking-job-order-qa-accounts',
+    args,
+    databaseUrl,
+  });
+  if (!args.execute) {
+    console.log(
+      JSON.stringify(
+        {
+          safety,
+          customerCount: 1,
+          staffCount: 3,
+          vehicleCount: 1,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   const seededCustomer = await upsertCustomerAccount(qaAccounts.customer);
   const seededStaff = await Promise.all([
     upsertStaffAccount(qaAccounts.adviser),

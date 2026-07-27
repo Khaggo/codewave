@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 import { addFinding, annotateSeverity } from '../helpers/assertions.mjs';
 import {
   apiLogin,
+  createCustomerVehicle,
   ensureLocalQaRuntime,
   getPublicBookingAvailability,
   getPublicBookingCatalog,
@@ -32,6 +33,15 @@ test('customer mobile booking can submit more than one requested service in a si
 
   test.skip(activeServices.length < 2, 'Need at least two active booking services to prove multi-service booking.');
   expect(timeSlots.length, 'At least one active booking time slot is required for mobile booking proof.').toBeGreaterThan(0);
+  const runPlateToken = runMarker.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(-8);
+  const temporaryVehicle = await createCustomerVehicle(request, customerSession, {
+    plateNumber: `MS${runPlateToken}`,
+    make: 'Honda',
+    model: `City ${runPlateToken.slice(-4)}`,
+    year: 2023,
+    color: 'Gray',
+    notes: `${runMarker} temporary multi-service vehicle`,
+  });
 
   let selectedTimeSlot = null;
   let firstBookableDay = null;
@@ -40,8 +50,12 @@ test('customer mobile booking can submit more than one requested service in a si
     const availability = await getPublicBookingAvailability(request, {
       timeSlotId: timeSlot.id,
       accessToken: customerSession.accessToken,
+      vehicleId: temporaryVehicle.id,
     });
-    const bookableDay = (availability.days ?? []).find((day) => day?.isBookable);
+    const bookableDay = (availability.days ?? []).find((day) => {
+      const matchingSlot = (day?.slots ?? []).find((slot) => slot?.timeSlotId === timeSlot.id);
+      return day?.isBookable && matchingSlot?.isAvailable;
+    });
 
     if (bookableDay) {
       selectedTimeSlot = timeSlot;
@@ -63,6 +77,8 @@ test('customer mobile booking can submit more than one requested service in a si
     timeSlotLabel: selectedTimeSlot.label,
     scheduledDate: firstBookableDay.scheduledDate,
     noteMarker: runMarker,
+    vehiclePlateNumber: temporaryVehicle.plateNumber,
+    vehicleLabel: `${temporaryVehicle.year} ${temporaryVehicle.make} ${temporaryVehicle.model}`,
   });
 
   const createdBooking = await pollUntil(

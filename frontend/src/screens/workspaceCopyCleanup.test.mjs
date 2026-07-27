@@ -10,8 +10,9 @@ test('dashboard workspace copy is concise', () => {
 
   assert.ok(source.includes('Review assigned work and keep repair progress current.'))
   assert.ok(source.includes('Manage booking, intake, job-order, QA, and finance work from one workspace.'))
-  assert.ok(source.includes('Open a job order to update progress or review intake history.'))
-  assert.ok(source.includes('Keep workshop updates current for the rest of the staff.'))
+  assert.ok(source.includes('Workshop Work'))
+  assert.ok(source.includes('Open workspace'))
+  assert.ok(source.includes('Live work currently in your workshop queue.'))
 
   assert.ok(
     !source.includes(
@@ -44,24 +45,25 @@ test('intake, qa, and finance workspaces use short section descriptions', () => 
 
   assert.ok(qa.includes('Review release checks, record verdicts, and keep overrides auditable.'))
 
-  assert.ok(finance.includes('Review invoice-ready work, payment entries, and completion records.'))
-  assert.ok(finance.includes('Focus on records that are ready for payment or invoice follow-through.'))
-  assert.ok(finance.includes('Keep the active billing record in view before updating payment or completion follow-through.'))
+  assert.ok(finance.includes('Review finalized service invoices, payment entries, and completion records.'))
+  assert.ok(finance.includes('Find a service invoice'))
+  assert.ok(finance.includes('Keep one live summary in view while you work through invoice detail and payment history.'))
 })
 
 test('service flow workspaces use queue-first copy and remove bulky dashboard wording', () => {
+  const jobOrderBoard = read('frontend/src/screens/JobOrdersOperationsBoard.jsx')
   const jobOrders = read('frontend/src/screens/JobOrderWorkbench.js')
   const qa = read('frontend/src/screens/QAAuditWorkspace.js')
   const finance = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
 
-  assert.ok(jobOrders.includes('Review active work, update progress, and prepare jobs for QA.'))
-  assert.ok(jobOrders.includes('Focus on the live execution queue first.'))
+  assert.ok(jobOrderBoard.includes('Claim work, monitor the workshop queue, and open one focused job workspace.'))
+  assert.ok(jobOrders.includes('Track each service, blocker, update, and required evidence item.'))
 
   assert.ok(qa.includes('Review release checks, record verdicts, and keep overrides auditable.'))
-  assert.ok(qa.includes('Focus on the jobs waiting for release review.'))
+  assert.ok(qa.includes('Complete your current review, then take next; teammates can review other records in parallel.'))
 
-  assert.ok(finance.includes('Review invoice-ready work, payment entries, and completion records.'))
-  assert.ok(finance.includes('Focus on records that are ready for payment or invoice follow-through.'))
+  assert.ok(finance.includes('Review finalized service invoices, payment entries, and completion records.'))
+  assert.ok(finance.includes('Find a service invoice'))
 
   assert.ok(!jobOrders.includes('Choose a schedule date and refresh to load confirmed bookings.'))
   assert.ok(
@@ -72,18 +74,20 @@ test('service flow workspaces use queue-first copy and remove bulky dashboard wo
 })
 
 test('service workspaces use concise queue-first section labels', () => {
+  const jobOrderBoard = read('frontend/src/screens/JobOrdersOperationsBoard.jsx')
   const jobOrders = read('frontend/src/screens/JobOrderWorkbench.js')
   const qa = read('frontend/src/screens/QAAuditWorkspace.js')
   const finance = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
 
-  assert.ok(jobOrders.includes('Job Order Queue'))
-  assert.ok(jobOrders.includes('Selected Job Order'))
+  assert.ok(jobOrderBoard.includes('Workshop queue'))
+  assert.ok(jobOrders.includes('Service Progress'))
+  assert.ok(jobOrders.includes('QA handoff'))
 
   assert.ok(qa.includes('QA Queue'))
   assert.ok(qa.includes('Selected Audit'))
 
-  assert.ok(finance.includes('Invoice & Order Queue'))
-  assert.ok(finance.includes('Selected Record'))
+  assert.ok(finance.includes('Service Invoices'))
+  assert.ok(finance.includes('Invoice Detail'))
 })
 
 test('qa audit workspace keeps release queue ahead of findings and verdict actions', () => {
@@ -103,34 +107,22 @@ test('qa audit workspace keeps release queue ahead of findings and verdict actio
   assert.ok(blockingIndex < verdictIndex)
 })
 
-test('job orders workspace keeps queue before detail actions', () => {
-  const source = read('frontend/src/screens/JobOrderWorkbench.js')
+test('job orders separate the team queue from the focused service workspace', () => {
+  const board = read('frontend/src/screens/JobOrdersOperationsBoard.jsx')
+  const workspace = read('frontend/src/screens/JobOrderWorkbench.js')
 
-  const queueIndex = source.indexOf('<p className="card-title">Job Order Queue</p>')
-  const detailIndex = source.indexOf('<p className="card-title">Selected Job Order</p>', queueIndex + 1)
-  const assignmentsIndex = source.indexOf('<p className="card-title">Assignments</p>', detailIndex + 1)
-  const progressIndex = source.indexOf('<p className="card-title">Progress Updates</p>', assignmentsIndex + 1)
-  const evidenceIndex = source.indexOf('<p className="card-title">Evidence</p>', progressIndex + 1)
-  const finalizeIndex = source.indexOf('<p className="card-title">Finalize</p>', evidenceIndex + 1)
-
-  assert.notEqual(queueIndex, -1)
-  assert.notEqual(detailIndex, -1)
-  assert.notEqual(assignmentsIndex, -1)
-  assert.notEqual(progressIndex, -1)
-  assert.notEqual(evidenceIndex, -1)
-  assert.notEqual(finalizeIndex, -1)
-  assert.ok(queueIndex < detailIndex)
-  assert.ok(detailIndex < assignmentsIndex)
-  assert.ok(assignmentsIndex < progressIndex)
-  assert.ok(progressIndex < evidenceIndex)
-  assert.ok(evidenceIndex < finalizeIndex)
+  assert.ok(board.includes('Workshop queue'))
+  assert.ok(board.includes('Open workspace'))
+  assert.ok(workspace.includes('Service Progress'))
+  assert.ok(workspace.includes('>Services</p>'))
+  assert.ok(workspace.includes('QA handoff'))
 })
 
 test('invoice workspace keeps record queue before payment details', () => {
   const source = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
 
-  const queueIndex = source.indexOf('Invoice & Order Queue')
-  const detailIndex = source.indexOf('Selected Record')
+  const queueIndex = source.indexOf('Service Invoices')
+  const detailIndex = source.indexOf('Invoice Detail')
   const paymentIndex = source.indexOf('Payment Entries')
 
   assert.notEqual(queueIndex, -1)
@@ -149,7 +141,7 @@ test('intake workspace source keeps the guided front-desk section order', () => 
     'title="Requirements"',
     'title="Arrival Inspection"',
     '<p className="card-title">Inspection History</p>',
-    '<p className="card-title">Next Step Actions</p>',
+    '<p className="card-title">Selected Inspection Detail</p>',
   ]
   const indices = sectionMarkers.map((marker) => intakeScreen.indexOf(marker))
 
@@ -179,32 +171,31 @@ test('booking-service and inventory workspaces use one-sentence descriptions', (
   assert.ok(booking.includes('Create a category before publishing services.'))
   assert.ok(booking.includes('Publish services with valid category records only.'))
 
-  assert.ok(inventory.includes('Manage stock levels, thresholds, and item availability for catalog products.'))
-  assert.ok(inventory.includes('Search existing catalog products and act on the live stock queue.'))
-  assert.ok(inventory.includes('Review the selected product before updating stock or threshold settings.'))
-  assert.ok(inventory.includes('Record a live stock change for the selected product.'))
-  assert.ok(inventory.includes('Review the latest stock changes for this product.'))
+  assert.ok(inventory.includes('Create inventory-backed products, adjust stock, and maintain low-stock thresholds from one live workspace.'))
+  assert.ok(inventory.includes('Create items, reconcile stock counts, and maintain live reorder thresholds without leaving this workspace.'))
+  assert.ok(inventory.includes('Pick a live product from the directory below, then update its threshold or adjust quantity.'))
+  assert.ok(inventory.includes('Live inventory directory'))
+  assert.ok(inventory.includes('Search the linked product set and review visibility, quantity, and threshold state at a glance.'))
 })
 
 test('catalog admin uses concise operational copy', () => {
   const catalog = read('frontend/src/screens/ShopProductAdmin.js')
 
-  assert.ok(catalog.includes('Publish and manage customer-visible marketplace products.'))
+  assert.ok(catalog.includes('Manage live ecommerce categories and product listings from the actual ecommerce runtime.'))
 })
 
-test('catalog admin keeps published products ahead of the editor form', () => {
+test('catalog admin keeps live products ahead of publishing and editor controls', () => {
   const catalog = read('frontend/src/screens/ShopProductAdmin.js')
 
-  const catalogListIndex = catalog.indexOf('title="Published Products"')
-  const catalogDetailIndex = catalog.indexOf('title="Selected Product"')
+  const catalogListIndex = catalog.indexOf('title="Catalog Products"')
   const catalogEditorIndex = catalog.indexOf('title="Publishing Controls"')
+  const productModalIndex = catalog.indexOf('{editorProductId ? (')
 
   assert.notEqual(catalogListIndex, -1)
-  assert.notEqual(catalogDetailIndex, -1)
   assert.notEqual(catalogEditorIndex, -1)
+  assert.notEqual(productModalIndex, -1)
   assert.ok(catalogListIndex < catalogEditorIndex)
-  assert.ok(catalogListIndex < catalogDetailIndex)
-  assert.ok(catalogDetailIndex < catalogEditorIndex)
+  assert.ok(catalogEditorIndex < productModalIndex)
 })
 
 test('catalog admin uses marketplace publishing header copy', () => {
@@ -212,19 +203,20 @@ test('catalog admin uses marketplace publishing header copy', () => {
 
   assert.ok(catalog.includes('eyebrow="Marketplace publishing"'))
   assert.ok(catalog.includes('title="Catalog Admin"'))
-  assert.ok(catalog.includes('Publish and manage customer-visible marketplace products.'))
-  assert.ok(catalog.includes('Search published products'))
-  assert.ok(catalog.includes('Choose a product from the list to review publishing details.'))
+  assert.ok(catalog.includes('Manage live ecommerce categories and product listings from the actual ecommerce runtime.'))
+  assert.ok(catalog.includes('Search live products'))
+  assert.ok(catalog.includes('open a listing for editing.'))
 })
 
 test('catalog admin keeps stock ownership in inventory', () => {
   const catalog = read('frontend/src/screens/ShopProductAdmin.js')
+  const inventory = read('frontend/src/screens/InventoryWorkspace.js')
 
-  assert.ok(catalog.includes('Manage Stock'))
-  assert.ok(catalog.includes('Inventory owns stock updates.'))
-  assert.ok(catalog.includes('Set stock later from Inventory.'))
-  assert.ok(!catalog.includes('catalog-product-stock'))
-  assert.ok(!catalog.includes('edit-product-stock'))
+  assert.ok(catalog.includes('createStaffInventoryProduct'))
+  assert.ok(!catalog.includes('createStaffInventoryAdjustment'))
+  assert.ok(!catalog.includes('updateStaffInventoryPolicy'))
+  assert.ok(inventory.includes('Stock adjustment'))
+  assert.ok(inventory.includes('Save stock policy'))
 })
 
 test('catalog admin keeps modal editor state separate from selected detail state', () => {
@@ -233,42 +225,40 @@ test('catalog admin keeps modal editor state separate from selected detail state
   assert.ok(catalog.includes('const [editorProductId, setEditorProductId] = useState(null)'))
   assert.ok(catalog.includes('const editorProduct = useMemo('))
   assert.ok(catalog.includes('if (!editorProduct) return'))
-  assert.ok(catalog.includes('{editorProduct ? ('))
+  assert.ok(catalog.includes('{editorProductId ? ('))
 })
 
 test('inventory uses concise operational copy', () => {
   const inventory = read('frontend/src/screens/InventoryWorkspace.js')
 
-  assert.ok(inventory.includes('Manage stock levels, thresholds, and item availability for catalog products.'))
+  assert.ok(inventory.includes('Create inventory-backed products, adjust stock, and maintain low-stock thresholds from one live workspace.'))
 })
 
 test('staff accounts uses concise operational copy', () => {
   const staff = read('frontend/src/components/StaffProvisioningPanel.js')
 
-  assert.ok(staff.includes('Create accounts, manage access, and keep operations staffing usable.'))
+  assert.ok(staff.includes('Create service-adviser and admin identities from one protected workspace.'))
+  assert.ok(staff.includes('activate or deactivate access without deleting its history.'))
 })
 
 test('analytics uses concise operational copy', () => {
   const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
 
-  assert.ok(analytics.includes("Review today's workload, bottlenecks, and live operational signals."))
+  assert.ok(analytics.includes('Inspect read-only analytics snapshots across operations and support domains.'))
 })
 
-test('inventory keeps product list before selected detail', () => {
+test('inventory keeps live controls ahead of the searchable stock directory', () => {
   const inventory = read('frontend/src/screens/InventoryWorkspace.js')
 
-  const inventoryListIndex = inventory.indexOf('aria-label="Inventory stock table"')
-  const inventoryDetailIndex = inventory.indexOf('title="Selected Product"')
-  const adjustmentIndex = inventory.indexOf('title="Stock Adjustment"')
-  const historyIndex = inventory.indexOf('title="Adjustment History"')
+  const controlIndex = inventory.indexOf('title="Inventory Control Center"')
+  const directoryIndex = inventory.indexOf('title="Live inventory directory"')
+  const inventoryListIndex = inventory.indexOf('aria-label="Inventory product table"')
 
+  assert.notEqual(controlIndex, -1)
+  assert.notEqual(directoryIndex, -1)
   assert.notEqual(inventoryListIndex, -1)
-  assert.notEqual(inventoryDetailIndex, -1)
-  assert.notEqual(adjustmentIndex, -1)
-  assert.notEqual(historyIndex, -1)
-  assert.ok(inventoryListIndex < inventoryDetailIndex)
-  assert.ok(inventoryDetailIndex < adjustmentIndex)
-  assert.ok(adjustmentIndex < historyIndex)
+  assert.ok(controlIndex < directoryIndex)
+  assert.ok(directoryIndex < inventoryListIndex)
 })
 
 test('inventory workspace removes planned glossary language from the main surface', () => {
@@ -284,18 +274,21 @@ test('inventory workspace removes planned glossary language from the main surfac
   assert.ok(!inventory.includes('backlog'))
 })
 
-test('staff accounts keeps the managed directory ahead of provisioning controls', () => {
+test('staff accounts presents provisioning, status control, then the managed directory', () => {
   const staff = read('frontend/src/components/StaffProvisioningPanel.js')
 
-  const staffDirectoryIndex = staff.indexOf('Managed Account Directory')
   const staffProvisioningIndex = staff.indexOf('Provision Operations Accounts')
+  const staffStatusIndex = staff.indexOf('Account Status Control')
+  const staffDirectoryIndex = staff.indexOf('Managed Account Directory')
 
-  assert.notEqual(staffDirectoryIndex, -1)
   assert.notEqual(staffProvisioningIndex, -1)
-  assert.ok(staffDirectoryIndex < staffProvisioningIndex)
+  assert.notEqual(staffStatusIndex, -1)
+  assert.notEqual(staffDirectoryIndex, -1)
+  assert.ok(staffProvisioningIndex < staffStatusIndex)
+  assert.ok(staffStatusIndex < staffDirectoryIndex)
 })
 
-test('analytics keeps current operations sections ahead of dashboard summaries', () => {
+test('analytics keeps derived summaries ahead of the detailed operations mix', () => {
   const analytics = read('frontend/src/screens/AdminAnalyticsWorkspace.js')
 
   const analyticsOperationsIndex = analytics.indexOf('title="Booking Status Mix"')
@@ -303,7 +296,7 @@ test('analytics keeps current operations sections ahead of dashboard summaries',
 
   assert.notEqual(analyticsOperationsIndex, -1)
   assert.notEqual(analyticsDashboardIndex, -1)
-  assert.ok(analyticsOperationsIndex < analyticsDashboardIndex)
+  assert.ok(analyticsDashboardIndex < analyticsOperationsIndex)
 })
 
 test('analytics and loyalty workspaces stay concise', () => {

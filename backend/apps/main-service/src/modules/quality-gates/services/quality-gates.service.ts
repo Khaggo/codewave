@@ -1,4 +1,9 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
@@ -6,6 +11,7 @@ import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jo
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
 import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
+import { StaffWorkQueuesService } from '@main-modules/staff-work-queues/services/staff-work-queues.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import {
@@ -29,7 +35,7 @@ import {
 } from './quality-gate-semantic-auditor.service';
 
 type QualityGateStatus = (typeof qualityGateStatusEnum.enumValues)[number];
-type QualityGateActorRole = 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
+type QualityGateActorRole = 'service_adviser' | 'super_admin';
 type QualityGateActor = {
   userId: string;
   role: string;
@@ -54,6 +60,7 @@ export class QualityGatesService {
     private readonly eventBus: AutocareEventBusService,
     private readonly qualityGateDiscrepancyEngine: QualityGateDiscrepancyEngineService,
     private readonly qualityGateSemanticAuditor: QualityGateSemanticAuditorService,
+    private readonly staffWorkQueuesService: StaffWorkQueuesService,
     @InjectQueue(AI_WORKER_QUEUE_NAME)
     private readonly aiWorkerQueue: Queue,
   ) {}
@@ -66,14 +73,6 @@ export class QualityGatesService {
       throw new ConflictException('Quality gate can only start when the job order is ready for QA');
     }
 
-    const availableHeadTechnicians =
-      typeof this.usersService.listStaffAccounts === 'function'
-        ? (await this.usersService.listStaffAccounts()).filter(
-            (account) => account.isActive && account.role === 'head_technician',
-          )
-        : [];
-    const assignedHeadTechnicianUserId = availableHeadTechnicians[0]?.id ?? null;
-
     const requestedAt = new Date().toISOString();
     const jobId = toBullSafeJobId(`quality-gate:${jobOrderId}:${requestedAt}`);
     const queuedAuditJob = createQueuedAiJobMetadata({
@@ -85,9 +84,6 @@ export class QualityGatesService {
     });
 
     const gate = await this.qualityGatesRepository.upsertPending(jobOrderId, queuedAuditJob);
-    if (assignedHeadTechnicianUserId) {
-      await this.qualityGatesRepository.assignHeadTechnician(jobOrderId, assignedHeadTechnicianUserId);
-    }
 
     try {
       await this.aiWorkerQueue.add(
@@ -131,7 +127,7 @@ export class QualityGatesService {
         findings: [
           this.buildAuditInfrastructureFailureFinding(
             'qa_audit_queue_unavailable',
-            'Quality pre-check could not be queued, so head-technician manual review is required.',
+            'Quality pre-check could not be queued, so manual adviser review is required.',
           ),
         ],
       });
@@ -173,7 +169,7 @@ export class QualityGatesService {
         gate: 'foundation',
         severity: 'warning',
         code: 'missing_progress_evidence',
-        message: 'No technician progress evidence has been recorded for this job order yet.',
+        message: 'No adviser-owned workshop progress evidence has been recorded for this job order yet.',
       });
     }
 
@@ -242,19 +238,27 @@ export class QualityGatesService {
     }
 
     const status = gate.status as QualityGateStatus;
-    if (!['passed', 'overridden'].includes(status)) {
+    if (
+      !['passed', 'overridden'].includes(status)
+      || gate.reviewerVerdict !== 'passed'
+    ) {
       const verdict =
         gate.reviewerVerdict === 'blocked'
-          ? 'Finalization blocked: head-technician verdict is blocked'
+          ? 'Finalization blocked: workshop QA verdict is blocked'
           : 'Finalization blocked: QA verdict is missing';
       throw new ConflictException(verdict);
     }
   }
 
-  async recordReviewerVerdict(jobOrderId: string, payload: RecordQualityGateVerdictDto, actor: QualityGateActor) {
+  async recordReviewerVerdict(
+    jobOrderId: string,
+    payload: RecordQualityGateVerdictDto,
+    actor: QualityGateActor,
+    expectedVersion?: number,
+  ) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
-    if (!['head_technician', 'super_admin'].includes(resolvedActor.role)) {
-      throw new ForbiddenException('Only head technicians or super admins can record QA verdicts');
+    if (!['service_adviser', 'super_admin'].includes(resolvedActor.role)) {
+      throw new ForbiddenException('Only service advisers or super admins can record QA verdicts');
     }
 
     const jobOrder = await this.jobOrdersRepository.findById(jobOrderId);
@@ -267,6 +271,7 @@ export class QualityGatesService {
       reviewerUserId: resolvedActor.id,
       reviewerVerdict: payload.verdict,
       reviewerNote: payload.note ?? null,
+      expectedVersion,
     });
 
     if (payload.verdict === 'blocked' && jobOrder.status === 'ready_for_qa') {
@@ -275,6 +280,13 @@ export class QualityGatesService {
         reason: payload.note ?? 'QA reviewer blocked release and returned work to remediation.',
       });
     }
+
+    await this.staffWorkQueuesService.completeClaim(
+      'qa',
+      'job_order',
+      jobOrderId,
+      resolvedActor.id,
+    );
 
     return updatedGate;
   }
@@ -352,12 +364,12 @@ export class QualityGatesService {
       riskScore: 70,
       blockingReason: failureMessage,
       auditJob,
-      findings: [
-        this.buildAuditInfrastructureFailureFinding(
-          'qa_audit_worker_failed',
-          'Quality pre-check worker failed before completion, so manual head-technician review is required.',
-        ),
-      ],
+        findings: [
+          this.buildAuditInfrastructureFailureFinding(
+            'qa_audit_worker_failed',
+            'Quality pre-check worker failed before completion, so manual adviser review is required.',
+          ),
+        ],
     });
   }
 
@@ -562,18 +574,11 @@ export class QualityGatesService {
     jobOrder: Awaited<ReturnType<JobOrdersRepository['findById']>>,
     actor: { userId: string; role: QualityGateActorRole },
   ) {
-    if (['head_technician', 'service_adviser', 'super_admin'].includes(actor.role)) {
+    if (['service_adviser', 'super_admin'].includes(actor.role)) {
       return;
     }
 
-    const assignments = jobOrder.assignments as Array<{ technicianUserId: string }>;
-    const isAssignedTechnician = assignments.some(
-      (assignment) => assignment.technicianUserId === actor.userId,
-    );
-
-    if (!isAssignedTechnician) {
-      throw new ForbiddenException('Only assigned technicians or staff reviewers can access this quality gate');
-    }
+    throw new ForbiddenException('Only service advisers or super admins can access this quality gate');
   }
 
   private async assertStaffActor(userId: string) {
@@ -582,8 +587,8 @@ export class QualityGatesService {
       throw new NotFoundException('Quality-gate actor not found');
     }
 
-    if (!['technician', 'head_technician', 'service_adviser', 'super_admin'].includes(user.role)) {
-      throw new ForbiddenException('Only staff accounts can access quality gates');
+    if (!['service_adviser', 'super_admin'].includes(user.role)) {
+      throw new ForbiddenException('Only service advisers or super admins can access quality gates');
     }
 
     return user;

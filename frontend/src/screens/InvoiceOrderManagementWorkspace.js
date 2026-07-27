@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Clock3,
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 
 import PageHeader from '@/components/ui/PageHeader'
+import ServiceLifecycleHeader from '@/components/ServiceLifecycleHeader'
 import { ApiError, listAdminCustomers } from '@/lib/authClient'
 import { getInvoiceAgingAnalytics } from '@/lib/analyticsAdminClient'
 import { getJobOrderInvoiceLookup, listJobOrderWorkbenchSummaries } from '@/lib/jobOrderWorkbenchClient'
@@ -263,6 +264,7 @@ export default function InvoiceOrderManagementWorkspace() {
   const canRead = canStaffReadInvoiceOrderManagement(user)
   const [activeMode, setActiveMode] = useState('service')
   const [jobOrderId, setJobOrderId] = useState('')
+  const [serviceQueueSearch, setServiceQueueSearch] = useState('')
   const [jobOrderOptions, setJobOrderOptions] = useState([])
   const [customerOptions, setCustomerOptions] = useState([])
   const [selectedCustomerUserId, setSelectedCustomerUserId] = useState('')
@@ -290,6 +292,27 @@ export default function InvoiceOrderManagementWorkspace() {
     message: '',
     snapshot: null,
   })
+  const autoLoadedServiceIdRef = useRef('')
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const params = new URLSearchParams(window.location.search)
+    const routeJobOrderId = params.get('jobOrderId')
+    const routeOrderId = params.get('orderId')
+    const routeCustomerUserId = params.get('customerUserId')
+
+    if (routeJobOrderId) {
+      setActiveMode('service')
+      setJobOrderId(routeJobOrderId)
+    } else if (routeOrderId || routeCustomerUserId) {
+      setActiveMode('order')
+      setEcommerceOrderId(routeOrderId ?? '')
+      setSelectedCustomerUserId(routeCustomerUserId ?? '')
+    }
+  }, [])
 
   const loadInvoiceAging = useCallback(async () => {
     if (!user?.accessToken || !canRead) {
@@ -345,6 +368,7 @@ export default function InvoiceOrderManagementWorkspace() {
       listJobOrderWorkbenchSummaries({
         accessToken: user.accessToken,
         scope: 'history',
+        limit: 50,
       }),
       listAdminCustomers(user.accessToken),
     ])
@@ -372,7 +396,7 @@ export default function InvoiceOrderManagementWorkspace() {
       .catch(() => setEcommerceOrderOptions([]))
   }, [canRead, selectedCustomerUserId, user?.accessToken])
 
-  const handleLoadServiceInvoice = async () => {
+  const handleLoadServiceInvoice = useCallback(async () => {
     if (!user?.accessToken) {
       setJobOrderState({
         status: 'invoice_order_unauthorized',
@@ -404,8 +428,8 @@ export default function InvoiceOrderManagementWorkspace() {
         message: invoiceRecord
           ? 'Service record loaded for invoice follow-through.'
           : jobOrder
-            ? 'Job order loaded, but no invoice-ready record is attached yet.'
-            : 'Service invoice snapshot is unavailable for the selected job order.',
+            ? 'This job order has not been finalized into an invoice yet.'
+            : 'The service invoice is unavailable for the selected job order.',
         jobOrder: jobOrder
           ? {
               ...jobOrder,
@@ -422,7 +446,21 @@ export default function InvoiceOrderManagementWorkspace() {
         jobOrder: null,
       })
     }
-  }
+  }, [canRead, jobOrderId, user?.accessToken])
+
+  useEffect(() => {
+    if (
+      !jobOrderId ||
+      !user?.accessToken ||
+      !canRead ||
+      autoLoadedServiceIdRef.current === jobOrderId
+    ) {
+      return
+    }
+
+    autoLoadedServiceIdRef.current = jobOrderId
+    void handleLoadServiceInvoice()
+  }, [canRead, handleLoadServiceInvoice, jobOrderId, user?.accessToken])
 
   const handleLoadEcommerceOrder = async () => {
     if (!user?.accessToken) {
@@ -476,6 +514,18 @@ export default function InvoiceOrderManagementWorkspace() {
   }
 
   const serviceInvoice = jobOrderState.jobOrder?.invoiceRecord ?? null
+  const filteredServiceJobOrders = useMemo(() => {
+    const normalizedSearch = serviceQueueSearch.trim().toLowerCase()
+    if (!normalizedSearch) {
+      return jobOrderOptions
+    }
+
+    return jobOrderOptions.filter((jobOrder) =>
+      `${formatJobOrderReference(jobOrder)} ${formatLabel(jobOrder.status)} ${jobOrder.workDate ?? ''}`
+        .toLowerCase()
+        .includes(normalizedSearch),
+    )
+  }, [jobOrderOptions, serviceQueueSearch])
   const invoiceAging = agingState.snapshot
   const agingBuckets = invoiceAging?.agingBuckets ?? []
   const trackedInvoicePolicies = invoiceAging?.trackedInvoicePolicies ?? []
@@ -493,11 +543,11 @@ export default function InvoiceOrderManagementWorkspace() {
       {
         key: 'service',
         icon: Wrench,
-        label: 'Service invoice-ready',
+        label: 'Service invoice',
         status: jobOrderLoadLabel,
         body: serviceInvoice
           ? `${serviceInvoice.invoiceReference} is ready for payment follow-through.`
-          : jobOrderState.message || 'Load a finalized job order to review its invoice-ready record.',
+          : jobOrderState.message || 'Load a finalized job order to review its invoice.',
       },
       {
         key: 'order',
@@ -668,7 +718,7 @@ export default function InvoiceOrderManagementWorkspace() {
       <PageHeader
         eyebrow="Financial Operations"
         title="Invoices & Orders"
-        description="Review invoice-ready work, payment entries, and completion records."
+        description="Review finalized service invoices, payment entries, and completion records."
         actions={(
           <button
             type="button"
@@ -681,6 +731,55 @@ export default function InvoiceOrderManagementWorkspace() {
           </button>
         )}
       />
+
+      {activeMode === 'service' ? (
+        <ServiceLifecycleHeader
+          currentStep={
+            serviceInvoice?.paymentStatus === 'paid'
+              ? 'complete'
+              : jobOrderState.jobOrder && jobOrderState.jobOrder.status !== 'finalized'
+                ? jobOrderState.jobOrder.status === 'ready_for_qa'
+                  ? 'qa'
+                  : 'workshop'
+                : 'payment'
+          }
+          reference={
+            jobOrderState.jobOrder
+              ? formatJobOrderReference(jobOrderState.jobOrder)
+              : 'Select a service invoice'
+          }
+          customer={jobOrderState.jobOrder?.customerDisplayName ?? jobOrderState.jobOrder?.customerName}
+          vehicle={jobOrderState.jobOrder?.vehicleDisplayName ?? jobOrderState.jobOrder?.plateNumber}
+          status={
+            serviceInvoice
+              ? formatLabel(serviceInvoice.paymentStatus)
+              : jobOrderState.jobOrder
+                ? formatLabel(jobOrderState.jobOrder.status)
+                : 'Awaiting selection'
+          }
+          owner="Service Adviser"
+          blocker={
+            jobOrderState.jobOrder && !serviceInvoice
+              ? 'Finalize the selected job order before payment can continue.'
+              : null
+          }
+          nextAction={
+            serviceInvoice?.paymentStatus === 'paid'
+              ? 'Review or export the completed invoice record.'
+              : serviceInvoice
+                ? 'Record or verify payment from the selected job order.'
+                : jobOrderState.jobOrder
+                  ? 'Return to the job order and complete its remaining release steps.'
+                  : 'Choose a finalized service record from the queue.'
+          }
+          actionLabel={jobOrderState.jobOrder?.id ? 'Open job workspace' : null}
+          actionHref={
+            jobOrderState.jobOrder?.id
+              ? `/admin/job-orders/${encodeURIComponent(jobOrderState.jobOrder.id)}`
+              : null
+          }
+        />
+      ) : null}
 
       <section className="ops-control-strip">
         <div className="space-y-4">
@@ -709,13 +808,25 @@ export default function InvoiceOrderManagementWorkspace() {
           </div>
 
           {activeMode === 'service' ? (
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="space-y-3">
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
               <label>
-                <span className="label">Service record</span>
+                <span className="label">Find a service invoice</span>
+                <input
+                  type="search"
+                  value={serviceQueueSearch}
+                  onChange={(event) => setServiceQueueSearch(event.target.value)}
+                  className="input"
+                  placeholder="Search by booking, job order, or work date"
+                />
+              </label>
+              <label className="sr-only">
+                <span>Service record</span>
                 <select
                   value={jobOrderId}
                   onChange={(event) => setJobOrderId(event.target.value)}
-                  className="select"
+                  className="sr-only"
+                  aria-label="Service record"
                 >
                   <option value="">Choose a finalized job order</option>
                   {jobOrderOptions.map((jobOrder) => (
@@ -738,6 +849,36 @@ export default function InvoiceOrderManagementWorkspace() {
                 )}
                 Load Service
               </button>
+              </div>
+
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {filteredServiceJobOrders.slice(0, 12).map((jobOrder) => {
+                  const isSelected = jobOrderId === jobOrder.id
+                  return (
+                    <button
+                      key={jobOrder.id}
+                      type="button"
+                      onClick={() => setJobOrderId(jobOrder.id)}
+                      className={`rounded-lg border p-3 text-left transition-colors ${
+                        isSelected
+                          ? 'border-brand-orange bg-brand-orange/10'
+                          : 'border-surface-border bg-surface-card hover:border-brand-orange/40'
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-ink-primary">{formatJobOrderReference(jobOrder)}</p>
+                      <p className="mt-1 text-xs text-ink-muted">
+                        {formatLabel(jobOrder.status)} / {jobOrder.workDate ?? 'No work date'}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+              {filteredServiceJobOrders.length === 0 ? (
+                <div className="empty-panel">
+                  <p className="text-sm font-semibold text-ink-primary">No service invoices match this search</p>
+                  <p className="mt-2 text-sm text-ink-secondary">Clear the search or refresh the workspace.</p>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_auto]">
@@ -885,7 +1026,7 @@ export default function InvoiceOrderManagementWorkspace() {
                 </div>
               ) : (
                 <p className="mt-3 text-sm leading-6 text-ink-muted">
-                  Load a finalized job order to review the service invoice-ready record.
+                  Load a finalized job order to review its service invoice.
                 </p>
               )}
             </div>

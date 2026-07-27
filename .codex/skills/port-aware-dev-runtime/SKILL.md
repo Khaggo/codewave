@@ -38,41 +38,48 @@ Get-Process -Id <PID> -ErrorAction SilentlyContinue | Select-Object Id,ProcessNa
 Invoke-WebRequest -Uri 'http://127.0.0.1:3000/api/health' -UseBasicParsing
 ```
 
-4. If the needed port is already healthy, do not start another server. Tell the user which port is active and continue debugging against it.
+4. Run `npm run runtime:status` from the repository root to distinguish a managed listener from an external or stale listener.
+5. If the needed port is already healthy, do not start another server. Tell the user which port is active and continue debugging against it.
 
-5. If the needed port is active but wrong, stale, or explicitly requested to be closed, stop only that specific PID. Do not kill broad `node` process groups.
+6. Use `npm run runtime:restart -- <runtime-name>` only for manager-owned runtimes. The manager refuses to terminate unknown listeners.
 
-6. If the needed port is empty, start only the missing runtime and capture its PID/logs under that app's `.runtime/` folder.
+7. If the needed port is empty, use the repo-root `dev:*` command. It starts detached, returns immediately, and writes ownership/log data under the application's `.runtime/` directory.
+8. When the next operation requires a ready service, run `npm run runtime:wait -- <runtime-name>`. This readiness check is explicitly bounded and reports the relevant log tail on failure.
 
 ## Safe Starts
 
 - Backend:
 
 ```powershell
-cd D:\mainprojects\codewave\backend
+cd D:\mainprojects\codewave
 npm run dev:main
 ```
 
 - Staff/admin web:
 
 ```powershell
-cd D:\mainprojects\codewave\frontend
-npm run dev
+cd D:\mainprojects\codewave
+npm run dev:web
 ```
 
 - Expo Go on phone:
 
 ```powershell
-cd D:\mainprojects\codewave\mobile
-npx expo start --lan --clear
+cd D:\mainprojects\codewave
+npm run dev:mobile
 ```
 
 - Expo web debug:
 
 ```powershell
-cd D:\mainprojects\codewave\mobile
-npx expo start --web --port 8090 --clear
+cd D:\mainprojects\codewave
+npm run dev:mobile:web
 ```
+
+Do not use PowerShell `Start-Process`, raw app-level `dev` commands, or ad hoc detached
+Node launches for these runtimes. Codex Windows sessions can contain both `Path` and
+`PATH`; the runtime manager normalizes that environment and avoids inherited terminal
+handles.
 
 ## Repo-Specific Reminders
 

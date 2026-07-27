@@ -16,7 +16,27 @@ export class JobOrderProgressEntryResponseDto {
   @ApiProperty({
     example: '61539ebf-e98a-45da-aa0d-a19acded1d7f',
   })
-  technicianUserId!: string;
+  technicianUserId?: string | null;
+
+  @ApiPropertyOptional({
+    example: '5d9be480-c0be-4cc2-b89d-5c2ad7fc1c4d',
+  })
+  recordedByUserId?: string | null;
+
+  @ApiPropertyOptional({
+    example: '61539ebf-e98a-45da-aa0d-a19acded1d7f',
+  })
+  technicianProfileId?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'diagnosis',
+  })
+  workshopStage?: string | null;
+
+  @ApiPropertyOptional({
+    example: '8bcb97fe-0aa4-4c68-ae49-2f58c4526529',
+  })
+  workItemId?: string | null;
 
   @ApiProperty({
     enum: jobOrderProgressEntryTypeEnum.enumValues,

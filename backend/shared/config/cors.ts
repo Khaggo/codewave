@@ -6,6 +6,13 @@ type CorsOriginCheck = {
 
 const STAFF_WEB_PORT = '3002';
 
+export const STAFF_API_CORS_ALLOWED_HEADERS = [
+  'Content-Type',
+  'Authorization',
+  'X-Work-Claim-Id',
+  'If-Match',
+];
+
 const isPrivateIpv4Host = (hostname: string): boolean => {
   if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
     return true;

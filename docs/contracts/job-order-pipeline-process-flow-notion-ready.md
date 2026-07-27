@@ -19,9 +19,9 @@ The real job-order lifecycle is not only one screen. It is a multi-surface opera
 
 1. Booking or intake creates a workshop handoff.
 2. A service adviser creates the job order.
-3. Staff assign technicians.
-4. Technician or head technician executes the work.
-5. Staff collect progress and evidence.
+3. Staff assign technician profiles and selected specialties.
+4. Service adviser drives adviser-owned workshop execution with technician-profile context.
+5. Staff collect checklist progress and evidence.
 6. The job order moves to QA.
 7. QA either clears release, blocks release, or sends the work into rework.
 8. Once cleared, the adviser or super admin finalizes the job order.
@@ -44,8 +44,8 @@ The redesign target should be one clearer mental model across those pages.
 ```mermaid
 flowchart TD
   A["Booking Confirmed or Walk-in Intake Complete"] --> B["Create Job Order"]
-  B --> C["Assign Technician or Head Technician"]
-  C --> D["Workshop Execution"]
+  B --> C["Assign Technician Profile"]
+  C --> D["Adviser-Owned Workshop Execution"]
   D --> E["Progress Updates"]
   E --> F["Photo / Evidence Upload"]
   F --> G["Ready For QA"]
@@ -106,7 +106,7 @@ flowchart TD
   - or an approved back-job case
 - snapshot the responsible service adviser
 - define work items
-- optionally assign technicians
+- optionally assign technician profiles
 
 **Current backend truth**
 
@@ -128,11 +128,11 @@ flowchart TD
 
 **Supporting users**
 
-- `head_technician` can coordinate workshop work, but adviser/admin still own create/final assignment authority
+- Technician profiles provide specialty and assignment context, but adviser/admin users still own create/final assignment authority.
 
 **What must happen**
 
-- choose one or more technicians
+- choose one or more technician profiles and selected specialties
 - confirm work is ready for workshop execution
 
 **UX issue**
@@ -143,8 +143,12 @@ flowchart TD
 
 **Primary owner**
 
-- `technician`
-- `head_technician`
+- `service_adviser`
+- `super_admin`
+
+**Operational context**
+
+- non-auth technician profile
 
 **What must happen**
 
@@ -153,7 +157,7 @@ flowchart TD
 - add progress notes
 - upload evidence photos
 
-**Allowed technician-oriented statuses**
+**Allowed workshop statuses**
 
 - `in_progress`
 - `blocked`
@@ -172,7 +176,7 @@ flowchart TD
 
 **Primary owner**
 
-- `head_technician`
+- `service_adviser`
 - `super_admin`
 
 **Readers**
@@ -251,7 +255,7 @@ flowchart TD
 
 **Review / release authority**
 
-- `head_technician`
+- `service_adviser`
 - `super_admin`
 
 **What must happen**
@@ -270,18 +274,18 @@ flowchart TD
 
 ## Roles By Stage
 
-| Stage | Technician | Head Technician | Service Adviser | Super Admin |
+| Stage | Customer | Technician Profile (non-auth) | Service Adviser | Super Admin |
 | --- | --- | --- | --- | --- |
-| Intake and handoff | no | limited | yes | yes |
-| Create job order | no | no | yes | yes |
-| Assign technicians | no | support | yes | yes |
-| Workshop execution | yes | yes | view / support | yes |
-| Progress notes | yes | yes | support | yes |
-| Evidence upload | yes | yes | yes | yes |
-| QA verdict | no | yes | read / support | yes |
-| Finalize | no | no | yes | yes |
+| Intake and handoff | no | context only | yes | yes |
+| Create job order | no | context only | yes | yes |
+| Assign technician profiles | no | selected as context | yes | yes |
+| Workshop execution | no | assigned as context | yes | yes |
+| Progress notes | no | assigned as context | yes | yes |
+| Evidence upload | no | assigned as context | yes | yes |
+| QA verdict | no | context only | yes | yes |
+| Finalize | no | context only | yes | yes |
 | Record payment | no | no | yes | yes |
-| Back-job review | no | yes | yes | yes |
+| Back-job review | no | context only | yes | yes |
 
 ## System Status Model
 
@@ -402,8 +406,8 @@ Use this section directly if you want a clean paste into a Notion page:
 
 1. Booking is confirmed or walk-in intake is completed.
 2. Service adviser creates the job order and defines work items.
-3. Technicians are assigned.
-4. Technician or head technician performs the work.
+3. Technician profiles and selected specialties are assigned.
+4. Service adviser records checklist/progress/evidence under the assigned technician-profile context.
 5. Progress notes and evidence photos are recorded.
 6. Job order is moved to `Ready for QA`.
 7. QA Audit reviews release readiness.

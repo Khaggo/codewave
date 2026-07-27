@@ -23,4 +23,13 @@ export class BookingAvailabilityQueryDto {
   @IsOptional()
   @IsString()
   timeSlotId?: string;
+
+  @ApiPropertyOptional({
+    example: '7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d',
+    description:
+      'Optional owned-vehicle filter so the availability window can reflect active-service conflicts for that vehicle.',
+  })
+  @IsOptional()
+  @IsString()
+  vehicleId?: string;
 }

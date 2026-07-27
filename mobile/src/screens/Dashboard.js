@@ -103,6 +103,13 @@ import {
   validateEmail,
   validatePhoneNumber,
 } from '../utils/validation';
+import {
+  buildCheckoutAddressLabel,
+  buildInvoiceCheckoutPayload,
+  createInitialCheckoutState,
+  trimCheckoutValue,
+  validateInvoiceCheckoutForm,
+} from '../lib/invoiceCheckoutModel.mjs';
 
 const BOTTOM_NAV_HEIGHT = 82;
 const DASHBOARD_WEB_SCROLL_HEIGHT = `calc(100vh - ${BOTTOM_NAV_HEIGHT}px)`;
@@ -284,104 +291,6 @@ const createInitialStoreOrderTrackingState = () => ({
   errorMessage: '',
   invoiceErrorMessage: '',
 });
-
-const buildInvoiceCheckoutName = (account) =>
-  `${account?.firstName || ''} ${account?.lastName || ''}`.trim() ||
-  account?.username ||
-  '';
-
-const createInitialInvoiceCheckoutForm = (account) => ({
-  recipientName: buildInvoiceCheckoutName(account),
-  email: account?.email || '',
-  contactPhone: account?.phoneNumber || '',
-  addressLine1: account?.defaultAddress?.addressLine1 || '',
-  addressLine2: account?.defaultAddress?.addressLine2 || '',
-  city: account?.defaultAddress?.city || account?.city || '',
-  province: account?.defaultAddress?.province || '',
-  postalCode: account?.defaultAddress?.postalCode || '',
-  notes: '',
-});
-
-const createInitialCheckoutState = (account) => ({
-  stage: 'cart',
-  previewStatus: 'idle',
-  preview: null,
-  submitting: false,
-  order: null,
-  errorMessage: '',
-  form: createInitialInvoiceCheckoutForm(account),
-  fieldErrors: {},
-});
-
-const trimCheckoutValue = (value) => String(value ?? '').trim();
-
-const validateInvoiceCheckoutForm = (form) => {
-  const errors = {};
-  const normalizedPhoneNumber = normalizePhoneNumber(form.contactPhone || '');
-  const normalizedPostalCode = String(form.postalCode ?? '').replace(/\D/g, '').slice(0, 4);
-
-  if (!trimCheckoutValue(form.recipientName)) {
-    errors.recipientName = 'Enter the billing recipient name.';
-  }
-
-  const emailError = validateEmail(form.email || '');
-  if (emailError) {
-    errors.email = emailError;
-  }
-
-  if (normalizedPhoneNumber) {
-    const phoneError = validatePhoneNumber(normalizedPhoneNumber);
-    if (phoneError) {
-      errors.contactPhone = phoneError;
-    }
-  }
-
-  if (!trimCheckoutValue(form.addressLine1)) {
-    errors.addressLine1 = 'Enter the billing street address.';
-  }
-
-  if (!trimCheckoutValue(form.city)) {
-    errors.city = 'Enter the billing city.';
-  }
-
-  if (!trimCheckoutValue(form.province)) {
-    errors.province = 'Enter the billing province.';
-  }
-
-  if (normalizedPostalCode && normalizedPostalCode.length !== 4) {
-    errors.postalCode = 'Use a 4-digit postal code.';
-  }
-
-  return errors;
-};
-
-const buildInvoiceCheckoutPayload = (form) => {
-  const normalizedPhoneNumber = normalizePhoneNumber(form.contactPhone || '');
-  const normalizedPostalCode = String(form.postalCode ?? '').replace(/\D/g, '').slice(0, 4);
-
-  return {
-    recipientName: trimCheckoutValue(form.recipientName),
-    email: normalizeEmail(form.email || ''),
-    contactPhone: normalizedPhoneNumber || undefined,
-    addressLine1: trimCheckoutValue(form.addressLine1),
-    addressLine2: trimCheckoutValue(form.addressLine2) || undefined,
-    city: trimCheckoutValue(form.city),
-    province: trimCheckoutValue(form.province),
-    postalCode: normalizedPostalCode || undefined,
-  };
-};
-
-const buildCheckoutAddressLabel = (address) =>
-  [
-    address?.addressLine1,
-    address?.addressLine2,
-    address?.city,
-    address?.province,
-    address?.postalCode,
-  ]
-    .map((value) => trimCheckoutValue(value))
-    .filter(Boolean)
-    .join(', ');
 
 const normalizeNavigationId = (value) => {
   const normalizedValue = typeof value === 'string' ? value.trim() : '';
@@ -606,6 +515,8 @@ const formatBookingAvailabilityStatusLabel = (status) => {
       return 'Open';
     case 'limited':
       return 'Limited';
+    case 'blocked':
+      return 'Blocked';
     case 'full':
       return 'Full';
     case 'closed':
@@ -624,6 +535,8 @@ const getBookingAvailabilityTone = (status) => {
     case 'bookable':
       return 'success';
     case 'limited':
+      return 'warning';
+    case 'blocked':
       return 'warning';
     case 'full':
       return 'danger';
@@ -644,27 +557,61 @@ const getBookingAvailabilityWindowLabel = (availability) => {
   )}`;
 };
 
+const getBlockedBookingSlotMessage = (slot, selectedTimeSlot) => {
+  if (!slot) {
+    return 'This date is not available for the selected slot.';
+  }
+
+  if (slot.remainingCapacity <= 0) {
+    return `${selectedTimeSlot?.label || 'Selected slot'} is full`;
+  }
+
+  return `${selectedTimeSlot?.label || 'Selected slot'} is unavailable for this vehicle or booking right now`;
+};
+
+const getBlockedBookingSlotCapacityLabel = (slot) => {
+  if (!slot) {
+    return 'Unavailable';
+  }
+
+  if (slot.remainingCapacity <= 0) {
+    return `${slot.bookingCount}/${slot.capacity} booked`;
+  }
+
+  return 'Blocked by vehicle or booking conflict';
+};
+
 const buildBookingDateCardItem = (availabilityDay, selectedTimeSlot) => {
   const parsedDate = parseDateOnly(availabilityDay?.scheduledDate);
   const matchingSlot = getBookingAvailabilitySlotForTime(availabilityDay, selectedTimeSlot?.id);
   const effectiveStatus =
-    matchingSlot && !matchingSlot.isAvailable ? 'full' : availabilityDay?.status || 'full';
+    matchingSlot && !matchingSlot.isAvailable
+      ? matchingSlot.remainingCapacity > 0
+        ? 'blocked'
+        : 'full'
+      : availabilityDay?.status || 'full';
   const isSelectable = matchingSlot ? matchingSlot.isAvailable : Boolean(availabilityDay?.isBookable);
   const detailLabel = matchingSlot
     ? matchingSlot.isAvailable
       ? `${matchingSlot.remainingCapacity} left in ${selectedTimeSlot?.label || 'selected slot'}`
-      : `${selectedTimeSlot?.label || 'Selected slot'} is full`
+      : getBlockedBookingSlotMessage(matchingSlot, selectedTimeSlot)
     : availabilityDay?.status === 'closed'
       ? availabilityDay?.closureLabel || availabilityDay?.closureReason || 'Shop closed for this date'
     : availabilityDay?.status === 'no_active_slots'
       ? 'No live slots'
       : `${availabilityDay?.availableSlotCount ?? 0} of ${availabilityDay?.activeSlotCount ?? 0} slots open`;
   const capacityLabel = matchingSlot
-    ? `${matchingSlot.bookingCount}/${matchingSlot.capacity} booked`
+    ? matchingSlot.isAvailable
+      ? `${matchingSlot.bookingCount}/${matchingSlot.capacity} booked`
+      : getBlockedBookingSlotCapacityLabel(matchingSlot)
     : `${availabilityDay?.remainingCapacity ?? 0}/${availabilityDay?.totalCapacity ?? 0} capacity left`;
 
   return {
     key: availabilityDay?.scheduledDate || 'booking-date',
+    scheduledDate: availabilityDay?.scheduledDate || '',
+    accessibilityLabel: availabilityDay?.scheduledDate
+      ? `Booking date ${formatBookingDateLabel(availabilityDay.scheduledDate)}`
+      : 'Booking date',
     weekday: parsedDate ? parsedDate.toLocaleDateString('en-US', { weekday: 'short' }) : '--',
     day: parsedDate ? `${parsedDate.getDate()}` : '--',
     month: parsedDate ? parsedDate.toLocaleDateString('en-US', { month: 'short' }) : '--',
@@ -812,6 +759,51 @@ const buildBookingTrackingSteps = (booking) => {
   }
 
   const status = booking.status;
+  const workshopStage = booking?.currentWorkshopStage ?? null;
+  const workshopStageLabels = {
+    received: 'Received',
+    diagnosis: 'Diagnosis',
+    in_repair: 'In Repair',
+    quality_check: 'Quality Check',
+    ready: 'Ready',
+  };
+
+  if (workshopStage) {
+    const orderedStages = ['received', 'diagnosis', 'in_repair', 'quality_check', 'ready'];
+    const currentIndex = orderedStages.indexOf(workshopStage);
+
+    return [
+      {
+        label: 'Booking Request',
+        status: 'Submitted',
+        state: 'done',
+      },
+      {
+        label: 'Staff Review',
+        status: booking.status === 'rescheduled' ? 'Rescheduled' : 'Confirmed',
+        state: 'done',
+      },
+      ...orderedStages.map((stageKey, index) => ({
+        label: workshopStageLabels[stageKey] ?? stageKey,
+        status:
+          index < currentIndex
+            ? 'Completed'
+            : index === currentIndex
+              ? 'Current stage'
+              : 'Upcoming',
+        state:
+          index < currentIndex
+            ? 'done'
+            : index === currentIndex
+              ? 'current'
+              : 'upcoming',
+        note:
+          index === currentIndex
+            ? booking?.workshopStageHistory?.find((entry) => entry?.stage === stageKey)?.note ?? 'Service adviser is updating your live workshop progress.'
+            : undefined,
+      })),
+    ];
+  }
 
   if (status === 'declined' || status === 'cancelled') {
     return [
@@ -1840,6 +1832,7 @@ function BookingDateCard({ item, isSelected, onPress, isCompact, cardStyle }) {
         !item.isSelectable && styles.bookingDateCardDisabled,
         isSelected && styles.bookingDateCardActive,
       ]}
+      accessibilityLabel={item.accessibilityLabel}
       onPress={item.isSelectable ? onPress : undefined}
       disabled={!item.isSelectable}
     >
@@ -2217,6 +2210,7 @@ export default function Dashboard({
   const [activeTab, setActiveTab] = useState('explore');
   const [menuScreen, setMenuScreen] = useState('root');
   const [bookingMode, setBookingMode] = useState('book');
+  const [bookingDiscoveryReloadKey, setBookingDiscoveryReloadKey] = useState(0);
   const [bookingDiscovery, setBookingDiscovery] = useState(createInitialBookingDiscoveryState);
   const [selectedBookingServiceIds, setSelectedBookingServiceIds] = useState([]);
   const [selectedBookingTimeKey, setSelectedBookingTimeKey] = useState(null);
@@ -2228,6 +2222,7 @@ export default function Dashboard({
   const [bookingHistory, setBookingHistory] = useState(createInitialBookingHistoryState);
   const [serviceHistoryState, setServiceHistoryState] = useState(createInitialServiceHistoryState);
   const [selectedHistoryBookingId, setSelectedHistoryBookingId] = useState(null);
+  const [bookingTrackReloadKey, setBookingTrackReloadKey] = useState(0);
   const [bookingDetailState, setBookingDetailState] = useState(createInitialBookingDetailState);
   const [bookingReservationPaymentState, setBookingReservationPaymentState] = useState(
     createInitialBookingReservationPaymentState,
@@ -3145,7 +3140,10 @@ export default function Dashboard({
         const nextSnapshot = await loadBookingDiscoverySnapshot({
           userId: account?.userId,
           accessToken: account?.accessToken,
-          availabilityWindow: getInitialBookingAvailabilityWindow(),
+          availabilityWindow: {
+            ...getInitialBookingAvailabilityWindow(),
+            vehicleId: selectedBookingVehicleId,
+          },
         });
 
         if (isCancelled) {
@@ -3198,6 +3196,7 @@ export default function Dashboard({
     account?.userId,
     activeTab,
     bookingMode,
+    bookingDiscoveryReloadKey,
   ]);
 
   useEffect(() => {
@@ -3270,19 +3269,8 @@ export default function Dashboard({
     const nextSelectedServiceIds = selectedBookingServiceIds.filter((serviceId) =>
       bookingDiscovery.services.some((service) => service.id === serviceId && service.isActive),
     );
-    if (
-      nextSelectedServiceIds.length !== selectedBookingServiceIds.length ||
-      (!nextSelectedServiceIds.length && bookingDiscovery.services.length)
-    ) {
-      const fallbackServiceId =
-        bookingDiscovery.services.find(isBookableService)?.id ?? bookingDiscovery.services[0]?.id ?? null;
-      setSelectedBookingServiceIds(
-        nextSelectedServiceIds.length
-          ? nextSelectedServiceIds
-          : fallbackServiceId
-            ? [fallbackServiceId]
-            : [],
-      );
+    if (nextSelectedServiceIds.length !== selectedBookingServiceIds.length) {
+      setSelectedBookingServiceIds(nextSelectedServiceIds);
     }
 
     const matchingTimeSlot = bookingDiscovery.timeSlots.find(
@@ -3320,6 +3308,27 @@ export default function Dashboard({
     bookingDiscovery.availability,
     selectedBookingDateKey,
     selectedBookingTimeKey,
+  ]);
+
+  useEffect(() => {
+    if (
+      bookingDiscovery.status !== 'ready' ||
+      bookingDiscovery.availability.status !== 'ready' ||
+      !selectedBookingVehicleId ||
+      bookingDiscovery.availability.vehicleId === selectedBookingVehicleId
+    ) {
+      return;
+    }
+
+    void loadBookingAvailabilityWindow(getCurrentBookingAvailabilityWindow(), {
+      selectedDateKey: selectedBookingDateKey,
+    });
+  }, [
+    bookingDiscovery.availability.status,
+    bookingDiscovery.availability.vehicleId,
+    bookingDiscovery.status,
+    selectedBookingDateKey,
+    selectedBookingVehicleId,
   ]);
 
   useEffect(() => {
@@ -3401,6 +3410,7 @@ export default function Dashboard({
     account?.userId,
     activeTab,
     bookingMode,
+    bookingTrackReloadKey,
   ]);
 
   useEffect(() => {
@@ -3466,6 +3476,7 @@ export default function Dashboard({
     account?.accessToken,
     activeTab,
     bookingMode,
+    bookingTrackReloadKey,
     selectedHistoryBookingId,
   ]);
 
@@ -3489,7 +3500,34 @@ export default function Dashboard({
 
   const handleTabPress = (tabKey) => {
     if (tabKey === 'insurance') {
-      void navigateToInsuranceInquiry();
+      void navigateToInsuranceInquiry(null, { useRememberedInquiry: false });
+      return;
+    }
+
+    if (tabKey === activeTab && tabKey === 'notifications') {
+      if (bookingMode === 'book') {
+        setBookingDiscovery((currentState) => ({
+          ...currentState,
+          status: 'idle',
+          errorMessage: '',
+        }));
+        setBookingDiscoveryReloadKey((value) => value + 1);
+        return;
+      }
+
+      setBookingHistory((currentState) => ({
+        ...currentState,
+        status: 'idle',
+        errorMessage: '',
+      }));
+      setBookingTrackReloadKey((value) => value + 1);
+      setBookingDetailState(createInitialBookingDetailState());
+      setBookingReservationPaymentState(createInitialBookingReservationPaymentState());
+      return;
+    }
+
+    if (tabKey === activeTab && tabKey === 'messages') {
+      setGarageReloadKey((value) => value + 1);
       return;
     }
 
@@ -3901,10 +3939,14 @@ export default function Dashboard({
       return {
         startDate: bookingDiscovery.availability.startDate,
         endDate: bookingDiscovery.availability.endDate,
+        vehicleId: selectedBookingVehicleId,
       };
     }
 
-    return getInitialBookingAvailabilityWindow();
+    return {
+      ...getInitialBookingAvailabilityWindow(),
+      vehicleId: selectedBookingVehicleId,
+    };
   };
 
   const loadBookingAvailabilityWindow = async (
@@ -3923,6 +3965,7 @@ export default function Dashboard({
     try {
       const availability = await getBookingAvailability({
         ...windowQuery,
+        vehicleId: selectedBookingVehicleId,
         accessToken: account?.accessToken,
       });
 
@@ -4428,7 +4471,7 @@ export default function Dashboard({
   };
 
   const navigateToInsurancePage = (vehicleId = null) => {
-    void navigateToInsuranceInquiry(vehicleId);
+    void navigateToInsuranceInquiry(vehicleId, { useRememberedInquiry: false });
   };
 
   const navigateToProfileSection = (sectionKey) => {
@@ -4437,7 +4480,7 @@ export default function Dashboard({
     setIsProfileTooltipVisible(false);
   };
 
-  const navigateToInsuranceInquiry = (vehicleId = null) => {
+  const navigateToInsuranceInquiry = (vehicleId = null, { useRememberedInquiry = true } = {}) => {
     const loadRememberedInquiryMappings = async () => {
       try {
         const serializedMappings = await AsyncStorage.getItem(
@@ -4450,16 +4493,18 @@ export default function Dashboard({
     };
 
     return loadRememberedInquiryMappings().then(() => {
-    const selectedVehicleId =
-      normalizeNavigationId(vehicleId) ??
-      normalizeNavigationId(selectedGarageVehicleId) ??
-      normalizeNavigationId(account?.primaryVehicleId);
-    const rememberedInquiryId = getRememberedInquiryForVehicle(selectedVehicleId);
+      const selectedVehicleId =
+        normalizeNavigationId(vehicleId) ??
+        normalizeNavigationId(selectedGarageVehicleId) ??
+        normalizeNavigationId(account?.primaryVehicleId);
+      const rememberedInquiryId = useRememberedInquiry
+        ? getRememberedInquiryForVehicle(selectedVehicleId)
+        : null;
 
-    navigation.navigate('InsuranceInquiryScreen', {
-      vehicleId: selectedVehicleId,
-      inquiryId: rememberedInquiryId,
-    });
+      navigation.navigate('InsuranceInquiryScreen', {
+        vehicleId: selectedVehicleId,
+        inquiryId: rememberedInquiryId,
+      });
     });
   };
 
@@ -6080,22 +6125,30 @@ export default function Dashboard({
                             : styles.bookingDateStatusBadgeDanger,
                         ]}
                       >
-                        <Text style={styles.bookingDateStatusText}>
-                          {formatBookingAvailabilityStatusLabel(
-                            selectedBookingDay.status === 'closed'
-                              ? 'closed'
-                              : selectedBookingSlotAvailability?.isAvailable
-                              ? selectedBookingDay.status
-                              : 'full',
-                          )}
-                        </Text>
-                      </View>
+                          <Text style={styles.bookingDateStatusText}>
+                            {formatBookingAvailabilityStatusLabel(
+                              selectedBookingDay.status === 'closed'
+                                ? 'closed'
+                                : selectedBookingSlotAvailability?.isAvailable
+                                ? selectedBookingDay.status
+                                : (selectedBookingSlotAvailability?.remainingCapacity ?? 0) > 0
+                                  ? 'blocked'
+                                  : 'full',
+                            )}
+                          </Text>
+                        </View>
                     </View>
                     <Text style={styles.bookingAvailabilitySelectionMeta}>
                       {selectedBookingDay.status === 'closed'
                         ? selectedBookingDay.closureLabel || selectedBookingDay.closureReason || 'This date is closed for new bookings.'
                         : selectedBookingSlotAvailability
-                        ? `${selectedBookingSlotAvailability.label}: ${selectedBookingSlotAvailability.remainingCapacity} of ${selectedBookingSlotAvailability.capacity} spots left.`
+                        ? selectedBookingSlotAvailability.isAvailable
+                          ? `${selectedBookingSlotAvailability.label}: ${selectedBookingSlotAvailability.remainingCapacity} of ${selectedBookingSlotAvailability.capacity} spots left.`
+                          : `${selectedBookingSlotAvailability.label}: ${
+                              selectedBookingSlotAvailability.remainingCapacity > 0
+                                ? 'unavailable for this vehicle or booking right now.'
+                                : 'fully booked.'
+                            }`
                         : `${selectedBookingDay.availableSlotCount} of ${selectedBookingDay.activeSlotCount} live slots are still available on this day.`}
                     </Text>
                   </View>
@@ -6675,7 +6728,10 @@ export default function Dashboard({
             styles.infoPanelPrimaryAction,
             !selectedInsuranceVehicle && styles.insuranceLauncherDisabled,
           ]}
-          onPress={() => selectedInsuranceVehicle && navigateToInsuranceInquiry(selectedInsuranceVehicle.id)}
+          onPress={() =>
+            selectedInsuranceVehicle &&
+            navigateToInsuranceInquiry(selectedInsuranceVehicle.id, { useRememberedInquiry: false })
+          }
           activeOpacity={selectedInsuranceVehicle ? 0.86 : 1}
           disabled={!selectedInsuranceVehicle}
         >
@@ -6780,7 +6836,7 @@ export default function Dashboard({
         icon: 'shield-outline',
         bgColor: colors.surfaceRaised,
         iconColor: colors.primary,
-        onPress: () => navigateToInsuranceInquiry(),
+        onPress: () => navigateToInsuranceInquiry(null, { useRememberedInquiry: false }),
       },
       {
         key: 'rewards',
@@ -7110,7 +7166,9 @@ export default function Dashboard({
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.garageActionButton}
-                    onPress={() => navigateToInsuranceInquiry(vehicle.id)}
+                    onPress={() =>
+                      navigateToInsuranceInquiry(vehicle.id, { useRememberedInquiry: false })
+                    }
                     activeOpacity={0.86}
                   >
                     <Text style={styles.garageActionText}>Insurance</Text>

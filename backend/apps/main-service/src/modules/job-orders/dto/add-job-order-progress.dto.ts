@@ -4,6 +4,14 @@ import { ArrayUnique, IsArray, IsDateString, IsEnum, IsOptional, IsString, IsUUI
 import { jobOrderProgressEntryTypeEnum } from '../schemas/job-orders.schema';
 
 export class AddJobOrderProgressDto {
+  @ApiPropertyOptional({
+    example: '8bcb97fe-0aa4-4c68-ae49-2f58c4526529',
+    description: 'The service item this progress entry belongs to.',
+  })
+  @IsOptional()
+  @IsUUID()
+  workItemId?: string;
+
   @ApiProperty({
     enum: jobOrderProgressEntryTypeEnum.enumValues,
     example: 'work_started',

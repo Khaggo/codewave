@@ -89,16 +89,23 @@ npm install
 Preferred:
 
 ```powershell
-npm run start:lan
+cd d:\mainprojects\codewave
+npm run dev:mobile
 ```
 
 Fallback if LAN mode has trouble:
 
 ```powershell
+cd d:\mainprojects\codewave\mobile
 npm run start:tunnel
 ```
 
 Keep `EXPO_PUBLIC_API_BASE_URL` set to your LAN IP even if you use tunnel mode for Metro.
+
+Important runtime note:
+
+- Prefer the repo-root `npm run dev:mobile` and `npm run dev:mobile:web` commands when working locally with Codex.
+- Those commands now go through a single-instance watchdog that checks the port first and refuses to spawn duplicate Expo or Node runtimes on the same listener.
 
 ## Expo MCP Setup
 

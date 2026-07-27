@@ -104,4 +104,28 @@ export class BookingResponseDto {
     type: () => BookingReservationPaymentResponseDto,
   })
   reservationPayment?: BookingReservationPaymentResponseDto | null;
+
+  @ApiPropertyOptional({
+    enum: ['received', 'diagnosis', 'in_repair', 'quality_check', 'ready'],
+    example: 'diagnosis',
+  })
+  currentWorkshopStage?: 'received' | 'diagnosis' | 'in_repair' | 'quality_check' | 'ready' | null;
+
+  @ApiPropertyOptional({
+    type: 'array',
+    example: [
+      {
+        id: 'edc6a182-575b-4e35-aef5-7f26372d8eb5',
+        stage: 'diagnosis',
+        note: 'Adviser confirmed the complaint and started diagnostics.',
+        createdAt: '2026-05-22T10:00:00.000Z',
+      },
+    ],
+  })
+  workshopStageHistory?: Array<{
+    id: string;
+    stage: 'received' | 'diagnosis' | 'in_repair' | 'quality_check' | 'ready';
+    note?: string | null;
+    createdAt: string;
+  }>;
 }

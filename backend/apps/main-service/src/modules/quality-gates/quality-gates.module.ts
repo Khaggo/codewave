@@ -5,6 +5,7 @@ import { Module, forwardRef } from '@nestjs/common';
 
 import { AuthModule } from '@main-modules/auth/auth.module';
 import { JobOrdersModule } from '@main-modules/job-orders/job-orders.module';
+import { StaffWorkQueuesModule } from '@main-modules/staff-work-queues/staff-work-queues.module';
 import { UsersModule } from '@main-modules/users/users.module';
 
 import { QualityGatesController } from './controllers/quality-gates.controller';
@@ -21,6 +22,7 @@ import { QualityGatesService } from './services/quality-gates.service';
     InspectionsModule,
     forwardRef(() => BackJobsModule),
     forwardRef(() => JobOrdersModule),
+    StaffWorkQueuesModule,
   ],
   controllers: [QualityGatesController],
   providers: [

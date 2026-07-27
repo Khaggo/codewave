@@ -1,4 +1,4 @@
-import { Test } from '@nestjs/testing';
+import { Test as NestTest } from '@nestjs/testing';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
@@ -9,6 +9,26 @@ import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
 import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
 import { JobOrdersService } from '@main-modules/job-orders/services/job-orders.service';
+import { StaffWorkQueuesService } from '@main-modules/staff-work-queues/services/staff-work-queues.service';
+import { TechnicianProfilesService } from '@main-modules/technician-profiles/services/technician-profiles.service';
+
+const staffWorkQueuesProvider = () => ({
+  provide: StaffWorkQueuesService,
+  useValue: {
+    completeClaim: jest.fn().mockResolvedValue(null),
+  },
+});
+
+const Test = {
+  createTestingModule(
+    metadata: Parameters<typeof NestTest.createTestingModule>[0],
+  ) {
+    return NestTest.createTestingModule({
+      ...metadata,
+      providers: [staffWorkQueuesProvider(), ...(metadata.providers ?? [])],
+    });
+  },
+};
 
 describe('JobOrdersService', () => {
   it('creates a job order from a confirmed booking with adviser and technician validation', async () => {
@@ -73,6 +93,9 @@ describe('JobOrdersService', () => {
         userId: 'customer-1',
       }),
     };
+    const staffWorkQueuesService = {
+      completeClaim: jest.fn().mockResolvedValue(null),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -83,6 +106,7 @@ describe('JobOrdersService', () => {
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: vehiclesRepository },
         { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
+        { provide: StaffWorkQueuesService, useValue: staffWorkQueuesService },
         { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
@@ -112,6 +136,12 @@ describe('JobOrdersService', () => {
         sourceId: 'booking-1',
         status: 'assigned',
       }),
+    );
+    expect(staffWorkQueuesService.completeClaim).toHaveBeenCalledWith(
+      'job_order',
+      'booking_handoff',
+      'booking-1',
+      'adviser-1',
     );
     expect(bookingsRepository.updateStatus).toHaveBeenCalledWith(
       'booking-1',
@@ -259,6 +289,17 @@ describe('JobOrdersService', () => {
         { provide: BackJobsRepository, useValue: { findOptionalById: jest.fn(), linkReworkJobOrder: jest.fn() } },
         { provide: UsersService, useValue: usersService },
         { provide: VehiclesRepository, useValue: vehiclesRepository },
+        {
+          provide: TechnicianProfilesService,
+          useValue: {
+            findActiveByIds: jest.fn().mockResolvedValue([
+              {
+                id: 'not-tech-1',
+                specialties: ['electrical'],
+              },
+            ]),
+          },
+        },
         { provide: QualityGatesService, useValue: { beginQualityGate: jest.fn(), assertReleaseAllowed: jest.fn() } },
         { provide: AutocareEventBusService, useValue: eventBus },
       ],
@@ -360,7 +401,13 @@ describe('JobOrdersService', () => {
     );
 
     expect(jobOrdersRepository.replaceAssignments).toHaveBeenCalledWith('job-order-1', {
-      assignedTechnicianIds: ['tech-1'],
+      assignments: [
+        {
+          technicianProfileId: 'tech-1',
+          selectedSpecialty: 'general repair',
+        },
+      ],
+      expectedUpdatedAt: undefined,
       status: 'assigned',
     });
     expect(result).toBe(replacedResult);
@@ -379,7 +426,7 @@ describe('JobOrdersService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('repairs assignmentless operational job orders from inferred technician activity or downgrades them to draft', async () => {
+  it('downgrades assignmentless operational job orders to draft and flags finalized records for review', async () => {
     const eventBus = {
       publish: jest.fn(),
     };
@@ -444,28 +491,31 @@ describe('JobOrdersService', () => {
     const service = moduleRef.get(JobOrdersService);
     const result = await service.repairAssignmentRecovery();
 
-    expect(jobOrdersRepository.replaceAssignments).toHaveBeenNthCalledWith(1, 'job-order-1', {
-      assignedTechnicianIds: ['tech-1'],
-      status: 'ready_for_qa',
-    });
+    expect(jobOrdersRepository.replaceAssignments).toHaveBeenNthCalledWith(
+      1,
+      'job-order-1',
+      expect.objectContaining({
+        assignments: [],
+        status: 'draft',
+        notes: expect.stringContaining('[assignment-repair]'),
+      }),
+    );
     expect(jobOrdersRepository.replaceAssignments).toHaveBeenNthCalledWith(
       2,
       'job-order-2',
       expect.objectContaining({
-        assignedTechnicianIds: [],
+        assignments: [],
         status: 'draft',
         notes: expect.stringContaining('[assignment-repair]'),
       }),
     );
     expect(result).toEqual({
-      repaired: [
+      repaired: [],
+      downgradedToDraft: [
         {
           jobOrderId: 'job-order-1',
-          status: 'ready_for_qa',
-          assignedTechnicianIds: ['tech-1'],
+          previousStatus: 'ready_for_qa',
         },
-      ],
-      downgradedToDraft: [
         {
           jobOrderId: 'job-order-2',
           previousStatus: 'assigned',
@@ -546,7 +596,7 @@ describe('JobOrdersService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('lets an assigned technician append progress entries and mark completed items', async () => {
+  it('lets a service adviser append progress entries and mark completed items', async () => {
     const eventBus = {
       publish: jest.fn(),
     };
@@ -587,8 +637,8 @@ describe('JobOrdersService', () => {
           provide: UsersService,
           useValue: {
             findById: jest.fn().mockResolvedValue({
-              id: 'tech-1',
-              role: 'technician',
+              id: 'adviser-1',
+              role: 'service_adviser',
               isActive: true,
             }),
           },
@@ -604,41 +654,62 @@ describe('JobOrdersService', () => {
     const result = await service.addProgressEntry(
       'job-order-1',
       {
+        workItemId: 'item-1',
         entryType: 'work_completed',
-        message: 'Finished the first work item.',
+        message: 'Finished the first service.',
         completedItemIds: ['item-1'],
       },
       {
-        userId: 'tech-1',
-        role: 'technician',
+        userId: 'adviser-1',
+        role: 'service_adviser',
       },
     );
 
     expect(jobOrdersRepository.addProgressEntry).toHaveBeenCalledWith(
       'job-order-1',
       expect.objectContaining({
+        workItemId: 'item-1',
         entryType: 'work_completed',
         completedItemIds: ['item-1'],
       }),
-      'tech-1',
+      'adviser-1',
     );
     expect(result).toBe(updateResult);
+
+    jobOrdersRepository.addProgressEntry.mockClear();
+
+    await service.addProgressEntry(
+      'job-order-1',
+      {
+        workItemId: 'item-1',
+        entryType: 'work_started',
+        message: 'Started the first service.',
+      },
+      {
+        userId: 'adviser-1',
+        role: 'service_adviser',
+      },
+    );
+
+    expect(jobOrdersRepository.addProgressEntry).toHaveBeenCalledWith(
+      'job-order-1',
+      expect.objectContaining({
+        workItemId: 'item-1',
+        entryType: 'work_started',
+        nextWorkshopStage: 'in_repair',
+      }),
+      'adviser-1',
+    );
   });
 
-  it('rejects progress entries from unassigned technicians and photo evidence on closed job orders', async () => {
+  it('rejects retired technician progress and photo evidence on closed job orders', async () => {
     const eventBus = {
       publish: jest.fn(),
     };
     const jobOrdersRepository = {
       findById: jest
         .fn()
-        .mockResolvedValueOnce({
-          id: 'job-order-1',
-          status: 'assigned',
-          items: [],
-          assignments: [],
-        })
-        .mockResolvedValueOnce({
+        .mockResolvedValue({
           id: 'job-order-2',
           status: 'cancelled',
           items: [],
@@ -973,7 +1044,7 @@ describe('JobOrdersService', () => {
     ]);
   });
 
-  it('lets head technicians see all workbench summaries for QA queue visibility', async () => {
+  it('lets service advisers see all workbench summaries for QA queue visibility', async () => {
     const jobOrdersRepository = {
       findAllSummaries: jest.fn().mockResolvedValue([
         {
@@ -1006,8 +1077,8 @@ describe('JobOrdersService', () => {
           provide: UsersService,
           useValue: {
             findById: jest.fn().mockResolvedValue({
-              id: 'head-tech-1',
-              role: 'head_technician',
+              id: 'adviser-1',
+              role: 'service_adviser',
               isActive: true,
             }),
           },
@@ -1021,7 +1092,7 @@ describe('JobOrdersService', () => {
     const service = moduleRef.get(JobOrdersService);
 
     const result = await service.listWorkbenchSummaries(
-      { userId: 'head-tech-1', role: 'head_technician' },
+      { userId: 'adviser-1', role: 'service_adviser' },
       { month: '2026-05', scope: 'active' },
     );
 
@@ -1360,7 +1431,7 @@ describe('JobOrdersService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('restricts finalize ownership to the responsible adviser while still allowing super-admin release', async () => {
+  it('allows the claimed adviser to finalize and completes the Job Order claim', async () => {
     const eventBus = {
       publish: jest.fn(),
     };
@@ -1398,6 +1469,9 @@ describe('JobOrdersService', () => {
         }),
       finalize: jest.fn().mockResolvedValue(finalizedResult),
     };
+    const staffWorkQueuesService = {
+      completeClaim: jest.fn().mockResolvedValue(null),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -1431,33 +1505,21 @@ describe('JobOrdersService', () => {
         },
         { provide: VehiclesRepository, useValue: { findOwnedByUser: jest.fn() } },
         { provide: QualityGatesService, useValue: qualityGatesService },
+        { provide: StaffWorkQueuesService, useValue: staffWorkQueuesService },
         { provide: AutocareEventBusService, useValue: eventBus },
       ],
     }).compile();
 
     const service = moduleRef.get(JobOrdersService);
 
-    await expect(
-      service.finalize(
-        'job-order-1',
-        {
-          summary: 'Different adviser should not be able to finalize this job order.',
-        },
-        {
-          userId: 'adviser-other',
-          role: 'service_adviser',
-        },
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-
     const result = await service.finalize(
       'job-order-1',
       {
-        summary: 'Super admin completed the release after escalation review.',
+        summary: 'Claimed adviser completed the release after QA.',
       },
       {
-        userId: 'super-admin-1',
-        role: 'super_admin',
+        userId: 'adviser-other',
+        role: 'service_adviser',
       },
     );
 
@@ -1465,14 +1527,20 @@ describe('JobOrdersService', () => {
     expect(jobOrdersRepository.finalize).toHaveBeenCalledWith(
       'job-order-1',
       expect.objectContaining({
-        finalizedByUserId: 'super-admin-1',
-        summary: 'Super admin completed the release after escalation review.',
+        finalizedByUserId: 'adviser-other',
+        summary: 'Claimed adviser completed the release after QA.',
       }),
+    );
+    expect(staffWorkQueuesService.completeClaim).toHaveBeenCalledWith(
+      'job_order',
+      'job_order',
+      'job-order-1',
+      'adviser-other',
     );
     expect(eventBus.publish).toHaveBeenCalledWith(
       'service.invoice_finalized',
       expect.objectContaining({
-        finalizedByUserId: 'super-admin-1',
+        finalizedByUserId: 'adviser-other',
         serviceAdviserUserId: 'adviser-owner',
       }),
     );

@@ -158,16 +158,16 @@ describe('AuthController integration', () => {
           password: 'SecurePass123',
           firstName: 'Maria',
           lastName: 'Santos',
-          role: 'technician',
-          accountType: 'mechanic',
+          role: 'service_adviser',
+          accountType: 'staff',
         });
 
       expect(createStaffResponse.status).toBe(201);
       expect(createStaffResponse.body).toEqual(
         expect.objectContaining({
-          email: expect.stringMatching(/^maria\d{3}\.mechanic@autocare\.com$/),
-          role: 'technician',
-          staffCode: expect.stringMatching(/^MEC-\d{4}$/),
+          email: expect.stringMatching(/^maria\d{3}\.staff@autocare\.com$/),
+          role: 'service_adviser',
+          staffCode: expect.stringMatching(/^STA-\d{4}$/),
           isActive: true,
         }),
       );
@@ -187,8 +187,8 @@ describe('AuthController integration', () => {
         expect.arrayContaining([
           expect.objectContaining({
             id: createStaffResponse.body.id,
-            accountType: 'mechanic',
-            roleLabel: 'Mechanic',
+            accountType: 'staff',
+            roleLabel: 'Staff',
           }),
         ]),
       );

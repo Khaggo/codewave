@@ -76,6 +76,7 @@ describe('UsersService', () => {
   it('requires a staff code for managed staff users and rejects duplicate staff codes', async () => {
     const repository = {
       findByEmail: jest.fn().mockResolvedValue(null),
+      findActiveByPhone: jest.fn().mockResolvedValue(null),
       findByStaffCode: jest
         .fn()
         .mockResolvedValueOnce(null)
@@ -168,6 +169,7 @@ describe('UsersService', () => {
 
   it('allows staff roles to update another user profile record', async () => {
     const repository = {
+      findActiveByPhone: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockResolvedValue({
         id: 'user-1',
         profile: {
@@ -207,6 +209,44 @@ describe('UsersService', () => {
     expect(repository.update).toHaveBeenCalledWith('user-1', {
       firstName: 'Updated',
     });
+  });
+
+  it('rejects duplicate active phone numbers during managed user creation', async () => {
+    const repository = {
+      findByEmail: jest.fn().mockResolvedValue(null),
+      findByStaffCode: jest.fn(),
+      findActiveByPhone: jest.fn().mockResolvedValue({
+        id: 'existing-user',
+        profile: {
+          phone: '09171234567',
+        },
+      }),
+      create: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: UsersRepository,
+          useValue: repository,
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(UsersService);
+
+    await expect(
+      service.createManagedUser({
+        email: 'customer@example.com',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        role: 'customer',
+        phone: '0917-123-4567',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(repository.findActiveByPhone).toHaveBeenCalledWith('09171234567');
+    expect(repository.create).not.toHaveBeenCalled();
   });
 
   it('rejects customer address creation on another user record', async () => {

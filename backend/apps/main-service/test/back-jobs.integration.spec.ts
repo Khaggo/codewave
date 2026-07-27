@@ -57,6 +57,8 @@ describe('BackJobsController integration', () => {
         email: customer.email,
         password: 'password123',
       });
+      expect(technicianLogin.status).toBe(401);
+      expect(qaReviewerLogin.status).toBe(200);
 
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
@@ -111,7 +113,7 @@ describe('BackJobsController integration', () => {
 
       const inProgressResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${originalJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'in_progress',
         });
@@ -119,7 +121,7 @@ describe('BackJobsController integration', () => {
 
       const readyForQaResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${originalJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'ready_for_qa',
         });
@@ -127,7 +129,7 @@ describe('BackJobsController integration', () => {
 
       const evidencePhotoResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${originalJobOrderResponse.body.id}/photos`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           fileName: 'original-repair-check.jpg',
           fileUrl: 'https://files.example.com/job-orders/original-repair-check.jpg',
@@ -139,7 +141,7 @@ describe('BackJobsController integration', () => {
 
       const progressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${originalJobOrderResponse.body.id}/progress`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           entryType: 'work_completed',
           message: 'Initial repair completed.',

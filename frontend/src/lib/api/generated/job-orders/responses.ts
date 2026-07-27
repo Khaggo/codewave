@@ -12,17 +12,33 @@ export interface JobOrderItemResponse {
 export interface JobOrderAssignmentResponse {
   id: string;
   jobOrderId: string;
-  technicianUserId: string;
+  technicianProfileId: string;
+  technicianCode?: string | null;
+  technicianName?: string | null;
+  selectedSpecialty?: string | null;
+  technicianUserId?: string | null;
   assignedAt: string;
 }
 
 export interface JobOrderProgressEntryResponse {
   id: string;
   jobOrderId: string;
-  technicianUserId: string;
-  entryType: 'note' | 'work_started' | 'work_completed' | 'issue_found';
+  technicianUserId?: string | null;
+  recordedByUserId?: string | null;
+  technicianProfileId?: string | null;
+  workshopStage?: 'received' | 'diagnosis' | 'in_repair' | 'quality_check' | 'ready' | null;
+  entryType: 'note' | 'work_started' | 'work_completed' | 'issue_found' | 'stage_update';
   message: string;
   completedItemIds?: string[];
+  createdAt: string;
+}
+
+export interface JobOrderWorkshopStageHistoryEntryResponse {
+  id: string;
+  stage: 'received' | 'diagnosis' | 'in_repair' | 'quality_check' | 'ready';
+  note?: string | null;
+  recordedByUserId?: string | null;
+  attachedPhotoIds?: string[];
   createdAt: string;
 }
 
@@ -84,12 +100,14 @@ export interface JobOrderResponse {
   sourceBookingReference?: string | null;
   sourceBackJobReference?: string | null;
   status: JobOrderStatus;
+  currentWorkshopStage?: 'received' | 'diagnosis' | 'in_repair' | 'quality_check' | 'ready' | null;
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
   items: JobOrderItemResponse[];
   assignments: JobOrderAssignmentResponse[];
   progressEntries: JobOrderProgressEntryResponse[];
+  workshopStageHistory: JobOrderWorkshopStageHistoryEntryResponse[];
   photos: JobOrderPhotoResponse[];
   invoiceRecord?: JobOrderInvoiceRecordResponse | null;
 }

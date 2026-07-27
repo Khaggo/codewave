@@ -19,6 +19,7 @@ For a paper-only review, see [autocare-paper-changes-report.md](./autocare-paper
 
 - The current product direction is mostly compatible with the paper, but several wording and system gaps remain.
 - The largest real system gap is loyalty. The paper wants points from completed service work and ecommerce purchases, while the current canonical docs and loyalty logic are still service-payment-first.
+- The largest business-process gap is insurance: the current system supports inquiry/document/workflow tracking, but not a full structured insurer-approval and estimate-to-job-order bridge.
 - Web and mobile direction are broadly aligned: web is `Next.js`, mobile is `Expo React Native`. The main gap is that some architecture docs still understate the existence of the real `mobile/` app.
 - Chatbot direction is also broadly aligned as long as it stays a FAQ and common-inquiry assistant with escalation, separate from reviewed generative AI summaries.
 - Auth, approved third-party integrations, and notifications should follow the current system, not the older paper wording.
@@ -36,6 +37,8 @@ For a paper-only review, see [autocare-paper-changes-report.md](./autocare-paper
 | Chatbot and AI boundary | `paper must change` | The paper places chatbot and generative AI features close together. | Make the boundary explicit: the chatbot is a FAQ/common-inquiry assistant with escalation, while generative AI is for reviewed summaries and QA support, not customer-facing autonomous chat. |
 | Auth target flow | `paper must change` | The paper still leans on username/password-style staff login language. | Update the target direction to `Google verification + email OTP`, and describe password-first flows only as legacy compatibility if they are mentioned at all. |
 | External integrations | `paper must change` | The paper says there is no real-time third-party integration. | Correct this so it reflects current approved exceptions: Google identity verification, SMTP email delivery, and governed AI-provider integration policy. |
+| Insurance approval and quotation flow | `paper must change` | The real business process requires estimate preparation, insurer approval, and repair start only after approval. | Describe the current system honestly as insurance inquiry/document/workflow tracking. Do not claim a full estimate-to-insurer-to-job-order bridge unless it is implemented. |
+| Customer back-job initiation | `paper must change` | The business process starts from customer complaints, but the implemented product currently proves staff-managed back-job intake only. | Do not claim customer self-service back-job initiation unless it is separately implemented and QA-proven. |
 
 ### Paper Evidence Checked
 
@@ -55,6 +58,8 @@ For a paper-only review, see [autocare-paper-changes-report.md](./autocare-paper
 | Chatbot behavior | `already aligned` | Keep the current FAQ-guided, deterministic, escalation-aware direction. No generative chatbot expansion is needed. | Maintain current docs and UX wording consistency only |
 | Auth and approved integrations | `already aligned` | Keep Google verification plus email OTP as the target model. Keep approved external exceptions. No rollback to password-first target state. | `docs/architecture/auth-security-policy.md`, `docs/architecture/api-strategy.md`, `docs/architecture/system-architecture.md` |
 | Notifications transport | `already aligned` | Keep email-only notification transport. Do not add push-notification scope now. | `docs/architecture/domains/main-service/notifications.md`, notification schema and delivery code |
+| Insurance estimate and approval bridge | `system must change` | If the paper/demo wants true insurer-aligned repair authorization, AUTOCARE needs a structured insurance estimate record, insurer submission state, insurer decision state, and explicit job-order gating/linkage. | Insurance schema/DTOs/services, job-order source model, staff insurance UI, tests |
+| Customer back-job initiation | `system may change` | If the defense wants customer complaint initiation directly from service history, mobile needs a customer-safe back-job request path. Otherwise keep the paper staff-managed only. | Mobile completed-history/service-detail surfaces, back-job customer-safe APIs, tests |
 
 ### Loyalty System Delta
 
@@ -180,6 +185,8 @@ The loyalty change is the only major system implementation change in this review
 - `docs/architecture/tasks/03-integration/T303-loyalty-from-service-and-purchase-events.md`
 - `docs/contracts/T303-loyalty-from-service-and-purchase-events.md`
 - `docs/contracts/T114-faq-chatbot-v1.md`
+- `docs/business-process-cruisers-crib.md`
+- `docs/business-process-implementation-alignment-report.md`
 
 ### Live repo code and manifests
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-23T02:42:12.3606484+08:00",
+  "generatedAt": "2026-07-26T20:11:07.9356166+08:00",
   "policy": {
     "orchestratorWriteMode": "proposal-only",
     "validatorMode": "content-strict",
@@ -112,13 +112,13 @@
         "control.domain-map"
       ],
       "summaryMaxWords": null,
-      "version": 1,
+      "version": 2,
       "hash": {
         "algorithm": "sha256",
-        "value": "4890dfcb9160089f3a8d9f2aa31c3fdd4469a08a0ed6f58401f7d805a52d6e96"
+        "value": "e2df092aa077886bfe7a3ae006d1d7e370717ebdc2c34adf1f657fb34601a07d"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-23T00:53:58.0011069+08:00"
+      "lastVerifiedAt": "2026-07-26T20:08:29.1749885+08:00"
     },
     {
       "path": "agents/orchestrator.md",
@@ -140,13 +140,13 @@
         "control.domain-map"
       ],
       "summaryMaxWords": null,
-      "version": 1,
+      "version": 2,
       "hash": {
         "algorithm": "sha256",
-        "value": "e8828ce5498431f6309afafc71ad1e3eb2e00ea742339e1a1a47e6f07d667a3d"
+        "value": "9ee4987d252a5abe8dbb34478a5991e617c3f5d024c2243a5b402d5f5027227e"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-23T00:53:58.0011069+08:00"
+      "lastVerifiedAt": "2026-07-26T20:08:29.1749885+08:00"
     },
     {
       "path": "agents/refactor-worker.md",
@@ -420,7 +420,7 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "bdac730819c529355081dfcc800f9656989f4c5f4fbb7056bf9ca2a5d014ac86"
+        "value": "6ac41e89a46b77213959aa7a6ead8ab82f621c32ab1e40fe3ae526d5274d1811"
       },
       "validationStatus": "validated",
       "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
@@ -594,7 +594,7 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "57028ac63d7846daa9d8518b0c8c2744e783d7554bab6b443ca622d6839bb39b"
+        "value": "7d1359114dd35a024bf385e6e7a469a667792077f43464413dd8591b932e841a"
       },
       "validationStatus": "validated",
       "lastVerifiedAt": "2026-04-21T03:21:42+08:00"
@@ -772,7 +772,7 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "65945fef8fb59daeb9e30e92ab10aff90044e2266274fb06fdbc36a8c0815be9"
+        "value": "e8c4bf0bfa215a229cbccd0e8c6d3e1c342cc71ff4d411c6fa1cc4b5ff0c778c"
       },
       "validationStatus": "validated",
       "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
@@ -844,7 +844,7 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "62f5cc12767070d6d38c6cbbbc92351cdd187a64c8f81b16a99ef4a16c97970a"
+        "value": "2e92edbc0bcd6f5da18ebb8f256a871b567bf4f41a806550042785ac7e9999ee"
       },
       "validationStatus": "validated",
       "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
@@ -1174,10 +1174,61 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "f0bf296b36643588a584446d196f9ee07bbb1b645a79e84bcc1b7554bbf0cc9b"
+        "value": "f2a047ac7cfe035502d9dea83cc295ee0d9db589277c34c3bce090ef1669f5dd"
       },
       "validationStatus": "validated",
       "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+    },
+    {
+      "path": "repository-map.md",
+      "docId": "control.repository-map",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Agent Summary",
+        "Runtime Boundaries",
+        "Contract Authority",
+        "Change Routing",
+        "Safety Boundaries"
+      ],
+      "directDependencies": [
+        "control.system-architecture",
+        "control.api-strategy",
+        "control.frontend-backend-sync"
+      ],
+      "summaryMaxWords": 100,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "6cbdc5effd8863bf986a494f70d59ecb6abc15bc4c5f1dcda84aa8a779500bb2"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-07-27T00:00:00+08:00"
+    },
+    {
+      "path": "database-migrations.md",
+      "docId": "control.database-migrations",
+      "docType": "control-plane",
+      "owningService": "control-plane",
+      "owningRole": "orchestrator",
+      "requiredHeadings": [
+        "Agent Summary",
+        "Commands",
+        "Existing Environment Baseline",
+        "Release Evidence"
+      ],
+      "directDependencies": [
+        "control.system-architecture"
+      ],
+      "summaryMaxWords": 100,
+      "version": 1,
+      "hash": {
+        "algorithm": "sha256",
+        "value": "1634e76b5bf54a7fdb2d7345fe8e8711da147770e05f501538d4434766470774"
+      },
+      "validationStatus": "validated",
+      "lastVerifiedAt": "2026-07-27T00:00:00+08:00"
     },
     {
       "path": "README.md",
@@ -1208,10 +1259,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "f2d416c972680f1b4ede396353bb13ff09cfc99a982b351097c2f3c84795ff26"
+        "value": "1c02b651a518cbccb05716f436d1d34a182eb9924d58c696ade0e14b2c71a8fd"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-23T00:53:58.0011069+08:00"
+      "lastVerifiedAt": "2026-07-27T00:00:00+08:00"
     },
     {
       "path": "system-architecture.md",
@@ -1240,23 +1291,23 @@
         "control.golden-domain-template"
       ],
       "summaryMaxWords": null,
-      "version": 1,
+      "version": 3,
       "hash": {
         "algorithm": "sha256",
-        "value": "394302e2b3ee8ff3e1de15e7db6a1671c2d8ebdfe35e76874a6a81a375d8e8f1"
+        "value": "ea16c5820cbde0193592679ceff42a8dcab925e76cc7ca07e59629166e67079f"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-23T00:53:58.0011069+08:00"
+      "lastVerifiedAt": "2026-07-26T20:11:07.9356166+08:00"
     },
     {
       "path": "auth-security-policy.md",
-      "version": 1,
+      "version": 2,
       "hash": {
         "algorithm": "sha256",
-        "value": "f646365087cdc54f22eeca6466db85f342624e3ffdb804b665f4380a90e17597"
+        "value": "5c32c785a34911eb2a75bfe898a65011b28332d4b8f7e69b674eaca8d30d8fa0"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z",
+      "lastVerifiedAt": "2026-07-26T10:54:42.7910646+08:00",
       "docId": "control.auth-security-policy",
       "docType": "control-plane",
       "owningService": "control-plane",
@@ -1267,7 +1318,8 @@
         "Email OTP Verification",
         "Pending Account States",
         "Legacy Login Position",
-        "Audit and Delivery Expectations"
+        "Audit and Delivery Expectations",
+        "Runtime and Abuse Protection"
       ],
       "directDependencies": [
         "control.system-architecture",

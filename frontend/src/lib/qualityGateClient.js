@@ -1,4 +1,5 @@
 import { ApiError } from './authClient';
+import { requireWorkClaimHeaders } from './staffWorkQueueClient';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 
@@ -65,7 +66,7 @@ export const normalizeQualityGateForReview = (qualityGate) => {
   };
 };
 
-export const getJobOrderQualityGate = async ({ jobOrderId, accessToken }) => {
+export const getJobOrderQualityGate = async ({ jobOrderId, accessToken, signal }) => {
   const normalizedJobOrderId = trimOrUndefined(jobOrderId);
 
   if (!normalizedJobOrderId) {
@@ -78,6 +79,7 @@ export const getJobOrderQualityGate = async ({ jobOrderId, accessToken }) => {
     await request(`/api/job-orders/${normalizedJobOrderId}/qa`, {
       method: 'GET',
       headers: buildAuthorizedHeaders(accessToken),
+      signal,
     }),
   );
 };
@@ -114,6 +116,8 @@ export const recordJobOrderQualityGateVerdict = async ({
   verdict,
   note,
   accessToken,
+  claimId,
+  version,
 }) => {
   const normalizedJobOrderId = trimOrUndefined(jobOrderId);
   const normalizedVerdict = trimOrUndefined(verdict);
@@ -134,7 +138,11 @@ export const recordJobOrderQualityGateVerdict = async ({
   return normalizeQualityGateForReview(
     await request(`/api/job-orders/${normalizedJobOrderId}/qa/verdict`, {
       method: 'PATCH',
-      headers: buildAuthorizedHeaders(accessToken),
+      headers: {
+        ...buildAuthorizedHeaders(accessToken),
+        ...requireWorkClaimHeaders(claimId),
+        ...(Number.isInteger(version) ? { 'If-Match': String(version) } : {}),
+      },
       body: {
         verdict: normalizedVerdict,
         note: normalizedNote,

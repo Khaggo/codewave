@@ -7,6 +7,7 @@ import { BOOKINGS_CLOCK } from '@main-modules/bookings/bookings.constants';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { BookingsService } from '@main-modules/bookings/services/bookings.service';
 import { BookingReservationPaymentGatewayService } from '@main-modules/bookings/services/booking-reservation-payment-gateway.service';
+import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-orders.repository';
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 
 describe('BookingsService', () => {
@@ -150,6 +151,12 @@ describe('BookingsService', () => {
 
   const buildVehiclesRepositoryMock = () => ({
     findOwnedByUser: jest.fn().mockResolvedValue({ id: 'vehicle-1', userId: 'user-1' }),
+    findById: jest.fn().mockResolvedValue({ id: 'vehicle-1', userId: 'user-1' }),
+  });
+
+  const buildJobOrdersRepositoryMock = () => ({
+    findByVehicleId: jest.fn().mockResolvedValue([]),
+    findLatestByBookingSourceId: jest.fn().mockResolvedValue(null),
   });
 
   const createModule = async ({
@@ -158,12 +165,14 @@ describe('BookingsService', () => {
     vehiclesRepository = buildVehiclesRepositoryMock(),
     paymentGateway = buildGatewayMock(),
     notificationsService = buildNotificationsMock(),
+    jobOrdersRepository = buildJobOrdersRepositoryMock(),
   }: Partial<{
     bookingsRepository: ReturnType<typeof buildBookingsRepositoryMock>;
     usersService: ReturnType<typeof buildUsersServiceMock>;
     vehiclesRepository: ReturnType<typeof buildVehiclesRepositoryMock>;
     paymentGateway: ReturnType<typeof buildGatewayMock>;
     notificationsService: ReturnType<typeof buildNotificationsMock>;
+    jobOrdersRepository: ReturnType<typeof buildJobOrdersRepositoryMock>;
   }> = {}) => {
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -174,6 +183,7 @@ describe('BookingsService', () => {
         { provide: VehiclesRepository, useValue: vehiclesRepository },
         { provide: BookingReservationPaymentGatewayService, useValue: paymentGateway },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: JobOrdersRepository, useValue: jobOrdersRepository },
       ],
     }).compile();
 
@@ -184,6 +194,7 @@ describe('BookingsService', () => {
       vehiclesRepository,
       paymentGateway,
       notificationsService,
+      jobOrdersRepository,
     };
   };
 
@@ -233,6 +244,34 @@ describe('BookingsService', () => {
       }),
     );
     expect(result.id).toBe('booking-1');
+  });
+
+  it('rejects a new booking when the same vehicle already has an active service job order', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    const jobOrdersRepository = buildJobOrdersRepositoryMock();
+    jobOrdersRepository.findByVehicleId.mockResolvedValue([
+      {
+        id: 'job-order-1',
+        jobOrderReference: 'JO-20260622-0001',
+        status: 'ready_for_qa',
+      },
+    ]);
+    const { service } = await createModule({ bookingsRepository, jobOrdersRepository });
+
+    await expect(
+      service.create(
+        {
+          userId: 'user-1',
+          vehicleId: 'vehicle-1',
+          timeSlotId: 'slot-1',
+          scheduledDate: '2026-04-20',
+          serviceIds: ['service-1'],
+          notes: 'Follow-up booking while the same vehicle is still in service.',
+        },
+        { userId: 'user-1', role: 'customer' },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(bookingsRepository.create).not.toHaveBeenCalled();
   });
 
   it('creates a booking service with a persisted base price for service pricing management', async () => {
@@ -390,6 +429,7 @@ describe('BookingsService', () => {
   it('rejects booking creation when the vehicle is not owned by the user', async () => {
     const vehiclesRepository = {
       findOwnedByUser: jest.fn().mockResolvedValue(null),
+      findById: jest.fn().mockResolvedValue(null),
     };
 
     const { service } = await createModule({ vehiclesRepository });
@@ -848,6 +888,56 @@ describe('BookingsService', () => {
       { userId: 'user-1', role: 'customer' },
     );
 
+    expect(availability.days).toEqual([
+      expect.objectContaining({
+        scheduledDate: '2026-04-02',
+        status: 'full',
+        isBookable: false,
+        availableSlotCount: 0,
+        slots: [
+          expect.objectContaining({
+            timeSlotId: 'slot-1',
+            status: 'full',
+            isAvailable: false,
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('marks a vehicle with active service as unavailable before booking submit is attempted', async () => {
+    const bookingsRepository = buildBookingsRepositoryMock();
+    bookingsRepository.listTimeSlots.mockResolvedValue([
+      {
+        id: 'slot-1',
+        label: 'Morning Slot',
+        startTime: '09:00',
+        endTime: '10:00',
+        capacity: 2,
+        isActive: true,
+      },
+    ]);
+    const jobOrdersRepository = buildJobOrdersRepositoryMock();
+    jobOrdersRepository.findByVehicleId.mockResolvedValue([
+      {
+        id: 'job-order-1',
+        status: 'ready_for_qa',
+      },
+    ]);
+
+    const { service } = await createModule({ bookingsRepository, jobOrdersRepository });
+
+    const availability = await service.getAvailability(
+      {
+        startDate: '2026-04-02',
+        endDate: '2026-04-02',
+        timeSlotId: 'slot-1',
+        vehicleId: 'vehicle-1',
+      },
+      { userId: 'user-1', role: 'customer' },
+    );
+
+    expect(availability.vehicleId).toBe('vehicle-1');
     expect(availability.days).toEqual([
       expect.objectContaining({
         scheduledDate: '2026-04-02',

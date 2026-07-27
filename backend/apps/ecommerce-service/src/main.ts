@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { isAllowedCorsOrigin } from '@shared/config/cors';
+import helmet from 'helmet';
 
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger';
@@ -13,11 +14,21 @@ async function bootstrap() {
     rawBody: true,
   });
   const configService = app.get(ConfigService);
+  const env = configService.get<string>('env', 'development');
   const allowedOrigins = configService.get<string[]>('cors.origins', [
     'http://localhost:3002',
     'http://127.0.0.1:3002',
   ]);
 
+  if (env.toLowerCase() === 'production') {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.setGlobalPrefix('api');
   app.enableCors({
     origin: (
@@ -28,7 +39,7 @@ async function bootstrap() {
         isAllowedCorsOrigin({
           origin,
           allowedOrigins,
-          env: configService.get<string>('env', 'development'),
+          env,
         })
       ) {
         callback(null, true);

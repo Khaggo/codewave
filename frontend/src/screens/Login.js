@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertCircle, Eye, EyeOff, Lock, Mail, ShieldCheck, UserCog } from 'lucide-react'
+import Image from 'next/image'
+import { AlertCircle, Eye, EyeOff, LoaderCircle, Lock, Mail, ShieldCheck, UserCog } from 'lucide-react'
 
 import { ApiError, loginAccount } from '@/lib/authClient'
 
@@ -25,6 +26,8 @@ const buildLoginErrors = (form) => {
 }
 
 const InputField = ({
+  id,
+  name,
   label,
   icon: Icon,
   value,
@@ -36,7 +39,11 @@ const InputField = ({
   trailing,
 }) => (
   <div>
-    <label className="block text-xs font-semibold mb-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+    <label
+      htmlFor={id}
+      className="block text-xs font-semibold mb-1.5"
+      style={{ color: 'rgba(255,255,255,0.45)' }}
+    >
       {label}
     </label>
     <div className="relative">
@@ -46,21 +53,29 @@ const InputField = ({
         style={{ color: 'rgba(255,255,255,0.25)' }}
       />
       <input
+        id={id}
+        name={name}
         type={type}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
         autoComplete={autoComplete}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${id}-error` : undefined}
         className={`${fieldBaseClasses} ${trailing ? 'pr-11' : 'pr-4'}`}
         style={{ borderColor: error ? 'rgba(248,113,113,0.78)' : 'rgba(255,255,255,0.09)' }}
       />
       {trailing}
     </div>
-    {error ? <p className="mt-1.5 text-xs text-red-400">{error}</p> : null}
+    {error ? (
+      <p id={`${id}-error`} className="mt-1.5 text-xs text-red-400">
+        {error}
+      </p>
+    ) : null}
   </div>
 )
 
-export default function Login({ onAuthenticated, initialError }) {
+export default function Login({ onAuthenticated, initialError, restoring = false }) {
   const [loginForm, setLoginForm] = useState(emptyLoginForm)
   const [errors, setErrors] = useState({})
   const [notice, setNotice] = useState(
@@ -127,14 +142,16 @@ export default function Login({ onAuthenticated, initialError }) {
 
   return (
     <div className="min-h-screen flex bg-[#0a0a0a]">
-      <div
-        className="hidden lg:flex lg:w-[58%] flex-col justify-between relative overflow-hidden"
-        style={{
-          backgroundImage: 'url(/21352.jpg)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      >
+      <div className="hidden lg:flex lg:w-[58%] flex-col justify-between relative overflow-hidden">
+        <Image
+          src="/21352.webp"
+          alt=""
+          fill
+          priority
+          unoptimized
+          sizes="58vw"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
         <div
           className="absolute inset-0"
           style={{ background: 'linear-gradient(135deg, rgba(0,0,0,0.88) 0%, rgba(10,6,0,0.78) 50%, rgba(0,0,0,0.84) 100%)' }}
@@ -182,7 +199,7 @@ export default function Login({ onAuthenticated, initialError }) {
             </span>
           </h1>
           <p className="mt-5 text-base font-medium leading-relaxed max-w-md" style={{ color: 'rgba(255,255,255,0.60)' }}>
-            This web portal is for technicians, head technicians, service advisers, and super admins. Customer accounts should use the mobile app instead.
+            This web portal is for service advisers and super admins. Customer accounts should use the mobile app instead.
           </p>
         </div>
 
@@ -219,65 +236,82 @@ export default function Login({ onAuthenticated, initialError }) {
           <p className="text-xs font-bold uppercase tracking-[0.2em] mb-3" style={{ color: '#f07c00' }}>
             Staff & Admin Access Portal
           </p>
-          <h2 className="text-3xl font-black text-white leading-tight">Login</h2>
+          <h2 className="text-3xl font-black text-white leading-tight">
+            {restoring ? 'Opening workspace' : 'Login'}
+          </h2>
 
-          {notice?.text ? (
-            <div
-              className="flex items-start gap-2.5 mt-6 mb-5 rounded-xl px-4 py-3"
-              style={{
-                background: 'rgba(239,68,68,0.08)',
-                border: '1px solid rgba(239,68,68,0.18)',
-              }}
-            >
-              <AlertCircle size={15} className="text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-400">{notice.text}</p>
+          {restoring ? (
+            <div className="mt-6 flex items-center gap-3 text-sm text-ink-secondary" role="status" aria-live="polite">
+              <LoaderCircle size={18} className="animate-spin text-brand-orange" />
+              <p>Checking your saved staff session...</p>
             </div>
-          ) : null}
-
-          <form onSubmit={handleLoginSubmit} className="space-y-4 mt-6" noValidate>
-            <InputField
-              label="Email"
-              icon={Mail}
-              value={loginForm.email}
-              onChange={(event) => setLoginForm((current) => ({ ...current, email: event.target.value }))}
-              placeholder="email@example.com"
-              autoComplete="email"
-              error={errors.email}
-            />
-            <InputField
-              label="Password"
-              icon={Lock}
-              value={loginForm.password}
-              onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Enter your password"
-              autoComplete="current-password"
-              error={errors.password}
-              trailing={
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((value) => !value)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-muted"
+          ) : (
+            <>
+              {notice?.text ? (
+                <div
+                  className="flex items-start gap-2.5 mt-6 mb-5 rounded-xl px-4 py-3"
+                  style={{
+                    background: 'rgba(239,68,68,0.08)',
+                    border: '1px solid rgba(239,68,68,0.18)',
+                  }}
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              }
-            />
+                  <AlertCircle size={15} className="text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-400">{notice.text}</p>
+                </div>
+              ) : null}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 rounded-xl text-sm font-bold text-white transition-all duration-150 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                background: loading
-                  ? 'rgba(179,84,30,0.5)'
-                  : 'linear-gradient(135deg,#f07c00 0%,#b3541e 100%)',
-                boxShadow: loading ? 'none' : '0 4px 20px rgba(179,84,30,0.35)',
-              }}
-            >
-              {loading ? 'Signing in...' : 'Sign In'}
-            </button>
-          </form>
+              <form onSubmit={handleLoginSubmit} className="space-y-4 mt-6" noValidate>
+                <InputField
+                  id="staff-email"
+                  name="email"
+                  label="Email"
+                  icon={Mail}
+                  value={loginForm.email}
+                  onChange={(event) => setLoginForm((current) => ({ ...current, email: event.target.value }))}
+                  placeholder="email@example.com"
+                  autoComplete="email"
+                  error={errors.email}
+                />
+                <InputField
+                  id="staff-password"
+                  name="password"
+                  label="Password"
+                  icon={Lock}
+                  value={loginForm.password}
+                  onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  error={errors.password}
+                  trailing={
+                    <button
+                      type="button"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowPassword((value) => !value)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-muted"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  }
+                />
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 rounded-xl text-sm font-bold text-white transition-all duration-150 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    background: loading
+                      ? 'rgba(179,84,30,0.5)'
+                      : 'linear-gradient(135deg,#f07c00 0%,#b3541e 100%)',
+                    boxShadow: loading ? 'none' : '0 4px 20px rgba(179,84,30,0.35)',
+                  }}
+                >
+                  {loading ? 'Signing in...' : 'Sign In'}
+                </button>
+              </form>
+            </>
+          )}
         </div>
       </div>
     </div>

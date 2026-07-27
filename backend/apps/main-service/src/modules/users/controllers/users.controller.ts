@@ -40,7 +40,7 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('customer', 'technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Roles('customer', 'service_adviser', 'super_admin')
   @Get(':id')
   @ApiOperation({ summary: 'Get a user by id.' })
   @ApiParam({
@@ -66,7 +66,7 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('customer', 'technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Roles('customer', 'service_adviser', 'super_admin')
   @Patch(':id')
   @ApiOperation({ summary: 'Update user profile fields.' })
   @ApiParam({
@@ -89,7 +89,7 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('customer', 'technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Roles('customer', 'service_adviser', 'super_admin')
   @Get(':id/addresses')
   @ApiOperation({ summary: 'List addresses attached to a user.' })
   @ApiParam({
@@ -116,7 +116,7 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('customer', 'technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Roles('customer', 'service_adviser', 'super_admin')
   @Post(':id/addresses')
   @ApiOperation({ summary: 'Add an address to a user.' })
   @ApiParam({
@@ -139,7 +139,7 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('customer', 'technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Roles('customer', 'service_adviser', 'super_admin')
   @Patch(':id/addresses/:addressId')
   @ApiOperation({ summary: 'Update a user address.' })
   @ApiParam({

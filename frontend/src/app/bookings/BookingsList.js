@@ -3,15 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
-  BellRing,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Edit3,
   Gauge,
   ListChecks,
   RefreshCw,
   Save,
+  Settings2,
   ShieldAlert,
   Trash2,
   X,
@@ -31,6 +33,7 @@ import {
   updateBookingDateClosure,
   updateTimeSlotDefinition,
 } from '@/lib/bookingStaffClient'
+import { sendBookingToWorkshop } from '@/lib/jobOrderWorkbenchClient'
 import { useToast } from '@/components/Toast'
 import { useUser } from '@/lib/userContext'
 import BookingActionConfirmModal from './BookingActionConfirmModal'
@@ -893,7 +896,12 @@ function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId 
             const actions = booking.jobOrderId ? [] : getBookingStatusActions(booking.status)
             const handoffStateMeta = getBookingHandoffStateMeta(booking)
             return (
-              <div key={booking.id} className="px-5 py-4">
+              <div
+                key={booking.id}
+                data-booking-row
+                data-booking-id={booking.id}
+                className="px-5 py-4"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <p className="font-mono text-[11px] font-bold tracking-wide text-brand-orange">
                     {formatBookingReference(booking)}
@@ -1002,6 +1010,164 @@ function ScheduleSlotCard({ slot, onStatusAction, onOpenJobOrder, busyBookingId 
   )
 }
 
+function AttentionQueue({
+  bookings,
+  busyBookingId,
+  onOpenIntake,
+  onOpenJobOrder,
+  onStatusAction,
+}) {
+  if (bookings.length === 0) {
+    return (
+      <div className="card">
+        <EmptyState
+          icon={CheckCircle2}
+          title="No bookings need attention"
+          copy="This date has no active booking steps waiting on the front desk."
+        />
+      </div>
+    )
+  }
+
+  return (
+    <section className="card overflow-hidden">
+      <div className="border-b border-surface-border px-5 py-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="card-title">Needs attention</p>
+            <p className="mt-1 text-sm text-ink-secondary">
+              Work from top to bottom. Each booking shows the next useful action.
+            </p>
+          </div>
+          <span className="badge badge-orange">
+            {bookings.length} active booking{bookings.length === 1 ? '' : 's'}
+          </span>
+        </div>
+      </div>
+
+      <div className="divide-y divide-surface-border">
+        {bookings.map((booking) => {
+          const statusActions = getBookingStatusActions(booking.status)
+          const isBusy = busyBookingId === booking.id
+          const isReadyForIntake = ['confirmed', 'rescheduled'].includes(booking.status)
+          const shouldOpenJobOrder = Boolean(booking.jobOrderId) || booking.status === 'in_service'
+          const primaryStatusAction =
+            !isReadyForIntake && !shouldOpenJobOrder ? statusActions[0] ?? null : null
+          const secondaryActions = primaryStatusAction
+            ? statusActions.slice(1)
+            : statusActions
+          const PrimaryStatusIcon = primaryStatusAction?.icon
+
+          return (
+            <article
+              key={booking.id}
+              data-booking-row
+              data-booking-id={booking.id}
+              className="px-5 py-4"
+            >
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-[11px] font-bold tracking-wide text-brand-orange">
+                      {formatBookingReference(booking)}
+                    </p>
+                    <StatusBadge status={booking.status} />
+                    {booking.reservationPayment ? (
+                      <span
+                        className={`badge ${
+                          booking.reservationPayment.status === 'paid'
+                            ? 'badge-green'
+                            : 'badge-orange'
+                        }`}
+                      >
+                        {getReservationPaymentStatusLabel(booking.reservationPayment)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1.5 text-sm font-semibold text-ink-primary">
+                    {getServiceNames(booking)}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
+                    <span>{booking.slotWindow || booking.slotLabel || 'Schedule time unavailable'}</span>
+                    <span>{getCustomerLabel(booking)}</span>
+                    <span>{getVehicleLabel(booking)}</span>
+                  </div>
+                  {booking.notes ? (
+                    <p className="mt-2 line-clamp-1 text-xs text-ink-secondary">
+                      <span className="font-semibold">Notes:</span> {booking.notes}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  {isReadyForIntake ? (
+                    <button
+                      type="button"
+                      className="booking-status-action-primary"
+                      onClick={() => onOpenIntake(booking)}
+                    >
+                      <CheckCircle2 size={13} />
+                      Start Intake
+                    </button>
+                  ) : shouldOpenJobOrder ? (
+                    <button
+                      type="button"
+                      className="booking-status-action-primary"
+                      onClick={() => onOpenJobOrder(booking)}
+                    >
+                      <ListChecks size={13} />
+                      {booking.jobOrderId ? 'Resume job' : 'Send to Workshop'}
+                    </button>
+                  ) : primaryStatusAction ? (
+                    <button
+                      type="button"
+                      className="booking-status-action-primary"
+                      disabled={Boolean(busyBookingId)}
+                      onClick={() => onStatusAction(booking, primaryStatusAction)}
+                    >
+                      {isBusy ? (
+                        <RefreshCw size={13} className="animate-spin" />
+                      ) : (
+                        <PrimaryStatusIcon size={13} />
+                      )}
+                      {isBusy ? 'Working...' : primaryStatusAction.label}
+                    </button>
+                  ) : null}
+
+                  {secondaryActions.length > 0 ? (
+                    <details className="relative">
+                      <summary className="btn-ghost min-h-10 cursor-pointer list-none px-3 text-sm">
+                        More Actions
+                      </summary>
+                      <div className="absolute right-0 z-20 mt-2 min-w-52 space-y-2 rounded-lg border border-surface-border bg-surface-card p-2 shadow-xl">
+                        {secondaryActions.map((action) => {
+                          const Icon = action.icon
+                          return (
+                            <button
+                              key={`${booking.id}-${action.kind || action.status}`}
+                              type="button"
+                              className={`${action.className} w-full justify-start`}
+                              disabled={Boolean(busyBookingId)}
+                              onClick={() => onStatusAction(booking, action)}
+                            >
+                              <Icon size={13} />
+                              {action.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </details>
+                  ) : null}
+                </div>
+              </div>
+            </article>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 function QueueTable({ queue }) {
   const items = queue?.items ?? []
 
@@ -1078,8 +1244,10 @@ export default function BookingsList() {
   const user = useUser()
   const hasAutoSelectedUpcomingDate = useRef(false)
   const selectedDateRef = useRef(toDateKey())
-  const [tab, setTab] = useState('schedule')
+  const staffBookingReadsRequestRef = useRef(0)
+  const [tab, setTab] = useState('attention')
   const [scheduleScope, setScheduleScope] = useState('active')
+  const [showScheduleManagement, setShowScheduleManagement] = useState(false)
   const [selectedDate, setSelectedDate] = useState(() => toDateKey())
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()))
   const [statusFilter, setStatusFilter] = useState('all')
@@ -1217,6 +1385,9 @@ export default function BookingsList() {
   ])
 
   const loadStaffBookingReads = useCallback(async () => {
+    const requestId = staffBookingReadsRequestRef.current + 1
+    staffBookingReadsRequestRef.current = requestId
+
     if (!user?.accessToken) {
       const unauthorized = {
         status: 'unauthorized',
@@ -1262,6 +1433,10 @@ export default function BookingsList() {
       ),
       getCurrentQueue(queueQuery, user.accessToken),
     ])
+
+    if (staffBookingReadsRequestRef.current !== requestId) {
+      return
+    }
 
     if (scheduleResult.status === 'fulfilled') {
       setScheduleState({
@@ -1755,21 +1930,75 @@ export default function BookingsList() {
     await Promise.allSettled(refreshTasks)
   }
 
-  function openJobOrderFromBooking(booking, overrideJobOrderId) {
+  async function openJobOrderFromBooking(booking, overrideJobOrderId) {
     const jobOrderId = overrideJobOrderId ?? booking?.jobOrderId
 
-    if (!jobOrderId) {
+    if (jobOrderId) {
+      window.location.assign(`/admin/job-orders/${jobOrderId}`)
       return
     }
 
+    if (!booking?.id || !user?.accessToken) {
+      setActionState({
+        status: 'error',
+        busyBookingId: '',
+        message: 'Sign in with a service adviser or super admin account before sending work to the workshop.',
+      })
+      return
+    }
+
+    setActionState({
+      status: 'submitting',
+      busyBookingId: booking.id,
+      message: '',
+    })
+
+    try {
+      const handoff = await sendBookingToWorkshop({
+        bookingId: booking.id,
+        accessToken: user.accessToken,
+      })
+      setActionState({
+        status: 'success',
+        busyBookingId: '',
+        message: handoff.created
+          ? `${handoff.reference} is ready for workshop setup.`
+          : `${handoff.reference} was already created and has been reopened.`,
+      })
+      window.location.assign(`/admin/job-orders/${handoff.jobOrderId}`)
+    } catch (error) {
+      setActionState({
+        status: 'error',
+        busyBookingId: '',
+        message: error?.message || 'The booking could not be sent to the workshop.',
+      })
+    }
+  }
+
+  function openIntakeFromBooking(booking) {
     const params = new URLSearchParams()
-    params.set('jobOrderId', jobOrderId)
 
     if (booking?.id) {
       params.set('bookingId', booking.id)
     }
+    if (booking?.vehicleId) {
+      params.set('vehicleId', booking.vehicleId)
+    }
+    const customerUserId = booking?.customerUserId ?? booking?.customerId
+    if (customerUserId) {
+      params.set('customerUserId', customerUserId)
+    }
+    if (booking?.scheduledDate) {
+      params.set('scheduledDate', booking.scheduledDate)
+    }
 
-    window.location.assign(`/admin/job-orders?${params.toString()}`)
+    window.location.assign(`/admin/intake-inspections?${params.toString()}`)
+  }
+
+  function shiftSelectedDate(dayOffset) {
+    const nextDate = toDateFromKey(selectedDate)
+    nextDate.setDate(nextDate.getDate() + dayOffset)
+    handleSelectedDateChange(toDateKey(nextDate))
   }
 
   function handleSelectedDateChange(nextDateKey) {
@@ -1978,6 +2207,13 @@ export default function BookingsList() {
   }
 
   const scheduleSummary = useMemo(() => summarizeSchedule(scheduleState.data), [scheduleState.data])
+  const attentionBookings = useMemo(
+    () =>
+      flattenScheduleBookings(scheduleState.data).filter((booking) =>
+        ['pending_payment', 'pending', 'confirmed', 'rescheduled', 'in_service'].includes(booking.status),
+      ),
+    [scheduleState.data],
+  )
   const bookedScheduleDates = useMemo(
     () => scheduleWindowState.dates.filter((date) => date.totalBookings > 0 || date.isClosed),
     [scheduleWindowState.dates],
@@ -2046,131 +2282,126 @@ export default function BookingsList() {
       <PageHeader
         eyebrow="Staff Booking Operations"
         title="Booking Schedule"
-        description="Review customer bookings, manage slot availability, and keep the active queue moving from one operations workspace."
+        description="Work through customer bookings in order, from reservation review to intake and workshop handoff."
         actions={
-          <button
-            onClick={refreshBookingOperations}
-            disabled={isRefreshingOperations}
-            className="btn-ghost min-h-11 min-w-[148px]"
-          >
-            <RefreshCw size={14} className={isRefreshingOperations ? 'animate-spin' : ''} />
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowScheduleManagement((current) => !current)}
+              className="btn-ghost min-h-11"
+              aria-expanded={showScheduleManagement}
+            >
+              <Settings2 size={14} />
+              {showScheduleManagement ? 'Close Schedule Settings' : 'Manage Schedule'}
+            </button>
+            <button
+              type="button"
+              onClick={refreshBookingOperations}
+              disabled={isRefreshingOperations}
+              className="btn-ghost min-h-11"
+              aria-label="Refresh booking schedule"
+            >
+              <RefreshCw size={14} className={isRefreshingOperations ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          </div>
         }
       />
 
       <section className="booking-control-strip">
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_minmax(0,1fr)] xl:items-end">
-          <label className="block">
-            <span className="label">Schedule date</span>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(event) => {
-                handleSelectedDateChange(event.target.value || toDateKey())
-              }}
-              className="input"
-            />
-          </label>
-          <label className="block">
-            <span className="label">Schedule status</span>
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className="select"
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => shiftSelectedDate(-1)}
+              className="btn-ghost h-11 w-11 justify-center p-0"
+              aria-label="Previous schedule date"
+              title="Previous day"
             >
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="block">
-            <span className="label">Schedule view</span>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {[
-                { key: 'active', label: 'Active' },
-                { key: 'history', label: 'History' },
-              ].map((view) => (
-                <button
-                  key={view.key}
-                  type="button"
-                  onClick={() => setScheduleScope(view.key)}
-                  className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-                    scheduleScope === view.key ? 'text-white' : 'text-ink-secondary'
-                  }`}
-                  style={
-                    scheduleScope === view.key
-                      ? { background: 'rgb(var(--brand-orange))' }
-                      : { background: 'rgb(var(--brand-orange) / 0.08)' }
-                  }
-                >
-                  {view.label}
-                </button>
-              ))}
-            </div>
+              <ChevronLeft size={18} />
+            </button>
+            <label className="block min-w-0 sm:min-w-[230px]">
+              <span className="sr-only">Schedule date</span>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(event) => {
+                  handleSelectedDateChange(event.target.value || toDateKey())
+                }}
+                className="input"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => shiftSelectedDate(1)}
+              className="btn-ghost h-11 w-11 justify-center p-0"
+              aria-label="Next schedule date"
+              title="Next day"
+            >
+              <ChevronRight size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectedDateChange(toDateKey())}
+              className="btn-ghost min-h-11 px-3"
+            >
+              Today
+            </button>
           </div>
-          <label className="block">
-            <span className="label">Slot filter</span>
-            <select
-              value={timeSlotFilter}
-              onChange={(event) => setTimeSlotFilter(event.target.value)}
-              className="select"
-            >
-              <option value="all">All slots</option>
-              {timeSlotOptions.map((slot) => (
-                <option key={slot.timeSlotId} value={slot.timeSlotId}>
-                  {formatTimeSlotWindow(slot) ? `${slot.label} (${formatTimeSlotWindow(slot)})` : slot.label}
-                </option>
-              ))}
-            </select>
-          </label>
+
+          <details className="relative">
+            <summary className="btn-ghost min-h-11 cursor-pointer list-none px-4">
+              <Settings2 size={14} />
+              Filters
+            </summary>
+            <div className="mt-3 grid gap-3 rounded-lg border border-surface-border bg-surface-card p-4 shadow-xl sm:grid-cols-3 xl:absolute xl:right-0 xl:z-30 xl:w-[720px]">
+              <label className="block">
+                <span className="label">Booking status</span>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                  className="select"
+                >
+                  {STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="label">Schedule history</span>
+                <select
+                  value={scheduleScope}
+                  onChange={(event) => setScheduleScope(event.target.value)}
+                  className="select"
+                >
+                  <option value="active">Active Bookings</option>
+                  <option value="history">Booking History</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="label">Time slot</span>
+                <select
+                  value={timeSlotFilter}
+                  onChange={(event) => setTimeSlotFilter(event.target.value)}
+                  className="select"
+                >
+                  <option value="all">All slots</option>
+                  {timeSlotOptions.map((slot) => (
+                    <option key={slot.timeSlotId} value={slot.timeSlotId}>
+                      {formatTimeSlotWindow(slot) ? `${slot.label} (${formatTimeSlotWindow(slot)})` : slot.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </details>
         </div>
       </section>
 
-      {scheduleScope === 'active' && bookedScheduleDates.length > 0 ? (
-        <div
-          className="toolbar-surface flex flex-col gap-3 md:flex-row md:items-center"
-          style={{ backgroundColor: 'rgb(var(--brand-orange) / 0.04)', borderColor: 'rgb(var(--brand-orange) / 0.18)' }}
-        >
-          <div className="flex shrink-0 items-center gap-2.5">
-            <BellRing size={16} className="text-brand-orange" />
-            <p className="text-xs font-semibold text-ink-primary">
-              Booking watchlist
-              <span className="font-normal text-ink-muted"> — choose a date with live bookings or an active closure</span>
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-1.5 md:ml-auto">
-            {bookedScheduleDates.map((date) => {
-              const isActive = selectedDate === date.dateKey
-              const isClosedDate = Boolean(date.isClosed)
-              return (
-                <button
-                  key={date.dateKey}
-                  onClick={() => handleSelectedDateChange(date.dateKey)}
-                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-                    isActive ? 'text-white' : 'hover:brightness-110'
-                  }`}
-                  style={
-                    isActive
-                      ? { background: 'rgb(var(--brand-orange))', color: '#fff' }
-                      : { background: 'rgb(var(--brand-orange) / 0.12)', color: 'rgb(var(--brand-orange))' }
-                  }
-                >
-                  {formatDate(date.dateKey)}
-                  {isClosedDate
-                    ? ` • Closed${date.totalBookings ? ` • ${date.totalBookings} bookings` : ''}`
-                    : ` • ${date.totalBookings}${date.pendingCount ? `/${date.pendingCount} pending` : ''}`}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ) : scheduleScope === 'active' && scheduleWindowState.status === 'loading' ? (
-        <div className="text-xs text-ink-muted px-1">Scanning the next month for customer-created bookings...</div>
-      ) : null}
-
+      {showScheduleManagement ? (
+        <>
       <section className="card p-5">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -2330,12 +2561,14 @@ export default function BookingsList() {
         onToggleActive={handleToggleSlotActive}
         onDelete={handleDeleteSlotDefinition}
       />
+        </>
+      ) : null}
 
       <div className="booking-segmented-control">
         {[
+          { key: 'attention', icon: CheckCircle2, label: 'Needs Attention' },
           { key: 'schedule', icon: CalendarDays, label: 'Daily Schedule' },
           { key: 'calendar', icon: CalendarDays, label: 'Calendar View' },
-          { key: 'queue', icon: ListChecks, label: 'Current Queue' },
         ].map((item) => (
           <button
             key={item.key}
@@ -2347,6 +2580,59 @@ export default function BookingsList() {
           </button>
         ))}
       </div>
+
+      {tab === 'attention' ? (
+        <section className="space-y-5">
+          <div className="toolbar-surface grid grid-cols-2 gap-3 xl:grid-cols-4 xl:divide-x xl:divide-surface-border">
+            <div className="px-2">
+              <p className="text-xs font-semibold text-ink-muted">Work Date</p>
+              <p className="mt-1 text-sm font-bold text-ink-primary">
+                {formatDate(scheduleState.data?.scheduledDate ?? selectedDate)}
+              </p>
+            </div>
+            <div className="px-2 xl:pl-5">
+              <p className="text-xs font-semibold text-ink-muted">Needs Attention</p>
+              <p className="mt-1 text-sm font-bold text-ink-primary">
+                {attentionBookings.length} booking{attentionBookings.length === 1 ? '' : 's'}
+              </p>
+            </div>
+            <div className="px-2 xl:pl-5">
+              <p className="text-xs font-semibold text-ink-muted">All Bookings</p>
+              <p className="mt-1 text-sm font-bold text-ink-primary">
+                {scheduleSummary.totalBookings} total / {scheduleSummary.confirmedCount} confirmed
+              </p>
+            </div>
+            <div className="px-2 xl:pl-5">
+              <p className="text-xs font-semibold text-ink-muted">Available Capacity</p>
+              <p className="mt-1 text-sm font-bold text-ink-primary">
+                {Math.max(0, scheduleSummary.totalCapacity - scheduleSummary.totalBookings)} of {scheduleSummary.totalCapacity}
+              </p>
+            </div>
+          </div>
+
+          {actionState.message ? (
+            <div className={actionState.status === 'error' ? 'status-message status-message-danger' : 'status-message status-message-success'}>
+              {actionState.message}
+            </div>
+          ) : null}
+
+          {scheduleState.error ? (
+            <div className="status-message status-message-danger">{scheduleState.error}</div>
+          ) : null}
+
+          {isLoadingSchedule ? (
+            <LoadingRows />
+          ) : (
+            <AttentionQueue
+              bookings={attentionBookings}
+              busyBookingId={actionState.busyBookingId}
+              onOpenIntake={openIntakeFromBooking}
+              onOpenJobOrder={openJobOrderFromBooking}
+              onStatusAction={handleBookingStatusAction}
+            />
+          )}
+        </section>
+      ) : null}
 
       {tab === 'schedule' ? (
         <section className="space-y-5">
@@ -2459,45 +2745,6 @@ export default function BookingsList() {
           }
           onToday={() => handleSelectedDateChange(toDateKey())}
         />
-      ) : null}
-
-      {tab === 'queue' ? (
-        <section className="space-y-5">
-          {!hasQueueData && ['unauthorized', 'forbidden', 'validation-error', 'error'].includes(queueState.status) ? (
-            <BlockingState state={queueState} onRetry={refreshBookingOperations} />
-          ) : (
-            <>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <SummaryTile
-                  icon={ListChecks}
-                  label="Current Queue"
-                  value={queueCount}
-                  sub={`For ${formatDate(queueState.data?.scheduledDate ?? toDateKey())}`}
-                />
-                <SummaryTile
-                  icon={Clock}
-                  label="Generated"
-                  value={formatDateTime(queueState.data?.generatedAt)}
-                  sub="Snapshot refreshes from the live read model"
-                />
-                <SummaryTile
-                  icon={ShieldAlert}
-                  label="Access Boundary"
-                  value={canReadBookingOperations ? 'Allowed' : 'Forbidden'}
-                  sub="Service adviser and super admin only"
-                />
-              </div>
-
-              {queueState.error ? (
-                <div className="status-message status-message-danger">
-                  {queueState.error}
-                </div>
-              ) : null}
-
-              {isLoadingQueue ? <LoadingRows /> : <QueueTable queue={queueState.data} />}
-            </>
-          )}
-        </section>
       ) : null}
 
       <BookingActionConfirmModal

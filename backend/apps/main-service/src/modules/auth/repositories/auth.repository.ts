@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -174,11 +174,11 @@ export class AuthRepository extends BaseRepository {
     });
   }
 
-  async incrementOtpAttempts(id: string, attempts: number) {
+  async incrementOtpAttempts(id: string) {
     const [challenge] = await this.db
       .update(authOtpChallenges)
       .set({
-        attempts,
+        attempts: sql`${authOtpChallenges.attempts} + 1`,
       })
       .where(eq(authOtpChallenges.id, id))
       .returning();

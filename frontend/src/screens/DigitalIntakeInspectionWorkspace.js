@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  ArrowRight,
   BadgeCheck,
   FileSearch,
   Loader2,
@@ -12,6 +13,7 @@ import {
 
 import PageHeader from '@/components/ui/PageHeader'
 import PortalSelect from '@/components/ui/PortalSelect'
+import ServiceLifecycleHeader from '@/components/ServiceLifecycleHeader'
 import { ApiError, listAdminCustomers, listStaffAccounts } from '@/lib/authClient'
 import { listVehicleBookings } from '@/lib/bookingStaffClient'
 import {
@@ -19,6 +21,7 @@ import {
   listVehicleInspections,
   uploadVehicleInspectionPhoto,
 } from '@/lib/inspectionStaffClient'
+import { sendBookingToWorkshop } from '@/lib/jobOrderWorkbenchClient'
 import { useUser } from '@/lib/userContext'
 import {
   getSelectedInspection,
@@ -198,7 +201,7 @@ function InspectionCard({ inspection, isSelected, onSelect }) {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-orange">
             {formatLabel(inspection.inspectionType)}
           </p>
-          <p className="mt-2 text-sm font-bold text-ink-primary">{inspection.id}</p>
+          <p className="mt-2 text-sm font-bold text-ink-primary">Intake inspection</p>
           <p className="mt-1 text-xs text-ink-muted">{formatDateTime(inspection.createdAt)}</p>
         </div>
         <span className={`badge ${getVerificationTone(inspection.verificationState)}`}>
@@ -270,6 +273,11 @@ export default function DigitalIntakeInspectionWorkspace() {
   const [submitIntent, setSubmitIntent] = useState(null)
   const [activeIntakeTab, setActiveIntakeTab] = useState('arrival_visit')
   const [arrivalPhotoUploads, setArrivalPhotoUploads] = useState({})
+  const [savedHandoffContext, setSavedHandoffContext] = useState(null)
+  const [workshopHandoffState, setWorkshopHandoffState] = useState({
+    status: 'idle',
+    message: '',
+  })
   const arrivalPhotoInputRefs = useRef({})
 
   useEffect(() => {
@@ -280,12 +288,15 @@ export default function DigitalIntakeInspectionWorkspace() {
     const params = new URLSearchParams(window.location.search)
     const vehicleId = params.get('vehicleId')
     const bookingId = params.get('bookingId')
+    const customerUserId = params.get('customerUserId')
 
-    if (vehicleId || bookingId) {
+    if (vehicleId || bookingId || customerUserId) {
       setDraft((current) => ({
         ...current,
         vehicleId: vehicleId ?? current.vehicleId,
         bookingId: bookingId ?? current.bookingId,
+        customerUserId: customerUserId ?? current.customerUserId,
+        arrivalType: bookingId ? 'with_booking' : current.arrivalType,
       }))
     }
   }, [])
@@ -322,6 +333,23 @@ export default function DigitalIntakeInspectionWorkspace() {
       .then((items) => setVehicleBookings(items))
       .catch(() => setVehicleBookings([]))
   }, [draft.vehicleId, user?.accessToken])
+
+  useEffect(() => {
+    if (!draft.vehicleId || draft.customerUserId || customers.length === 0) {
+      return
+    }
+
+    const owningCustomer = customers.find((customer) =>
+      (customer?.vehicles ?? []).some((vehicle) => vehicle.id === draft.vehicleId),
+    )
+
+    if (owningCustomer?.id) {
+      setDraft((current) => ({
+        ...current,
+        customerUserId: owningCustomer.id,
+      }))
+    }
+  }, [customers, draft.customerUserId, draft.vehicleId])
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === draft.customerUserId) ?? null,
@@ -438,8 +466,8 @@ export default function DigitalIntakeInspectionWorkspace() {
     if (selectedCustomer) {
       items.push({
         label: 'Customer',
-        value: selectedCustomer.displayName || selectedCustomer.email || selectedCustomer.id,
-        sub: selectedCustomer.email || selectedCustomer.id,
+        value: selectedCustomer.displayName || selectedCustomer.email || 'Selected customer',
+        sub: selectedCustomer.email || 'Customer profile',
       })
     }
 
@@ -447,7 +475,7 @@ export default function DigitalIntakeInspectionWorkspace() {
       items.push({
         label: 'Vehicle',
         value: formatVehicleOptionLabel(selectedVehicle),
-        sub: `Vehicle ID: ${selectedVehicle.id}`,
+        sub: selectedVehicle.plateNumber || 'Vehicle profile',
       })
     } else if (draft.vehicleId.trim()) {
       items.push({
@@ -460,7 +488,7 @@ export default function DigitalIntakeInspectionWorkspace() {
     if (selectedBooking) {
       items.push({
         label: 'Booking',
-        value: selectedBooking.id,
+        value: selectedBooking.bookingReference || 'Scheduled booking',
         sub: formatBookingOptionLabel(selectedBooking),
       })
     } else if (draft.bookingId.trim()) {
@@ -778,6 +806,19 @@ export default function DigitalIntakeInspectionWorkspace() {
 
       setInspections((current) => [savedInspection, ...current.filter((item) => item.id !== savedInspection.id)])
       setSelectedInspectionId(savedInspection.id)
+      setSavedHandoffContext(
+        savedInspection.status === 'completed'
+          ? {
+              bookingId: normalizedDraftWithUploads.bookingId,
+              customerUserId: normalizedDraftWithUploads.customerUserId,
+              vehicleId: normalizedDraftWithUploads.vehicleId,
+              nextRoute: resolveIntakeNextRoute(
+                normalizedDraftWithUploads.visitType,
+                normalizedDraftWithUploads.nextRoute,
+              ),
+            }
+          : null,
+      )
       setDraft((current) =>
         getResetIntakeDraft({
           receivedByStaff: current.receivedByStaff || defaultReceivedByStaff,
@@ -828,6 +869,27 @@ export default function DigitalIntakeInspectionWorkspace() {
             <span className="badge badge-gray">{isTechnician ? 'Technician workflow' : 'Staff workflow'}</span>
             <span className="badge badge-gray">{inspections.length} loaded record{inspections.length === 1 ? '' : 's'}</span>
           </>
+        }
+      />
+
+      <ServiceLifecycleHeader
+        currentStep="intake"
+        reference={selectedBooking?.bookingReference ?? draft.bookingId ?? 'New intake'}
+        customer={selectedCustomer?.displayName ?? selectedCustomer?.email}
+        vehicle={selectedVehicle ? formatVehicleOptionLabel(selectedVehicle) : draft.vehicleId}
+        status={draftStatus.label}
+        owner={defaultReceivedByStaff || 'Front desk'}
+        blocker={
+          !draft.customerUserId || !draft.vehicleId
+            ? 'Select the customer and vehicle before completing intake.'
+            : null
+        }
+        nextAction={
+          activeIntakeTab === 'arrival_visit'
+            ? 'Confirm the arrival and visit type.'
+            : activeIntakeTab === 'concern_requirements'
+              ? 'Capture the customer concern and required documents.'
+              : 'Complete vehicle condition evidence and signoff.'
         }
       />
 
@@ -1474,6 +1536,18 @@ export default function DigitalIntakeInspectionWorkspace() {
                   </div>
                 </div>
                 <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                  <p className="text-sm font-bold text-ink-primary">Captured Intake Snapshot</p>
+                  <p className="mt-1 text-xs text-ink-muted">
+                    Saved intake details appear here so staff can review what was actually recorded during
+                    reception, not only the linked booking data.
+                  </p>
+                  <div className="mt-3 rounded-xl border border-surface-border bg-surface-raised p-3">
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-ink-primary">
+                      {selectedInspection.notes || 'No intake notes were saved on this inspection record.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-bold text-ink-primary">Findings</p>
@@ -1561,6 +1635,88 @@ export default function DigitalIntakeInspectionWorkspace() {
         <div className={`mt-4 ${getMessageTone(captureState.status)}`}>
           {captureState.message}
         </div>
+      ) : null}
+
+      {savedHandoffContext ? (
+        <section className="mt-4 rounded-lg border border-brand-orange/30 bg-brand-orange/10 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-ink-primary">Intake complete</p>
+              <p className="mt-1 text-sm text-ink-secondary">
+                Continue with this same customer and vehicle. You will not need to look up the record again.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-primary min-h-11 shrink-0"
+              disabled={workshopHandoffState.status === 'submitting'}
+              onClick={async () => {
+                const params = new URLSearchParams()
+                if (savedHandoffContext.bookingId) {
+                  params.set('bookingId', savedHandoffContext.bookingId)
+                }
+                if (savedHandoffContext.vehicleId) {
+                  params.set('vehicleId', savedHandoffContext.vehicleId)
+                }
+                if (savedHandoffContext.customerUserId) {
+                  params.set('customerUserId', savedHandoffContext.customerUserId)
+                }
+
+                const nextPath =
+                  savedHandoffContext.nextRoute === 'insurance'
+                    ? '/insurance'
+                    : savedHandoffContext.nextRoute === 'complaint'
+                      ? '/backjobs'
+                      : savedHandoffContext.nextRoute === 'inspection'
+                        ? '/admin/intake-inspections'
+                        : '/admin/job-orders'
+
+                if (savedHandoffContext.nextRoute !== 'service') {
+                  window.location.assign(`${nextPath}?${params.toString()}`)
+                  return
+                }
+
+                if (!savedHandoffContext.bookingId || !user?.accessToken) {
+                  setWorkshopHandoffState({
+                    status: 'error',
+                    message: 'A confirmed booking and signed-in staff account are required for workshop handoff.',
+                  })
+                  return
+                }
+
+                setWorkshopHandoffState({ status: 'submitting', message: '' })
+                try {
+                  const handoff = await sendBookingToWorkshop({
+                    bookingId: savedHandoffContext.bookingId,
+                    accessToken: user.accessToken,
+                  })
+                  window.location.assign(`/admin/job-orders/${handoff.jobOrderId}`)
+                } catch (error) {
+                  setWorkshopHandoffState({
+                    status: 'error',
+                    message: error?.message || 'The intake could not be sent to the workshop.',
+                  })
+                }
+              }}
+            >
+              {savedHandoffContext.nextRoute === 'insurance'
+                ? 'Continue to Insurance'
+                : savedHandoffContext.nextRoute === 'complaint'
+                  ? 'Continue to Back-Jobs'
+                  : savedHandoffContext.nextRoute === 'inspection'
+                    ? 'Review Inspection'
+                    : workshopHandoffState.status === 'submitting'
+                      ? 'Sending...'
+                      : 'Send to Workshop'}
+              <ArrowRight size={15} />
+            </button>
+          </div>
+          {workshopHandoffState.message ? (
+            <p className="mt-3 text-sm text-red-300" role="alert">
+              {workshopHandoffState.message}
+            </p>
+          ) : null}
+        </section>
       ) : null}
     </div>
   )

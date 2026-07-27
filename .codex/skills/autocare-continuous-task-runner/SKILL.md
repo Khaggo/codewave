@@ -1,27 +1,28 @@
 ---
 name: autocare-continuous-task-runner
-description: Keep AUTOCARE implementation work moving continuously with minimal interruptions. Use when the user asks Codex to continue, keep building, stop asking repeated approvals, do the next task, follow the build order, or work autonomously on repo tasks while still respecting sandbox, destructive-action, network, credential, and production-safety boundaries.
+description: Keep an explicitly activated AUTOCARE queue task moving with minimal interruptions. Use only after the user selected agent/queue mode or an AUTOCARE task is already active. A generic request to continue an ordinary task must not activate this skill.
 ---
 
 # AUTOCARE Continuous Task Runner
 
 ## Purpose
 
-Continue AUTOCARE repo work by default. Make reasonable assumptions, execute safe local steps without asking first, and only pause for decisions or approvals that cannot be safely inferred.
+Continue an already selected AUTOCARE task. This is a foreground execution loop, not a persistent or background agent. The active user request always wins over the build queue.
 
 ## Continuous Work Rules
 
-1. Treat direct task requests as permission to inspect, edit, and validate files inside `D:\mainprojects\codewave`.
-2. Prefer safe local commands that do not need escalation. If a command fails because of sandbox restrictions, request the narrowest approval needed and continue after approval.
-3. Batch unavoidable approval requests. Ask once for a clear category of work instead of repeatedly asking for the same kind of command.
-4. Do not ask broad clarification questions when a reasonable default is available. State the assumption in the progress update or final summary.
-5. Keep moving through implementation, verification, and summary unless blocked by missing credentials, missing services, destructive actions, paid tools, production access, or a user decision with real tradeoffs.
-6. Do not bypass platform approvals. A skill can reduce interruptions, but it cannot silently approve restricted commands or override sandbox policy.
+1. Confirm an AUTOCARE queue task or explicit agent-mode objective is active. Otherwise continue the user's ordinary task without loading this workflow.
+2. Treat direct task requests as permission to inspect, edit, and validate files inside `D:\mainprojects\codewave`.
+3. Prefer safe local commands that do not need escalation. If a command fails because of sandbox restrictions, request the narrowest approval needed and continue after approval.
+4. Batch unavoidable approval requests. Ask once for a clear category of work instead of repeatedly asking for the same kind of command.
+5. Do not ask broad clarification questions when a reasonable default is available. State the assumption in the progress update or final summary.
+6. Keep moving through implementation, verification, and summary unless blocked by missing credentials, missing services, destructive actions, paid tools, production access, or a user decision with real tradeoffs.
+7. Do not bypass platform approvals. A skill can reduce interruptions, but it cannot silently approve restricted commands or override sandbox policy.
 
 ## Default Skill Chain
 
 1. Load `mcp-first-token-efficiency` so Serena or another relevant MCP is attempted before broad local reads.
-2. Load `autocare-agent-system-bootstrap` for build-order task selection and role handoffs.
+2. Load `autocare-agent-system-bootstrap` only for the already activated queue task and role checklists.
 3. Load `port-aware-dev-runtime` before starting, stopping, or debugging backend, frontend, Expo, Metro, or Node processes.
 4. Load `swagger-serena-first` for backend route, DTO, controller, OpenAPI, or client API integration work.
 5. Load `backend-web-mobile-integration` when a change crosses backend, web, and mobile.
@@ -56,3 +57,4 @@ Pause or request approval for:
 5. If validation fails, fix and rerun targeted checks.
 6. If blocked, document the blocker, the exact approval or service needed, and the next command to run after unblocking.
 7. Continue to the next acceptance check when the current one passes.
+8. Stop when the selected objective is complete. Do not silently claim another queue item.

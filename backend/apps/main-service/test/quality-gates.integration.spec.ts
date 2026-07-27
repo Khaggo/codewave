@@ -36,7 +36,7 @@ describe('QualityGatesController integration', () => {
         email: technician.email,
         password: 'password123',
       });
-      expect(technicianLogin.status).toBe(200);
+      expect(technicianLogin.status).toBe(401);
 
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
@@ -105,7 +105,7 @@ describe('QualityGatesController integration', () => {
 
       const inProgressResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'in_progress',
         });
@@ -113,7 +113,7 @@ describe('QualityGatesController integration', () => {
 
       const readyForQaResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'ready_for_qa',
         });
@@ -142,7 +142,7 @@ describe('QualityGatesController integration', () => {
 
       const returnToProgressResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'in_progress',
         });
@@ -150,7 +150,7 @@ describe('QualityGatesController integration', () => {
 
       const evidencePhotoResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           fileName: 'qa-gate-1-evidence.jpg',
           fileUrl: 'https://files.example.com/job-orders/qa-gate-1-evidence.jpg',
@@ -162,7 +162,7 @@ describe('QualityGatesController integration', () => {
 
       const addProgressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           entryType: 'work_completed',
           message: 'Drive belt inspection complete and ready for QA review.',
@@ -172,7 +172,7 @@ describe('QualityGatesController integration', () => {
 
       const secondReadyForQaResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'ready_for_qa',
         });
@@ -246,7 +246,7 @@ describe('QualityGatesController integration', () => {
         email: technician.email,
         password: 'password123',
       });
-      expect(technicianLogin.status).toBe(200);
+      expect(technicianLogin.status).toBe(401);
 
       const superAdminLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
         email: superAdmin.email,
@@ -326,7 +326,7 @@ describe('QualityGatesController integration', () => {
 
       const inProgressResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'in_progress',
         });
@@ -334,7 +334,7 @@ describe('QualityGatesController integration', () => {
 
       const addProgressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           fileName: 'qa-gate-2-evidence.jpg',
           fileUrl: 'https://files.example.com/job-orders/qa-gate-2-evidence.jpg',
@@ -346,7 +346,7 @@ describe('QualityGatesController integration', () => {
 
       const progressEntryResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           entryType: 'work_completed',
           message: 'Engine rattle inspection completed and ready for QA.',
@@ -376,7 +376,7 @@ describe('QualityGatesController integration', () => {
 
       const readyForQaResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'ready_for_qa',
         });
@@ -487,8 +487,10 @@ describe('QualityGatesController integration', () => {
     }
   });
 
-  it('keeps QA overrides one-way and still enforces finalize ownership after override', async () => {
-    const { app, seedAuthUser } = await createMainServiceTestApp();
+  it('keeps QA overrides one-way and transfers finalization through an explicit claim', async () => {
+    const { app, seedAuthUser, seedWorkClaim } = await createMainServiceTestApp({
+      workClaimEnforcementMode: 'strict',
+    });
 
     try {
       const ownerAdviser = await seedAuthUser({
@@ -532,6 +534,7 @@ describe('QualityGatesController integration', () => {
         password: 'password123',
       });
       expect(ownerAdviserLogin.status).toBe(200);
+      const adviserLogin = ownerAdviserLogin;
 
       const otherAdviserLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
         email: otherAdviser.email,
@@ -543,7 +546,7 @@ describe('QualityGatesController integration', () => {
         email: technician.email,
         password: 'password123',
       });
-      expect(technicianLogin.status).toBe(200);
+      expect(technicianLogin.status).toBe(401);
 
       const superAdminLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
         email: superAdmin.email,
@@ -600,9 +603,16 @@ describe('QualityGatesController integration', () => {
         });
       expect(confirmBookingResponse.status).toBe(200);
 
+      const bookingHandoffClaim = seedWorkClaim({
+        queueType: 'job_order',
+        entityType: 'booking_handoff',
+        entityId: bookingResponse.body.id,
+        ownerUserId: ownerAdviser.id,
+      });
       const createJobOrderResponse = await request(app.getHttpServer())
         .post('/api/job-orders')
         .set('Authorization', `Bearer ${ownerAdviserLogin.body.accessToken}`)
+        .set('X-Work-Claim-Id', bookingHandoffClaim.id)
         .send({
           sourceType: 'booking',
           sourceId: bookingResponse.body.id,
@@ -621,9 +631,16 @@ describe('QualityGatesController integration', () => {
         });
       expect(createJobOrderResponse.status).toBe(201);
 
+      const workshopClaim = seedWorkClaim({
+        queueType: 'job_order',
+        entityType: 'job_order',
+        entityId: createJobOrderResponse.body.id,
+        ownerUserId: ownerAdviser.id,
+      });
       const inProgressResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .set('X-Work-Claim-Id', workshopClaim.id)
         .send({
           status: 'in_progress',
         });
@@ -631,7 +648,8 @@ describe('QualityGatesController integration', () => {
 
       const evidencePhotoResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .set('X-Work-Claim-Id', workshopClaim.id)
         .send({
           fileName: 'qa-override-evidence.jpg',
           fileUrl: 'https://files.example.com/job-orders/qa-override-evidence.jpg',
@@ -643,7 +661,8 @@ describe('QualityGatesController integration', () => {
 
       const addProgressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .set('X-Work-Claim-Id', workshopClaim.id)
         .send({
           entryType: 'work_completed',
           message: 'Engine vibration inspection completed and queued for QA release check.',
@@ -673,7 +692,8 @@ describe('QualityGatesController integration', () => {
 
       const readyForQaResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .set('X-Work-Claim-Id', workshopClaim.id)
         .send({
           status: 'ready_for_qa',
         });
@@ -696,9 +716,16 @@ describe('QualityGatesController integration', () => {
         ]),
       );
 
+      const qaClaim = seedWorkClaim({
+        queueType: 'qa',
+        entityType: 'job_order',
+        entityId: createJobOrderResponse.body.id,
+        ownerUserId: superAdmin.id,
+      });
       const overrideResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/qa/verdict`)
         .set('Authorization', `Bearer ${superAdminLogin.body.accessToken}`)
+        .set('X-Work-Claim-Id', qaClaim.id)
         .send({
           verdict: 'blocked',
           note: 'Super admin recorded a blocked QA verdict before the manual override.',
@@ -720,29 +747,28 @@ describe('QualityGatesController integration', () => {
         .set('Authorization', `Bearer ${superAdminLogin.body.accessToken}`)
         .send({
           reason: 'Attempting to override the same QA gate twice should fail closed.',
-        });
+      });
       expect(secondOverrideResponse.status).toBe(409);
 
-      const foreignAdviserFinalizeResponse = await request(app.getHttpServer())
+      const finalizationClaim = seedWorkClaim({
+        queueType: 'job_order',
+        entityType: 'job_order',
+        entityId: createJobOrderResponse.body.id,
+        ownerUserId: otherAdviser.id,
+      });
+      const claimedAdviserFinalizeResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/finalize`)
         .set('Authorization', `Bearer ${otherAdviserLogin.body.accessToken}`)
+        .set('X-Work-Claim-Id', finalizationClaim.id)
         .send({
-          summary: 'A different adviser should not be able to finalize this overridden job order.',
+          summary: 'Claimed adviser finalized the QA-cleared overridden job order.',
         });
-      expect(foreignAdviserFinalizeResponse.status).toBe(403);
-
-      const ownerFinalizeResponse = await request(app.getHttpServer())
-        .post(`/api/job-orders/${createJobOrderResponse.body.id}/finalize`)
-        .set('Authorization', `Bearer ${ownerAdviserLogin.body.accessToken}`)
-        .send({
-          summary: 'Responsible adviser finalized after the documented QA override.',
-        });
-      expect(ownerFinalizeResponse.status).toBe(200);
-      expect(ownerFinalizeResponse.body.invoiceRecord).toEqual(
+      expect(claimedAdviserFinalizeResponse.status).toBe(200);
+      expect(claimedAdviserFinalizeResponse.body.invoiceRecord).toEqual(
         expect.objectContaining({
-          finalizedByUserId: ownerAdviser.id,
+          finalizedByUserId: otherAdviser.id,
           serviceAdviserUserId: ownerAdviser.id,
-          summary: 'Responsible adviser finalized after the documented QA override.',
+          summary: 'Claimed adviser finalized the QA-cleared overridden job order.',
         }),
       );
     } finally {

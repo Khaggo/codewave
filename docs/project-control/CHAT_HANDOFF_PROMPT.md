@@ -12,12 +12,36 @@ Before doing any work, read these project-control files:
 3. docs/project-control/OBJECTIVE_COMPLIANCE_MATRIX.md
 4. docs/project-control/QA_LEDGER.md
 5. docs/project-control/IMPLEMENTATION_ROADMAP.md
-6. docs/project-control/UX_AUDIT_PRO_HANDOFF.md
-7. docs/project-control/UX_AUDIT_BACKLOG.md
+6. docs/project-control/PANELIST_FULL_SYSTEM_QA_2026-05-22.md
+7. docs/project-control/UX_AUDIT_PRO_HANDOFF.md
+8. docs/project-control/UX_AUDIT_BACKLOG.md
+
+If the task may benefit from the repo's self-improving agent system, also read:
+
+9. docs/architecture/README.md
+10. docs/architecture/system-architecture.md
+11. docs/architecture/agents/orchestrator.md
+12. docs/architecture/agent-manifest.json
 
 Treat these files as the source of truth for what is done, what failed panel review, what passed QA, and what still needs work.
 
 Do not rely only on chat history.
+
+If Notion access is available, also check the AUTOCARE Wiki dashboard for team-facing context:
+
+- `Current QA and project-control dashboard — 2026-05-23`
+- `Extracted decisions from QA Chat — 2026-05-23`
+- `Extracted decisions from Implementation Chat — 2026-05-23`
+
+The repo project-control docs remain the engineering evidence source. Notion is the team-facing knowledge hub and may contain summaries, decisions, pipelines, and paper-facing guidance.
+
+The repo includes a self-improving agentic system under `docs/architecture/`.
+
+- Default freeform routing should start from the orchestrator model described there.
+- Repo-defined agent roles include: `orchestrator`, `domain-worker`, `integration-worker`, `test-worker`, `validator`, `docs-worker`, and `refactor-worker`.
+- Codex is allowed to spawn subagents when that helps the task, but those spawned subagents should follow the repo role docs and ownership rules instead of improvising their own workflow.
+- Use subagents especially for parallel, well-bounded work. Keep the main chat responsible for integration, truthfulness, and final control-file updates.
+- Do not bypass the repo's validator/orchestrator ownership rules just because subagents are available.
 
 Before editing, run git status and do not revert unrelated dirty files.
 
@@ -34,6 +58,15 @@ When you complete a task, update the relevant project-control files:
 Current recovery priority:
 
 Make the system and documentation comply with the panel feedback and Objectives 1-6, with QA evidence for each claim.
+
+Latest full-system QA truth:
+
+- The latest 2026-05-22 whole-system panel/objectives Playwright rerun is green: 20 passed, 0 failed, 0 timed out, 0 skipped.
+- The green gate covers booking-to-cash, mobile multi-service booking, Shop/ecommerce rewards, insurance documents, insurance manual reminder/broadcast, admin CRUD/pricing/billing, Back-Jobs, Objective 2 lifecycle/readable IDs, broad readable-ID sweep, human-QA PDF recovery, adviser-owned role access, and adviser-owned checklist/PDF workshop proof.
+- Residual polish items remain: invoice lookup specificity, immediate invoice visibility, stale mobile completed-history refresh, completed-state timing before manual payment, non-finalized Back-Jobs negative dataset coverage, deterministic approved lifecycle summary data for panel capture, timed session-stability proof, Objective 5 guided demo capture, UX polish, and paper/diagram updates.
+- Technician web logins are intentionally retired. Do not treat retired-login failures as product regressions; rewrite QA around adviser/admin-managed technician profiles, selected specialties, checklist/task controls, evidence upload, and adviser-owned workshop stages.
+- `docs/architecture/rbac-policy.md` is updated to the current canonical authenticated roles: `customer`, `service_adviser`, and `super_admin`; technicians are non-auth operational profiles with specialties.
+- Do not rely on the older `PANELIST_FULL_SYSTEM_QA_2026-05-22.md` 7/11 failed report as current truth without checking `CURRENT_STATE.md` and `QA_LEDGER.md`; it is historical context now superseded by the later 20/20 run.
 
 For UX work, use the combined workflow:
 

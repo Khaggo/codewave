@@ -1,22 +1,27 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   BadgeCheck,
   ExternalLink,
   Lock,
   RefreshCw,
-  Search,
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react'
 
 import PageHeader from '@/components/ui/PageHeader'
 import PortalLink from '@/components/PortalLink'
+import ServiceLifecycleHeader from '@/components/ServiceLifecycleHeader'
+import StaffWorkQueue from '@/components/StaffWorkQueue'
 import { useToast } from '@/components/Toast.jsx'
 import { ApiError } from '@/lib/authClient'
-import { listJobOrderWorkbenchSummaries } from '@/lib/jobOrderWorkbenchClient'
+import {
+  claimMatchesWork,
+  isStaffWorkClaimError,
+  toJobOrderClaimSummary,
+} from '@/lib/jobOrderClaimState.mjs'
 import {
   getJobOrderQualityGate,
   overrideJobOrderQualityGate,
@@ -33,7 +38,14 @@ import {
   getQualityGateReleaseState,
   getReviewNeededQualityGateFindings,
 } from '@/lib/api/generated/quality-gates/staff-web-qa-review'
-import { getGroupedQualityFindings } from './qaAuditView.mjs'
+import {
+  buildQaVerdictCompletionState,
+  getGroupedQualityFindings,
+} from './qaAuditView.mjs'
+import {
+  createQaReviewRequestCoordinator,
+  isQaReviewTargetCurrent,
+} from './qaReviewRequestCoordinator.mjs'
 
 const initialQaState = {
   status: 'qa_ready',
@@ -43,6 +55,14 @@ const initialQaState = {
 const initialOverrideState = {
   status: 'override_ready',
   message: '',
+}
+
+const initialQaDetailState = {
+  entityId: '',
+  requestId: 0,
+  status: 'idle',
+  gate: null,
+  error: '',
 }
 
 const initialVerdictState = {
@@ -170,7 +190,7 @@ function getPendingReviewGuidance({
   if (reviewNeededFindings.length > 0) {
     return {
       toneClass: 'rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100',
-      message: 'QA is awaiting reviewer attention. Clear the warning findings, then record the head-technician verdict.',
+      message: 'QA is awaiting reviewer attention. Clear the warning findings, then record the adviser release verdict.',
     }
   }
 
@@ -178,7 +198,7 @@ function getPendingReviewGuidance({
     toneClass: 'rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-100',
     message: canRecordLiveVerdict
       ? 'No blocking findings remain. Record a Pass verdict to clear this release.'
-      : 'No blocking findings remain. A head technician or super admin still needs to record Pass before release can continue.',
+      : 'No blocking findings remain. A service adviser or super admin still needs to record Pass before release can continue.',
   }
 }
 
@@ -229,7 +249,7 @@ function StatusMessage({ state }) {
   if (!state.message) return null
 
   const toneClass =
-    state.status === 'qa_loaded'
+    state.status === 'qa_loaded' || state.status === 'qa_completed'
       ? 'status-message status-message-success'
       : state.status === 'qa_unavailable'
         ? 'status-message status-message-warning'
@@ -273,9 +293,9 @@ function QualityFindingCard({ finding }) {
   )
 }
 
-function SectionFrame({ title, copy, badge, children }) {
+function SectionFrame({ id, title, copy, badge, children }) {
   return (
-    <section className="ops-panel">
+    <section id={id} className="ops-panel scroll-mt-24">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="card-title">{title}</p>
@@ -296,15 +316,21 @@ export default function QAAuditWorkspace() {
   const canRecordLiveVerdict = canStaffRecordQualityGateVerdict(role)
   const canOverrideLiveQa = canStaffOverrideQualityGate(role)
   const [jobOrderId, setJobOrderId] = useState('')
-  const [qualityGate, setQualityGate] = useState(null)
+  const [qaDetailState, setQaDetailState] = useState(initialQaDetailState)
   const [jobOrderOptions, setJobOrderOptions] = useState([])
+  const [activeClaim, setActiveClaim] = useState(null)
+  const [queueRefreshKey, setQueueRefreshKey] = useState(0)
   const [verdictDraft, setVerdictDraft] = useState('passed')
   const [verdictNote, setVerdictNote] = useState('')
   const [overrideReason, setOverrideReason] = useState('')
   const [qaState, setQaState] = useState(initialQaState)
   const [verdictState, setVerdictState] = useState(initialVerdictState)
   const [overrideState, setOverrideState] = useState(initialOverrideState)
-  const qaLoadInFlightRef = useRef(false)
+  const requestCoordinatorRef = useRef(null)
+  if (!requestCoordinatorRef.current) {
+    requestCoordinatorRef.current = createQaReviewRequestCoordinator()
+  }
+  const qualityGate = qaDetailState.gate
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -313,36 +339,17 @@ export default function QAAuditWorkspace() {
 
     const nextJobOrderId = new URLSearchParams(window.location.search).get('jobOrderId')
     if (nextJobOrderId) {
+      requestCoordinatorRef.current.invalidate(nextJobOrderId)
       setJobOrderId(nextJobOrderId)
     }
   }, [])
 
-  useEffect(() => {
-    if (!user?.accessToken || !canReadLiveQa) {
-      setJobOrderOptions([])
-      return
-    }
-
-    let cancelled = false
-
-    void listJobOrderWorkbenchSummaries({
-      accessToken: user.accessToken,
-    })
-      .then((items) => {
-        if (!cancelled) {
-          setJobOrderOptions(items.filter((jobOrder) => jobOrder.status === 'ready_for_qa'))
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setJobOrderOptions([])
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [canReadLiveQa, user?.accessToken])
+  useEffect(
+    () => () => {
+      requestCoordinatorRef.current.dispose()
+    },
+    [],
+  )
 
   const selectedReleaseState = getQualityGateReleaseState(qualityGate)
   const releaseSummary = releaseSummaryByState[selectedReleaseState] ?? releaseSummaryByState.release_unavailable
@@ -355,20 +362,36 @@ export default function QAAuditWorkspace() {
   const blockingGroup = groupedFindings.find((group) => group.key === 'critical') ?? null
   const reviewGroups = groupedFindings.filter((group) => group.key !== 'critical')
   const latestOverride = qualityGate ? getLatestQualityGateOverride(qualityGate) : null
+  const selectedJobOrderReference = getLoadedJobOrderReference(jobOrderId, jobOrderOptions, qualityGate)
+  const selectedJobOrder = useMemo(
+    () => jobOrderOptions.find((jobOrder) => jobOrder.id === (qualityGate?.jobOrderId ?? jobOrderId)) ?? null,
+    [jobOrderId, jobOrderOptions, qualityGate?.jobOrderId],
+  )
+  const canActOnLoadedGate = isQaReviewTargetCurrent({
+    detailState: qaDetailState,
+    selectedEntityId: jobOrderId,
+    qualityGate,
+  })
+  const activeClaimId = claimMatchesWork(activeClaim, 'job_order', jobOrderId)
+    ? activeClaim.id
+    : ''
+  const canSubmitVerdict = Boolean(canRecordLiveVerdict && canActOnLoadedGate && activeClaimId)
+  const canSubmitOverride = Boolean(
+    canOverrideLiveQa
+    && canActOnLoadedGate
+    && qualityGate?.status === 'blocked',
+  )
   const pendingReviewGuidance = getPendingReviewGuidance({
     qualityGate,
     blockingFindings,
     reviewNeededFindings,
-    canRecordLiveVerdict,
+    canRecordLiveVerdict: canSubmitVerdict,
   })
-  const selectedJobOrderReference = getLoadedJobOrderReference(jobOrderId, jobOrderOptions, qualityGate)
-
-  async function loadQualityGate() {
-    if (qaLoadInFlightRef.current) {
-      return
-    }
-
-    if (!jobOrderId.trim()) {
+  const loadQualityGate = useCallback(async (requestedJobOrderId = jobOrderId) => {
+    const normalizedJobOrderId = requestedJobOrderId.trim()
+    if (!normalizedJobOrderId) {
+      requestCoordinatorRef.current.invalidate()
+      setQaDetailState(initialQaDetailState)
       setQaState({
         status: 'qa_not_found',
         message: 'Choose a job order before loading QA.',
@@ -377,6 +400,11 @@ export default function QAAuditWorkspace() {
     }
 
     if (!canReadLiveQa) {
+      requestCoordinatorRef.current.invalidate(normalizedJobOrderId)
+      setQaDetailState({
+        ...initialQaDetailState,
+        entityId: normalizedJobOrderId,
+      })
       setQaState({
         status: 'qa_forbidden_role',
         message: 'This workspace is limited to QA-capable staff roles.',
@@ -385,6 +413,11 @@ export default function QAAuditWorkspace() {
     }
 
     if (!user?.accessToken) {
+      requestCoordinatorRef.current.invalidate(normalizedJobOrderId)
+      setQaDetailState({
+        ...initialQaDetailState,
+        entityId: normalizedJobOrderId,
+      })
       setQaState({
         status: 'qa_failed',
         message: 'A valid staff session is required before loading QA.',
@@ -392,7 +425,19 @@ export default function QAAuditWorkspace() {
       return
     }
 
-    qaLoadInFlightRef.current = true
+    const requestToken = requestCoordinatorRef.current.begin(normalizedJobOrderId)
+    setQaDetailState({
+      entityId: requestToken.entityId,
+      requestId: requestToken.requestId,
+      status: 'loading',
+      gate: null,
+      error: '',
+    })
+    setVerdictDraft('passed')
+    setVerdictNote('')
+    setOverrideReason('')
+    setVerdictState(initialVerdictState)
+    setOverrideState(initialOverrideState)
     setQaState({
       status: 'qa_loading',
       message: '',
@@ -400,11 +445,22 @@ export default function QAAuditWorkspace() {
 
     try {
       const loadedQualityGate = await getJobOrderQualityGate({
-        jobOrderId: jobOrderId.trim(),
+        jobOrderId: requestToken.entityId,
         accessToken: user.accessToken,
+        signal: requestToken.signal,
       })
 
-      setQualityGate(loadedQualityGate)
+      if (!requestCoordinatorRef.current.isCurrent(requestToken)) {
+        return
+      }
+
+      setQaDetailState({
+        entityId: requestToken.entityId,
+        requestId: requestToken.requestId,
+        status: 'ready',
+        gate: loadedQualityGate,
+        error: '',
+      })
       setVerdictDraft(loadedQualityGate.reviewerVerdict === 'blocked' ? 'blocked' : 'passed')
       setVerdictNote(loadedQualityGate.reviewerNote ?? '')
       setVerdictState(initialVerdictState)
@@ -414,6 +470,10 @@ export default function QAAuditWorkspace() {
         message: 'Release review loaded.',
       })
     } catch (error) {
+      if (error?.name === 'AbortError' || !requestCoordinatorRef.current.isCurrent(requestToken)) {
+        return
+      }
+
       let nextStatus = 'qa_failed'
 
       if (error instanceof ApiError && error.status === 403) {
@@ -424,21 +484,26 @@ export default function QAAuditWorkspace() {
         nextStatus = 'qa_unavailable'
       }
 
-      setQualityGate(null)
+      const message = error?.message || 'Review workspace could not be loaded.'
+      setQaDetailState({
+        entityId: requestToken.entityId,
+        requestId: requestToken.requestId,
+        status: 'error',
+        gate: null,
+        error: message,
+      })
       setQaState({
         status: nextStatus,
-        message: error?.message || 'Review workspace could not be loaded.',
+        message,
       })
-    } finally {
-      qaLoadInFlightRef.current = false
     }
-  }
+  }, [canReadLiveQa, jobOrderId, user?.accessToken])
 
   async function handleOverrideQualityGate() {
-    if (!qualityGate) {
+    if (!qualityGate || !canActOnLoadedGate) {
       setOverrideState({
         status: 'override_not_found',
-        message: 'Load a blocked quality gate before recording an override.',
+        message: 'Load the currently selected blocked quality gate before recording an override.',
       })
       return
     }
@@ -480,14 +545,30 @@ export default function QAAuditWorkspace() {
       message: '',
     })
 
+    const actionToken = {
+      entityId: qaDetailState.entityId,
+      requestId: qaDetailState.requestId,
+    }
+    const targetQualityGate = qualityGate
+    const targetReference = selectedJobOrderReference
+
     try {
       const updatedQualityGate = await overrideJobOrderQualityGate({
-        jobOrderId: qualityGate.jobOrderId,
+        jobOrderId: targetQualityGate.jobOrderId,
         reason: overrideReason.trim(),
         accessToken: user.accessToken,
       })
 
-      setQualityGate(updatedQualityGate)
+      if (!requestCoordinatorRef.current.isCurrent(actionToken)) {
+        setQueueRefreshKey((current) => current + 1)
+        return
+      }
+
+      setQaDetailState((current) => (
+        current.entityId === actionToken.entityId && current.requestId === actionToken.requestId
+          ? { ...current, gate: updatedQualityGate }
+          : current
+      ))
       setOverrideReason('')
       setOverrideState({
         status: 'override_saved',
@@ -496,9 +577,18 @@ export default function QAAuditWorkspace() {
       toast({
         type: 'success',
         title: 'QA Override Recorded',
-        message: `${selectedJobOrderReference} now has an auditable super-admin override.`,
+        message: `${targetReference} now has an auditable super-admin override.`,
       })
     } catch (error) {
+      if (!requestCoordinatorRef.current.isCurrent(actionToken)) {
+        toast({
+          type: 'error',
+          title: 'QA Override Failed',
+          message: `${targetReference} was not overridden. Return to that record before retrying.`,
+        })
+        return
+      }
+
       let nextStatus = 'override_failed'
 
       if (error instanceof ApiError && error.status === 403) {
@@ -517,10 +607,10 @@ export default function QAAuditWorkspace() {
   }
 
   async function handleRecordQualityGateVerdict() {
-    if (!qualityGate) {
+    if (!qualityGate || !canActOnLoadedGate) {
       setVerdictState({
         status: 'verdict_not_found',
-        message: 'Load a pre-check review before recording a verdict.',
+        message: 'Load the currently selected pre-check review before recording a verdict.',
       })
       return
     }
@@ -528,7 +618,7 @@ export default function QAAuditWorkspace() {
     if (!canRecordLiveVerdict) {
       setVerdictState({
         status: 'verdict_forbidden_role',
-        message: 'Only the head technician or super admin can record the release verdict.',
+        message: 'Only the service adviser or super admin can record the release verdict.',
       })
       return
     }
@@ -536,7 +626,15 @@ export default function QAAuditWorkspace() {
     if (!user?.accessToken) {
       setVerdictState({
         status: 'verdict_failed',
-        message: 'A valid head-technician or super-admin session is required before recording the verdict.',
+        message: 'A valid service-adviser or super-admin session is required before recording the verdict.',
+      })
+      return
+    }
+
+    if (!activeClaimId) {
+      setVerdictState({
+        status: 'verdict_failed',
+        message: 'Claim this QA record before recording its verdict.',
       })
       return
     }
@@ -546,31 +644,77 @@ export default function QAAuditWorkspace() {
       message: '',
     })
 
+    const actionToken = {
+      entityId: qaDetailState.entityId,
+      requestId: qaDetailState.requestId,
+    }
+    const targetQualityGate = qualityGate
+    const completedJobOrderReference = selectedJobOrderReference
+
     try {
       const updatedQualityGate = await recordJobOrderQualityGateVerdict({
-        jobOrderId: qualityGate.jobOrderId,
+        jobOrderId: targetQualityGate.jobOrderId,
         verdict: verdictDraft,
         note: verdictNote,
         accessToken: user.accessToken,
+        claimId: activeClaimId,
+        version: targetQualityGate.version,
       })
 
-      setQualityGate(updatedQualityGate)
-      setVerdictDraft(updatedQualityGate.reviewerVerdict === 'blocked' ? 'blocked' : 'passed')
-      setVerdictNote(updatedQualityGate.reviewerNote ?? '')
-      setVerdictState({
-        status: 'verdict_saved',
-        message: updatedQualityGate.reviewerVerdict === 'blocked' ? 'Block recorded.' : 'Pass recorded.',
+      const completion = buildQaVerdictCompletionState({
+        verdict: updatedQualityGate.reviewerVerdict,
+        reference: completedJobOrderReference,
       })
+      setQueueRefreshKey((current) => current + 1)
+
+      if (requestCoordinatorRef.current.isCurrent(actionToken)) {
+        requestCoordinatorRef.current.invalidate()
+        setQaDetailState(initialQaDetailState)
+        setJobOrderId('')
+        setActiveClaim(null)
+        setVerdictDraft('passed')
+        setVerdictNote('')
+        setOverrideReason('')
+        setVerdictState(initialVerdictState)
+        setOverrideState(initialOverrideState)
+        setQaState({
+          status: completion.status,
+          message: completion.message,
+        })
+
+        if (typeof window !== 'undefined') {
+          const nextUrl = new URL(window.location.href)
+          nextUrl.searchParams.delete('jobOrderId')
+          window.history.replaceState({}, '', nextUrl)
+        }
+      }
+
       toast({
         type: 'success',
         title: 'QA Verdict Recorded',
-        message:
-          updatedQualityGate.reviewerVerdict === 'blocked'
-            ? `${selectedJobOrderReference} was returned for technician remediation.`
-            : `${selectedJobOrderReference} is now cleared for release review.`,
+        message: completion.toastMessage,
       })
     } catch (error) {
+      if (!requestCoordinatorRef.current.isCurrent(actionToken)) {
+        toast({
+          type: 'error',
+          title: 'QA Verdict Failed',
+          message: `${completedJobOrderReference} was not updated. Return to that record before retrying.`,
+        })
+        return
+      }
+
       let nextStatus = 'verdict_failed'
+
+      if (isStaffWorkClaimError(error)) {
+        setActiveClaim(null)
+        setQueueRefreshKey((current) => current + 1)
+        setVerdictState({
+          status: 'verdict_failed',
+          message: 'Your QA assignment changed or expired. Refresh the queue and claim the review again.',
+        })
+        return
+      }
 
       if (error instanceof ApiError && error.status === 403) {
         nextStatus = 'verdict_forbidden_role'
@@ -584,6 +728,80 @@ export default function QAAuditWorkspace() {
       })
     }
   }
+
+  useEffect(() => {
+    if (!jobOrderId) {
+      return
+    }
+
+    void loadQualityGate(jobOrderId)
+  }, [canReadLiveQa, jobOrderId, loadQualityGate, user?.accessToken])
+
+  const openQueueItem = useCallback((item) => {
+    const nextJobOrderId = (item.jobOrderId || item.entityId || '').trim()
+    if (!nextJobOrderId) return
+
+    requestCoordinatorRef.current.invalidate(nextJobOrderId)
+    setQaDetailState({
+      ...initialQaDetailState,
+      entityId: nextJobOrderId,
+    })
+    setVerdictDraft('passed')
+    setVerdictNote('')
+    setOverrideReason('')
+    setVerdictState(initialVerdictState)
+    setOverrideState(initialOverrideState)
+    setActiveClaim(
+      toJobOrderClaimSummary({
+        claim: item.claim,
+        entityId: nextJobOrderId,
+        entityType: 'job_order',
+      }),
+    )
+    setJobOrderOptions((current) => {
+      const queueJobOrder = {
+        id: nextJobOrderId,
+        jobOrderReference: item.reference,
+        status: item.status,
+        plateNumber: item.plateNumber,
+        vehicleDisplayName: item.vehicleName,
+      }
+      return current.some((jobOrder) => jobOrder.id === nextJobOrderId)
+        ? current.map((jobOrder) => jobOrder.id === nextJobOrderId ? queueJobOrder : jobOrder)
+        : [...current, queueJobOrder]
+    })
+    if (nextJobOrderId === jobOrderId) {
+      void loadQualityGate(nextJobOrderId)
+    } else {
+      setJobOrderId(nextJobOrderId)
+    }
+
+    window.setTimeout(() => {
+      document.getElementById('selected-qa-audit')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }, 0)
+  }, [jobOrderId, loadQualityGate])
+
+  const clearQueueSelection = useCallback(() => {
+    requestCoordinatorRef.current.invalidate()
+    setJobOrderId('')
+    setQaDetailState(initialQaDetailState)
+    setActiveClaim(null)
+    setVerdictDraft('passed')
+    setVerdictNote('')
+    setOverrideReason('')
+    setVerdictState(initialVerdictState)
+    setOverrideState(initialOverrideState)
+    setQaState(initialQaState)
+
+    if (typeof window !== 'undefined') {
+      const nextUrl = new URL(window.location.href)
+      nextUrl.searchParams.delete('jobOrderId')
+      window.history.replaceState({}, '', nextUrl)
+    }
+  }, [])
 
   return (
     <div className="ops-page-shell">
@@ -604,81 +822,57 @@ export default function QAAuditWorkspace() {
         )}
       />
 
+      <ServiceLifecycleHeader
+        currentStep="qa"
+        reference={jobOrderId ? selectedJobOrderReference : 'Select a QA record'}
+        customer={selectedJobOrder?.customerDisplayName ?? selectedJobOrder?.customerName}
+        vehicle={selectedJobOrder?.vehicleDisplayName ?? selectedJobOrder?.plateNumber}
+        status={releaseSummary.value}
+        owner="Service Adviser"
+        blocker={
+          blockingFindings.length > 0
+            ? qualityGate?.blockingReason || `${blockingFindings.length} blocking finding${blockingFindings.length === 1 ? '' : 's'} must be resolved.`
+            : null
+        }
+        nextAction={
+          ['release_allowed', 'release_allowed_by_override'].includes(selectedReleaseState)
+            ? 'Return to the selected job order and finalize the invoice-ready record.'
+            : selectedReleaseState === 'release_blocked'
+              ? 'Return the selected job order for correction and fresh evidence.'
+              : qualityGate
+                ? 'Review findings and record the release verdict.'
+                : 'Choose a job order from the QA queue.'
+        }
+        actionLabel={
+          qualityGate
+            ? ['release_allowed', 'release_allowed_by_override'].includes(selectedReleaseState)
+              ? 'Continue to Finalization'
+              : 'Return to Job Order'
+            : null
+        }
+        actionHref={
+          qualityGate?.jobOrderId
+            ? `/admin/job-orders/${encodeURIComponent(qualityGate.jobOrderId)}`
+            : null
+        }
+      />
+
       <div className="space-y-5">
-        <SectionFrame
+        <StaffWorkQueue
+          queueType="qa"
+          accessToken={user?.accessToken}
           title="QA Queue"
-          copy="Focus on the jobs waiting for release review."
-          badge={<span className={`badge ${canReadLiveQa ? 'badge-green' : 'badge-red'}`}>{canReadLiveQa ? formatLabel(role) : 'Read locked'}</span>}
-        >
-          <form
-            className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]"
-            onSubmit={(event) => {
-              event.preventDefault()
-              loadQualityGate()
-            }}
-          >
-            <label>
-              <span className="label">Job order</span>
-              <select
-                value={jobOrderId}
-                onChange={(event) => setJobOrderId(event.target.value)}
-                className="select"
-              >
-                <option value="">Choose a release review</option>
-                {jobOrderOptions.map((jobOrder) => (
-                  <option key={jobOrder.id} value={jobOrder.id}>
-                    {formatJobOrderReference(jobOrder)} / {formatLabel(jobOrder.status)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" disabled={qaState.status === 'qa_loading'} className="ops-action-primary self-end">
-              {qaState.status === 'qa_loading' ? (
-                <RefreshCw size={14} className="animate-spin" />
-              ) : (
-                <Search size={14} />
-              )}
-              Load Review
-            </button>
-          </form>
+          description="Complete your current review, then take next; teammates can review other records in parallel."
+          onOpenWork={openQueueItem}
+          onReleaseWork={clearQueueSelection}
+          selectedEntityId={jobOrderId}
+          refreshKey={queueRefreshKey}
+        />
 
-          <div className="mt-4 grid gap-3 xl:grid-cols-3">
-            {jobOrderOptions.slice(0, 6).map((jobOrder) => {
-              const isSelected = jobOrderId === jobOrder.id
-
-              return (
-                <button
-                  key={jobOrder.id}
-                  type="button"
-                  onClick={() => setJobOrderId(jobOrder.id)}
-                  className={`rounded-2xl border p-4 text-left transition-colors ${
-                    isSelected
-                      ? 'border-brand-orange bg-brand-orange/10'
-                      : 'border-surface-border bg-surface-card hover:border-brand-orange/40'
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-ink-primary">{formatJobOrderReference(jobOrder)}</p>
-                  <p className="mt-2 text-sm text-ink-secondary">{formatLabel(jobOrder.status)}</p>
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <span className={`badge ${canRecordLiveVerdict ? 'badge-green' : 'badge-gray'}`}>
-              Verdict {canRecordLiveVerdict ? 'open' : 'locked'}
-            </span>
-            <span className={`badge ${canOverrideLiveQa ? 'badge-blue' : 'badge-gray'}`}>
-              Override {canOverrideLiveQa ? 'open' : 'locked'}
-            </span>
-          </div>
-
-          <div className="mt-4">
-            <StatusMessage state={qaState} />
-          </div>
-        </SectionFrame>
+        <StatusMessage state={qaState} />
 
         <SectionFrame
+          id="selected-qa-audit"
           title="Selected Audit"
           copy="Review the loaded release decision."
           badge={<span className={releaseSummary.toneClass}>{releaseSummary.value}</span>}
@@ -728,7 +922,7 @@ export default function QAAuditWorkspace() {
             <div className="space-y-3">
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div className="ops-panel-muted">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Work Items</p>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Services</p>
                   <p className="mt-2 text-sm font-semibold text-ink-primary">
                     {qualityGate.preCheckSummary?.completedWorkItemCount ?? 0} / {qualityGate.preCheckSummary?.totalWorkItemCount ?? 0}
                   </p>
@@ -824,8 +1018,8 @@ export default function QAAuditWorkspace() {
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-ink-primary">QA verdict</p>
-                <span className={`badge ${canRecordLiveVerdict ? 'badge-green' : 'badge-gray'}`}>
-                  {canRecordLiveVerdict ? 'Editable' : 'Read only'}
+                <span className={`badge ${canSubmitVerdict ? 'badge-green' : 'badge-gray'}`}>
+                  {canSubmitVerdict ? 'Editable' : 'Read only'}
                 </span>
               </div>
               {qualityGate ? (
@@ -845,7 +1039,7 @@ export default function QAAuditWorkspace() {
                     <select
                       value={verdictDraft}
                       onChange={(event) => setVerdictDraft(event.target.value)}
-                      disabled={!canRecordLiveVerdict}
+                      disabled={!canSubmitVerdict}
                       className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="passed">Pass</option>
@@ -858,7 +1052,7 @@ export default function QAAuditWorkspace() {
                       value={verdictNote}
                       onChange={(event) => setVerdictNote(event.target.value)}
                       rows={4}
-                      disabled={!canRecordLiveVerdict}
+                      disabled={!canSubmitVerdict}
                       className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00] disabled:cursor-not-allowed disabled:opacity-60"
                       placeholder="Explain the release decision."
                     />
@@ -867,7 +1061,7 @@ export default function QAAuditWorkspace() {
                   <button
                     type="button"
                     onClick={handleRecordQualityGateVerdict}
-                    disabled={!canRecordLiveVerdict || verdictState.status === 'verdict_submitting'}
+                    disabled={!canSubmitVerdict || verdictState.status === 'verdict_submitting'}
                     className="ops-action-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {verdictState.status === 'verdict_submitting' ? (
@@ -889,8 +1083,8 @@ export default function QAAuditWorkspace() {
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-ink-primary">Super-admin override</p>
-                <span className={`badge ${canOverrideLiveQa ? 'badge-blue' : 'badge-gray'}`}>
-                  {canOverrideLiveQa ? 'Editable' : 'Locked'}
+                <span className={`badge ${canSubmitOverride ? 'badge-blue' : 'badge-gray'}`}>
+                  {canSubmitOverride ? 'Editable' : 'Locked'}
                 </span>
               </div>
               {latestOverride ? (
@@ -910,7 +1104,7 @@ export default function QAAuditWorkspace() {
                   value={overrideReason}
                   onChange={(event) => setOverrideReason(event.target.value)}
                   rows={4}
-                  disabled={!qualityGate || !canOverrideLiveQa || qualityGate.status !== 'blocked'}
+                  disabled={!canSubmitOverride}
                   className="mt-1 w-full rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm text-ink-primary outline-none focus:border-[#f07c00] disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="Explain why release can continue."
                 />
@@ -919,12 +1113,12 @@ export default function QAAuditWorkspace() {
               <button
                 type="button"
                 onClick={handleOverrideQualityGate}
-                disabled={overrideState.status === 'override_submitting' || !qualityGate || !canOverrideLiveQa || qualityGate.status !== 'blocked'}
+                disabled={overrideState.status === 'override_submitting' || !canSubmitOverride}
                 className="ops-action-danger w-full disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {overrideState.status === 'override_submitting' ? (
                   <RefreshCw size={15} className="animate-spin" />
-                ) : canOverrideLiveQa ? (
+                ) : canSubmitOverride ? (
                   <ShieldAlert size={15} />
                 ) : (
                   <Lock size={15} />
@@ -970,8 +1164,18 @@ export default function QAAuditWorkspace() {
               <AlertTriangle size={12} />
               Queue-driven release review
             </span>
-            <PortalLink href="/admin/job-orders" className="inline-flex items-center gap-2 text-sm font-bold text-brand-orange">
-              Continue in Job Orders <ExternalLink size={14} />
+            <PortalLink
+              href={
+                qualityGate?.jobOrderId
+                  ? `/admin/job-orders/${encodeURIComponent(qualityGate.jobOrderId)}`
+                  : '/admin/job-orders'
+              }
+              className="inline-flex items-center gap-2 text-sm font-bold text-brand-orange"
+            >
+              {['release_allowed', 'release_allowed_by_override'].includes(selectedReleaseState)
+                ? 'Continue to Finalization'
+                : 'Return to Job Order'}{' '}
+              <ExternalLink size={14} />
             </PortalLink>
             {selectedReleaseState === 'release_allowed' ? (
               <span className="badge badge-green">

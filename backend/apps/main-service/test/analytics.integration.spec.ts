@@ -66,7 +66,7 @@ describe('AnalyticsController integration', () => {
         }),
       ]);
       expect(adviserLogin.status).toBe(200);
-      expect(technicianLogin.status).toBe(200);
+      expect(technicianLogin.status).toBe(401);
       expect(superAdminLogin.status).toBe(200);
       expect(customerLogin.status).toBe(200);
 
@@ -130,7 +130,7 @@ describe('AnalyticsController integration', () => {
 
       const inProgressResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'in_progress',
         });
@@ -138,7 +138,7 @@ describe('AnalyticsController integration', () => {
 
       const evidencePhotoResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           fileName: 'analytics-work-item.jpg',
           fileUrl: 'https://files.example.com/job-orders/analytics-work-item.jpg',
@@ -150,7 +150,7 @@ describe('AnalyticsController integration', () => {
 
       const progressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           entryType: 'work_completed',
           message: 'Engine rattle resolved and oil service completed.',
@@ -160,7 +160,7 @@ describe('AnalyticsController integration', () => {
 
       const readyForQaResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'ready_for_qa',
         });
@@ -392,7 +392,7 @@ describe('AnalyticsController integration', () => {
       const technicianForbiddenResponse = await request(app.getHttpServer())
         .get('/api/analytics/dashboard')
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`);
-      expect(technicianForbiddenResponse.status).toBe(403);
+      expect(technicianForbiddenResponse.status).toBe(401);
     } finally {
       await app.close();
     }
@@ -455,7 +455,7 @@ describe('AnalyticsController integration', () => {
         }),
       ]);
       expect(adviserLogin.status).toBe(200);
-      expect(technicianLogin.status).toBe(200);
+      expect(technicianLogin.status).toBe(401);
       expect(superAdminLogin.status).toBe(200);
       expect(customerLogin.status).toBe(200);
 
@@ -532,7 +532,7 @@ describe('AnalyticsController integration', () => {
 
       const inProgressResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'in_progress',
         });
@@ -540,7 +540,7 @@ describe('AnalyticsController integration', () => {
 
       const evidencePhotoResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           fileName: 'audit-trail-work-item.jpg',
           fileUrl: 'https://files.example.com/job-orders/audit-trail-work-item.jpg',
@@ -552,7 +552,7 @@ describe('AnalyticsController integration', () => {
 
       const progressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           entryType: 'work_completed',
           message: 'Startup vibration check completed and sent to QA.',
@@ -582,7 +582,7 @@ describe('AnalyticsController integration', () => {
 
       const readyForQaResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'ready_for_qa',
         });

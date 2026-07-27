@@ -19,19 +19,21 @@ This suite is a cross-surface QA harness for the seeded booking-to-job-order flo
 Run these locally before `npm run qa:e2e`:
 
 ```powershell
-cd D:\mainprojects\codewave\backend
+cd D:\mainprojects\codewave
 npm run dev:main
 ```
 
 ```powershell
-cd D:\mainprojects\codewave\frontend
-npm run dev -- --port 3002
+cd D:\mainprojects\codewave
+npm run dev:web
 ```
 
 ```powershell
-cd D:\mainprojects\codewave\mobile
-npx expo start --web --port 8090 --clear
+cd D:\mainprojects\codewave
+npm run dev:mobile:web
 ```
+
+These repo-root runtime scripts now go through a single-instance watchdog. If the expected port is already occupied, the watchdog refuses to spawn a duplicate Node or Expo process.
 
 If `mobile/.runtime/qa-mobile-web-export/index.html` already exists, the harness will auto-serve that static export on `http://127.0.0.1:8095` and use it instead of requiring a live Expo web server.
 

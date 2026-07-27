@@ -9,47 +9,51 @@ test.beforeEach(async ({ request }) => {
   await ensureLocalQaRuntime(request, { requireMobile: false });
 });
 
-test('head technician can open Job Orders and QA Audit without super-admin session', async ({ browser }, testInfo) => {
+test('service adviser can open Job Orders and QA Audit without super-admin session', async ({ browser }, testInfo) => {
   annotateSeverity(
     testInfo,
     'critical',
-    'Head technician access to Job Orders and QA Audit should not depend on the super admin account.',
+    'The live workshop flow is adviser-owned, so a service adviser must be able to open Job Orders and QA Audit without super-admin help.',
   );
 
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await loginStaff(page, qaAccounts.headTechnician, '/admin/job-orders');
+  await loginStaff(page, qaAccounts.adviser, '/admin/job-orders');
   await expect(page.getByRole('heading', { name: 'Job Orders' })).toBeVisible();
-  await expect(page.getByText('This workspace is limited to QA-capable staff roles.', { exact: false })).toHaveCount(0);
 
   await page.goto('http://127.0.0.1:3002/admin/qa-audit');
   await expect(page.getByRole('heading', { name: 'QA Audit' })).toBeVisible();
-  await expect(page.getByText('This workspace is limited to QA-capable staff roles.', { exact: false })).toHaveCount(0);
 
   await context.close();
 });
 
-test('technician is blocked from role-gated booking and invoice workspaces with meaningful copy', async ({ browser }, testInfo) => {
+test('retired technician and head-technician accounts are blocked with explicit retirement copy', async ({
+  browser,
+}, testInfo) => {
   annotateSeverity(
     testInfo,
     'high',
-    'Unauthorized role access should fail clearly instead of leaving technicians on broken or misleading admin pages.',
+    'Retired workshop logins should fail clearly so QA does not mistake intentional role retirement for a broken staff portal.',
   );
 
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  for (const account of [qaAccounts.technician, qaAccounts.headTechnician]) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
 
-  await loginStaff(page, qaAccounts.technician, '/bookings');
-  await expectTextPresent(page, 'This workspace is not available for your role.');
-  await expectTextPresent(page, 'Your role does not have access to that workspace in the staff portal.');
-  await expectTextPresent(page, 'Blocked page: /bookings');
+    await page.goto('http://127.0.0.1:3002/bookings');
+    await page.getByPlaceholder('email@example.com').fill(account.email);
+    await page.getByPlaceholder('Enter your password').fill(account.password);
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
-  await page.goto('http://127.0.0.1:3002/admin/invoices');
-  await expectTextPresent(page, 'This workspace is not available for your role.');
-  await expectTextPresent(page, 'Blocked page: /admin/invoices');
+    await expectTextPresent(
+      page,
+      'Technician login has been retired. Service advisers now manage workshop progress and technician assignments.',
+    );
+    await expect(page.getByRole('heading', { name: /Booking Schedule|Job Orders|QA Audit|Invoices & Orders/i })).toHaveCount(0);
 
-  await context.close();
+    await context.close();
+  }
 });
 
 test('web login validates empty credentials before attempting staff auth', async ({ page }, testInfo) => {

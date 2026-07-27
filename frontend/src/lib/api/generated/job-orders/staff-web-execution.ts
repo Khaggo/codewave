@@ -76,8 +76,8 @@ export const staffJobOrderProgressRules: StaffJobOrderExecutionRule<
     surface: 'staff-admin-web',
     truth: 'client-guard',
     routeKey: 'addJobOrderProgress',
-    allowedRoles: ['technician', 'head_technician', 'super_admin'],
-    description: 'An assigned technician, head technician, or super admin can append structured progress to a loaded job order.',
+    allowedRoles: ['service_adviser', 'super_admin'],
+    description: 'A service adviser or super admin can append structured workshop progress to a loaded job order.',
   },
   {
     state: 'progress_not_assigned',
@@ -243,7 +243,7 @@ export const canStaffAppendProgress = ({
   jobOrder?: JobOrderResponse | null;
   userId?: string | null;
 }): boolean => {
-  if (role === 'super_admin') {
+  if (staffJobOrderReviewerRoles.includes(role as StaffJobOrderReviewerRole)) {
     return true;
   }
 

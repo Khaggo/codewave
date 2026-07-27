@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, Bell, ChevronDown, LogOut, Menu, Search, X } from 'lucide-react'
+import { ArrowRight, Bell, ChevronDown, ClipboardList, LogOut, Menu, Search, X } from 'lucide-react'
 import PortalLink from '@/components/PortalLink'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import { isEcommerceEnabled } from '@/lib/runtimeFlags'
@@ -12,7 +12,7 @@ const SEARCH_DESTINATIONS = [
   { label: 'Dashboard', sub: 'Staff overview and live operations shortcuts', href: '/' },
   { label: 'Bookings', sub: 'Daily schedule, queue, status updates, rescheduling', href: '/bookings' },
   { label: 'Customers & Vehicles', sub: 'Customer profile and vehicle records', href: '/admin/customers' },
-  { label: 'Job Order Workbench', sub: 'Create job orders, progress, photos, finalization, payment', href: '/admin/job-orders' },
+  { label: 'Job Orders', sub: 'My Work, team queue, service progress, and QA handoff', href: '/admin/job-orders' },
   { label: 'Intake Inspections', sub: 'Vehicle-scoped inspection capture and history', href: '/admin/intake-inspections' },
   { label: 'QA Audit', sub: 'Load quality gates and record super-admin overrides', href: '/admin/qa-audit' },
   { label: 'Invoice & Orders', sub: 'Known job-order invoices and ecommerce order lookup', href: '/admin/invoices' },
@@ -152,13 +152,29 @@ function GlobalSearch() {
   )
 }
 
-export default function Topbar({ onMenuToggle, user, onLogout }) {
+export default function Topbar({ onMenuToggle, user, onLogout, workState }) {
   const pathname = usePathname()
   const routeMeta = getShellRouteMeta(pathname)
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const unread = 0
+  const workItem = workState?.item ?? null
+  const workClaim = workItem?.claim ?? workState?.session?.currentClaim ?? null
+  const workReference = workItem?.reference || (workClaim?.entityId ? `JO-${workClaim.entityId.slice(0, 8)}` : '')
+  const workHref = workItem?.jobOrderId
+    ? `/admin/job-orders/${encodeURIComponent(workItem.jobOrderId)}`
+    : '/admin/job-orders'
+  const notificationKey = [
+    workClaim?.id,
+    workState?.summary?.blocked ?? 0,
+    workState?.summary?.overdue ?? 0,
+  ].join(':')
+  const [seenNotificationKey, setSeenNotificationKey] = useState('')
+  const unread = notificationKey !== '::' && notificationKey !== seenNotificationKey ? 1 : 0
+
+  useEffect(() => {
+    setSeenNotificationKey(window.localStorage.getItem('autocare:staff-work-notification') ?? '')
+  }, [])
 
   const initials = user?.name
     ? user.name.split(' ').map((word) => word[0]).slice(0, 2).join('').toUpperCase()
@@ -188,12 +204,26 @@ export default function Topbar({ onMenuToggle, user, onLogout }) {
         <GlobalSearch />
         <ThemeSwitcher />
 
+        {workClaim ? (
+          <PortalLink
+            href={workHref}
+            className="hidden min-h-10 max-w-[220px] items-center gap-2 border border-emerald-500/25 bg-emerald-500/10 px-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/15 lg:flex"
+            title={`Resume ${workReference || 'active work'}`}
+          >
+            <ClipboardList size={15} className="shrink-0" />
+            <span className="truncate">Resume {workReference || 'My Work'}</span>
+            <ArrowRight size={14} className="shrink-0" />
+          </PortalLink>
+        ) : null}
+
         <div className="relative">
           <button
             type="button"
             onClick={() => {
               setNotifOpen((value) => !value)
               setProfileOpen(false)
+              setSeenNotificationKey(notificationKey)
+              window.localStorage.setItem('autocare:staff-work-notification', notificationKey)
             }}
             className="relative rounded-xl border border-transparent p-2 text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink-secondary"
             aria-label="Open notifications"
@@ -212,13 +242,49 @@ export default function Topbar({ onMenuToggle, user, onLogout }) {
                   <p className="text-sm font-semibold text-ink-primary">Notifications</p>
                   <span className="badge badge-gray">Updates</span>
                 </div>
-                <div className="empty-panel m-3 px-4 py-8 text-center">
-                  <Bell size={22} className="mx-auto text-ink-muted" />
-                  <p className="mt-3 text-sm font-semibold text-ink-primary">No notifications yet</p>
-                  <p className="mt-2 text-xs leading-5 text-ink-muted">
-                    Booking, QA, and inventory updates will appear here when notification delivery is available.
-                  </p>
-                </div>
+                {workClaim || (workState?.summary?.blocked ?? 0) > 0 || (workState?.summary?.overdue ?? 0) > 0 ? (
+                  <div className="divide-y divide-surface-border">
+                    {workClaim ? (
+                      <PortalLink href={workHref} className="flex gap-3 px-4 py-4 hover:bg-surface-hover">
+                        <ClipboardList size={17} className="mt-0.5 shrink-0 text-emerald-300" />
+                        <span>
+                          <span className="block text-sm font-semibold text-ink-primary">Work assigned to you</span>
+                          <span className="mt-1 block text-xs leading-5 text-ink-muted">
+                            Resume {workReference || 'your active job order'} before taking another record.
+                          </span>
+                        </span>
+                      </PortalLink>
+                    ) : null}
+                    {(workState?.summary?.blocked ?? 0) > 0 ? (
+                      <PortalLink href="/admin/job-orders" className="flex gap-3 px-4 py-4 hover:bg-surface-hover">
+                        <Bell size={17} className="mt-0.5 shrink-0 text-amber-300" />
+                        <span>
+                          <span className="block text-sm font-semibold text-ink-primary">Blocked workshop work</span>
+                          <span className="mt-1 block text-xs leading-5 text-ink-muted">
+                            {workState.summary.blocked} record{workState.summary.blocked === 1 ? '' : 's'} need review.
+                          </span>
+                        </span>
+                      </PortalLink>
+                    ) : null}
+                    {(workState?.summary?.overdue ?? 0) > 0 ? (
+                      <PortalLink href="/admin/job-orders" className="flex gap-3 px-4 py-4 hover:bg-surface-hover">
+                        <Bell size={17} className="mt-0.5 shrink-0 text-red-300" />
+                        <span>
+                          <span className="block text-sm font-semibold text-ink-primary">Overdue work waiting</span>
+                          <span className="mt-1 block text-xs leading-5 text-ink-muted">
+                            {workState.summary.overdue} record{workState.summary.overdue === 1 ? '' : 's'} passed the scheduled date.
+                          </span>
+                        </span>
+                      </PortalLink>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="empty-panel m-3 px-4 py-8 text-center">
+                    <Bell size={22} className="mx-auto text-ink-muted" />
+                    <p className="mt-3 text-sm font-semibold text-ink-primary">You are caught up</p>
+                    <p className="mt-2 text-xs leading-5 text-ink-muted">New assignments and workshop risks will appear here.</p>
+                  </div>
+                )}
               </div>
             </>
           ) : null}

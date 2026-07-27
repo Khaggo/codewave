@@ -13,6 +13,7 @@ import { FinalizeJobOrderDto } from '../dto/finalize-job-order.dto';
 import { RecordJobOrderInvoicePaymentDto } from '../dto/record-job-order-invoice-payment.dto';
 import { ReplaceJobOrderAssignmentsDto } from '../dto/replace-job-order-assignments.dto';
 import { UpdateJobOrderStatusDto } from '../dto/update-job-order-status.dto';
+import { UpdateJobOrderWorkshopStageDto } from '../dto/update-job-order-workshop-stage.dto';
 import {
   jobOrders,
   jobOrderAssignments,
@@ -36,15 +37,20 @@ type CreateJobOrderPersistenceInput = Pick<
   jobType: 'normal' | 'back_job';
   parentJobOrderId?: string | null;
   items: CreateJobOrderDto['items'];
-  assignedTechnicianIds?: string[];
+  assignments?: CreateJobOrderDto['assignments'];
 };
 
 type UpdateJobOrderStatusPersistenceInput = UpdateJobOrderStatusDto;
 type ReplaceJobOrderAssignmentsPersistenceInput = {
-  assignedTechnicianIds: ReplaceJobOrderAssignmentsDto['assignedTechnicianIds'];
+  assignments: ReplaceJobOrderAssignmentsDto['assignments'];
   status?: UpdateJobOrderStatusDto['status'];
   notes?: string | null;
   expectedUpdatedAt?: string;
+};
+type UpdateJobOrderWorkshopStagePersistenceInput = UpdateJobOrderWorkshopStageDto & {
+  recordedByUserId: string;
+  attachedPhotoIds?: string[];
+  nextStatus?: UpdateJobOrderStatusDto['status'];
 };
 type FinalizeJobOrderPersistenceInput = FinalizeJobOrderDto & {
   finalizedByUserId: string;
@@ -118,11 +124,12 @@ export class JobOrdersRepository extends BaseRepository {
       })),
     );
 
-    if (payload.assignedTechnicianIds?.length) {
+    if (payload.assignments?.length) {
       await this.db.insert(jobOrderAssignments).values(
-        payload.assignedTechnicianIds.map((technicianUserId) => ({
+        payload.assignments.map((assignment) => ({
           jobOrderId: createdJobOrder.id,
-          technicianUserId,
+          technicianProfileId: assignment.technicianProfileId,
+          selectedSpecialty: assignment.selectedSpecialty,
         })),
       );
     }
@@ -139,6 +146,9 @@ export class JobOrdersRepository extends BaseRepository {
         },
         assignments: {
           orderBy: asc(jobOrderAssignments.assignedAt),
+          with: {
+            technicianProfile: true,
+          },
         },
         progressEntries: {
           orderBy: desc(jobOrderProgressLogs.createdAt),
@@ -162,6 +172,9 @@ export class JobOrdersRepository extends BaseRepository {
         },
         assignments: {
           orderBy: asc(jobOrderAssignments.assignedAt),
+          with: {
+            technicianProfile: true,
+          },
         },
         progressEntries: {
           orderBy: desc(jobOrderProgressLogs.createdAt),
@@ -194,6 +207,9 @@ export class JobOrdersRepository extends BaseRepository {
         },
         assignments: {
           orderBy: asc(jobOrderAssignments.assignedAt),
+          with: {
+            technicianProfile: true,
+          },
         },
         progressEntries: {
           orderBy: desc(jobOrderProgressLogs.createdAt),
@@ -223,6 +239,9 @@ export class JobOrdersRepository extends BaseRepository {
       with: {
         assignments: {
           orderBy: asc(jobOrderAssignments.assignedAt),
+          with: {
+            technicianProfile: true,
+          },
         },
       },
     });
@@ -234,6 +253,9 @@ export class JobOrdersRepository extends BaseRepository {
       with: {
         assignments: {
           orderBy: asc(jobOrderAssignments.assignedAt),
+          with: {
+            technicianProfile: true,
+          },
         },
       },
     });
@@ -249,6 +271,9 @@ export class JobOrdersRepository extends BaseRepository {
         },
         assignments: {
           orderBy: asc(jobOrderAssignments.assignedAt),
+          with: {
+            technicianProfile: true,
+          },
         },
         progressEntries: {
           orderBy: desc(jobOrderProgressLogs.createdAt),
@@ -267,6 +292,9 @@ export class JobOrdersRepository extends BaseRepository {
       with: {
         assignments: {
           orderBy: asc(jobOrderAssignments.assignedAt),
+          with: {
+            technicianProfile: true,
+          },
         },
         invoiceRecord: true,
       },
@@ -279,6 +307,18 @@ export class JobOrdersRepository extends BaseRepository {
     });
 
     return Boolean(existingJobOrder);
+  }
+
+  async findLatestByBookingSourceId(sourceId: string) {
+    return this.db.query.jobOrders.findFirst({
+      where: and(eq(jobOrders.sourceType, 'booking'), eq(jobOrders.sourceId, sourceId)),
+      orderBy: [desc(jobOrders.updatedAt)],
+      with: {
+        progressEntries: {
+          orderBy: desc(jobOrderProgressLogs.createdAt),
+        },
+      },
+    });
   }
 
   async hasBackJobSource(sourceId: string) {
@@ -325,11 +365,14 @@ export class JobOrdersRepository extends BaseRepository {
 
       await tx.delete(jobOrderAssignments).where(eq(jobOrderAssignments.jobOrderId, id));
 
-      if (payload.assignedTechnicianIds.length > 0) {
+      const nextAssignments = payload.assignments ?? [];
+
+      if (nextAssignments.length > 0) {
         await tx.insert(jobOrderAssignments).values(
-          payload.assignedTechnicianIds.map((technicianUserId) => ({
+          nextAssignments.map((assignment) => ({
             jobOrderId: id,
-            technicianUserId,
+            technicianProfileId: assignment.technicianProfileId,
+            selectedSpecialty: assignment.selectedSpecialty,
           })),
         );
       }
@@ -375,6 +418,9 @@ export class JobOrdersRepository extends BaseRepository {
         },
         assignments: {
           orderBy: asc(jobOrderAssignments.assignedAt),
+          with: {
+            technicianProfile: true,
+          },
         },
         progressEntries: {
           orderBy: desc(jobOrderProgressLogs.createdAt),
@@ -415,9 +461,13 @@ export class JobOrdersRepository extends BaseRepository {
     id: string,
     payload: AddJobOrderProgressDto & {
       attachedPhotoIds?: string[];
-      nextStatus?: 'in_progress';
+      nextStatus?: 'in_progress' | 'blocked';
+      nextWorkshopStage?: UpdateJobOrderWorkshopStageDto['stage'];
+      recordedByUserId?: string;
+      technicianProfileId?: string | null;
+      workshopStage?: UpdateJobOrderWorkshopStageDto['stage'];
     },
-    technicianUserId: string,
+    actorUserId: string,
   ) {
     const filters = [eq(jobOrders.id, id), ...createUpdatedAtMatchFilters(payload.expectedUpdatedAt)];
 
@@ -426,6 +476,7 @@ export class JobOrdersRepository extends BaseRepository {
       .set({
         updatedAt: new Date(),
         ...(payload.nextStatus ? { status: payload.nextStatus } : {}),
+        ...(payload.nextWorkshopStage ? { currentWorkshopStage: payload.nextWorkshopStage } : {}),
       })
       .where(and(...filters))
       .returning();
@@ -448,10 +499,48 @@ export class JobOrdersRepository extends BaseRepository {
 
     await this.db.insert(jobOrderProgressLogs).values({
       jobOrderId: id,
-      technicianUserId,
+      technicianUserId: payload.recordedByUserId ? null : actorUserId,
+      recordedByUserId: payload.recordedByUserId ?? actorUserId,
+      technicianProfileId: payload.technicianProfileId ?? null,
+      workshopStage: payload.workshopStage ?? null,
+      workItemId: payload.workItemId ?? null,
       entryType: payload.entryType,
       message: payload.message,
       completedItemIds: payload.completedItemIds ?? [],
+      attachedPhotoIds: payload.attachedPhotoIds ?? [],
+    });
+
+    return this.findById(id);
+  }
+
+  async updateWorkshopStage(id: string, payload: UpdateJobOrderWorkshopStagePersistenceInput) {
+    const filters = [eq(jobOrders.id, id), ...createUpdatedAtMatchFilters(payload.expectedUpdatedAt)];
+
+    const [touchedJobOrder] = await this.db
+      .update(jobOrders)
+      .set({
+        updatedAt: new Date(),
+        currentWorkshopStage: payload.stage,
+        ...(payload.nextStatus ? { status: payload.nextStatus } : {}),
+      })
+      .where(and(...filters))
+      .returning();
+
+    if (!touchedJobOrder && payload.expectedUpdatedAt) {
+      throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
+    }
+
+    this.assertFound(touchedJobOrder, 'Job order not found');
+
+    await this.db.insert(jobOrderProgressLogs).values({
+      jobOrderId: id,
+      technicianUserId: null,
+      recordedByUserId: payload.recordedByUserId,
+      technicianProfileId: null,
+      workshopStage: payload.stage,
+      entryType: 'stage_update',
+      message: payload.note?.trim() || `Workshop stage updated to ${payload.stage.replace(/_/g, ' ')}`,
+      completedItemIds: [],
       attachedPhotoIds: payload.attachedPhotoIds ?? [],
     });
 

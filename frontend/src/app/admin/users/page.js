@@ -3,6 +3,7 @@
 import { ShieldAlert, UserCog, Wrench } from 'lucide-react'
 
 import StaffProvisioningPanel from '@/components/StaffProvisioningPanel'
+import TechnicianDirectoryPanel from '@/components/TechnicianDirectoryPanel'
 import PageHeader from '@/components/ui/PageHeader'
 import { useUser } from '@/lib/userContext'
 
@@ -14,10 +15,10 @@ const accountTypeCards = [
     accent: 'Operations access',
   },
   {
-    title: 'Mechanic / Technician',
-    copy: 'Workshop execution accounts. Mechanics currently share technician permissions in the live role model.',
+    title: 'Technician Directory',
+    copy: 'Non-login workshop profiles with specialties like mechanic, electrician, and body repair for adviser assignment.',
     icon: Wrench,
-    accent: 'Workshop access',
+    accent: 'Workshop profiles',
   },
   {
     title: 'Admin',
@@ -37,7 +38,7 @@ export default function AdminUsersPage() {
         <PageHeader
           eyebrow="Restricted"
           title="User Administration"
-          description="Only super admins can create new staff, mechanic, technician, and admin accounts from this workspace."
+          description="Only super admins can create new adviser/admin accounts and manage technician profiles from this workspace."
         />
         <div className="empty-panel">
           <ShieldAlert size={28} className="mx-auto text-brand-orange" />
@@ -55,7 +56,7 @@ export default function AdminUsersPage() {
       <PageHeader
         eyebrow="Super Admin"
         title="User Administration Workspace"
-        description="Provision operations accounts, capture the exact role mapping, and manage account status from one protected admin workspace. Created accounts can sign in immediately with the generated email and selected password."
+        description="Provision adviser/admin accounts, manage the technician profile directory, and keep workshop staffing ready for service-adviser assignment."
       />
 
       <section className="ops-summary-grid">
@@ -76,6 +77,7 @@ export default function AdminUsersPage() {
       </section>
 
       <StaffProvisioningPanel />
+      <TechnicianDirectoryPanel />
     </div>
   )
 }

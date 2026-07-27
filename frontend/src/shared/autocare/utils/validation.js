@@ -3,8 +3,19 @@
 //  Shared between Web and Mobile apps.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phoneRegex = /^09\d{9}$/;
+import {
+  normalizeEmail,
+  normalizePhoneNumber,
+  validateEmail,
+  validatePhoneNumber,
+} from '@codewave/domain-utils';
+
+export {
+  normalizeEmail,
+  normalizePhoneNumber,
+  validateEmail,
+  validatePhoneNumber,
+} from '@codewave/domain-utils';
 
 export const passwordRequirementItems = [
   { key: 'hasValidLength', label: '8-14 characters' },
@@ -28,10 +39,6 @@ export const monthLabels = [
   'November',
   'December',
 ];
-
-export const normalizeEmail = (value) => value.trim().toLowerCase();
-
-export const normalizePhoneNumber = (value) => value.replace(/\D/g, '').slice(0, 11);
 
 export const buildUsername = (email, firstName, lastName) => {
   const emailLocalPart = normalizeEmail(email).split('@')[0]?.replace(/[^a-z0-9._-]/gi, '');
@@ -119,34 +126,6 @@ export const getChangePasswordChecklistState = ({
 export const isPasswordValid = (password) => {
   const checks = getPasswordChecks(password);
   return Object.values(checks).every(Boolean);
-};
-
-export const validateEmail = (email) => {
-  const normalizedEmail = normalizeEmail(email);
-
-  if (!normalizedEmail) {
-    return 'Enter your email address.';
-  }
-
-  if (!emailRegex.test(normalizedEmail)) {
-    return 'Enter a valid email address.';
-  }
-
-  return '';
-};
-
-export const validatePhoneNumber = (phoneNumber) => {
-  const digits = normalizePhoneNumber(phoneNumber);
-
-  if (!digits) {
-    return 'Enter your phone number.';
-  }
-
-  if (!phoneRegex.test(digits)) {
-    return 'Use an 11-digit PH mobile number starting with 09.';
-  }
-
-  return '';
 };
 
 export const validateBirthday = (birthday) => {

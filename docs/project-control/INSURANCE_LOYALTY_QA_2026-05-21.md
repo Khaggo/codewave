@@ -10,7 +10,7 @@ Insurance:
 
 Loyalty:
 
-- Customer completes the service path through booking, reservation fee, job order, technician progress/evidence, head technician QA, invoice finalization, and manual payment.
+- Customer completes the service path through booking, reservation fee, job order, technician progress/evidence, Service Adviser QA, invoice finalization, and manual payment.
 - QA verifies loyalty points do not accrue from booking completion, reservation-fee payment, or unpaid invoice finalization.
 - QA verifies loyalty points accrue only after the qualifying paid service invoice event.
 

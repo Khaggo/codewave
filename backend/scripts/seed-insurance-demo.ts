@@ -19,6 +19,7 @@ import {
   isSeedOwnedText,
   parseEnvFileContents,
 } from './lib/insurance-demo-seed-runtime';
+import { assertOperationalSafety, parseOperationalArgs } from './operational-safety';
 
 type SeededAccount = {
   id: string;
@@ -1161,6 +1162,27 @@ async function main() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error('DATABASE_URL is required to seed the insurance demo dataset.');
+  }
+
+  const args = parseOperationalArgs(process.argv.slice(2));
+  const safety = assertOperationalSafety({
+    command: 'seed:insurance-demo',
+    args,
+    databaseUrl,
+  });
+  if (!args.execute) {
+    console.log(
+      JSON.stringify(
+        {
+          safety,
+          scenarioCount: DEMO_INSURANCE_SCENARIOS.length,
+          staffCount: 1,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
   }
 
   const client = new Client({ connectionString: databaseUrl });

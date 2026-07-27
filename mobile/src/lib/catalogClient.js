@@ -5,6 +5,34 @@ const DEFAULT_ECOMMERCE_API_BASE_URL = __DEV__
   : 'https://ecommerce.autocare-cc.com';
 const CATALOG_REQUEST_TIMEOUT_MS = 8000;
 
+const isPrivateOrLoopbackHostname = (hostname) => {
+  const normalizedHostname = String(hostname ?? '').trim().toLowerCase();
+
+  if (!normalizedHostname) {
+    return false;
+  }
+
+  if (['localhost', '127.0.0.1', '0.0.0.0'].includes(normalizedHostname)) {
+    return true;
+  }
+
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(normalizedHostname)) {
+    return true;
+  }
+
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(normalizedHostname)) {
+    return true;
+  }
+
+  const private172Match = /^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(normalizedHostname);
+  if (private172Match) {
+    const secondOctet = Number(private172Match[1]);
+    return secondOctet >= 16 && secondOctet <= 31;
+  }
+
+  return false;
+};
+
 const deriveEcommerceApiBaseUrl = () => {
   const explicitBaseUrl = String(process.env.EXPO_PUBLIC_ECOMMERCE_API_BASE_URL ?? '').trim();
 
@@ -14,17 +42,17 @@ const deriveEcommerceApiBaseUrl = () => {
 
   const mainApiBaseUrl = getApiBaseUrl();
 
-  if (!__DEV__) {
-    return DEFAULT_ECOMMERCE_API_BASE_URL;
-  }
-
   try {
     const parsedBaseUrl = new URL(mainApiBaseUrl);
-    parsedBaseUrl.port = '3001';
-    return parsedBaseUrl.toString().replace(/\/$/, '');
+    if (__DEV__ || isPrivateOrLoopbackHostname(parsedBaseUrl.hostname)) {
+      parsedBaseUrl.port = '3001';
+      return parsedBaseUrl.toString().replace(/\/$/, '');
+    }
   } catch {
     return DEFAULT_ECOMMERCE_API_BASE_URL;
   }
+
+  return DEFAULT_ECOMMERCE_API_BASE_URL;
 };
 
 const buildAuthHeaders = (accessToken) =>

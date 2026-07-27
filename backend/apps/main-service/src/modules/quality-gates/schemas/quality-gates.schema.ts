@@ -91,6 +91,7 @@ export const jobOrderQualityGates = pgTable(
     reviewerVerdict: qualityGateReviewerVerdictEnum('reviewer_verdict').notNull().default('pending'),
     reviewerNote: text('reviewer_note'),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    version: integer('version').notNull().default(1),
     auditJob: jsonb('audit_job').$type<AiWorkerJobMetadata | null>(),
     lastAuditRequestedAt: timestamp('last_audit_requested_at', { withTimezone: true }).notNull().defaultNow(),
     lastAuditCompletedAt: timestamp('last_audit_completed_at', { withTimezone: true }),

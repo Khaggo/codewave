@@ -357,6 +357,16 @@ export class InsuranceService {
       throw new ConflictException('Closed or rejected insurance inquiries cannot accept new documents');
     }
 
+    let documentUrl: URL;
+    try {
+      documentUrl = new URL(payload.fileUrl);
+    } catch {
+      throw new BadRequestException('Document URL must be a valid HTTP or HTTPS URL');
+    }
+    if (!['http:', 'https:'].includes(documentUrl.protocol)) {
+      throw new BadRequestException('Document URL must use HTTP or HTTPS; use the upload action for local files');
+    }
+
     return this.presentInquiryForActor(
       this.normalizeInquiryDocumentStatus(await this.insuranceRepository.addDocument(id, payload, actor.userId)),
       actor,

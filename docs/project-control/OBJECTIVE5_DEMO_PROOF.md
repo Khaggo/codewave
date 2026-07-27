@@ -8,7 +8,7 @@ Objective 5 requires visible proof that AUTOCARE:
 
 1. detects service-completion discrepancies through QA rules and semantic/NLP-style review,
 2. blocks or warns the release flow based on that evidence,
-3. records an auditable head-technician/super-admin decision, and
+3. records an auditable service-adviser/super-admin decision, and
 4. exposes a customer-facing reviewed summary after reviewer approval.
 
 ## Proof Chain

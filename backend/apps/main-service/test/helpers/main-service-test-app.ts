@@ -1,6 +1,12 @@
 import { randomUUID } from 'crypto';
 
-import { INestApplication, NotFoundException, UnauthorizedException, ValidationPipe } from '@nestjs/common';
+import {
+  ConflictException,
+  INestApplication,
+  NotFoundException,
+  UnauthorizedException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
@@ -130,6 +136,8 @@ import {
 import { QualityGateDiscrepancyEngineService } from '../../src/modules/quality-gates/services/quality-gate-discrepancy-engine.service';
 import { QualityGateSemanticAuditorService } from '../../src/modules/quality-gates/services/quality-gate-semantic-auditor.service';
 import { QualityGatesService } from '../../src/modules/quality-gates/services/quality-gates.service';
+import { StaffWorkClaimGuard } from '../../src/modules/staff-work-queues/guards/staff-work-claim.guard';
+import { StaffWorkQueuesService } from '../../src/modules/staff-work-queues/services/staff-work-queues.service';
 import { VehicleLifecycleController } from '../../src/modules/vehicle-lifecycle/controllers/vehicle-lifecycle.controller';
 import { AppendVehicleTimelineEventDto } from '../../src/modules/vehicle-lifecycle/dto/append-vehicle-timeline-event.dto';
 import { VehicleLifecycleRepository } from '../../src/modules/vehicle-lifecycle/repositories/vehicle-lifecycle.repository';
@@ -1550,6 +1558,13 @@ class InMemoryVehiclesRepository {
     return vehicle ? { ...vehicle } : null;
   }
 
+  async findByPlateSignature(plateSignature: string) {
+    const vehicle = Array.from(this.vehicles.values()).find(
+      (entry) => entry.plateNumber.replace(/[^a-z0-9]/gi, '').toUpperCase() === plateSignature,
+    );
+    return vehicle ? { ...vehicle } : null;
+  }
+
   async findByUserId(userId: string) {
     return Array.from(this.vehicles.values())
       .filter((vehicle) => vehicle.userId === userId)
@@ -2022,6 +2037,17 @@ class InMemoryBookingsRepository {
     );
   }
 
+  async findBookingReadModelByIds(ids: string[]) {
+    return ids
+      .map((id) => this.bookings.get(id))
+      .filter((booking): booking is BookingRecord => Boolean(booking))
+      .map((booking) => ({
+        id: booking.id,
+        scheduledDate: booking.scheduledDate,
+        bookingReference: booking.bookingReference,
+      }));
+  }
+
   async findByUserId(userId: string) {
     return Array.from(this.bookings.values())
       .filter((booking) => booking.userId === userId)
@@ -2333,6 +2359,21 @@ class InMemoryJobOrdersRepository {
     );
   }
 
+  async findLatestByBookingSourceId(sourceId: string) {
+    const jobOrder = Array.from(this.jobOrders.values())
+      .filter((entry) => entry.sourceType === 'booking' && entry.sourceId === sourceId)
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())[0];
+
+    return cloneJobOrder(
+      jobOrder,
+      this.items,
+      this.assignments,
+      this.progressEntries,
+      this.photos,
+      this.invoiceRecords,
+    );
+  }
+
   async findByVehicleId(vehicleId: string) {
     return Array.from(this.jobOrders.values())
       .filter((jobOrder) => jobOrder.vehicleId === vehicleId)
@@ -2410,9 +2451,14 @@ class InMemoryJobOrdersRepository {
   async replaceAssignments(
     id: string,
     payload: {
-      assignedTechnicianIds: string[];
+      assignments?: Array<{
+        technicianProfileId: string;
+        selectedSpecialty: string;
+      }>;
+      assignedTechnicianIds?: string[];
       status?: JobOrderStatus;
       notes?: string | null;
+      expectedUpdatedAt?: string;
     },
   ) {
     const jobOrder = this.jobOrders.get(id);
@@ -2427,7 +2473,11 @@ class InMemoryJobOrdersRepository {
     }
 
     const now = new Date();
-    payload.assignedTechnicianIds.forEach((technicianUserId) => {
+    const technicianProfileIds =
+      payload.assignments?.map((assignment) => assignment.technicianProfileId) ??
+      payload.assignedTechnicianIds ??
+      [];
+    technicianProfileIds.forEach((technicianUserId) => {
       this.assignments.push({
         id: randomUUID(),
         jobOrderId: id,
@@ -3306,6 +3356,13 @@ class InMemoryInsuranceRepository {
     }
 
     return cloneInsuranceInquiry(inquiry, this.documents, this.activities);
+  }
+
+  async findInquiriesByVehicleId(vehicleId: string) {
+    return Array.from(this.inquiries.values())
+      .filter((inquiry) => inquiry.vehicleId === vehicleId)
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+      .map((inquiry) => ({ ...inquiry }));
   }
 
   async updateStatus(
@@ -4811,8 +4868,89 @@ class FakeMailDeliveryService {
   }
 }
 
-export async function createMainServiceTestApp(): Promise<{
+type SeededWorkClaim = {
+  id: string;
+  queueType: 'job_order' | 'qa';
+  entityType: 'booking_handoff' | 'job_order';
+  entityId: string;
+  ownerUserId: string;
+};
+
+class InMemoryStaffWorkQueuesService {
+  private readonly claims = new Map<string, SeededWorkClaim>();
+
+  seedClaim(payload: Omit<SeededWorkClaim, 'id'>): SeededWorkClaim {
+    const claim = { id: randomUUID(), ...payload };
+    this.claims.set(claim.id, claim);
+    return claim;
+  }
+
+  assertClaimAccess(
+    claimId: string | undefined,
+    queueType: SeededWorkClaim['queueType'],
+    entityType: SeededWorkClaim['entityType'],
+    entityId: string,
+    ownerUserId: string,
+    options: { allowUnclaimedWithoutHeader?: boolean } = {},
+  ) {
+    const activeClaim = [...this.claims.values()].find(
+      (claim) =>
+        claim.queueType === queueType &&
+        claim.entityType === entityType &&
+        claim.entityId === entityId,
+    );
+    if (!claimId) {
+      if (!activeClaim && options.allowUnclaimedWithoutHeader) {
+        return null;
+      }
+      throw new ConflictException({
+        code: 'WORK_CLAIM_REQUIRED',
+        message: 'Claim this work before editing it.',
+      });
+    }
+
+    const claim = this.claims.get(claimId);
+    if (
+      !claim ||
+      claim.queueType !== queueType ||
+      claim.entityType !== entityType ||
+      claim.entityId !== entityId ||
+      claim.ownerUserId !== ownerUserId
+    ) {
+      throw new ConflictException({
+        code: 'WORK_CLAIM_CONFLICT',
+        message: 'This work claim is not valid for the requested record.',
+      });
+    }
+
+    return claim;
+  }
+
+  completeClaim(
+    queueType: SeededWorkClaim['queueType'],
+    entityType: SeededWorkClaim['entityType'],
+    entityId: string,
+    ownerUserId?: string,
+  ) {
+    const claim = [...this.claims.values()].find(
+      (entry) =>
+        entry.queueType === queueType &&
+        entry.entityType === entityType &&
+        entry.entityId === entityId &&
+        (!ownerUserId || entry.ownerUserId === ownerUserId),
+    );
+    if (claim) {
+      this.claims.delete(claim.id);
+    }
+    return Promise.resolve(claim ?? null);
+  }
+}
+
+export async function createMainServiceTestApp(options: {
+  workClaimEnforcementMode?: 'observe' | 'strict';
+} = {}): Promise<{
   app: INestApplication;
+  seedWorkClaim: (payload: Omit<SeededWorkClaim, 'id'>) => SeededWorkClaim;
   seedAuthUser: (payload: {
     email: string;
     password: string;
@@ -4829,6 +4967,7 @@ export async function createMainServiceTestApp(): Promise<{
     'jwt.refreshSecret': 'test-refresh-secret',
     'jwt.accessExpiresIn': '15m',
     'jwt.refreshExpiresIn': '7d',
+    'staffWorkClaims.enforcementMode': options.workClaimEnforcementMode ?? 'observe',
   };
   const bookingClock = {
     now: () => new Date('2026-04-01T00:00:00.000Z'),
@@ -4852,6 +4991,7 @@ export async function createMainServiceTestApp(): Promise<{
   const smtpMailService = new FakeMailDeliveryService();
   const inspectionsRepository = new InMemoryInspectionsRepository();
   const vehicleLifecycleRepository = new InMemoryVehicleLifecycleRepository();
+  const staffWorkQueuesService = new InMemoryStaffWorkQueuesService();
 
   const moduleRef = await Test.createTestingModule({
     imports: [PassportModule.register({ defaultStrategy: 'jwt' }), JwtModule.register({})],
@@ -4878,6 +5018,7 @@ export async function createMainServiceTestApp(): Promise<{
       JwtStrategy,
       JwtAuthGuard,
       RolesGuard,
+      StaffWorkClaimGuard,
       UsersService,
       VehiclesService,
       BookingsService,
@@ -4896,6 +5037,7 @@ export async function createMainServiceTestApp(): Promise<{
       VehicleLifecycleService,
       AiWorkerProcessor,
       AutocareEventBusService,
+      { provide: StaffWorkQueuesService, useValue: staffWorkQueuesService },
       LoyaltyAccrualPlannerService,
       { provide: GoogleIdentityService, useValue: googleIdentityService },
       { provide: MailDeliveryService, useValue: smtpMailService },
@@ -4974,6 +5116,7 @@ export async function createMainServiceTestApp(): Promise<{
 
   return {
     app,
+    seedWorkClaim: (payload) => staffWorkQueuesService.seedClaim(payload),
     seedAuthUser: async (payload) => {
       const user = await usersRepository.create({
         email: payload.email,

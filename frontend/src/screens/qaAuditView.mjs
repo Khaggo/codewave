@@ -75,3 +75,19 @@ export function getGroupedQualityFindings(findings) {
     })
     .filter((group) => group.items.length > 0)
 }
+
+export function buildQaVerdictCompletionState({ verdict, reference }) {
+  const jobOrderReference = reference || 'Job order'
+  const wasBlocked = verdict === 'blocked'
+
+  return {
+    wasBlocked,
+    status: 'qa_completed',
+    message: wasBlocked
+      ? `${jobOrderReference} was returned to Job Orders. You can take the next QA review.`
+      : `${jobOrderReference} passed QA. You can take the next review.`,
+    toastMessage: wasBlocked
+      ? `${jobOrderReference} was returned for technician remediation.`
+      : `${jobOrderReference} is now cleared for finalization.`,
+  }
+}

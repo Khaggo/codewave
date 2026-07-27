@@ -1,5 +1,18 @@
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phoneRegex = /^09\d{9}$/;
+import {
+  normalizeEmail,
+  normalizePhoneNumber,
+  validateEmail,
+  validatePhoneNumber,
+} from '@codewave/domain-utils';
+
+export {
+  normalizeEmail,
+  normalizePhoneNumber,
+  validateEmail,
+  validatePhoneNumber,
+} from '@codewave/domain-utils';
+
+const licensePlateBodyRegex = /^[A-Z0-9 -]+$/;
 export const monthLabels = [
   'January',
   'February',
@@ -15,11 +28,14 @@ export const monthLabels = [
   'December',
 ];
 
-export const normalizeEmail = (value) => value.trim().toLowerCase();
-
-// PH mobile numbers must stay numeric-only and capped to 11 digits while typing.
-export const normalizePhoneNumber = (value) => value.replace(/\D/g, '').slice(0, 11);
 export const normalizeVehicleYear = (value) => String(value ?? '').replace(/\D/g, '').slice(0, 4);
+export const normalizeLicensePlate = (value) =>
+  String(value ?? '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 -]/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 20)
+    .trimStart();
 
 export const formatVehicleDisplayName = ({ vehicleMake, vehicleModel, vehicleYear }) =>
   [vehicleYear, vehicleMake, vehicleModel]
@@ -119,34 +135,6 @@ export const isPasswordValid = (password) => {
   return Object.values(checks).every(Boolean);
 };
 
-export const validateEmail = (email) => {
-  const normalizedEmail = normalizeEmail(email);
-
-  if (!normalizedEmail) {
-    return 'Enter your email address.';
-  }
-
-  if (!emailRegex.test(normalizedEmail)) {
-    return 'Enter a valid email address.';
-  }
-
-  return '';
-};
-
-export const validatePhoneNumber = (phoneNumber) => {
-  const digits = normalizePhoneNumber(phoneNumber);
-
-  if (!digits) {
-    return 'Enter your phone number.';
-  }
-
-  if (!phoneRegex.test(digits)) {
-    return 'Use an 11-digit PH mobile number starting with 09.';
-  }
-
-  return '';
-};
-
 export const validateOptionalPhoneNumber = (phoneNumber) => {
   const digits = normalizePhoneNumber(phoneNumber);
 
@@ -155,6 +143,25 @@ export const validateOptionalPhoneNumber = (phoneNumber) => {
   }
 
   return validatePhoneNumber(digits);
+};
+
+export const validateLicensePlate = (licensePlate) => {
+  const normalizedPlate = normalizeLicensePlate(licensePlate).trim();
+  const compactPlate = normalizedPlate.replace(/[^A-Z0-9]/g, '');
+
+  if (!normalizedPlate) {
+    return 'Enter your vehicle plate.';
+  }
+
+  if (!licensePlateBodyRegex.test(normalizedPlate)) {
+    return 'Use only letters, numbers, spaces, or hyphens for the vehicle plate.';
+  }
+
+  if (compactPlate.length < 4 || compactPlate.length > 10) {
+    return 'Use 4-10 letters or numbers for the vehicle plate.';
+  }
+
+  return '';
 };
 
 export const validateBirthday = (birthday) => {
@@ -230,8 +237,9 @@ export const validateRegisterForm = (form) => {
     errors.birthday = birthdayError;
   }
 
-  if (!form.licensePlate.trim()) {
-    errors.licensePlate = 'Enter your vehicle plate.';
+  const licensePlateError = validateLicensePlate(form.licensePlate);
+  if (licensePlateError) {
+    errors.licensePlate = licensePlateError;
   }
 
   if (!form.vehicleMake.trim()) {
@@ -273,8 +281,9 @@ export const validateProfileForm = (form) => {
     errors.address = 'Enter your address.';
   }
 
-  if (!form.licensePlate.trim()) {
-    errors.licensePlate = 'Enter your vehicle plate.';
+  const licensePlateError = validateLicensePlate(form.licensePlate);
+  if (licensePlateError) {
+    errors.licensePlate = licensePlateError;
   }
 
   if (!form.vehicleMake.trim()) {

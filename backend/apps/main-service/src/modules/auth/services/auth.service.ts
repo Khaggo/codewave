@@ -66,6 +66,7 @@ const roleFallbackAccountTypes: Record<string, StaffAccountType> = {
 };
 
 const MAX_ACTIVE_HEAD_TECHNICIANS = 2;
+const MAX_OTP_ATTEMPTS = 5;
 
 @Injectable()
 export class AuthService {
@@ -198,13 +199,10 @@ export class AuthService {
       throw new BadRequestException('OTP has expired');
     }
 
+    this.assertOtpAttemptAvailable(challenge);
     const isOtpValid = await bcrypt.compare(payload.otp, challenge.otpHash);
     if (!isOtpValid) {
-      await this.authRepository.incrementOtpAttempts(
-        challenge.id,
-        (challenge.attempts ?? 0) + 1,
-      );
-      throw new BadRequestException('Invalid OTP');
+      await this.rejectInvalidOtp(challenge);
     }
 
     await this.authRepository.consumeOtpChallenge(challenge.id);
@@ -248,13 +246,10 @@ export class AuthService {
       throw new BadRequestException('OTP has expired');
     }
 
+    this.assertOtpAttemptAvailable(challenge);
     const isOtpValid = await bcrypt.compare(payload.otp, challenge.otpHash);
     if (!isOtpValid) {
-      await this.authRepository.incrementOtpAttempts(
-        challenge.id,
-        (challenge.attempts ?? 0) + 1,
-      );
-      throw new BadRequestException('Invalid OTP');
+      await this.rejectInvalidOtp(challenge);
     }
 
     await this.authRepository.consumeOtpChallenge(challenge.id);
@@ -343,6 +338,18 @@ export class AuthService {
         wasSuccessful: false,
       });
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (['technician', 'head_technician'].includes(user.role)) {
+      await this.authRepository.logLoginAttempt({
+        userId: user.id,
+        email: loginDto.email,
+        ipAddress,
+        wasSuccessful: false,
+      });
+      throw new UnauthorizedException(
+        'Technician login has been retired. Service advisers now manage workshop progress and technician assignments.',
+      );
     }
 
     await this.authRepository.logLoginAttempt({
@@ -646,7 +653,9 @@ export class AuthService {
 
   async listStaffAccounts(actor: { userId: string; role: string }) {
     const staffAccounts = await this.usersService.listStaffAccounts(actor.userId);
-    return staffAccounts.map((account) => this.toManagedStaffAccount(account));
+    return staffAccounts
+      .filter((account) => ['service_adviser', 'super_admin'].includes(account.role))
+      .map((account) => this.toManagedStaffAccount(account));
   }
 
   async listCustomersWithVehicles(_actor: { userId: string; role: string }) {
@@ -891,13 +900,10 @@ export class AuthService {
       throw new BadRequestException('OTP has expired');
     }
 
+    this.assertOtpAttemptAvailable(challenge);
     const isOtpValid = await bcrypt.compare(payload.otp, challenge.otpHash);
     if (!isOtpValid) {
-      await this.authRepository.incrementOtpAttempts(
-        challenge.id,
-        (challenge.attempts ?? 0) + 1,
-      );
-      throw new BadRequestException('Invalid OTP');
+      await this.rejectInvalidOtp(challenge);
     }
 
     await this.authRepository.consumeOtpChallenge(challenge.id);
@@ -946,18 +952,31 @@ export class AuthService {
       throw new BadRequestException('OTP has expired');
     }
 
+    this.assertOtpAttemptAvailable(challenge);
     const isOtpValid = await bcrypt.compare(otp, challenge.otpHash);
     if (!isOtpValid) {
-      await this.authRepository.incrementOtpAttempts(
-        challenge.id,
-        (challenge.attempts ?? 0) + 1,
-      );
-      throw new BadRequestException('Invalid OTP');
+      await this.rejectInvalidOtp(challenge);
     }
 
     await this.authRepository.consumeOtpChallenge(challenge.id);
 
     return challenge;
+  }
+
+  private assertOtpAttemptAvailable(challenge: { attempts?: number | null }) {
+    if ((challenge.attempts ?? 0) >= MAX_OTP_ATTEMPTS) {
+      throw new BadRequestException('OTP attempt limit reached. Request a new code.');
+    }
+  }
+
+  private async rejectInvalidOtp(challenge: { id: string; attempts?: number | null }): Promise<never> {
+    const updatedChallenge = await this.authRepository.incrementOtpAttempts(challenge.id);
+    if ((updatedChallenge?.attempts ?? MAX_OTP_ATTEMPTS) >= MAX_OTP_ATTEMPTS) {
+      await this.authRepository.consumeOtpChallenge(challenge.id);
+      throw new BadRequestException('OTP attempt limit reached. Request a new code.');
+    }
+
+    throw new BadRequestException('Invalid OTP');
   }
 
   private async issueTokens(user: { id: string; email: string; role: string; profile?: unknown }) {
@@ -1067,7 +1086,7 @@ export class AuthService {
   }
 
   private generateOtp() {
-    return `${Math.floor(100000 + Math.random() * 900000)}`;
+    return `${randomInt(100000, 1000000)}`;
   }
 
   private normalizePhilippineMobile(value: string) {

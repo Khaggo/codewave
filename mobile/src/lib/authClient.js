@@ -510,6 +510,14 @@ export const loginAccount = async (payload) =>
     body: payload,
   });
 
+export const refreshAuthSession = async (refreshToken) =>
+  request('/api/auth/refresh', {
+    method: 'POST',
+    body: {
+      refreshToken,
+    },
+  });
+
 export const requestForgotPasswordOtp = async ({ email }) =>
   request('/api/auth/password/forgot/request', {
     method: 'POST',

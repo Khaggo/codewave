@@ -1,20 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  ArrayMinSize,
-  ArrayUnique,
-  IsArray,
-  IsEnum,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-  ValidateNested,
-} from 'class-validator';
+import { ArrayMinSize, IsArray, IsEnum, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 import { jobOrderSourceTypeEnum } from '../schemas/job-orders.schema';
 
 import { CreateJobOrderItemDto } from './create-job-order-item.dto';
+import { JobOrderTechnicianAssignmentDto } from './job-order-technician-assignment.dto';
 
 export class CreateJobOrderDto {
   @ApiProperty({
@@ -76,13 +67,24 @@ export class CreateJobOrderDto {
   items!: CreateJobOrderItemDto[];
 
   @ApiPropertyOptional({
+    type: () => JobOrderTechnicianAssignmentDto,
+    isArray: true,
+    example: [{ technicianProfileId: '61539ebf-e98a-45da-aa0d-a19acded1d7f', selectedSpecialty: 'mechanic' }],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => JobOrderTechnicianAssignmentDto)
+  assignments?: JobOrderTechnicianAssignmentDto[];
+
+  @ApiPropertyOptional({
     type: String,
     isArray: true,
+    description: 'Legacy compatibility field. Prefer assignments with technicianProfileId plus specialty.',
     example: ['61539ebf-e98a-45da-aa0d-a19acded1d7f'],
   })
   @IsOptional()
   @IsArray()
-  @ArrayUnique()
   @IsUUID(undefined, { each: true })
   assignedTechnicianIds?: string[];
 }

@@ -1,13 +1,6 @@
 import './globals.css'
-import { Inter } from 'next/font/google'
 import AppShell from '@/components/layout/AppShell'
 import { ToastProvider } from '@/components/Toast.jsx'
-
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-inter',
-})
 
 export const metadata = {
   title: {
@@ -19,7 +12,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en">
       <body>
         <ToastProvider>
           <AppShell>{children}</AppShell>

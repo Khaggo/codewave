@@ -1,8 +1,8 @@
 import type { JobOrderQualityGateResponse, QualityGateFindingResponse } from './responses';
 
-export type StaffQualityGateReviewRole = 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
+export type StaffQualityGateReviewRole = 'service_adviser' | 'super_admin';
 export type StaffQualityGateOverrideRole = 'super_admin';
-export type StaffQualityGateVerdictRole = 'head_technician' | 'super_admin';
+export type StaffQualityGateVerdictRole = 'service_adviser' | 'super_admin';
 
 export type StaffQualityGateReviewState =
   | 'qa_ready'
@@ -46,8 +46,6 @@ export interface StaffQualityGateRule<TState extends string> {
 }
 
 export const staffQualityGateReviewRoles: StaffQualityGateReviewRole[] = [
-  'technician',
-  'head_technician',
   'service_adviser',
   'super_admin',
 ];
@@ -57,7 +55,7 @@ export const staffQualityGateOverrideRoles: StaffQualityGateOverrideRole[] = [
 ];
 
 export const staffQualityGateVerdictRoles: StaffQualityGateVerdictRole[] = [
-  'head_technician',
+  'service_adviser',
   'super_admin',
 ];
 
@@ -88,7 +86,7 @@ export const staffQualityGateReviewRules: StaffQualityGateRule<StaffQualityGateR
     allowedRoles: staffQualityGateReviewRoles,
     backendRoute: 'GET /api/job-orders/:jobOrderId/qa',
     releaseEffect: 'release_unavailable',
-    notes: 'Assigned technicians and staff reviewers can read QA; customers cannot use this web surface.',
+    notes: 'Only service advisers and super admins can use this QA review surface; customers and retired technician logins cannot.',
   },
 ];
 

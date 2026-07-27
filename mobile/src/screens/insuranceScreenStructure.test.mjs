@@ -253,7 +253,43 @@ test('dashboard insurance tab uses one launcher CTA and no legacy duplicate insu
   assert.doesNotMatch(dashboardSource, /bookingEyebrow}>INSURANCE/)
   assert.equal((dashboardSource.match(/Open Insurance Home/g) ?? []).length, 1)
   assert.match(dashboardSource, /if \(tabKey === 'insurance'\) \{/)
-  assert.match(dashboardSource, /void navigateToInsuranceInquiry\(\)/)
+  assert.match(
+    dashboardSource,
+    /void navigateToInsuranceInquiry\(null,\s*\{\s*useRememberedInquiry:\s*false\s*\}\)/,
+  )
+})
+
+test('insurance screen declares remembered inquiry storage key before effects and helpers use it', () => {
+  const screenSource = read('./InsuranceInquiryScreen.js')
+  const declarationIndex = screenSource.indexOf(
+    "const rememberedInquiryStorageKey = getRememberedInquiryStorageKey(account?.userId);",
+  )
+  const hydrationEffectIndex = screenSource.indexOf(
+    "}, [fallbackVehicleId, rememberedInquiryStorageKey, routeInquiryId, routeVehicleId]);",
+  )
+  const loadHelperIndex = screenSource.indexOf(
+    'const serializedMappings = await AsyncStorage.getItem(rememberedInquiryStorageKey);',
+  )
+  const persistHelperIndex = screenSource.indexOf(
+    'await AsyncStorage.setItem(rememberedInquiryStorageKey, serializeRememberedInquiryMappings());',
+  )
+
+  assert.notEqual(declarationIndex, -1, 'Expected rememberedInquiryStorageKey declaration to exist.')
+  assert.notEqual(hydrationEffectIndex, -1, 'Expected hydration effect dependency to reference rememberedInquiryStorageKey.')
+  assert.notEqual(loadHelperIndex, -1, 'Expected remembered inquiry loader to use rememberedInquiryStorageKey.')
+  assert.notEqual(persistHelperIndex, -1, 'Expected remembered inquiry persistence helper to use rememberedInquiryStorageKey.')
+  assert.ok(
+    declarationIndex < hydrationEffectIndex,
+    'rememberedInquiryStorageKey must be declared before the hydration effect dependency uses it.',
+  )
+  assert.ok(
+    declarationIndex < loadHelperIndex,
+    'rememberedInquiryStorageKey must be declared before the remembered-inquiry loader uses it.',
+  )
+  assert.ok(
+    declarationIndex < persistHelperIndex,
+    'rememberedInquiryStorageKey must be declared before the remembered-inquiry persistence helper uses it.',
+  )
 })
 
 test('insurance screen and action footers respect safe-area top and bottom insets', () => {

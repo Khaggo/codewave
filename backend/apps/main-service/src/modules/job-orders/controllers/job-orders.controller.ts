@@ -38,9 +38,12 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Roles } from '@main-modules/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
+import { RequiresWorkClaim } from '@main-modules/staff-work-queues/decorators/requires-work-claim.decorator';
+import { StaffWorkClaimGuard } from '@main-modules/staff-work-queues/guards/staff-work-claim.guard';
 
 import { AddJobOrderPhotoDto } from '../dto/add-job-order-photo.dto';
 import { AddJobOrderProgressDto } from '../dto/add-job-order-progress.dto';
+import { BookingWorkshopHandoffResponseDto } from '../dto/booking-workshop-handoff-response.dto';
 import { CreateJobOrderDto } from '../dto/create-job-order.dto';
 import { CustomerServiceHistoryResponseDto } from '../dto/customer-service-history-response.dto';
 import { FinalizeJobOrderDto } from '../dto/finalize-job-order.dto';
@@ -51,7 +54,9 @@ import { ListJobOrderWorkbenchQueryDto } from '../dto/list-job-order-workbench-q
 import { RecordJobOrderInvoicePaymentDto } from '../dto/record-job-order-invoice-payment.dto';
 import { ReplaceJobOrderAssignmentsDto } from '../dto/replace-job-order-assignments.dto';
 import { UpdateJobOrderStatusDto } from '../dto/update-job-order-status.dto';
+import { UpdateJobOrderWorkshopStageDto } from '../dto/update-job-order-workshop-stage.dto';
 import { UploadJobOrderPhotoDto } from '../dto/upload-job-order-photo.dto';
+import { JOB_ORDER_EVIDENCE_MAX_BYTES } from '../services/job-order-evidence-storage.service';
 import { JobOrdersService } from '../services/job-orders.service';
 
 @ApiTags('job-orders')
@@ -60,7 +65,13 @@ export class JobOrdersController {
   constructor(private readonly jobOrdersService: JobOrdersService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, StaffWorkClaimGuard)
+  @RequiresWorkClaim({
+    queueType: 'job_order',
+    entityType: 'booking_handoff',
+    entityIdKey: 'sourceId',
+    entityIdSource: 'body',
+  })
   @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Create a digital job order from approved operational intake.' })
   @ApiBearerAuth('access-token')
@@ -77,17 +88,43 @@ export class JobOrdersController {
     return this.jobOrdersService.create(payload, request.user as { userId: string; role: string });
   }
 
+  @Post('booking-handoffs/:bookingId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({
+    summary: 'Idempotently create or reopen the workshop job order for a confirmed booking.',
+  })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'bookingId',
+    format: 'uuid',
+  })
+  @ApiCreatedResponse({
+    description: 'The booking was handed off to its focused job-order workspace.',
+    type: BookingWorkshopHandoffResponseDto,
+  })
+  @ApiConflictResponse({ description: 'The booking is not eligible for workshop handoff.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can hand work to the workshop.' })
+  @ApiNotFoundResponse({ description: 'The booking or staff account was not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  sendBookingToWorkshop(@Param('bookingId') bookingId: string, @Req() request: Request) {
+    return this.jobOrdersService.sendBookingToWorkshop(
+      bookingId,
+      request.user as { userId: string; role: string },
+    );
+  }
+
   @Get('assigned')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'head_technician')
-  @ApiOperation({ summary: 'List job orders assigned to the current technician or head technician.' })
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Legacy endpoint retained for compatibility after technician login retirement.' })
   @ApiBearerAuth('access-token')
   @ApiOkResponse({
     description: 'Job orders assigned to the current technician, most recently updated first.',
     type: JobOrderResponseDto,
     isArray: true,
   })
-  @ApiForbiddenResponse({ description: 'Only technicians or head technicians can list their assigned job orders.' })
+  @ApiForbiddenResponse({ description: 'Technician login has been retired. Service advisers manage assignments from the workbench.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   listAssigned(@Req() request: Request) {
     return this.jobOrdersService.listAssignedToTechnician(
@@ -97,7 +134,7 @@ export class JobOrdersController {
 
   @Get('workbench-summaries')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'List accessible job-order summary records for workbench date indicators and selectors.' })
   @ApiBearerAuth('access-token')
   @ApiQuery({
@@ -132,7 +169,7 @@ export class JobOrdersController {
 
   @Get('workbench-calendar')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'List date markers for job orders and booking handoff queue visibility in one workbench month.' })
   @ApiBearerAuth('access-token')
   @ApiQuery({
@@ -209,9 +246,10 @@ export class JobOrdersController {
 
   @Patch(':id/assignments')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('head_technician', 'service_adviser', 'super_admin')
-  @ApiOperation({ summary: 'Replace the saved technician assignment set for one job order.' })
+  @UseGuards(JwtAuthGuard, RolesGuard, StaffWorkClaimGuard)
+  @RequiresWorkClaim({ queueType: 'job_order', entityType: 'job_order', entityIdKey: 'id' })
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Replace the saved technician-profile assignment set for one job order.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
     name: 'id',
@@ -225,7 +263,7 @@ export class JobOrdersController {
   @ApiBadRequestResponse({ description: 'The assignment payload is invalid.' })
   @ApiConflictResponse({ description: 'Operational job orders cannot clear their technician assignments.' })
   @ApiForbiddenResponse({ description: 'Only service advisers or super admins can replace job-order assignments.' })
-  @ApiNotFoundResponse({ description: 'Job order or technician account not found.' })
+  @ApiNotFoundResponse({ description: 'Job order or technician profile not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   replaceAssignments(
     @Param('id') id: string,
@@ -265,8 +303,8 @@ export class JobOrdersController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
-  @ApiOperation({ summary: 'Get a job order by id for assigned staff visibility.' })
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Get a job order by id for adviser/admin visibility.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
     name: 'id',
@@ -277,7 +315,7 @@ export class JobOrdersController {
     description: 'The matching job order.',
     type: JobOrderResponseDto,
   })
-  @ApiForbiddenResponse({ description: 'Only assigned technicians or staff reviewers can access this job order.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can access this job order.' })
   @ApiNotFoundResponse({ description: 'Job order not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   findById(@Param('id') id: string, @Req() request: Request) {
@@ -286,8 +324,9 @@ export class JobOrdersController {
 
   @Patch(':id/status')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
+  @UseGuards(JwtAuthGuard, RolesGuard, StaffWorkClaimGuard)
+  @RequiresWorkClaim({ queueType: 'job_order', entityType: 'job_order', entityIdKey: 'id' })
+  @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Update job-order execution status using validated staff transitions.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
@@ -301,7 +340,7 @@ export class JobOrdersController {
   })
   @ApiBadRequestResponse({ description: 'The job-order status payload is invalid.' })
   @ApiConflictResponse({ description: 'The requested job-order status transition is not allowed.' })
-  @ApiForbiddenResponse({ description: 'Only the appropriate staff role can perform this transition.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can perform this transition.' })
   @ApiNotFoundResponse({ description: 'Job order not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   updateStatus(
@@ -312,11 +351,36 @@ export class JobOrdersController {
     return this.jobOrdersService.updateStatus(id, payload, request.user as { userId: string; role: string });
   }
 
+  @Patch(':id/workshop-stage')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard, StaffWorkClaimGuard)
+  @RequiresWorkClaim({ queueType: 'job_order', entityType: 'job_order', entityIdKey: 'id' })
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Update the adviser-owned workshop stage tracker for one job order.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Job-order identifier.',
+    example: '7bc8926d-8eb7-4c97-85ab-4597a58e1f43',
+  })
+  @ApiOkResponse({
+    description: 'The updated job order after the workshop stage was saved.',
+    type: JobOrderResponseDto,
+  })
+  updateWorkshopStage(
+    @Param('id') id: string,
+    @Body() payload: UpdateJobOrderWorkshopStageDto,
+    @Req() request: Request,
+  ) {
+    return this.jobOrdersService.updateWorkshopStage(id, payload, request.user as { userId: string; role: string });
+  }
+
   @Post(':id/progress')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
-  @ApiOperation({ summary: 'Append a structured progress entry to a job order.' })
+  @UseGuards(JwtAuthGuard, RolesGuard, StaffWorkClaimGuard)
+  @RequiresWorkClaim({ queueType: 'job_order', entityType: 'job_order', entityIdKey: 'id' })
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Append a structured adviser-owned progress note to a job order.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
     name: 'id',
@@ -329,7 +393,7 @@ export class JobOrdersController {
   })
   @ApiBadRequestResponse({ description: 'The progress-entry payload is invalid.' })
   @ApiConflictResponse({ description: 'The job order cannot accept the supplied progress evidence.' })
-  @ApiForbiddenResponse({ description: 'Only assigned technicians can append progress entries.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can append progress entries.' })
   @ApiNotFoundResponse({ description: 'Job order not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   addProgressEntry(
@@ -342,8 +406,9 @@ export class JobOrdersController {
 
   @Post(':id/photos')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
+  @UseGuards(JwtAuthGuard, RolesGuard, StaffWorkClaimGuard)
+  @RequiresWorkClaim({ queueType: 'job_order', entityType: 'job_order', entityIdKey: 'id' })
+  @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Attach work evidence photos to a job order.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
@@ -357,7 +422,7 @@ export class JobOrdersController {
   })
   @ApiBadRequestResponse({ description: 'The photo-evidence payload is invalid.' })
   @ApiConflictResponse({ description: 'The job order cannot accept the supplied photo evidence.' })
-  @ApiForbiddenResponse({ description: 'Only assigned technicians or staff reviewers can add photo evidence.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can add photo evidence.' })
   @ApiNotFoundResponse({ description: 'Job order not found.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   addPhoto(
@@ -370,9 +435,16 @@ export class JobOrdersController {
 
   @Post(':id/photos/upload')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @UseInterceptors(FileInterceptor('file'))
-  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
+  @UseGuards(JwtAuthGuard, RolesGuard, StaffWorkClaimGuard)
+  @RequiresWorkClaim({ queueType: 'job_order', entityType: 'job_order', entityIdKey: 'id' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize: JOB_ORDER_EVIDENCE_MAX_BYTES,
+      },
+    }),
+  )
+  @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Upload image evidence directly for a job order, work item, progress entry, or QA review.' })
   @ApiBearerAuth('access-token')
   @ApiConsumes('multipart/form-data')
@@ -389,7 +461,7 @@ export class JobOrdersController {
         caption: { type: 'string' },
         linkedEntityType: {
           type: 'string',
-          enum: ['job_order', 'progress_entry', 'work_item', 'qa_review'],
+          enum: ['job_order', 'progress_entry', 'work_item', 'qa_review', 'workshop_stage'],
         },
         linkedEntityId: { type: 'string', format: 'uuid' },
       },
@@ -416,7 +488,7 @@ export class JobOrdersController {
 
   @Get(':id/photos/:photoId/file')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('technician', 'head_technician', 'service_adviser', 'super_admin')
+  @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Stream a stored evidence image for a job order.' })
   @ApiBearerAuth('access-token')
   @ApiParam({
@@ -441,13 +513,16 @@ export class JobOrdersController {
       request.user as { userId: string; role: string },
     );
     response.setHeader('Content-Type', file.mimeType);
-    response.setHeader('Content-Disposition', `inline; filename="${file.fileName}"`);
+    response.setHeader('Content-Disposition', `inline; filename="job-order-evidence-${photoId}"`);
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Cache-Control', 'private, no-store');
     return new StreamableFile(file.buffer);
   }
 
   @Post(':id/finalize')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, StaffWorkClaimGuard)
+  @RequiresWorkClaim({ queueType: 'job_order', entityType: 'job_order', entityIdKey: 'id' })
   @Roles('service_adviser', 'super_admin')
   @ApiOperation({ summary: 'Generate an invoice-ready record after QA clears the job order.' })
   @ApiBearerAuth('access-token')
@@ -593,6 +668,27 @@ export class JobOrdersController {
   ) {
     const file = await this.jobOrdersService.exportInvoicePdf(
       id,
+      request.user as { userId: string; role: string },
+    );
+    response.setHeader('Content-Type', 'application/pdf');
+    response.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    return new StreamableFile(file.buffer);
+  }
+
+  @Get(':id/assignments/:assignmentId/checklist.pdf')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Generate and stream the printable checklist PDF for one assigned technician profile.' })
+  @ApiBearerAuth('access-token')
+  async exportTechnicianChecklistPdf(
+    @Param('id') id: string,
+    @Param('assignmentId') assignmentId: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const file = await this.jobOrdersService.exportTechnicianChecklistPdf(
+      id,
+      assignmentId,
       request.user as { userId: string; role: string },
     );
     response.setHeader('Content-Type', 'application/pdf');

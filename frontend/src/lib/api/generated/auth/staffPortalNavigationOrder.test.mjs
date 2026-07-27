@@ -2,8 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 
-const navigationSourcePath =
-  'C:/Vscode/Main/codewave/frontend/src/lib/api/generated/auth/staff-web-session.ts'
+const navigationSourcePath = new URL('./staff-web-session.ts', import.meta.url)
 
 function getKeyPositions(source, keys) {
   return keys.map((key) => source.indexOf(`key: '${key}'`))
@@ -19,7 +18,6 @@ test('staff portal navigation rules follow the real service flow order', () => {
     'qa-audit',
     'invoice-order-management',
     'customer-directory',
-    'vehicle-records',
     'back-jobs',
     'insurance',
     'loyalty-management',

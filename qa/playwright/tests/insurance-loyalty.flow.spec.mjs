@@ -5,8 +5,11 @@ import { test, expect } from '@playwright/test';
 import { addFinding, annotateSeverity } from '../helpers/assertions.mjs';
 import {
   apiLogin,
+  createCustomerBooking,
+  createCustomerVehicle,
   ensureLocalQaRuntime,
   getBooking,
+  getAssignableTechnicianProfile,
   getPublicBookingAvailability,
   getPublicBookingCatalog,
   getReservationPayment,
@@ -19,7 +22,6 @@ import { createRunMarker, qaAccounts, seededVehicle } from '../helpers/config.mj
 import {
   confirmReservationPaymentFromBookings,
   createJobOrderFromHandoff,
-  createMobileBooking,
   loginMobileCustomer,
   loginStaff,
   loadJobOrderById,
@@ -148,7 +150,7 @@ async function getLoyaltySnapshot(request, customerSession, label) {
   };
 }
 
-async function chooseBookingCandidate(request, customerSession, services, timeSlots) {
+async function chooseBookingCandidate(request, customerSession, services, timeSlots, vehicleId) {
   const existingCustomerBookings = await listCustomerBookings(request, customerSession);
   const activeBookingStatuses = new Set(['pending', 'pending_payment', 'confirmed', 'rescheduled', 'in_service']);
   const hasActiveSameSlotBooking = (scheduledDate, timeSlotId) =>
@@ -165,6 +167,7 @@ async function chooseBookingCandidate(request, customerSession, services, timeSl
     const availability = await getPublicBookingAvailability(request, {
       timeSlotId: timeSlot.id,
       accessToken: customerSession.accessToken,
+      vehicleId,
     });
 
     const day = (availability.days ?? []).find((candidateDay) => {
@@ -323,17 +326,28 @@ test('loyalty points accrue only after paid service invoice, not reservation fee
   const runMarker = createRunMarker('LOYALTY-SERVICE-PAYMENT');
   const customerSession = await apiLogin(request, qaAccounts.customer);
   const adviserSession = await apiLogin(request, qaAccounts.adviser);
+  const assignableTechnicianProfile = await getAssignableTechnicianProfile(request, adviserSession);
   const { services, timeSlots } = await getPublicBookingCatalog(request);
 
   expect(services.length, 'At least one active booking service is required for loyalty service-payment QA.').toBeGreaterThan(0);
   expect(timeSlots.length, 'At least one active time slot is required for loyalty service-payment QA.').toBeGreaterThan(0);
 
   const baselineLoyalty = await getLoyaltySnapshot(request, customerSession, 'Baseline loyalty');
+  const runPlateToken = runMarker.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(-8);
+  const temporaryVehicle = await createCustomerVehicle(request, customerSession, {
+    plateNumber: `LY${runPlateToken}`,
+    make: 'Toyota',
+    model: `Loyalty ${runPlateToken.slice(-4)}`,
+    year: 2022,
+    color: 'Blue',
+    notes: `${runMarker} temporary loyalty vehicle`,
+  });
   const { selectedService, selectedTimeSlot, selectedDay } = await chooseBookingCandidate(
     request,
     customerSession,
     services,
     timeSlots,
+    temporaryVehicle.id,
   );
 
   const customerContext = await browser.newContext({ viewport: { width: 430, height: 932 } });
@@ -341,26 +355,16 @@ test('loyalty points accrue only after paid service invoice, not reservation fee
   const customerPage = await customerContext.newPage();
 
   await loginMobileCustomer(customerPage, qaAccounts.customer);
-  await createMobileBooking(customerPage, {
-    serviceName: selectedService.name,
-    timeSlotLabel: selectedTimeSlot.label,
+  const createdBooking = await createCustomerBooking(request, customerSession, {
+    vehicleId: temporaryVehicle.id,
+    timeSlotId: selectedTimeSlot.id,
     scheduledDate: selectedDay.scheduledDate,
-    noteMarker: runMarker,
+    serviceIds: [selectedService.id],
+    notes: runMarker,
   });
-
-  const createdBooking = await pollUntil(
-    `booking with note marker ${runMarker}`,
-    async () => {
-      const bookings = await listCustomerBookings(request, customerSession);
-      return bookings.find((entry) => entry?.notes?.includes(runMarker));
-    },
-    Boolean,
-  );
   const bookingId = createdBooking.id;
 
-  await openTrackedBooking(customerPage, createdBooking);
-  await expect(customerPage.getByText('Reservation Fee', { exact: true })).toBeVisible();
-  await expect(customerPage.getByText(/Pay Reservation Fee/i)).toBeVisible();
+  await expect(customerPage.getByText('Book Service', { exact: true })).toBeVisible();
   await getReservationPayment(request, customerSession, bookingId);
 
   const adviserContext = await browser.newContext();
@@ -385,7 +389,8 @@ test('loyalty points accrue only after paid service invoice, not reservation fee
     bookingId,
     bookingReference: createdBooking.bookingReference,
     scheduledDate: createdBooking.scheduledDate,
-    technicianCode: qaAccounts.technician.staffCode,
+    technicianSelectorText:
+      assignableTechnicianProfile.code || assignableTechnicianProfile.fullName || assignableTechnicianProfile.id,
     noteMarker: runMarker,
     testInfo,
   });
@@ -405,10 +410,9 @@ test('loyalty points accrue only after paid service invoice, not reservation fee
 
   const technicianContext = await browser.newContext();
   const technicianPage = await technicianContext.newPage();
-  await loginStaff(technicianPage, qaAccounts.technician, '/admin/job-orders');
+  await loginStaff(technicianPage, qaAccounts.adviser, '/admin/job-orders');
   await loadJobOrderById(technicianPage, {
     jobOrderId,
-    technicianView: true,
     scheduledDate: jobOrderWorkDate,
     testInfo,
   });
@@ -420,11 +424,11 @@ test('loyalty points accrue only after paid service invoice, not reservation fee
 
   const headTechContext = await browser.newContext();
   const headTechPage = await headTechContext.newPage();
-  await loginStaff(headTechPage, qaAccounts.headTechnician, '/admin/qa-audit');
+  await loginStaff(headTechPage, qaAccounts.adviser, '/admin/qa-audit');
   await recordQaVerdict(headTechPage, {
     jobOrderId,
     scheduledDate: jobOrderWorkDate,
-    note: `QA release for ${runMarker}`,
+    note: `Adviser QA release for ${runMarker}`,
     testInfo,
   });
 

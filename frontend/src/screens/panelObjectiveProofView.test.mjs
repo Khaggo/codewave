@@ -9,6 +9,7 @@ test('critical staff booking, job-order, QA, and invoice screens use business-re
   const bookings = read('frontend/src/app/bookings/BookingsList.js')
   const jobOrders = read('frontend/src/screens/JobOrderWorkbench.js')
   const qaAudit = read('frontend/src/screens/QAAuditWorkspace.js')
+  const qaAuditView = read('frontend/src/screens/qaAuditView.mjs')
   const invoices = read('frontend/src/screens/InvoiceOrderManagementWorkspace.js')
 
   assert.match(bookings, /if \(recordOrId\.bookingReference\) \{/)
@@ -26,9 +27,11 @@ test('critical staff booking, job-order, QA, and invoice screens use business-re
   assert.match(qaAudit, /function formatJobOrderReference\(jobOrder\) \{/)
   assert.match(qaAudit, /function getLoadedJobOrderReference\(jobOrderId, jobOrderOptions, qualityGate = null\) \{/)
   assert.match(qaAudit, /const selectedJobOrderReference = getLoadedJobOrderReference\(jobOrderId, jobOrderOptions, qualityGate\)/)
-  assert.match(qaAudit, /selectedJobOrderReference} now has an auditable super-admin override\./)
-  assert.match(qaAudit, /selectedJobOrderReference} was returned for technician remediation\./)
-  assert.match(qaAudit, /selectedJobOrderReference} is now cleared for release review\./)
+  assert.match(qaAudit, /const targetReference = selectedJobOrderReference/)
+  assert.match(qaAudit, /targetReference} now has an auditable super-admin override\./)
+  assert.match(qaAudit, /reference: completedJobOrderReference/)
+  assert.match(qaAuditView, /jobOrderReference} was returned for technician remediation\./)
+  assert.match(qaAuditView, /jobOrderReference} is now cleared for finalization\./)
   assert.doesNotMatch(qaAudit, /<p className="mt-2 break-all text-sm font-semibold text-ink-primary">\{qualityGate\.jobOrderId\}<\/p>/)
 
   assert.match(invoices, /const formatJobOrderReference = \(jobOrder\) => \{/)
@@ -45,7 +48,7 @@ test('Objective 5 proof surfaces expose discrepancy and customer-summary evidenc
     'Semantic Match',
     'Blocking Findings',
     'Review Needed',
-    'Continue in Job Orders',
+    'Return to Job Order',
   ]
 
   for (const fragment of requiredQaFragments) {

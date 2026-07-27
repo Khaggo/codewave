@@ -1,0 +1,14 @@
+{
+  "name": "@codewave/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./openapi/main-service": "./openapi/main-service.json"
+  },
+  "files": [
+    "openapi",
+    "src"
+  ]
+}

@@ -19,7 +19,14 @@ Build and maintain a correct, modular, self-improving, and implementation-ready 
 
 ## Agent Topology
 
-### Permanent roles
+### Runtime model
+
+- The repository contains role contracts, skills, task files, and validators. It does not contain a persistent autonomous multi-agent runtime.
+- Agent mode is opt-in. Ordinary user-directed work remains a direct Codex task and does not load or claim the implementation queue.
+- One Codex session applies the role contracts sequentially by default. Parallel workers require explicit user intent, disjoint write scopes, and one integration owner.
+- A role handoff is an ownership checklist unless a real parallel task was explicitly created; documentation must not imply that a background process started.
+
+### Core responsibility roles
 
 - `Orchestrator`: is the default front door for freeform user prompts, reads routing docs, decomposes work, triages improvement evidence, assigns ownership, approves or rejects proposals, and resolves conflicts. It is proposal-only and may not directly mutate domain Markdown.
 - `Domain Worker`: owns one assigned domain at a time and may edit only that domain's writable sections.
@@ -61,7 +68,8 @@ Build and maintain a correct, modular, self-improving, and implementation-ready 
 - `Domain Worker`: may edit only the assigned domain doc and only within declared `Writable Sections`.
 - `Integration Worker`: may edit shared contracts or multiple domain docs only when the task is explicitly cross-domain.
 - `Validator`: may update only machine-owned metadata such as hashes, versions, verification timestamps, and validation status.
-- Direct worker invocation is a narrow explicit exception. If the user does not name a role, the request starts with the orchestrator.
+- These governance rules apply when agent mode is active. A direct user task does not need to become a queue item.
+- Direct worker invocation is a narrow explicit exception inside agent mode. If the user activates agent mode without naming a role, the request starts with the orchestrator.
 - Domain workers do not directly edit `agent-manifest.json`.
 - Structural manifest changes are orchestrator-governed by proposal and validator-checked before acceptance.
 - `main-service.users` and `main-service.auth` are the current golden reference domains for documentation style and backend module shape.
@@ -70,7 +78,8 @@ Build and maintain a correct, modular, self-improving, and implementation-ready 
 
 ### Technical baseline
 
-- `NextJS`: customer-facing and admin-facing frontend.
+- `Next.js`: staff and super-admin web portal.
+- `Expo + React Native`: customer-facing mobile application.
 - `NestJS`: backend framework for both services.
 - `Drizzle ORM`: typed persistence layer for PostgreSQL.
 - `PostgreSQL`: transactional system of record.
@@ -79,6 +88,16 @@ Build and maintain a correct, modular, self-improving, and implementation-ready 
 - `BullMQ + Redis`: background jobs, retries, reminders, and derived refresh.
 - `RabbitMQ`: inter-service events and reliable asynchronous handoff.
 - `AI provider adapter`: approved Phase 2 AI features must route through a configurable adapter, not hard-coded model IDs.
+
+### Production security baseline
+
+- Production configuration must come from the deployment environment. Runtime services must not fall back to repository example env files.
+- JWT access and refresh secrets must be distinct, non-placeholder values of at least 32 characters.
+- OTP bypass is development-only and is rejected during production startup.
+- Both Nest services apply Helmet security headers, explicit CORS allowlists, and global request throttling.
+- Authentication endpoints use tighter route-level throttles, cryptographically secure OTP generation, bounded verification attempts, and atomic attempt accounting.
+- Uploaded evidence is size-bounded and validated from file signatures. Local storage reads must remain inside the configured upload root.
+- Internal upload URL schemes are service-owned and cannot be supplied through ordinary external-document APIs.
 
 ### Service boundaries
 
@@ -106,12 +125,12 @@ Build and maintain a correct, modular, self-improving, and implementation-ready 
 
 ## Improvement Loop
 
-1. Orchestrator receives either a freeform user prompt or improvement evidence.
+1. User explicitly activates agent mode, selects queued work, or submits improvement evidence for orchestrator triage.
 2. Orchestrator loads the minimum routing context, identifies ownership, and classifies the evidence as `noise`, `observation`, or `bounded proposal`.
 3. If the evidence is weak, duplicated, or not actionable, the orchestrator rejects it as noise and stops.
 4. If the evidence is credible but not yet a bounded change, the orchestrator logs an observation in the non-canonical improvement queue so stagnation, drift, and repeated confusion stay visible.
 5. If change is warranted, the orchestrator creates a bounded proposal with target file, allowed sections, and acceptance checks.
-6. A worker edits only the permitted file scope.
+6. The active Codex session applies the owning role checklist, or an explicitly created parallel worker edits only its permitted file scope.
 7. Validator checks heading schema, links, dependencies, and manifest integrity.
 8. Validator refreshes machine-owned metadata.
 9. Canonical Markdown is replaced only after validation passes and the proposal remains human-approved.

@@ -80,6 +80,30 @@ export class UsersRepository extends BaseRepository {
     });
   }
 
+  async findActiveByPhone(phone: string, excludeUserId?: string) {
+    const matchedProfile = await this.db.query.userProfiles.findFirst({
+      where: eq(userProfiles.phone, phone),
+      with: {
+        user: true,
+      },
+    });
+
+    const matchedUser = matchedProfile?.user ?? null;
+    if (!matchedUser) {
+      return null;
+    }
+
+    if (excludeUserId && matchedUser.id === excludeUserId) {
+      return null;
+    }
+
+    if (!matchedUser.isActive || matchedUser.deletedAt) {
+      return null;
+    }
+
+    return this.findById(matchedUser.id);
+  }
+
   async listStaffAccounts(excludeUserId?: string) {
     const filters = [ne(users.role, 'customer'), isNull(users.deletedAt)];
 

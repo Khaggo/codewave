@@ -52,7 +52,7 @@ Examples:
   becomes
   "Manage booking, intake, job-order, QA, and finance work from one workspace."
 
-- "Review automated pre-check summaries, let the head technician record the final pass or block verdict, and keep overrides auditable when a super admin must intervene."
+- "Review automated pre-check summaries, let the Service Adviser record the final pass or block verdict, and keep overrides auditable when a super admin must intervene."
   becomes
   "Review QA checks, record verdicts, and keep overrides auditable."
 

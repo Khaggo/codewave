@@ -1,5 +1,12 @@
 export type AppConfig = {
   env: string;
+  staffWorkClaims: {
+    enforcementMode: 'observe' | 'strict';
+    capacities: {
+      jobOrder: number;
+      qa: number;
+    };
+  };
   auth: {
     bypassCustomerRegistrationOtp: boolean;
   };
@@ -117,19 +124,31 @@ const toStringArray = (value: string | undefined, fallback: string[]): string[] 
 
 export default (): AppConfig => {
   const env = coalesceString(process.env.NODE_ENV) ?? 'development';
+  const staffWorkClaimEnforcementMode =
+    coalesceString(process.env.STAFF_WORK_CLAIM_ENFORCEMENT)?.toLowerCase() === 'observe'
+      ? 'observe'
+      : 'strict';
   const redisUrl = parseUrlOrNull(coalesceString(process.env.REDIS_URL));
   const redisPasswordFromUrl = redisUrl?.password ? decodeURIComponent(redisUrl.password) : undefined;
   const redisUsernameFromUrl = redisUrl?.username ? decodeURIComponent(redisUrl.username) : undefined;
-  const defaultRegistrationOtpBypass = env.toLowerCase() === 'production' ? 'true' : 'false';
 
   return {
     env,
+    staffWorkClaims: {
+      enforcementMode: staffWorkClaimEnforcementMode,
+      capacities: {
+        jobOrder: toNumber(
+          coalesceString(process.env.STAFF_WORK_JOB_ORDER_CAPACITY),
+          12,
+        ),
+        qa: toNumber(coalesceString(process.env.STAFF_WORK_QA_CAPACITY), 6),
+      },
+    },
     auth: {
-      // Temporary production safety valve while email delivery is unavailable.
       bypassCustomerRegistrationOtp:
         (
           coalesceString(process.env.AUTH_BYPASS_CUSTOMER_REGISTRATION_OTP) ??
-          defaultRegistrationOtpBypass
+          'false'
         ).toLowerCase() === 'true',
     },
     ports: {

@@ -14,6 +14,8 @@ import { BookingsRepository } from '@main-modules/bookings/repositories/bookings
 import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
 import { MailDeliveryService } from '@main-modules/notifications/services/mail-delivery.service';
 import { QualityGatesService } from '@main-modules/quality-gates/services/quality-gates.service';
+import { StaffWorkQueuesService } from '@main-modules/staff-work-queues/services/staff-work-queues.service';
+import { TechnicianProfilesService } from '@main-modules/technician-profiles/services/technician-profiles.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
 
@@ -28,14 +30,19 @@ import {
 import { RecordJobOrderInvoicePaymentDto } from '../dto/record-job-order-invoice-payment.dto';
 import { ReplaceJobOrderAssignmentsDto } from '../dto/replace-job-order-assignments.dto';
 import { UpdateJobOrderStatusDto } from '../dto/update-job-order-status.dto';
+import { UpdateJobOrderWorkshopStageDto } from '../dto/update-job-order-workshop-stage.dto';
 import { UploadJobOrderPhotoDto } from '../dto/upload-job-order-photo.dto';
 import { JobOrdersRepository } from '../repositories/job-orders.repository';
 import { jobOrderStatusEnum } from '../schemas/job-orders.schema';
-import { JobOrderEvidenceStorageService } from './job-order-evidence-storage.service';
+import {
+  JOB_ORDER_EVIDENCE_MAX_BYTES,
+  JobOrderEvidenceStorageService,
+} from './job-order-evidence-storage.service';
 import { JobOrderInvoicePaymongoService } from './job-order-invoice-paymongo.service';
 import { JobOrderInvoicePdfService } from './job-order-invoice-pdf.service';
+import { JobOrderTechnicianChecklistPdfService } from './job-order-technician-checklist-pdf.service';
 
-type JobOrderActorRole = 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
+type JobOrderActorRole = 'service_adviser' | 'super_admin';
 type JobOrderActor = {
   userId: string;
   role: string;
@@ -53,7 +60,6 @@ const allowedStatusTransitions: Record<JobOrderStatus, JobOrderStatus[]> = {
   cancelled: [],
 };
 
-const technicianAllowedStatuses: JobOrderStatus[] = ['in_progress', 'blocked', 'ready_for_qa'];
 const assignmentRequiredStatuses: JobOrderStatus[] = [
   'assigned',
   'in_progress',
@@ -70,6 +76,14 @@ const assignmentRepairCandidateStatuses: JobOrderStatus[] = [
 ];
 const activeWorkbenchStatuses: JobOrderStatus[] = ['draft', 'assigned', 'in_progress', 'blocked', 'ready_for_qa'];
 const historyWorkbenchStatuses: JobOrderStatus[] = ['finalized', 'cancelled'];
+const adviserWritableWorkshopStages = ['received', 'diagnosis', 'in_repair', 'quality_check', 'ready'] as const;
+const workshopStageToStatusMap: Record<(typeof adviserWritableWorkshopStages)[number], JobOrderStatus> = {
+  received: 'assigned',
+  diagnosis: 'in_progress',
+  in_repair: 'in_progress',
+  quality_check: 'ready_for_qa',
+  ready: 'ready_for_qa',
+};
 
 const normalizeBusinessToken = (value: string | null | undefined, fallback = 'WORK') => {
   const normalizedValue = String(value ?? '')
@@ -209,15 +223,19 @@ export class JobOrdersService {
     private readonly vehiclesRepository: VehiclesRepository,
     private readonly qualityGatesService: QualityGatesService,
     private readonly eventBus: AutocareEventBusService,
+    private readonly staffWorkQueuesService: StaffWorkQueuesService,
     @Optional()
     private readonly evidenceStorageService: JobOrderEvidenceStorageService,
     @Optional()
     private readonly invoicePdfService: JobOrderInvoicePdfService,
     @Optional()
+    private readonly technicianChecklistPdfService: JobOrderTechnicianChecklistPdfService,
+    @Optional()
     private readonly mailDeliveryService: MailDeliveryService,
     @Optional()
     private readonly jobOrderInvoicePaymongoService: JobOrderInvoicePaymongoService,
     @Optional() private readonly inspectionsRepository?: InspectionsRepository,
+    @Optional() private readonly technicianProfilesService?: TechnicianProfilesService,
   ) {}
 
   async create(payload: CreateJobOrderDto, actor: JobOrderActor) {
@@ -233,13 +251,21 @@ export class JobOrdersService {
       userId: resolvedActor.id,
       role: resolvedActor.role as JobOrderActorRole,
     });
-    await this.assertTechnicians(payload.assignedTechnicianIds);
+    const assignments = this.normalizeTechnicianAssignments(
+      payload.assignments ??
+        payload.assignedTechnicianIds?.map((technicianProfileId) => ({
+          technicianProfileId,
+          selectedSpecialty: 'general repair',
+        })),
+    );
+    await this.assertTechnicianProfiles(assignments);
 
     const createdJobOrder = await this.jobOrdersRepository.create({
       ...payload,
       jobType: sourceContext.jobType,
       parentJobOrderId: sourceContext.parentJobOrderId,
-      status: payload.assignedTechnicianIds?.length ? 'assigned' : 'draft',
+      assignments,
+      status: assignments.length ? 'assigned' : 'draft',
     });
 
     if (payload.sourceType === 'back_job') {
@@ -248,26 +274,107 @@ export class JobOrdersService {
     }
 
     await this.syncBookingLifecycleForJobOrderHandoff(createdJobOrder.sourceId);
+    await this.staffWorkQueuesService.completeClaim(
+      'job_order',
+      'booking_handoff',
+      payload.sourceId,
+      resolvedActor.id,
+    );
 
     return createdJobOrder;
   }
 
-  async listAssignedToTechnician(actor: JobOrderActor) {
+  async sendBookingToWorkshop(bookingId: string, actor: JobOrderActor) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
+    const existingJobOrder = await this.jobOrdersRepository.findLatestByBookingSourceId(bookingId);
 
-    if (!['technician', 'head_technician'].includes(resolvedActor.role)) {
-      throw new ForbiddenException('Only technicians or head technicians can list their assigned job orders');
+    if (existingJobOrder) {
+      const detail = await this.findById(existingJobOrder.id, actor);
+      return {
+        jobOrderId: detail.id,
+        reference: detail.jobOrderReference,
+        created: false,
+      };
     }
 
-    return this.jobOrdersRepository.findAssignedToTechnician(resolvedActor.id);
+    const booking = await this.bookingsRepository.findOptionalById(bookingId);
+    if (!booking) {
+      throw new NotFoundException('Booking source not found');
+    }
+
+    if (!['confirmed', 'in_service'].includes(booking.status)) {
+      throw new ConflictException('Only confirmed bookings can be sent to the workshop');
+    }
+
+    if (!resolvedActor.staffCode) {
+      throw new ConflictException('The signed-in staff account requires a staff code before workshop handoff');
+    }
+
+    const items = (booking.requestedServices ?? [])
+      .map((requestedService) => requestedService.service)
+      .filter(Boolean)
+      .map((service) => ({
+        name: service.name,
+        description: service.description ?? undefined,
+        estimatedHours: Math.max(1, Math.ceil(service.durationMinutes / 60)),
+      }));
+
+    let createdJobOrder;
+    try {
+      createdJobOrder = await this.create(
+        {
+          sourceType: 'booking',
+          sourceId: booking.id,
+          customerUserId: booking.userId,
+          vehicleId: booking.vehicleId,
+          serviceAdviserUserId: resolvedActor.id,
+          serviceAdviserCode: resolvedActor.staffCode,
+          notes: booking.notes ?? undefined,
+          items:
+            items.length > 0
+              ? items
+              : [
+                  {
+                    name: 'Workshop service',
+                    description: 'Complete the service work recorded during intake.',
+                    estimatedHours: 1,
+                  },
+                ],
+        },
+        actor,
+      );
+    } catch (error) {
+      const concurrentJobOrder = await this.jobOrdersRepository.findLatestByBookingSourceId(bookingId);
+      if (!concurrentJobOrder) {
+        throw error;
+      }
+
+      const concurrentDetail = await this.findById(concurrentJobOrder.id, actor);
+      return {
+        jobOrderId: concurrentDetail.id,
+        reference: concurrentDetail.jobOrderReference,
+        created: false,
+      };
+    }
+    const detail = await this.findById(createdJobOrder.id, actor);
+
+    return {
+      jobOrderId: detail.id,
+      reference: detail.jobOrderReference,
+      created: true,
+    };
+  }
+
+  async listAssignedToTechnician(actor: JobOrderActor) {
+    await this.assertStaffActor(actor.userId);
+    throw new ForbiddenException(
+      'Technician login has been retired. Service advisers now manage technician assignments from the staff workbench.',
+    );
   }
 
   async listWorkbenchSummaries(actor: JobOrderActor, query: ListJobOrderWorkbenchQueryDto) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
-    const summaries =
-      resolvedActor.role === 'technician'
-        ? await this.jobOrdersRepository.findAssignedSummaries(resolvedActor.id)
-        : await this.jobOrdersRepository.findAllSummaries();
+    const summaries = await this.jobOrdersRepository.findAllSummaries();
     const allowedStatuses = this.resolveWorkbenchStatuses(query.scope);
 
     const bookingSourceIds = summaries
@@ -336,8 +443,15 @@ export class JobOrdersService {
           vehicleId: jobOrder.vehicleId,
           serviceAdviserCode: jobOrder.serviceAdviserCode,
           assignedTechnicianIds: (jobOrder.assignments ?? [])
-            .map((assignment) => assignment.technicianUserId)
+            .map((assignment) => assignment.technicianProfileId)
             .filter(Boolean),
+          assignments: (jobOrder.assignments ?? []).map((assignment) => ({
+            id: assignment.id,
+            technicianProfileId: assignment.technicianProfileId,
+            technicianCode: assignment.technicianCode ?? assignment.technicianProfile?.code ?? null,
+            technicianName: assignment.technicianName ?? assignment.technicianProfile?.fullName ?? null,
+            selectedSpecialty: assignment.selectedSpecialty ?? null,
+          })),
           updatedAt: jobOrder.updatedAt.toISOString(),
         };
       })
@@ -349,7 +463,8 @@ export class JobOrdersService {
         }
 
         return right.updatedAt.localeCompare(left.updatedAt);
-      });
+      })
+      .slice(0, query.limit ?? 25);
   }
 
   async listWorkbenchCalendar(actor: JobOrderActor, query: ListJobOrderWorkbenchQueryDto) {
@@ -391,8 +506,8 @@ export class JobOrdersService {
 
   async findByVehicleId(vehicleId: string, actor: JobOrderActor) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
-    if (!['head_technician', 'service_adviser', 'super_admin'].includes(resolvedActor.role)) {
-      throw new ForbiddenException('Only head technicians, service advisers, or super admins can list vehicle job orders');
+    if (!['service_adviser', 'super_admin'].includes(resolvedActor.role)) {
+      throw new ForbiddenException('Only service advisers or super admins can list vehicle job orders');
     }
 
     return this.jobOrdersRepository.findByVehicleId(vehicleId);
@@ -423,12 +538,26 @@ export class JobOrdersService {
         ? buildBackJobReadableReference(await this.backJobsRepository.findById(jobOrder.sourceId))
         : null;
 
+    const workshopStageHistory = (jobOrder.progressEntries ?? [])
+      .filter((entry) => entry?.entryType === 'stage_update' && entry?.workshopStage)
+      .map((entry) => ({
+        id: entry.id,
+        stage: entry.workshopStage,
+        note: entry.message ?? null,
+        recordedByUserId: entry.recordedByUserId ?? entry.technicianUserId ?? null,
+        attachedPhotoIds: Array.isArray(entry.attachedPhotoIds) ? entry.attachedPhotoIds : [],
+        createdAt: entry.createdAt.toISOString(),
+      }))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+
     return {
       ...jobOrder,
       customerLabel: buildCustomerDisplayName(customer?.profile),
       vehicleLabel: buildVehicleDisplayLabel(vehicle),
       sourceBookingReference,
       sourceBackJobReference,
+      currentWorkshopStage: jobOrder.currentWorkshopStage ?? null,
+      workshopStageHistory,
       jobOrderReference: buildJobOrderReadableReference({
         jobOrderReference: null,
         sourceBookingReference,
@@ -529,22 +658,29 @@ export class JobOrdersService {
     }
 
     const jobOrder = await this.jobOrdersRepository.findById(id);
-    const assignedTechnicianIds = this.normalizeTechnicianIds(payload.assignedTechnicianIds);
-    await this.assertTechnicians(assignedTechnicianIds);
+    const assignments = this.normalizeTechnicianAssignments(
+      payload.assignments ??
+        payload.assignedTechnicianIds?.map((technicianProfileId) => ({
+          technicianProfileId,
+          selectedSpecialty: 'general repair',
+        })),
+    );
+    await this.assertTechnicianProfiles(assignments);
 
     const currentStatus = jobOrder.status as JobOrderStatus;
-    if (assignedTechnicianIds.length === 0 && assignmentRequiredStatuses.includes(currentStatus)) {
+    if (assignments.length === 0 && assignmentRequiredStatuses.includes(currentStatus)) {
       throw new ConflictException(
-        'Assigned technicians can only be cleared while the job order is still draft or cancelled',
+        'Technician assignments can only be cleared while the job order is still draft or cancelled',
       );
     }
 
     const nextStatus =
-      currentStatus === 'draft' && assignedTechnicianIds.length > 0 ? 'assigned' : currentStatus;
+      currentStatus === 'draft' && assignments.length > 0 ? 'assigned' : currentStatus;
 
     return this.jobOrdersRepository.replaceAssignments(id, {
-      assignedTechnicianIds,
+      assignments,
       status: nextStatus,
+      expectedUpdatedAt: payload.expectedUpdatedAt,
     });
   }
 
@@ -552,7 +688,7 @@ export class JobOrdersService {
     const resolvedActor = await this.assertStaffActor(actor.userId);
     const jobOrder = await this.jobOrdersRepository.findById(id);
     const currentStatus = jobOrder.status as JobOrderStatus;
-    const assignments = jobOrder.assignments as Array<{ technicianUserId: string }>;
+    const assignments = jobOrder.assignments as Array<{ technicianProfileId?: string | null }>;
     const actorInfo = {
       userId: resolvedActor.id,
       role: resolvedActor.role as JobOrderActorRole,
@@ -568,22 +704,8 @@ export class JobOrdersService {
       throw new ConflictException(`Cannot transition job order from ${currentStatus} to ${payload.status}`);
     }
 
-    if (technicianAllowedStatuses.includes(payload.status) && assignments.length === 0) {
-      throw new ConflictException('Assigned technicians are required before operational status changes');
-    }
-
-    if (['technician', 'head_technician'].includes(actorInfo.role)) {
-      if (!technicianAllowedStatuses.includes(payload.status)) {
-        throw new ForbiddenException('Workshop roles can only manage in-progress, blocked, or ready-for-QA states');
-      }
-
-      const isAssignedTechnician = assignments.some(
-        (assignment) => assignment.technicianUserId === actorInfo.userId,
-      );
-
-      if (!isAssignedTechnician) {
-        throw new ForbiddenException('Only assigned technicians can update this job order');
-      }
+    if (['assigned', 'in_progress', 'blocked', 'ready_for_qa'].includes(payload.status) && assignments.length === 0) {
+      throw new ConflictException('Assigned technician profiles are required before operational status changes');
     }
 
     const updatedJobOrder = await this.jobOrdersRepository.updateStatus(id, payload);
@@ -592,21 +714,30 @@ export class JobOrdersService {
       await this.qualityGatesService.beginQualityGate(id);
     }
 
+    if (['ready_for_qa', 'cancelled'].includes(payload.status)) {
+      await this.staffWorkQueuesService.completeClaim(
+        'job_order',
+        'job_order',
+        id,
+        resolvedActor.id,
+      );
+    }
+
     return updatedJobOrder;
   }
 
-  async repairAssignmentRecovery() {
+  async repairAssignmentRecovery({ execute = true }: { execute?: boolean } = {}) {
     const candidateJobOrders = await this.jobOrdersRepository.findByStatuses(
       assignmentRepairCandidateStatuses,
     );
 
-    const repaired: Array<{ jobOrderId: string; status: JobOrderStatus; assignedTechnicianIds: string[] }> = [];
+    const repaired: Array<{ jobOrderId: string; status: JobOrderStatus; assignedTechnicianProfileIds: string[] }> = [];
     const downgradedToDraft: Array<{ jobOrderId: string; previousStatus: JobOrderStatus }> = [];
     const manualReview: Array<{ jobOrderId: string; status: JobOrderStatus }> = [];
 
     for (const jobOrder of candidateJobOrders) {
       const currentStatus = jobOrder.status as JobOrderStatus;
-      const assignments = (jobOrder.assignments ?? []) as Array<{ technicianUserId: string }>;
+      const assignments = (jobOrder.assignments ?? []) as Array<{ technicianProfileId?: string | null }>;
       if (assignments.length > 0) {
         continue;
       }
@@ -619,30 +750,13 @@ export class JobOrdersService {
         continue;
       }
 
-      const inferredTechnicianIds = await this.resolveValidTechnicianIds(
-        (jobOrder.progressEntries ?? [])
-          .map((entry) => entry?.technicianUserId)
-          .filter((technicianUserId): technicianUserId is string => Boolean(technicianUserId)),
-      );
-
-      if (inferredTechnicianIds.length > 0) {
+      if (execute) {
         await this.jobOrdersRepository.replaceAssignments(jobOrder.id, {
-          assignedTechnicianIds: inferredTechnicianIds,
-          status: currentStatus,
+          assignments: [],
+          status: 'draft',
+          notes: this.appendAssignmentRepairNote(jobOrder.notes),
         });
-        repaired.push({
-          jobOrderId: jobOrder.id,
-          status: currentStatus,
-          assignedTechnicianIds: inferredTechnicianIds,
-        });
-        continue;
       }
-
-      await this.jobOrdersRepository.replaceAssignments(jobOrder.id, {
-        assignedTechnicianIds: [],
-        status: 'draft',
-        notes: this.appendAssignmentRepairNote(jobOrder.notes),
-      });
       downgradedToDraft.push({
         jobOrderId: jobOrder.id,
         previousStatus: currentStatus,
@@ -659,7 +773,6 @@ export class JobOrdersService {
   async addProgressEntry(id: string, payload: AddJobOrderProgressDto, actor: JobOrderActor) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
     const jobOrder = await this.jobOrdersRepository.findById(id);
-    const assignments = jobOrder.assignments as Array<{ technicianUserId: string }>;
     const items = jobOrder.items as Array<{ id: string }>;
     const actorInfo = {
       userId: resolvedActor.id,
@@ -669,14 +782,8 @@ export class JobOrdersService {
     this.assertViewerCanAccess(jobOrder, actorInfo);
     this.assertJobOrderCanAcceptEvidence(jobOrder.status);
 
-    if (['technician', 'head_technician'].includes(actorInfo.role)) {
-      const isAssignedTechnician = assignments.some(
-        (assignment) => assignment.technicianUserId === actorInfo.userId,
-      );
-
-      if (!isAssignedTechnician) {
-        throw new ForbiddenException('Only assigned technicians can append progress entries');
-      }
+    if (payload.workItemId && !items.some((item) => item.id === payload.workItemId)) {
+      throw new ConflictException('The selected service item must belong to the target job order');
     }
 
     if (payload.completedItemIds?.length) {
@@ -717,7 +824,18 @@ export class JobOrdersService {
       id,
       {
         ...payload,
-        nextStatus: jobOrder.status === 'assigned' ? 'in_progress' : undefined,
+        recordedByUserId: actorInfo.userId,
+        nextStatus:
+          payload.entryType === 'issue_found'
+            ? 'blocked'
+            : payload.entryType === 'work_started' && ['assigned', 'blocked'].includes(jobOrder.status)
+              ? 'in_progress'
+              : undefined,
+        nextWorkshopStage:
+          payload.entryType === 'work_started' &&
+          (!jobOrder.currentWorkshopStage || ['received', 'diagnosis'].includes(jobOrder.currentWorkshopStage))
+            ? 'in_repair'
+            : undefined,
       },
       actorInfo.userId,
     );
@@ -749,6 +867,45 @@ export class JobOrdersService {
     return updatedJobOrder;
   }
 
+  async updateWorkshopStage(id: string, payload: UpdateJobOrderWorkshopStageDto, actor: JobOrderActor) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    const jobOrder = await this.jobOrdersRepository.findById(id);
+    const actorInfo = {
+      userId: resolvedActor.id,
+      role: resolvedActor.role as JobOrderActorRole,
+    };
+
+    this.assertViewerCanAccess(jobOrder, actorInfo);
+    this.assertJobOrderCanAcceptEvidence(jobOrder.status);
+
+    const stage = payload.stage;
+    if (!adviserWritableWorkshopStages.includes(stage)) {
+      throw new BadRequestException('Unsupported workshop stage');
+    }
+
+    if (['quality_check', 'ready'].includes(stage) && (jobOrder.assignments ?? []).length === 0) {
+      throw new ConflictException('Assign at least one technician profile before moving the workshop to quality check.');
+    }
+
+    const updatedJobOrder = await this.jobOrdersRepository.updateWorkshopStage(id, {
+      ...payload,
+      recordedByUserId: actorInfo.userId,
+      nextStatus: workshopStageToStatusMap[stage],
+    });
+
+    if (stage === 'quality_check' || stage === 'ready') {
+      await this.qualityGatesService.beginQualityGate(id);
+      await this.staffWorkQueuesService.completeClaim(
+        'job_order',
+        'job_order',
+        id,
+        resolvedActor.id,
+      );
+    }
+
+    return updatedJobOrder;
+  }
+
   async uploadPhoto(
     id: string,
     payload: UploadJobOrderPhotoDto,
@@ -762,6 +919,10 @@ export class JobOrdersService {
   ) {
     if (!file?.buffer?.length) {
       throw new BadRequestException('An image upload is required');
+    }
+
+    if (file.size > JOB_ORDER_EVIDENCE_MAX_BYTES) {
+      throw new BadRequestException('Job-order evidence images must be 10 MB or smaller');
     }
 
     if (!String(file.mimetype).startsWith('image/')) {
@@ -786,7 +947,6 @@ export class JobOrdersService {
     const persistedFile = await this.evidenceStorageService.saveImage({
       jobOrderId: id,
       photoId,
-      originalFileName: file.originalname,
       mimeType: file.mimetype,
       buffer: file.buffer,
     });
@@ -801,7 +961,7 @@ export class JobOrdersService {
         linkedEntityType: payload.linkedEntityType ?? 'job_order',
         linkedEntityId: payload.linkedEntityId ?? id,
         storageKey: persistedFile.storageKey,
-        mimeType: file.mimetype,
+        mimeType: persistedFile.mimeType,
         fileSizeBytes: file.size,
       },
       actorInfo.userId,
@@ -825,10 +985,6 @@ export class JobOrdersService {
 
     if (!['service_adviser', 'super_admin'].includes(actorInfo.role)) {
       throw new ForbiddenException('Only service advisers or super admins can finalize job orders');
-    }
-
-    if (actorInfo.role === 'service_adviser' && actorInfo.userId !== jobOrder.serviceAdviserUserId) {
-      throw new ForbiddenException('Service advisers can only finalize their own job orders');
     }
 
     if (jobOrder.invoiceRecord) {
@@ -870,6 +1026,12 @@ export class JobOrdersService {
       reservationFeeDeductionCents,
       totalAmountCents,
     });
+    await this.staffWorkQueuesService.completeClaim(
+      'job_order',
+      'job_order',
+      id,
+      actorInfo.userId,
+    );
 
     this.eventBus.publish('service.invoice_finalized', {
       jobOrderId: finalizedJobOrder.id,
@@ -912,18 +1074,25 @@ export class JobOrdersService {
     const photo = (jobOrder.photos as Array<{
       id: string;
       fileName: string;
+      fileUrl?: string | null;
       mimeType?: string | null;
       storageKey?: string | null;
     }>).find((entry) => entry.id === photoId);
-    if (!photo?.storageKey) {
+    const normalizedStorageKey = String(photo?.storageKey ?? '').replace(/\\/g, '/');
+    const expectedStoragePrefix = `${id}/${photoId}.`;
+    const expectedFileUrl = `/api/job-orders/${id}/photos/${photoId}/file`;
+    if (
+      !normalizedStorageKey.startsWith(expectedStoragePrefix) ||
+      photo?.fileUrl !== expectedFileUrl
+    ) {
       throw new NotFoundException('Job-order evidence file not found');
     }
 
-    const buffer = await this.evidenceStorageService.readImage(photo.storageKey);
+    const storedImage = await this.evidenceStorageService.readImage(normalizedStorageKey);
     return {
-      buffer,
+      buffer: storedImage.buffer,
       fileName: photo.fileName,
-      mimeType: photo.mimeType ?? 'application/octet-stream',
+      mimeType: storedImage.mimeType,
     };
   }
 
@@ -951,6 +1120,59 @@ export class JobOrdersService {
     return {
       buffer: artifact.buffer,
       fileName: artifact.fileName,
+    };
+  }
+
+  async exportTechnicianChecklistPdf(
+    jobOrderId: string,
+    assignmentId: string,
+    actor: JobOrderActor,
+  ) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    const actorInfo = {
+      userId: resolvedActor.id,
+      role: resolvedActor.role as JobOrderActorRole,
+    };
+
+    if (!this.technicianChecklistPdfService) {
+      throw new ConflictException('Checklist PDF generation is not configured');
+    }
+
+    const jobOrder = await this.findById(jobOrderId, actorInfo);
+    const assignment = (jobOrder.assignments ?? []).find((entry) => entry?.id === assignmentId);
+    if (!assignment?.technicianProfileId) {
+      throw new NotFoundException('Technician assignment not found');
+    }
+
+    const [customer, vehicle] = await Promise.all([
+      this.usersService.findById(jobOrder.customerUserId),
+      this.vehiclesRepository.findById(jobOrder.vehicleId),
+    ]);
+
+    const buffer = await this.technicianChecklistPdfService.renderChecklist({
+      technicianName: assignment.technicianName ?? assignment.technicianProfile?.fullName ?? 'Assigned technician',
+      technicianCode: assignment.technicianCode ?? assignment.technicianProfile?.code ?? null,
+      specialty: assignment.selectedSpecialty ?? 'general repair',
+      jobOrderReference: jobOrder.jobOrderReference ?? buildJobOrderReadableReference({
+        sourceBookingReference: jobOrder.sourceBookingReference,
+        sourceBackJobReference: jobOrder.sourceBackJobReference,
+        createdAt: jobOrder.createdAt,
+        updatedAt: jobOrder.updatedAt,
+        serviceAdviserCode: jobOrder.serviceAdviserCode,
+        jobType: jobOrder.jobType,
+      }),
+      vehicleLabel: buildVehicleDisplayLabel(vehicle),
+      customerLabel: buildCustomerDisplayName(customer?.profile),
+      createdAt: new Date().toISOString(),
+      workItems: (jobOrder.items ?? []).map((item) => ({
+        name: item.name,
+        description: item.description ?? null,
+      })),
+    });
+
+    return {
+      buffer,
+      fileName: `${assignment.technicianCode ?? assignment.technicianProfile?.code ?? 'technician'}-${jobOrder.id}.pdf`,
     };
   }
 
@@ -1271,26 +1493,62 @@ export class JobOrdersService {
     }
   }
 
-  private async assertTechnicians(assignedTechnicianIds?: string[]) {
-    const normalizedTechnicianIds = this.normalizeTechnicianIds(assignedTechnicianIds);
-    if (normalizedTechnicianIds.length === 0) {
+  private async assertTechnicianProfiles(
+    assignments?: Array<{ technicianProfileId: string; selectedSpecialty: string }>,
+  ) {
+    const normalizedAssignments = this.normalizeTechnicianAssignments(assignments);
+    if (normalizedAssignments.length === 0) {
       return;
     }
 
-    for (const technicianUserId of normalizedTechnicianIds) {
-      const technician = await this.usersService.findById(technicianUserId);
-      if (!technician || !technician.isActive) {
-        throw new NotFoundException('Assigned technician not found');
+    if (!this.technicianProfilesService) {
+      return;
+    }
+
+    const profiles = await this.technicianProfilesService.findActiveByIds(
+      normalizedAssignments.map((assignment) => assignment.technicianProfileId),
+    );
+    const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+
+    for (const assignment of normalizedAssignments) {
+      const profile = profileById.get(assignment.technicianProfileId);
+      if (!profile) {
+        throw new NotFoundException('Assigned technician profile not found');
       }
 
-      if (!['technician', 'head_technician'].includes(technician.role)) {
-        throw new BadRequestException('Assigned staff must be technician or head-technician accounts');
+      const normalizedSpecialty = String(assignment.selectedSpecialty ?? '').trim().toLowerCase();
+      if (!normalizedSpecialty) {
+        throw new BadRequestException('Each technician assignment needs a selected specialty');
+      }
+
+      const supportedSpecialties = Array.isArray(profile.specialties)
+        ? profile.specialties.map((value) => String(value).trim().toLowerCase())
+        : [];
+      if (!supportedSpecialties.includes(normalizedSpecialty)) {
+        throw new BadRequestException('Selected technician specialty must match the technician profile.');
       }
     }
   }
 
-  private normalizeTechnicianIds(assignedTechnicianIds?: string[]) {
-    return [...new Set((assignedTechnicianIds ?? []).filter(Boolean))];
+  private normalizeTechnicianAssignments(
+    assignments?: Array<{ technicianProfileId?: string | null; selectedSpecialty?: string | null }>,
+  ) {
+    const dedupedAssignments = new Map<string, { technicianProfileId: string; selectedSpecialty: string }>();
+
+    for (const assignment of assignments ?? []) {
+      const technicianProfileId = String(assignment?.technicianProfileId ?? '').trim();
+      const selectedSpecialty = String(assignment?.selectedSpecialty ?? '').trim().toLowerCase();
+      if (!technicianProfileId || !selectedSpecialty) {
+        continue;
+      }
+
+      dedupedAssignments.set(technicianProfileId, {
+        technicianProfileId,
+        selectedSpecialty,
+      });
+    }
+
+    return [...dedupedAssignments.values()];
   }
 
   private resolveWorkbenchStatuses(scope?: JobOrderWorkbenchScope) {
@@ -1347,20 +1605,6 @@ export class JobOrdersService {
     });
   }
 
-  private async resolveValidTechnicianIds(assignedTechnicianIds?: string[]) {
-    const normalizedTechnicianIds = this.normalizeTechnicianIds(assignedTechnicianIds);
-    const validTechnicianIds: string[] = [];
-
-    for (const technicianUserId of normalizedTechnicianIds) {
-      const technician = await this.usersService.findById(technicianUserId);
-      if (technician?.isActive && ['technician', 'head_technician'].includes(technician.role)) {
-        validTechnicianIds.push(technicianUserId);
-      }
-    }
-
-    return validTechnicianIds;
-  }
-
   private async normalizePastDueOpenBookings() {
     const now = new Date();
     const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
@@ -1397,7 +1641,7 @@ export class JobOrdersService {
   }
 
   private appendAssignmentRepairNote(existingNotes?: string | null) {
-    const repairNote = '[assignment-repair] Technician assignment missing. Reassign before resuming execution.';
+    const repairNote = '[assignment-repair] Technician profile assignment missing. Reassign before resuming execution.';
     if (!existingNotes) {
       return repairNote;
     }
@@ -1413,18 +1657,11 @@ export class JobOrdersService {
     jobOrder: Awaited<ReturnType<JobOrdersRepository['findById']>>,
     actor: JobOrderActor,
   ) {
-    if (['head_technician', 'service_adviser', 'super_admin'].includes(actor.role)) {
+    if (['service_adviser', 'super_admin'].includes(actor.role)) {
       return;
     }
 
-    const assignments = jobOrder.assignments as Array<{ technicianUserId: string }>;
-    const isAssignedTechnician = assignments.some(
-      (assignment) => assignment.technicianUserId === actor.userId,
-    );
-
-    if (!isAssignedTechnician) {
-      throw new ForbiddenException('Only assigned technicians can access this job order');
-    }
+    throw new ForbiddenException('Only service advisers or super admins can access this job order');
   }
 
   private assertJobOrderCanAcceptEvidence(status: JobOrderStatus) {
@@ -1694,8 +1931,8 @@ export class JobOrdersService {
       throw new NotFoundException('Job-order operator not found');
     }
 
-    if (!['technician', 'head_technician', 'service_adviser', 'super_admin'].includes(user.role)) {
-      throw new ForbiddenException('Only staff accounts can manage job orders');
+    if (!['service_adviser', 'super_admin'].includes(user.role)) {
+      throw new ForbiddenException('Only service advisers or super admins can manage job orders');
     }
 
     return user;
@@ -1707,7 +1944,7 @@ export class JobOrdersService {
       throw new NotFoundException('Job-order operator not found');
     }
 
-    if (!['customer', 'technician', 'head_technician', 'service_adviser', 'super_admin'].includes(user.role)) {
+    if (!['customer', 'service_adviser', 'super_admin'].includes(user.role)) {
       throw new ForbiddenException('Only authorized accounts can access customer service history');
     }
 

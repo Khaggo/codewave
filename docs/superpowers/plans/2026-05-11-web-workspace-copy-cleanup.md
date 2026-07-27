@@ -334,7 +334,7 @@ test('old verbose workspace descriptions are removed from targeted files', () =>
     ],
     [
       'frontend/src/screens/QAAuditWorkspace.js',
-      'Review automated pre-check summaries, let the head technician record the final pass or block verdict, and keep overrides auditable when a super admin must intervene.',
+      'Review automated pre-check summaries, let the Service Adviser record the final pass or block verdict, and keep overrides auditable when a super admin must intervene.',
     ],
     [
       'frontend/src/screens/AdminAnalyticsWorkspace.js',

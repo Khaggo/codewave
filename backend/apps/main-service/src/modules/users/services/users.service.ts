@@ -41,7 +41,18 @@ export class UsersService {
       }
     }
 
-    return this.usersRepository.create(payload);
+    const normalizedPhone = this.normalizeOptionalPhilippineMobile(payload.phone);
+    if (normalizedPhone) {
+      const existingPhoneUser = await this.usersRepository.findActiveByPhone(normalizedPhone);
+      if (existingPhoneUser) {
+        throw new ConflictException('Phone number already exists');
+      }
+    }
+
+    return this.usersRepository.create({
+      ...payload,
+      phone: normalizedPhone,
+    });
   }
 
   async findById(id: string, actor?: { userId: string; role: string }) {
@@ -75,7 +86,23 @@ export class UsersService {
     if (actor) {
       this.assertUserActorCanAccessUser(id, actor);
     }
-    return this.usersRepository.update(id, updateUserDto);
+
+    const normalizedPhone =
+      updateUserDto.phone === undefined
+        ? undefined
+        : this.normalizeOptionalPhilippineMobile(updateUserDto.phone);
+
+    if (normalizedPhone) {
+      const existingPhoneUser = await this.usersRepository.findActiveByPhone(normalizedPhone, id);
+      if (existingPhoneUser) {
+        throw new ConflictException('Phone number already exists');
+      }
+    }
+
+    return this.usersRepository.update(id, {
+      ...updateUserDto,
+      phone: normalizedPhone,
+    });
   }
 
   async setActivationStatus(id: string, isActive: boolean) {
@@ -107,12 +134,29 @@ export class UsersService {
   }
 
   private assertUserActorCanAccessUser(userId: string, actor: { userId: string; role: string }) {
-    if (!['customer', 'technician', 'head_technician', 'service_adviser', 'super_admin'].includes(actor.role)) {
-      throw new ForbiddenException('Only authenticated customer or staff accounts can access user profile records');
+    if (!['customer', 'service_adviser', 'super_admin'].includes(actor.role)) {
+      throw new ForbiddenException('Only authenticated customer, service adviser, or super admin accounts can access user profile records');
     }
 
     if (actor.role === 'customer' && actor.userId !== userId) {
       throw new ForbiddenException('Customers can only access their own user profile records');
     }
+  }
+
+  private normalizeOptionalPhilippineMobile(value?: string | null) {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    const normalized = String(value ?? '').replace(/\D/g, '').slice(0, 11);
+    if (!normalized) {
+      return undefined;
+    }
+
+    if (!/^09\d{9}$/.test(normalized)) {
+      throw new BadRequestException('Phone number must be an 11-digit PH mobile number starting with 09');
+    }
+
+    return normalized;
   }
 }

@@ -7,6 +7,7 @@ import {
   calculateAge,
   formatVehicleDisplayName,
   formatDate,
+  normalizeLicensePlate,
   normalizePhoneNumber,
   normalizeVehicleYear,
   validateProfileForm,
@@ -49,7 +50,7 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
     }
 
     if (key === 'licensePlate') {
-      nextValue = value.toUpperCase();
+      nextValue = normalizeLicensePlate(value);
     }
 
     if (key === 'vehicleYear') {
@@ -87,10 +88,10 @@ export default function ManageProfile({ navigation, account, onSaveProfile }) {
     }
 
     try {
-      await onSaveProfile?.({
-        phoneNumber: normalizePhoneNumber(form.phoneNumber),
-        licensePlate: form.licensePlate.trim().toUpperCase(),
-        vehicleMake: form.vehicleMake.trim(),
+        await onSaveProfile?.({
+          phoneNumber: normalizePhoneNumber(form.phoneNumber),
+          licensePlate: normalizeLicensePlate(form.licensePlate).trim(),
+          vehicleMake: form.vehicleMake.trim(),
         vehicleModel: form.vehicleModel.trim(),
         vehicleColor: form.vehicleColor.trim(),
         vehicleYear: Number(normalizeVehicleYear(form.vehicleYear)),

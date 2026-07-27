@@ -13,4 +13,6 @@ export * from '@main-modules/notifications/schemas/notifications.schema';
 export * from '@main-modules/loyalty/schemas/loyalty.schema';
 export * from '@main-modules/vehicle-lifecycle/schemas/vehicle-lifecycle.schema';
 export * from '@main-modules/quality-gates/schemas/quality-gates.schema';
+export * from '@main-modules/technician-profiles/schemas/technician-profiles.schema';
+export * from '@main-modules/staff-work-queues/schemas/staff-work-queues.schema';
 export * from '@ecommerce-modules/catalog/schemas/catalog.schema';

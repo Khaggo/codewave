@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { UsersService } from '@main-modules/users/services/users.service';
 
@@ -22,12 +22,18 @@ export class VehiclesService {
       throw new NotFoundException('User not found');
     }
 
-    const existingVehicle = await this.vehiclesRepository.findByPlateNumber(createVehicleDto.plateNumber);
+    const normalizedPlateNumber = this.normalizePlateNumber(createVehicleDto.plateNumber);
+    const existingVehicle = await this.vehiclesRepository.findByPlateSignature(
+      this.buildPlateSignature(normalizedPlateNumber),
+    );
     if (existingVehicle) {
       throw new ConflictException('Vehicle plate number already exists');
     }
 
-    return this.vehiclesRepository.create(createVehicleDto);
+    return this.vehiclesRepository.create({
+      ...createVehicleDto,
+      plateNumber: normalizedPlateNumber,
+    });
   }
 
   async findById(id: string, actor?: { userId: string; role: string }) {
@@ -61,10 +67,18 @@ export class VehiclesService {
     }
 
     if (updateVehicleDto.plateNumber) {
-      const conflictingVehicle = await this.vehiclesRepository.findByPlateNumber(updateVehicleDto.plateNumber);
+      const normalizedPlateNumber = this.normalizePlateNumber(updateVehicleDto.plateNumber);
+      const conflictingVehicle = await this.vehiclesRepository.findByPlateSignature(
+        this.buildPlateSignature(normalizedPlateNumber),
+      );
       if (conflictingVehicle && conflictingVehicle.id !== id) {
         throw new ConflictException('Vehicle plate number already exists');
       }
+
+      updateVehicleDto = {
+        ...updateVehicleDto,
+        plateNumber: normalizedPlateNumber,
+      };
     }
 
     return this.vehiclesRepository.update(id, updateVehicleDto);
@@ -78,5 +92,30 @@ export class VehiclesService {
     if (actor.role === 'customer' && actor.userId !== userId) {
       throw new ForbiddenException('Customers can only access their own vehicle records');
     }
+  }
+
+  private normalizePlateNumber(value: string) {
+    const normalizedPlateNumber = String(value ?? '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9 -]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const plateSignature = this.buildPlateSignature(normalizedPlateNumber);
+
+    if (!normalizedPlateNumber) {
+      throw new BadRequestException('Vehicle plate number is required');
+    }
+
+    if (plateSignature.length < 4 || plateSignature.length > 10) {
+      throw new BadRequestException('Vehicle plate number must use 4-10 letters or numbers');
+    }
+
+    return normalizedPlateNumber;
+  }
+
+  private buildPlateSignature(value: string) {
+    return String(value ?? '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
   }
 }

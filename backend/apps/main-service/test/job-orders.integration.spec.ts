@@ -5,7 +5,7 @@ import { AutocareEventBusService } from '@shared/events/autocare-event-bus.servi
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
 describe('JobOrdersController integration', () => {
-  it('creates, reads, and updates a job order across adviser and technician roles', async () => {
+  it('creates, reads, and updates a job order through the service adviser workbench', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
     const eventBus = app.get(AutocareEventBusService);
 
@@ -49,7 +49,7 @@ describe('JobOrdersController integration', () => {
         email: technician.email,
         password: 'password123',
       });
-      expect(technicianLogin.status).toBe(200);
+      expect(technicianLogin.status).toBe(401);
 
       const qaReviewerLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
         email: qaReviewer.email,
@@ -150,7 +150,7 @@ describe('JobOrdersController integration', () => {
 
       const updateStatusResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'in_progress',
           reason: 'Technician started diagnostics.',
@@ -160,7 +160,7 @@ describe('JobOrdersController integration', () => {
 
       const readyForQaResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createJobOrderResponse.body.id}/status`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           status: 'ready_for_qa',
         });
@@ -169,7 +169,7 @@ describe('JobOrdersController integration', () => {
 
       const addPhotoResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           fileName: 'diagnostics-overview.jpg',
           fileUrl: 'https://files.example.com/job-orders/diagnostics-overview.jpg',
@@ -180,14 +180,14 @@ describe('JobOrdersController integration', () => {
       expect(addPhotoResponse.status).toBe(200);
       expect(addPhotoResponse.body.photos[0]).toEqual(
         expect.objectContaining({
-          takenByUserId: technician.id,
+          takenByUserId: adviser.id,
           fileName: 'diagnostics-overview.jpg',
         }),
       );
 
       const addProgressResponse = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
-        .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .send({
           entryType: 'work_completed',
           message: 'Initial diagnostics and mounting inspection completed.',
@@ -196,7 +196,7 @@ describe('JobOrdersController integration', () => {
       expect(addProgressResponse.status).toBe(200);
       expect(addProgressResponse.body.progressEntries[0]).toEqual(
         expect.objectContaining({
-          technicianUserId: technician.id,
+          technicianUserId: adviser.id,
           entryType: 'work_completed',
         }),
       );
@@ -285,7 +285,7 @@ describe('JobOrdersController integration', () => {
     }
   });
 
-  it('derives confirmed booking handoffs from daily schedule and lists technician assigned job orders', async () => {
+  it('derives confirmed booking handoffs and keeps the retired technician route closed', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
@@ -315,7 +315,7 @@ describe('JobOrdersController integration', () => {
         email: technician.email,
         password: 'password123',
       });
-      expect(technicianLogin.status).toBe(200);
+      expect(technicianLogin.status).toBe(401);
 
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
@@ -405,15 +405,7 @@ describe('JobOrdersController integration', () => {
       const assignedJobOrdersResponse = await request(app.getHttpServer())
         .get('/api/job-orders/assigned')
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`);
-      expect(assignedJobOrdersResponse.status).toBe(200);
-      expect(assignedJobOrdersResponse.body).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            id: createJobOrderResponse.body.id,
-            sourceId: bookingResponse.body.id,
-          }),
-        ]),
-      );
+      expect(assignedJobOrdersResponse.status).toBe(401);
 
       const adviserAssignedResponse = await request(app.getHttpServer())
         .get('/api/job-orders/assigned')
@@ -463,7 +455,7 @@ describe('JobOrdersController integration', () => {
         email: technicianA.email,
         password: 'password123',
       });
-      expect(technicianLogin.status).toBe(200);
+      expect(technicianLogin.status).toBe(401);
 
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
@@ -555,7 +547,7 @@ describe('JobOrdersController integration', () => {
         .send({
           assignedTechnicianIds: [technicianA.id],
         });
-      expect(technicianForbiddenResponse.status).toBe(403);
+      expect(technicianForbiddenResponse.status).toBe(401);
 
       const clearAssignmentsResponse = await request(app.getHttpServer())
         .patch(`/api/job-orders/${createDraftResponse.body.id}/assignments`)
@@ -599,6 +591,7 @@ describe('JobOrdersController integration', () => {
         email: otherTechnician.email,
         password: 'password123',
       });
+      expect(technicianLogin.status).toBe(401);
 
       const servicesResponse = await request(app.getHttpServer()).get('/api/services');
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
@@ -681,7 +674,7 @@ describe('JobOrdersController integration', () => {
       const unassignedTechnicianReadAttempt = await request(app.getHttpServer())
         .get(`/api/job-orders/${createJobOrderResponse.body.id}`)
         .set('Authorization', `Bearer ${technicianLogin.body.accessToken}`);
-      expect(unassignedTechnicianReadAttempt.status).toBe(403);
+      expect(unassignedTechnicianReadAttempt.status).toBe(401);
 
       const unassignedTechnicianProgressAttempt = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/progress`)
@@ -690,7 +683,7 @@ describe('JobOrdersController integration', () => {
           entryType: 'note',
           message: 'Attempted unauthorized progress entry.',
         });
-      expect(unassignedTechnicianProgressAttempt.status).toBe(403);
+      expect(unassignedTechnicianProgressAttempt.status).toBe(401);
 
       const customerPhotoAttempt = await request(app.getHttpServer())
         .post(`/api/job-orders/${createJobOrderResponse.body.id}/photos`)

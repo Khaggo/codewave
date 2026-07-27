@@ -249,7 +249,7 @@ test.describe('AUTOCARE broad readable-ID sweep', () => {
     annotateSeverity(
       testInfo,
       'high',
-      'Broad panel-readiness sweep for raw UUID/hash-like identifiers on critical customer, staff, technician, and head-technician surfaces.',
+      'Broad panel-readiness sweep for raw UUID/hash-like identifiers on critical customer and staff adviser surfaces.',
     );
 
     const coverage = [];
@@ -284,19 +284,19 @@ test.describe('AUTOCARE broad readable-ID sweep', () => {
       await context.close();
     });
 
-    await test.step('Technician role readable-ID sweep', async () => {
+    await test.step('Adviser job-order workbench readable-ID sweep', async () => {
       const context = await browser.newContext();
       const page = await context.newPage();
-      await loginStaff(page, qaAccounts.technician, '/admin/job-orders');
-      await sweepVisibleIdentifiers(page, 'Technician Job Orders', testInfo, coverage);
+      await loginStaff(page, qaAccounts.adviser, '/admin/job-orders');
+      await sweepVisibleIdentifiers(page, 'Adviser Job Orders', testInfo, coverage);
       await context.close();
     });
 
-    await test.step('Head technician role readable-ID sweep', async () => {
+    await test.step('Adviser QA Audit readable-ID sweep', async () => {
       const context = await browser.newContext();
       const page = await context.newPage();
-      await loginStaff(page, qaAccounts.headTechnician, '/admin/qa-audit');
-      await sweepVisibleIdentifiers(page, 'Head Technician QA Audit', testInfo, coverage);
+      await loginStaff(page, qaAccounts.adviser, '/admin/qa-audit');
+      await sweepVisibleIdentifiers(page, 'Adviser QA Audit', testInfo, coverage);
       await context.close();
     });
 

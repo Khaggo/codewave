@@ -50,10 +50,9 @@ test('mobile app persists and restores the active session across refreshes', () 
     'await AsyncStorage.getItem(MOBILE_SESSION_STORAGE_KEY);',
     'await AsyncStorage.setItem(MOBILE_SESSION_STORAGE_KEY, JSON.stringify(snapshot));',
     'await AsyncStorage.removeItem(MOBILE_SESSION_STORAGE_KEY);',
-    "currentMobileSessionAccessState === 'customer_session_active' ||",
-    "currentMobileSessionAccessState === 'technician_session_active'",
+    "currentMobileSessionAccessState === 'customer_session_active'",
     "initialRouteName={appInitialRouteName}",
-    "Checking your saved customer or workshop session before the app loads.",
+    "Checking your saved customer session before the app loads.",
   ]
 
   for (const fragment of requiredFragments) {
@@ -93,7 +92,8 @@ test('mobile customer and technician surfaces prefer business-readable reference
 
   assert.match(technicianSource, /const getJobOrderReference = \(jobOrder\) => \{/)
   assert.match(technicianSource, /if \(jobOrder\?\.jobOrderReference\) \{/)
-  assert.match(technicianSource, /return compactDate \? `JO-\$\{compactDate\}-\$\{plateToken\}` : `JO-\$\{plateToken\}`;/)
+  assert.match(technicianSource, /const prefix = jobOrder\?\.jobType === 'back_job' \? 'JO-RW' : 'JO';/)
+  assert.match(technicianSource, /return compactDate \? `\$\{prefix\}-\$\{compactDate\}-\$\{timeToken \|\| plateToken\}` : `\$\{prefix\}-\$\{plateToken\}`;/)
   assert.match(technicianSource, /<Text style=\{styles\.jobOrderId\}>\{getJobOrderReference\(jobOrder\)\}<\/Text>/)
   assert.match(technicianSource, /<Text style=\{styles\.modalTitle\}>\{getJobOrderReference\(jobOrder\)\}<\/Text>/)
   assert.doesNotMatch(technicianSource, /slice\(0,\s*8\)/)

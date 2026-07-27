@@ -737,6 +737,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       setLiveOwnedVehicles(accountOwnedVehicles);
     }
   }, [accountOwnedVehicles]);
+  const rememberedInquiryStorageKey = getRememberedInquiryStorageKey(account?.userId);
 
   useEffect(() => {
     let isMounted = true;
@@ -930,8 +931,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const resetDocumentDraftState = () => {
     setDocumentDraft(buildInitialDocumentUploadDraft());
   };
-
-  const rememberedInquiryStorageKey = getRememberedInquiryStorageKey(account?.userId);
 
   const loadPersistedRememberedInquiryMappings = async () => {
     try {

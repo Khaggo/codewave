@@ -17,6 +17,7 @@ import PageHeader from '@/components/ui/PageHeader'
 import { getDashboardAnalytics, getOperationsAnalytics } from '@/lib/analyticsAdminClient'
 import { ApiError } from '@/lib/authClient'
 import { listJobOrderWorkbenchSummaries } from '@/lib/jobOrderWorkbenchClient'
+import { listStaffWorkQueue } from '@/lib/staffWorkQueueClient'
 import { useUser } from '@/lib/userContext'
 
 const adminShortcuts = [
@@ -69,6 +70,7 @@ const createInitialState = () => ({
   dashboardAnalytics: null,
   operationsAnalytics: null,
   workbenchSummaries: [],
+  workQueue: null,
   errorMessage: '',
 })
 
@@ -148,17 +150,19 @@ function ShortcutCard({ item }) {
 function WorkbenchRow({ item }) {
   const status = getStatusInfo(item.status)
   const assignedCount = Array.isArray(item.assignedTechnicianIds) ? item.assignedTechnicianIds.length : 0
+  const reference =
+    item.jobOrderReference ||
+    (item.sourceBookingReference ? `JO · ${item.sourceBookingReference}` : 'Workshop job')
+  const jobTypeLabel = item.sourceType === 'back_job' ? 'Rework visit' : 'Customer service visit'
 
   return (
     <li className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_160px_180px_180px] lg:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-semibold text-ink-primary">{item.id}</p>
+          <p className="text-sm font-semibold text-ink-primary">{reference}</p>
           <span className={`badge ${status.className}`}>{status.label}</span>
         </div>
-        <p className="mt-1 text-sm text-ink-secondary capitalize">
-          {item.sourceType?.replace(/_/g, ' ') ?? 'Job order'} work item
-        </p>
+        <p className="mt-1 text-sm text-ink-secondary">{jobTypeLabel}</p>
       </div>
 
       <div>
@@ -173,10 +177,10 @@ function WorkbenchRow({ item }) {
 
       <div className="flex items-center gap-3 lg:justify-end">
         <PortalLink
-          href={`/admin/job-orders?jobOrderId=${encodeURIComponent(item.id)}`}
+          href={`/admin/job-orders/${encodeURIComponent(item.id)}`}
           className="btn-primary min-h-10 px-3"
         >
-          Open Job Order
+          Open workspace
         </PortalLink>
       </div>
     </li>
@@ -202,6 +206,7 @@ export default function Dashboard() {
         dashboardAnalytics: null,
         operationsAnalytics: null,
         workbenchSummaries: [],
+        workQueue: null,
         errorMessage: 'Sign in as staff before loading dashboard data.',
       })
       return
@@ -213,6 +218,7 @@ export default function Dashboard() {
       const workbenchPromise = listJobOrderWorkbenchSummaries({
         accessToken: user.accessToken,
         month: getCurrentMonthKey(),
+        limit: 25,
       })
 
       if (isTechnician) {
@@ -228,10 +234,16 @@ export default function Dashboard() {
         return
       }
 
-      const [dashboardAnalytics, operationsAnalytics, workbenchSummaries] = await Promise.all([
+      const [dashboardAnalytics, operationsAnalytics, workbenchSummaries, workQueue] = await Promise.all([
         getDashboardAnalytics(user.accessToken),
         getOperationsAnalytics(user.accessToken),
         workbenchPromise,
+        listStaffWorkQueue({
+          queueType: 'job_order',
+          accessToken: user.accessToken,
+          view: 'my',
+          limit: 25,
+        }),
       ])
 
       setState({
@@ -239,6 +251,7 @@ export default function Dashboard() {
         dashboardAnalytics,
         operationsAnalytics,
         workbenchSummaries,
+        workQueue,
         errorMessage: '',
       })
     } catch (error) {
@@ -254,6 +267,7 @@ export default function Dashboard() {
         dashboardAnalytics: null,
         operationsAnalytics: null,
         workbenchSummaries: [],
+        workQueue: null,
         errorMessage: message,
       })
     }
@@ -284,6 +298,7 @@ export default function Dashboard() {
   const activeRepairs = technicianQueue.filter((item) => item.status === 'in_progress').length
   const operationsSummary = state.operationsAnalytics
   const dashboardSummary = state.dashboardAnalytics
+  const activeClaimedWork = state.workQueue?.items?.find((item) => item.claim?.isMine) ?? null
   const bookingStatuses = operationsSummary?.bookingStatuses ?? []
   const jobOrderStatuses = operationsSummary?.jobOrderStatuses ?? []
   const serviceDemand = operationsSummary?.serviceDemand?.slice(0, 4) ?? []
@@ -387,7 +402,7 @@ export default function Dashboard() {
                   <PortalLink href="/admin/job-orders" className="btn-ghost justify-between">
                     <span className="inline-flex items-center gap-2">
                       <Wrench size={14} />
-                      Job Order Workbench
+                      Open Job Orders
                     </span>
                     <ArrowRight size={14} />
                   </PortalLink>
@@ -417,6 +432,27 @@ export default function Dashboard() {
         }
         meta={<span className="badge badge-gray">{user?.roleLabel ?? user?.role ?? 'Staff access'}</span>}
       />
+
+      {activeClaimedWork ? (
+        <section className="flex flex-col gap-4 border-y border-emerald-500/25 bg-emerald-500/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase text-emerald-300">Assigned to you</p>
+            <p className="mt-1 truncate text-base font-semibold text-ink-primary">
+              {activeClaimedWork.reference || 'Active job order'}
+            </p>
+            <p className="mt-1 truncate text-sm text-ink-secondary">
+              {[activeClaimedWork.customerName, activeClaimedWork.vehicleName].filter(Boolean).join(' / ') || 'Workshop work'}
+            </p>
+          </div>
+          <PortalLink
+            href={`/admin/job-orders/${encodeURIComponent(activeClaimedWork.jobOrderId)}`}
+            className="ops-action-primary shrink-0"
+          >
+            Resume work
+            <ArrowRight size={15} />
+          </PortalLink>
+        </section>
+      ) : null}
 
       {state.status === 'error' ? (
         <EmptyPanel
@@ -493,12 +529,12 @@ export default function Dashboard() {
               <div className="table-surface">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-surface-border px-5 py-4">
                   <div>
-                    <p className="card-title">Active Job Orders</p>
+                    <p className="card-title">Workshop Work</p>
                     <p className="mt-1 text-sm leading-6 text-ink-secondary">
-                      Live workbench entries for this month. Open a record to continue intake, QA, or invoice work.
+                      Active visits that still need workshop, QA, or release work.
                     </p>
                   </div>
-                  <span className="badge badge-gray">{activeJobOrders.length} active items</span>
+                  <span className="badge badge-gray">{activeJobOrders.length} active visits</span>
                 </div>
 
                 {activeJobOrders.length ? (

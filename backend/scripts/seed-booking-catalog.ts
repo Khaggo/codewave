@@ -2,6 +2,8 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { Client } from 'pg';
 
+import { assertOperationalSafety, parseOperationalArgs } from './operational-safety';
+
 type BookingServiceSeed = {
   name: string;
   category: string;
@@ -218,6 +220,27 @@ const run = async () => {
   loadLocalEnv();
 
   const connectionString = process.env.DATABASE_URL ?? 'postgresql://admin:root@localhost:5433/codewave';
+  const args = parseOperationalArgs(process.argv.slice(2));
+  const safety = assertOperationalSafety({
+    command: 'seed:booking-catalog',
+    args,
+    databaseUrl: connectionString,
+  });
+  if (!args.execute) {
+    console.log(
+      JSON.stringify(
+        {
+          safety,
+          categoryCount: new Set(bookingServiceCatalog.map((service) => service.category)).size,
+          serviceCount: bookingServiceCatalog.length,
+          timeSlotCount: bookingTimeSlotCatalog.length,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
   const client = new Client({ connectionString });
 
   await client.connect();

@@ -58,7 +58,7 @@ test('service flow workspaces use queue-first copy and remove bulky dashboard wo
   assert.ok(!jobOrders.includes('Choose a schedule date and refresh to load confirmed bookings.'))
   assert.ok(
     !qa.includes(
-      'Review the validator summary before the head technician decides.',
+      'Review the validator summary before the Service Adviser decides.',
     ),
   )
   assert.ok(

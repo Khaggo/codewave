@@ -10,8 +10,10 @@ import { colors, radius } from '../theme';
 import {
   cloneDate,
   formatVehicleDisplayName,
+  normalizeLicensePlate,
   normalizeVehicleYear,
   validateBirthday,
+  validateLicensePlate,
   validateVehicleYear,
 } from '../utils/validation';
 
@@ -48,7 +50,7 @@ export default function CompleteOnboardingPage({
     let nextValue = value;
 
     if (key === 'licensePlate') {
-      nextValue = String(value ?? '').toUpperCase();
+      nextValue = normalizeLicensePlate(value);
     }
 
     if (key === 'vehicleYear') {
@@ -70,14 +72,15 @@ export default function CompleteOnboardingPage({
   const handleSave = () => {
     const nextErrors = {};
     const birthdayError = validateBirthday(form.birthday);
+    const licensePlateError = validateLicensePlate(form.licensePlate);
     const vehicleYearError = validateVehicleYear(form.vehicleYear);
 
     if (birthdayError) {
       nextErrors.birthday = birthdayError;
     }
 
-    if (!form.licensePlate.trim()) {
-      nextErrors.licensePlate = 'Enter your vehicle plate.';
+    if (licensePlateError) {
+      nextErrors.licensePlate = licensePlateError;
     }
 
     if (!form.vehicleMake.trim()) {
@@ -105,7 +108,7 @@ export default function CompleteOnboardingPage({
         await onComplete({
           ...onboardingDraft,
           birthday: cloneDate(form.birthday),
-          licensePlate: form.licensePlate.trim().toUpperCase(),
+          licensePlate: normalizeLicensePlate(form.licensePlate).trim(),
           vehicleMake: form.vehicleMake.trim(),
           vehicleModel: form.vehicleModel.trim(),
           vehicleColor: form.vehicleColor.trim(),

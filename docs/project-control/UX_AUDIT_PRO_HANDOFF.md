@@ -128,9 +128,9 @@ This keeps each upload under the cap and keeps findings scoped to one flow at a 
 4. Customer opens Garage, sees multiple vehicles, and verifies pager/vehicle actions are understandable.
 5. Customer opens vehicle lifecycle and sees timeline plus reviewed customer-facing summary when available.
 6. Service adviser opens staff web Bookings, confirms booking, and sends it to workshop handoff.
-7. Service adviser opens Job Orders, creates/loads the job order from the booking handoff, and assigns a technician.
-8. Technician updates progress/evidence.
-9. Head technician opens QA Audit and performs QA release with visible Objective 5 anchors.
+7. Service adviser opens Job Orders, creates/loads the job order from the booking handoff, and assigns a technician profile.
+8. Service adviser records checklist/progress/evidence under the assigned technician profile.
+9. Service adviser opens QA Audit and performs QA release with visible Objective 5 anchors.
 10. Service adviser finalizes the job order and records payment in Invoices & Orders.
 11. Customer completed history should only show completion after the service, QA, invoice, and payment flow is finished.
 
@@ -148,8 +148,8 @@ This keeps each upload under the cap and keeps findings scoped to one flow at a 
 | Customer reviewed summary proof | `qa/playwright/artifacts/mobile-lifecycle-reviewed-summary-live.png` | Is the customer-visible reviewed summary easy to find and understand? |
 | Staff Bookings | `qa/ux-audit/2026-05-21/staff-adviser-bookings-current.png` | Can a service adviser quickly identify bookings that need confirmation or workshop handoff? |
 | Staff Job Orders | `qa/ux-audit/2026-05-21/staff-adviser-job-orders-current.png` | Is the mixed queue source-picking copy clear enough to prevent creating/loading the wrong job order? |
-| Staff QA Audit queue | `qa/ux-audit/2026-05-21/staff-adviser-qa-audit-current.png` | Does a non-head technician role understand why verdict actions may be locked? |
-| Head technician QA Audit loaded | `qa/ux-audit/2026-05-21/staff-headtech-qa-audit-loaded-current.png` | Are Risk Score, Semantic Match, Blocking Findings, and Review Needed visible and meaningful as Objective 5 proof? |
+| Staff QA Audit queue | `qa/ux-audit/2026-05-21/staff-adviser-qa-audit-current.png` | Does the screen clearly explain why verdict actions may be locked for unauthorized or retired-role sessions? |
+| Service adviser QA Audit loaded | `qa/ux-audit/2026-05-21/staff-adviser-qa-audit-loaded-current.png` | Are Risk Score, Semantic Match, Blocking Findings, and Review Needed visible and meaningful as Objective 5 proof? |
 | Staff Invoices & Orders | `qa/ux-audit/2026-05-21/staff-adviser-invoices-current.png` | Is the billing lookup/final payment surface clear, and can staff tell what must be loaded before payment? |
 | Completed-history timing | `qa/playwright/artifacts/qa-summary.md` | Does the evidence prove completion appears only after service, QA, invoice, and payment are finished? What screenshot should be added for demo confidence? |
 

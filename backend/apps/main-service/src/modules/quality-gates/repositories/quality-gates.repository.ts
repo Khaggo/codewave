@@ -1,5 +1,5 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -51,6 +51,7 @@ type RecordReviewerVerdictInput = {
   reviewerUserId: string;
   reviewerVerdict: Exclude<QualityGateReviewerVerdict, 'pending'>;
   reviewerNote?: string | null;
+  expectedVersion?: number;
 };
 
 @Injectable()
@@ -129,6 +130,7 @@ export class QualityGatesRepository extends BaseRepository {
           auditJob,
           lastAuditRequestedAt: now,
           lastAuditCompletedAt: null,
+          version: sql`${jobOrderQualityGates.version} + 1`,
           updatedAt: now,
         })
         .where(eq(jobOrderQualityGates.id, existing.id));
@@ -171,6 +173,7 @@ export class QualityGatesRepository extends BaseRepository {
         auditJob,
         blockingReason: options?.blockingReason ?? gate.blockingReason,
         lastAuditCompletedAt: options?.lastAuditCompletedAt ?? gate.lastAuditCompletedAt,
+        version: sql`${jobOrderQualityGates.version} + 1`,
         updatedAt: new Date(),
       })
       .where(eq(jobOrderQualityGates.id, gate.id));
@@ -211,6 +214,7 @@ export class QualityGatesRepository extends BaseRepository {
         blockingReason: payload.blockingReason ?? null,
         auditJob: payload.auditJob,
         lastAuditCompletedAt: now,
+        version: sql`${jobOrderQualityGates.version} + 1`,
         updatedAt: now,
       })
       .where(eq(jobOrderQualityGates.id, gate.id));
@@ -241,6 +245,7 @@ export class QualityGatesRepository extends BaseRepository {
           reviewerVerdict: 'passed',
           reviewerNote: payload.reason,
           reviewedAt: now,
+          version: sql`${jobOrderQualityGates.version} + 1`,
           updatedAt: now,
         })
         .where(eq(jobOrderQualityGates.id, gate.id));
@@ -268,6 +273,7 @@ export class QualityGatesRepository extends BaseRepository {
       .update(jobOrderQualityGates)
       .set({
         headTechnicianUserId,
+        version: sql`${jobOrderQualityGates.version} + 1`,
         updatedAt: new Date(),
       })
       .where(eq(jobOrderQualityGates.id, gate.id));
@@ -281,7 +287,7 @@ export class QualityGatesRepository extends BaseRepository {
       throw new NotFoundException('Quality gate not found');
     }
 
-    await this.db
+    const updatedRows = await this.db
       .update(jobOrderQualityGates)
       .set({
         status: payload.reviewerVerdict === 'passed' ? 'passed' : 'blocked',
@@ -289,9 +295,23 @@ export class QualityGatesRepository extends BaseRepository {
         reviewerNote: payload.reviewerNote ?? null,
         reviewedAt: new Date(),
         headTechnicianUserId: payload.reviewerUserId,
+        version: sql`${jobOrderQualityGates.version} + 1`,
         updatedAt: new Date(),
       })
-      .where(eq(jobOrderQualityGates.id, gate.id));
+      .where(and(
+        eq(jobOrderQualityGates.id, gate.id),
+        payload.expectedVersion === undefined
+          ? sql`true`
+          : eq(jobOrderQualityGates.version, payload.expectedVersion),
+      ))
+      .returning({ id: jobOrderQualityGates.id });
+
+    if (updatedRows.length === 0) {
+      throw new ConflictException({
+        code: 'STALE_WORK_VERSION',
+        message: 'This QA review changed in another session. Refresh before recording a verdict.',
+      });
+    }
 
     return this.findByJobOrderId(jobOrderId);
   }

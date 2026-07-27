@@ -14,11 +14,11 @@ describe('VehiclesService', () => {
     };
 
     const vehiclesRepository = {
-      findByPlateNumber: jest.fn().mockResolvedValue(null),
+      findByPlateSignature: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue({
         id: 'vehicle-1',
         userId: 'user-1',
-        plateNumber: 'ABC1234',
+        plateNumber: 'ABC 1234',
       }),
     };
 
@@ -34,15 +34,19 @@ describe('VehiclesService', () => {
 
     const result = await service.create({
       userId: 'user-1',
-      plateNumber: 'ABC1234',
+      plateNumber: 'abc 1234',
       make: 'Toyota',
       model: 'Vios',
       year: 2020,
     }, { userId: 'user-1', role: 'customer' });
 
     expect(usersService.findById).toHaveBeenCalledWith('user-1');
-    expect(vehiclesRepository.findByPlateNumber).toHaveBeenCalledWith('ABC1234');
-    expect(vehiclesRepository.create).toHaveBeenCalled();
+    expect(vehiclesRepository.findByPlateSignature).toHaveBeenCalledWith('ABC1234');
+    expect(vehiclesRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plateNumber: 'ABC 1234',
+      }),
+    );
     expect(result.id).toBe('vehicle-1');
   });
 
@@ -52,7 +56,7 @@ describe('VehiclesService', () => {
     };
 
     const vehiclesRepository = {
-      findByPlateNumber: jest.fn(),
+      findByPlateSignature: jest.fn(),
       create: jest.fn(),
     };
 
@@ -86,7 +90,7 @@ describe('VehiclesService', () => {
     };
 
     const vehiclesRepository = {
-      findByPlateNumber: jest.fn().mockResolvedValue({
+      findByPlateSignature: jest.fn().mockResolvedValue({
         id: 'vehicle-1',
         plateNumber: 'ABC1234',
       }),
@@ -106,7 +110,7 @@ describe('VehiclesService', () => {
     await expect(
       service.create({
         userId: 'user-1',
-        plateNumber: 'ABC1234',
+        plateNumber: 'ABC-1234',
         make: 'Toyota',
         model: 'Vios',
         year: 2020,
@@ -121,7 +125,7 @@ describe('VehiclesService', () => {
     };
 
     const vehiclesRepository = {
-      findByPlateNumber: jest.fn(),
+      findByPlateSignature: jest.fn(),
       create: jest.fn(),
     };
 
@@ -151,7 +155,7 @@ describe('VehiclesService', () => {
   it('propagates not found when updating a missing vehicle', async () => {
     const vehiclesRepository = {
       findById: jest.fn().mockResolvedValue(null),
-      findByPlateNumber: jest.fn().mockResolvedValue(null),
+      findByPlateSignature: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockRejectedValue(new NotFoundException('Vehicle not found')),
     };
 
@@ -175,5 +179,39 @@ describe('VehiclesService', () => {
         color: 'Blue',
       }, { userId: 'user-1', role: 'service_adviser' }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects vehicle creation when the normalized plate is too short', async () => {
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'user-1',
+      }),
+    };
+
+    const vehiclesRepository = {
+      findByPlateSignature: jest.fn(),
+      create: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        VehiclesService,
+        { provide: VehiclesRepository, useValue: vehiclesRepository },
+        { provide: UsersService, useValue: usersService },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(VehiclesService);
+
+    await expect(
+      service.create({
+        userId: 'user-1',
+        plateNumber: 'A-1',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2020,
+      }, { userId: 'user-1', role: 'customer' }),
+    ).rejects.toThrow('Vehicle plate number must use 4-10 letters or numbers');
+    expect(vehiclesRepository.create).not.toHaveBeenCalled();
   });
 });

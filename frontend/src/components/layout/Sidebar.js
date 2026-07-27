@@ -63,7 +63,7 @@ const LABEL_BY_KEY = {
   'user-admin': 'Staff Accounts',
 }
 
-export default function Sidebar({ collapsed, onToggle }) {
+export default function Sidebar({ collapsed, onToggle, jobWorkCount = 0 }) {
   const pathname = usePathname()
   const user = useUser()
   const ecommerceEnabled = isEcommerceEnabled()
@@ -136,7 +136,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                     href={href}
                     title={collapsed ? label : undefined}
                     className={`
-                      flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all duration-150
+                      relative flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all duration-150
                       ${collapsed ? 'justify-center' : ''}
                       ${active ? 'text-ink-primary' : 'text-ink-muted hover:bg-surface-hover/70 hover:text-ink-primary'}
                     `}
@@ -153,8 +153,16 @@ export default function Sidebar({ collapsed, onToggle }) {
                   >
                     <Icon size={18} className={`flex-shrink-0 ${active ? 'text-brand-orange' : ''}`} />
                     {!collapsed ? <span className="min-w-0 leading-5">{label}</span> : null}
+                    {href === '/admin/job-orders' && jobWorkCount > 0 ? (
+                      <span
+                        className={`${collapsed ? 'absolute right-2 top-2 h-2 w-2 rounded-full bg-brand-orange' : 'ml-auto min-w-6 rounded-full bg-brand-orange px-2 py-0.5 text-center text-[11px] font-bold text-white'}`}
+                        aria-label={`${jobWorkCount} active job assignment${jobWorkCount === 1 ? '' : 's'}`}
+                      >
+                        {collapsed ? null : jobWorkCount}
+                      </span>
+                    ) : null}
                     {!collapsed && active ? (
-                      <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-brand-orange" />
+                      <span className={`${href === '/admin/job-orders' && jobWorkCount > 0 ? '' : 'ml-auto'} h-2 w-2 flex-shrink-0 rounded-full bg-brand-orange`} />
                     ) : null}
                   </PortalLink>
                 )

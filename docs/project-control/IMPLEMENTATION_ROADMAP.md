@@ -1,6 +1,6 @@
 # Implementation Roadmap
 
-Last updated: 2026-05-22
+Last updated: 2026-05-23
 
 This roadmap is ordered for panel recovery. Do not work only on nice-to-have UI polish while objective-critical features remain unproven.
 
@@ -14,8 +14,13 @@ Tasks:
 - Keep `QA_LEDGER.md` current after every QA run.
 - Keep `PANELIST_FEEDBACK_MATRIX.md` and `OBJECTIVE_COMPLIANCE_MATRIX.md` current after every fix.
 - Ensure new chats use `CHAT_HANDOFF_PROMPT.md`.
+- Keep the Notion AUTOCARE Wiki aligned with repo project-control docs after major QA or implementation extraction updates.
+- Latest Notion implementation archive reconciled: `Extracted decisions from Implementation Chat — 2026-05-23`.
 - Add a repeatable local QA startup checklist so backend, staff web, and mobile web runtimes are all up before Playwright evidence runs.
-- After each targeted booking-to-cash fix, rerun Playwright promptly so patched findings move from "code-fixed" to "QA-closed".
+- Use the repo-root watchdog-backed runtime commands by default so one named runtime owns each expected dev port and duplicate Node/Expo spawns do not accumulate during recovery work.
+- After each targeted fix, rerun Playwright promptly so patched findings move from "code-fixed" to "QA-closed".
+- Latest full-system QA rerun to inherit: 20 passed / 0 failed on 2026-05-22. The automated Playwright gate is green across admin billing, Back-Jobs, booking-to-cash, multi-service booking, insurance documents/reminders, Objective 2, readable IDs, role retirement, ecommerce rewards, and adviser-owned checklist/PDF proof.
+- Residual non-blocking findings to polish before demo: invoice lookup specificity, immediate invoice visibility, stale mobile completed-history refresh, completed-state timing before manual payment, non-finalized Back-Jobs negative setup, and approved lifecycle summary setup.
 
 Acceptance:
 
@@ -27,23 +32,32 @@ Goal: Fix the issues most likely to fail another panel demo.
 
 Priority tasks:
 
-- Fix mobile session persistence and expired-session behavior.
+- Re-run timed live QA for the new web/mobile session refresh recovery and keep the user signed in beyond the old 10-15 minute failure window.
 - Redesign mobile booking/navigation to reduce confusion.
+- Keep the now-green full one-command Playwright suite green while moving from QA recovery into demo/paper packaging.
+- Human-QA PDF recovery is QA-closed for the tested checklist items: active `Book`/`Garage` refresh, no forced fallback `Body repair` selection, active-service booking blocking, Job Orders QA route, intake snapshot detail, and Dashboard Insurance launch all passed live on fresh `8096`.
+- Keep Objective 2 green after the fresh lifecycle rerun now passes again with the stable API-backed booking setup.
+- Keep Back-Jobs create/select finalized-origin green after the fresh rerun now passes again.
+- Keep backend integration wiring for booking/job-order/insurance lifecycle helpers covered in targeted backend tests so the green Playwright suite is not the only safety net.
+- Resolve or intentionally update `workspaceCopyCleanup.test.mjs`; it currently fails 19 of 25 checks and keeps usability/polish open.
 - Verify the newly added customer multi-car garage flow with panel-ready evidence.
-- Verify the newly added mobile multi-service booking flow with panel-ready evidence.
+- Keep booking-to-cash, service-loyalty, and multi-service booking green in regression, then polish invoice lookup/visibility and capture panel-ready evidence for those flows.
+- Insurance staff manual reminder/broadcast send is now live-closed in its own targeted rerun; next work is preserving it in regression and demo evidence.
 - Prevent duplicate booking data for same customer/date/time/service.
-- Restrict technician to checklist/progress/evidence responsibilities.
-- Finish billing details, quotation/pricing, and invoice display clarity.
-- Broad readable-ID QA is now closed for the tested critical surfaces: Mobile Rewards loyalty activity and Mobile Shop Orders leaks were fixed, and the final sweep passed with ecommerce `3001` available.
-- Rerun live `8090` panelist flow QA after the durable booking-reference patch so booking-to-cash can be re-closed with evidence.
-- Rerun live `8090` panelist flow QA after the invoice-selector history patch so the new `Invoices & Orders` blocker and duplicate same-day job-order labels can be closed with evidence.
-- Rerun live `8090` panelist flow QA after the mobile requested-services visibility patch and session-restore patch so the remaining mobile findings can be closed with evidence.
-- Rerun live insurance/loyalty Playwright QA after the authenticated staff document-link patch so OR/CR, policy, and police report files can be marked openable/downloadable with evidence.
+- Treat technician login as retired. Rewrite QA evidence around admin-managed technician profiles, adviser-owned workshop stage tracking, selected specialties, checklist/task controls, evidence upload, and printable checklist PDF flow.
+- Keep `docs/architecture/rbac-policy.md` synchronized with the retired-login/adviser-owned workshop model so paper, tests, and Notion do not reintroduce technician-authenticated portal assumptions.
+- Billing details, quotation/pricing, and invoice display clarity are now live-closed in the latest targeted reruns; next work is demo capture and paper alignment.
+- Broad readable-ID QA now passes under the adviser-owned role model; keep rerunning it on fresh listeners and do not treat retired technician login failures as product defects.
+- Do not use stale `8090` evidence unless rebuilt first. Current reliable mobile evidence uses fresh `8096` runtime or an explicitly rebuilt mobile web listener.
+- Preserve the now-green insurance/loyalty, booking reference, invoice selector, requested-services visibility, and session-restore checks in the full regression suite.
 - Capture fresh live evidence for the new automated-proof areas: mobile multi-service booking, garage add-second-vehicle + pagination, Objective 5 discrepancy plus customer-summary walkthrough, and panel-ready screenshots/video for the now-passing broad readable-ID sweep.
-- Live Shop/ecommerce rewards QA is now rerun and QA-closed for the staff manual ecommerce payment action and mobile product-code cleanup; keep the dedicated staff UI CRUD sweep for catalog, inventory, and service entries as separate follow-up work.
+- Re-run targeted manual/Playwright review for the redesigned dedicated mobile `Vehicle Timeline & Lifecycle` screen so the new showcase-style layout can count as usability/demo evidence instead of implementation-only polish.
+- Live Shop/ecommerce rewards and Objective 3 admin billing are now green in the full 20/20 rerun. Next work is panel-ready evidence capture and paper alignment.
+- Re-run targeted QA for customer plate-number validation, duplicate-phone rejection, and canonical duplicate-plate rejection so the new validation rules move from code-fixed to live-proven.
 - Live Back-Jobs staff-linked lineage, readable-reference, full rework follow-through, return-inspection label, and unique same-day rework selector QA now pass. The only major Back-Jobs proof gap is customer initiation if the defense claims it.
-- Live Admin CRUD / pricing / billing QA now passes with one remaining finding in the last recorded live evidence. Catalog hidden-state/category controls, Service Management pricing/edit/readable-code behavior, loyalty product/category pickers, and service invoice detail are QA-closed; the inventory low-stock threshold persistence bug is now code-fixed and needs the next live rerun.
-- Live Objective 2 lifecycle / readable-ID recovery QA now passes on a fresh current-source mobile runtime and proves the service side, insurance timeline, explicit invoice milestones, readable Job Orders/technician labels, non-UUID invoice references, and reviewed summary render on the tested flow. Separate broad readable-ID QA now also passes after the Mobile Rewards and Mobile Shop Orders cleanup with ecommerce-backed staff coverage included.
+- Live Admin CRUD / pricing / billing is green again in the latest targeted rerun.
+- Broad readable-ID QA still passes after the Mobile Rewards and Mobile Shop Orders cleanup with ecommerce-backed staff coverage included, and Objective 2 is green again in its latest targeted rerun.
+- Remaining high-value non-blocker proof work is timed session-stability evidence, staff/mobile polish findings, and paper/demo packaging.
 
 Acceptance:
 
@@ -57,11 +71,12 @@ Goal: Make Objectives 1 through 5 demonstrable.
 Priority tasks:
 
 - Insurance accident workflow with supporting document requirements.
+- Convert the new `docs/business-process-implementation-alignment-report.md` findings into an actual insurance roadmap: structured estimate/quotation record, insurer-submission tracking, approval-gated job-order linkage, and stronger compliance metadata.
 - Loyalty qualification standards and earning rules tied to final paid invoices.
-- Vehicle lifecycle timeline showing service, QA, invoice, inspection, and insurance records. Fresh current-source Objective 2 recovery QA now proves the full tested flow; next work is panel-ready capture and guarding future QA from stale mobile runtime drift.
-- Back-job customer report and staff rework resolution flow. Staff-linked creation, readable lineage, return-inspection display, unique rework selector labels, and full staff rework resolution now have live QA proof; remaining proof needs customer initiation only if claimed.
+- Vehicle lifecycle timeline showing service, QA, invoice, inspection, and insurance records. This is re-closed in the latest targeted Objective 2 rerun; next work is demo capture.
+- Back-job customer report and staff rework resolution flow. Staff create/select finalized-origin plus full follow-through are now green again; customer initiation remains unclaimed unless separately proven or implemented from mobile service history.
 - QA discrepancy scenario using NLP/rule scoring and generated customer-facing summary.
-- Admin data-entry polish for shop, catalog, inventory, services, loyalty earning-rule targeting, and service invoice detail. Rerun live admin QA now that the inventory stock-policy persistence bug (`6` saving as `3`) is patched, then claim Objective 3 as panel-ready if the rerun stays clean.
+- Admin data-entry polish for shop, catalog, inventory, services, loyalty earning-rule targeting, and service invoice detail. The latest admin rerun is now clean; next work is panel-ready evidence packaging.
 
 Acceptance:
 
@@ -73,7 +88,7 @@ Goal: Improve usability and produce evaluation proof.
 
 Priority tasks:
 
-- Mobile UI redesign pass.
+- Mobile UI redesign pass, including the newly refreshed dedicated lifecycle screen and any follow-up adjustments needed after screenshot/manual review.
 - Staff web UI polish for booking, job orders, QA audit, invoices, insurance, loyalty, and garage.
 - Confirm garage pagination behavior with screenshots/QA after the new lifecycle-surface pager landed.
 - Error messages and success feedback polish.
@@ -98,7 +113,8 @@ Priority tasks:
 - Improve figure readability.
 - Revise gap analysis table.
 - Add narrative after tables.
-- Add client business process.
+- Integrate the captured client business process from `docs/business-process-cruisers-crib.md` into the final paper, diagrams, and gap-analysis narrative.
+- Use `docs/business-process-implementation-alignment-report.md` as the paper/demo truth source for insurance approval, quotation, communication, and back-job scope boundaries.
 - Update documentation based on final implemented system.
 
 Acceptance:

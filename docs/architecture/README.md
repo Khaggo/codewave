@@ -1,6 +1,7 @@
-# AUTOCARE Backend SSoT
+# AUTOCARE Repository SSoT
 
-This directory is the backend source of truth for engineers and agents building the AUTOCARE ecosystem.
+This directory is the repository source of truth for engineers and agents building the AUTOCARE
+ecosystem across backend services, staff web, customer mobile, shared contracts, QA, and operations.
 
 ## Shared Goal
 
@@ -8,20 +9,20 @@ Use the docs in this directory to build and improve the backend quickly while pr
 
 ## Load Order
 
-1. [`system-architecture.md`](./system-architecture.md)
-2. [`api-strategy.md`](./api-strategy.md) when transport, event, job, or integration decisions matter
-3. [`dto-policy.md`](./dto-policy.md) when public REST payloads, validation, or Swagger contracts are involved
-4. [`frontend-backend-sync.md`](./frontend-backend-sync.md) when coordinating frontend and backend work on the same slice
-5. [`rbac-policy.md`](./rbac-policy.md) when roles, permissions, staff provisioning, or service-adviser identity are involved
-6. [`auth-security-policy.md`](./auth-security-policy.md) when Google verification, email OTP, signup activation, or legacy auth migration is involved
-7. [`ai-governance.md`](./ai-governance.md) when lifecycle summaries, QA audits, or provider adapter decisions are involved
-8. [`domain-map.md`](./domain-map.md)
-9. the target domain doc
-10. only the target domain's direct dependency docs if needed
-11. [`golden-domain-template.md`](./golden-domain-template.md) when creating or normalizing a new domain
-12. the matching role file in [`agents/`](./agents/) when agent behavior or write permissions are relevant
-13. [`tasks/README.md`](./tasks/README.md) when executing a concrete implementation task
-14. [`_backlog/agent-improvement-queue.md`](./_backlog/agent-improvement-queue.md) when reviewing routing drift, repeated confusion, or self-improvement signals
+1. [`repository-map.md`](./repository-map.md)
+2. [`system-architecture.md`](./system-architecture.md)
+3. [`api-strategy.md`](./api-strategy.md) when transport, event, job, or integration decisions matter
+4. [`dto-policy.md`](./dto-policy.md) when public REST payloads, validation, or Swagger contracts are involved
+5. [`frontend-backend-sync.md`](./frontend-backend-sync.md) when coordinating frontend and backend work on the same slice
+6. [`rbac-policy.md`](./rbac-policy.md) when roles, permissions, staff provisioning, or service-adviser identity are involved
+7. [`auth-security-policy.md`](./auth-security-policy.md) when Google verification, email OTP, signup activation, or legacy auth migration is involved
+8. [`ai-governance.md`](./ai-governance.md) when lifecycle summaries, QA audits, or provider adapter decisions are involved
+9. [`domain-map.md`](./domain-map.md)
+10. the target domain doc and only its direct dependencies
+11. [`golden-domain-template.md`](./golden-domain-template.md) when creating or normalizing a domain
+12. the matching role file in [`agents/`](./agents/) when agent behavior is explicitly activated
+13. [`tasks/README.md`](./tasks/README.md) for active implementation work
+14. [`_backlog/agent-improvement-queue.md`](./_backlog/agent-improvement-queue.md) for bounded improvement evidence
 
 ## Quick Routing
 
@@ -60,6 +61,7 @@ Use the docs in this directory to build and improve the backend quickly while pr
 
 ## Control-Plane Docs
 
+- [`repository-map.md`](./repository-map.md): repository ownership, runtime, verification, and safety boundaries
 - [`system-architecture.md`](./system-architecture.md): global goals, agent topology, write governance, and integrity rules
 - [`api-strategy.md`](./api-strategy.md): canonical transport, event, job, and Swagger decisions
 - [`dto-policy.md`](./dto-policy.md): canonical request/response DTO and validation rules for REST domains
@@ -100,3 +102,5 @@ Use the docs in this directory to build and improve the backend quickly while pr
 ## Legacy Material
 
 Earlier topic-based docs remain in [`_legacy/`](./_legacy/) for reference only.
+Completed plans and dated reports outside the canonical architecture set belong under
+[`../archive/`](../archive/) and must link back to the current SSOT when retained.

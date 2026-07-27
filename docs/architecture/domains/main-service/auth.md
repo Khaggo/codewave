@@ -18,8 +18,10 @@ Maintain secure authentication, activation gating, staff-account credential owne
 - Google identity verification payloads
 - email OTP verification payloads
 - legacy login, registration, and refresh payloads during migration
+- password reset and authenticated password-change requests with email OTP verification
+- authenticated staff phone-change requests with email OTP verification
 - authenticated delete-account requests with current-password confirmation plus email OTP verification
-- super-admin staff-account provisioning and activation changes
+- super-admin customer and staff account listing, provisioning, and activation changes
 - bearer-token protected requests for `GET /auth/me`
 
 ## Outputs
@@ -61,7 +63,9 @@ Key relations:
 - issue access and refresh tokens
 - rotate to one latest active refresh token per user
 - archive the authenticated account only after current-password confirmation and email OTP verification, then revoke active refresh tokens
-- deactivate or reactivate staff credentials without deleting the user record
+- reset forgotten passwords and change authenticated passwords only after purpose-bound email OTP verification
+- change an authenticated staff phone number only after purpose-bound email OTP verification
+- deactivate or reactivate customer and staff credentials without deleting the user record
 - write login audit logs for successful and failed login attempts
 - write staff-admin audit logs for staff provisioning and activation-status changes, preserving actor, timestamp, and reason metadata
 - expose the authenticated identity through JWT guard resolution
@@ -86,10 +90,14 @@ Key relations:
 - customer completes Google verification plus email OTP and receives tokens
 - existing activated account signs in and refreshes tokens
 - client refreshes an authenticated session
+- customer resets a forgotten password or changes a known password after email OTP verification
+- authenticated staff member changes their profile phone number after email OTP verification
 - authenticated customer archives their own account after confirming the current password and verifying the delete-account OTP
 - protected endpoints resolve the authenticated user from the bearer token
 - super admin provisions a new technician, service adviser, or super-admin account in pending activation state
 - staff member completes Google verification + email OTP to activate a pending staff account
+- super admin lists customer and staff accounts for account administration
+- super admin deactivates or reactivates an existing customer account without deleting history
 - super admin deactivates or reactivates an existing staff account without deleting history
 
 ## API Surface
@@ -98,6 +106,10 @@ Key relations:
 - `POST /auth/register/verify-email`
 - `POST /auth/login`
 - `POST /auth/refresh`
+- `POST /auth/password/forgot/request`
+- `POST /auth/password/forgot/reset`
+- `POST /auth/password/change/request`
+- `POST /auth/password/change/confirm`
 - `POST /auth/account/delete/start`
 - `POST /auth/account/delete/verify`
 - `GET /auth/me`
@@ -105,8 +117,13 @@ Key relations:
 - `POST /auth/google/signup/verify-email`
 - `POST /auth/staff-activation/google/start`
 - `POST /auth/staff-activation/verify-email`
+- `POST /auth/staff/profile/phone/change/request`
+- `POST /auth/staff/profile/phone/change/confirm`
+- `GET /admin/staff-accounts`
 - `POST /admin/staff-accounts`
 - `PATCH /admin/staff-accounts/:id/status`
+- `GET /admin/customers`
+- `PATCH /admin/customers/:id/status`
 
 ## Edge Cases
 
@@ -115,6 +132,7 @@ Key relations:
 - duplicate Google identity linkage for a different AUTOCARE account
 - Google or email mismatch during activation
 - wrong, expired, or already-consumed email OTP
+- OTP purpose, account ownership, or target value mismatch blocks password and phone changes
 - pending accounts must not receive usable tokens before activation completes
 - staff activation requires a matching Google identity and OTP challenge
 - missing or inactive auth account rejects login
@@ -124,6 +142,7 @@ Key relations:
 - missing or invalid bearer token blocks `GET /auth/me`
 - non-super-admin callers are forbidden from staff-account admin flows
 - customer identities cannot be managed through the staff-account status endpoint
+- staff identities cannot be managed through the customer-account status endpoint
 
 ## Writable Sections
 
@@ -132,7 +151,7 @@ Key relations:
 
 ## Out of Scope
 
-- credential-recovery features beyond the current login and refresh contract
+- credential recovery beyond the implemented purpose-bound email OTP flows
 - session expansion beyond the latest active refresh-token rule
 - profile editing
 - customer addresses

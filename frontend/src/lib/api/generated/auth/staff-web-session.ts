@@ -1,14 +1,12 @@
 import { authRoutes } from './requests';
 import type { ApiErrorResponse, RouteContract } from '../shared';
 
-export type StaffPortalRole = 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
+export type StaffPortalRole = 'service_adviser' | 'super_admin';
 
 export type StaffPortalAccessState =
   | 'unauthenticated'
   | 'login_submitting'
   | 'session_restoring'
-  | 'technician_session_active'
-  | 'head_technician_session_active'
   | 'service_adviser_session_active'
   | 'super_admin_session_active'
   | 'customer_blocked'
@@ -37,7 +35,7 @@ export interface StaffPortalNavigationRule {
   notes: string;
 }
 
-export const staffPortalRoles: StaffPortalRole[] = ['technician', 'head_technician', 'service_adviser', 'super_admin'];
+export const staffPortalRoles: StaffPortalRole[] = ['service_adviser', 'super_admin'];
 
 export const staffPortalSessionRoutes: RouteContract[] = [
   authRoutes.login,
@@ -50,7 +48,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     key: 'dashboard',
     href: '/',
     label: 'Dashboard',
-    visibleTo: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['service_adviser', 'super_admin'],
     group: 'Overview',
     notes: 'Shared staff landing surface after a valid session is established.',
   },
@@ -66,27 +64,27 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     key: 'digital-intake-inspections',
     href: '/admin/intake-inspections',
     label: 'Intake & Inspection',
-    visibleTo: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['service_adviser', 'super_admin'],
     group: 'Front Desk Flow',
     notes:
-      'Vehicle-scoped inspection capture and history are visible to all active staff roles; booking and QA ownership remain separate.',
+      'Vehicle-scoped inspection capture and history support adviser-led intake and workshop coordination.',
   },
   {
     key: 'job-orders-admin',
     href: '/admin/job-orders',
     label: 'Job Orders',
-    visibleTo: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['service_adviser', 'super_admin'],
     group: 'Front Desk Flow',
     notes:
-      'Technicians may load assigned execution work while booking handoff creation remains adviser/admin owned inside the workbench.',
+      'Advisers assign technician profiles, manage the workshop tracker, and prepare checklist output from this workbench.',
   },
   {
     key: 'qa-audit',
     href: '/admin/qa-audit',
     label: 'QA Audit',
-    visibleTo: ['head_technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['service_adviser', 'super_admin'],
     group: 'Front Desk Flow',
-    notes: 'Quality-gate review belongs to head technicians, advisers, and super admins, while override authority remains super-admin controlled.',
+    notes: 'Quality-gate review is adviser-owned, with super-admin override authority preserved.',
   },
   {
     key: 'invoice-order-management',
@@ -109,7 +107,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     key: 'back-jobs',
     href: '/backjobs',
     label: 'Back-Jobs',
-    visibleTo: ['head_technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['service_adviser', 'super_admin'],
     group: 'Customer Records',
     notes: 'Back-job review and release coordination remain adviser/admin workflows.',
   },
@@ -159,7 +157,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     label: 'User Administration',
     visibleTo: ['super_admin'],
     group: 'Admin',
-    notes: 'Super admins provision staff, mechanic, technician, and admin identities from this protected page.',
+    notes: 'Super admins provision adviser/admin identities and manage the non-auth technician directory from this protected page.',
   },
   {
     key: 'summary-review',
@@ -174,7 +172,7 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     key: 'settings',
     href: '/settings',
     label: 'Settings',
-    visibleTo: ['technician', 'head_technician', 'service_adviser', 'super_admin'],
+    visibleTo: ['service_adviser', 'super_admin'],
     group: 'Admin',
     notes: 'All staff roles may manage their own web-session settings.',
   },
@@ -185,24 +183,16 @@ export const staffPortalNavigationVisibilityByPath = Object.fromEntries(
 ) as Record<string, StaffPortalRole[]>;
 
 export const staffPortalRoleCapabilities: Record<StaffPortalRole, string[]> = {
-  technician: [
+  service_adviser: [
     'sign in to the staff portal',
     'restore an existing staff session',
     'view operational vehicle context',
     'capture and read vehicle-scoped inspection evidence',
-    'load assigned job-order execution work',
-    'access assigned-work dashboard states',
-  ],
-  head_technician: [
-    'all technician capabilities',
-    'review pre-check evidence summaries for ready-for-review job orders',
-    'record QA pass or block verdicts after physical inspection',
-    'return blocked work to technician remediation with explicit review notes',
-  ],
-  service_adviser: [
-    'all technician capabilities',
     'review booking schedule and queue states',
     'coordinate intake inspection evidence before job-order handoff',
+    'assign technician profiles and print specialty checklists',
+    'update adviser-owned workshop stage tracking',
+    'record the final QA release verdict',
     'coordinate insurance, back-job, and lifecycle review flows',
     'review service invoice, known ecommerce order, and invoice-aging visibility',
     'prepare operational release readiness',
@@ -239,14 +229,6 @@ export const staffPortalStateRules: StaffPortalStateRule[] = [
     routeKeys: ['refresh', 'me'],
     allowedRoles: [],
     description: 'The portal is validating or refreshing a previously stored session before showing staff navigation.',
-  },
-  {
-    state: 'technician_session_active',
-    surface: 'staff-admin-web',
-    truth: 'synchronous-auth-record',
-    routeKeys: ['login', 'refresh', 'me'],
-    allowedRoles: ['technician'],
-    description: 'The authenticated session belongs to an active technician and the portal must hide adviser/admin-only routes.',
   },
   {
     state: 'service_adviser_session_active',
@@ -311,11 +293,9 @@ export const staffPortalStateMessages: Record<
     StaffPortalAccessState,
     | 'login_submitting'
     | 'session_restoring'
-    | 'technician_session_active'
-    | 'head_technician_session_active'
-    | 'service_adviser_session_active'
-    | 'super_admin_session_active'
-  >,
+  | 'service_adviser_session_active'
+  | 'super_admin_session_active'
+>,
   string
 > = {
   unauthenticated: '',
@@ -365,7 +345,7 @@ export const staffPortalBlockedStateErrors: Record<
 };
 
 export const isStaffPortalRole = (role?: string | null): role is StaffPortalRole =>
-  role === 'technician' || role === 'head_technician' || role === 'service_adviser' || role === 'super_admin';
+  role === 'service_adviser' || role === 'super_admin';
 
 export const getStaffPortalAccessState = (sessionUser?: { role?: string | null; isActive?: boolean | null } | null): StaffPortalAccessState => {
   if (!sessionUser?.role) {
@@ -380,14 +360,6 @@ export const getStaffPortalAccessState = (sessionUser?: { role?: string | null; 
     return 'deactivated_staff_blocked';
   }
 
-  if (sessionUser.role === 'technician') {
-    return 'technician_session_active';
-  }
-
-  if (sessionUser.role === 'head_technician') {
-    return 'head_technician_session_active';
-  }
-
   if (sessionUser.role === 'service_adviser') {
     return 'service_adviser_session_active';
   }
@@ -399,13 +371,9 @@ export const isActiveStaffPortalState = (
   state: StaffPortalAccessState,
 ): state is Extract<
   StaffPortalAccessState,
-  | 'technician_session_active'
-  | 'head_technician_session_active'
   | 'service_adviser_session_active'
   | 'super_admin_session_active'
 > =>
-  state === 'technician_session_active' ||
-  state === 'head_technician_session_active' ||
   state === 'service_adviser_session_active' ||
   state === 'super_admin_session_active';
 

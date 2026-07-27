@@ -143,6 +143,14 @@ const normalizeCustomerRecord = (customer) => {
   };
 };
 
+const normalizeTechnicianProfile = (profile) => ({
+  ...profile,
+  specialties: Array.isArray(profile?.specialties) ? profile.specialties : [],
+  fullName: String(profile?.fullName ?? '').trim(),
+  code: profile?.code ?? null,
+  isActive: profile?.isActive !== false,
+});
+
 const AUTH_REQUEST_TIMEOUT_MS = 12000;
 
 const request = async (path, options = {}) => {
@@ -243,6 +251,45 @@ export const updateStaffAccountStatus = async (userId, payload, accessToken) =>
     },
     body: payload,
   }).then(normalizeManagedStaffAccount);
+
+export const listTechnicianProfiles = async (accessToken, options = {}) => {
+  const params = new URLSearchParams();
+  if (options.specialty) {
+    params.set('specialty', String(options.specialty).trim());
+  }
+  if (options.activeOnly === false) {
+    params.set('activeOnly', 'false');
+  }
+
+  const query = params.size ? `?${params.toString()}` : '';
+
+  return request(`/api/admin/technician-profiles${query}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }).then((profiles) =>
+    Array.isArray(profiles) ? profiles.map((profile) => normalizeTechnicianProfile(profile)) : [],
+  );
+};
+
+export const createTechnicianProfile = async (payload, accessToken) =>
+  request('/api/admin/technician-profiles', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: payload,
+  }).then(normalizeTechnicianProfile);
+
+export const updateTechnicianProfile = async (profileId, payload, accessToken) =>
+  request(`/api/admin/technician-profiles/${profileId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: payload,
+  }).then(normalizeTechnicianProfile);
 
 export const listAdminCustomers = async (accessToken) =>
   request('/api/admin/customers', {

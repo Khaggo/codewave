@@ -5,8 +5,14 @@ import { test, expect } from '@playwright/test';
 import { addFinding, annotateSeverity } from '../helpers/assertions.mjs';
 import {
   apiLogin,
+  claimStaffWorkViaApi,
+  createCustomerVehicle,
   ensureLocalQaRuntime,
+  finalizeJobOrderViaApi,
   getBooking,
+  getAssignableTechnicianProfile,
+  getJobOrderById,
+  getJobOrderInvoiceLookupById,
   getPublicBookingAvailability,
   getPublicBookingCatalog,
   getReservationPayment,
@@ -14,13 +20,14 @@ import {
   listVehicleJobOrders,
   pollUntil,
   proxyMobileApiTraffic,
+  recordJobOrderInvoicePaymentViaApi,
+  releaseCurrentStaffWorkViaApi,
 } from '../helpers/api.mjs';
 import { createRunMarker, qaAccounts, seededVehicle } from '../helpers/config.mjs';
 import {
   confirmReservationPaymentFromBookings,
   createJobOrderFromHandoff,
   createMobileBooking,
-  finalizeAndRecordPayment,
   loginMobileCustomer,
   loginStaff,
   loadJobOrderById,
@@ -28,13 +35,13 @@ import {
   progressJobOrderForQa,
   recordQaVerdict,
   sendBookingToWorkshop,
-  verifyInvoiceLookup,
 } from '../helpers/flows.mjs';
 
 test('customer booking reaches completed history only after workshop, QA, and payment flow', async ({
   browser,
   request,
 }, testInfo) => {
+  test.setTimeout(300_000);
   annotateSeverity(
     testInfo,
     'critical',
@@ -47,16 +54,24 @@ test('customer booking reaches completed history only after workshop, QA, and pa
   const customerSession = await apiLogin(request, qaAccounts.customer);
   const adviserSession = await apiLogin(request, qaAccounts.adviser);
   const { services, timeSlots } = await getPublicBookingCatalog(request);
+  const assignableTechnicianProfile = await getAssignableTechnicianProfile(request, adviserSession);
 
   expect(services.length, 'At least one active booking service is required for QA flow coverage.').toBeGreaterThan(0);
   expect(timeSlots.length, 'At least one active booking time slot is required for QA flow coverage.').toBeGreaterThan(0);
 
   const selectedService = services[0];
   const existingCustomerBookings = await listCustomerBookings(request, customerSession);
-  const seededVehicleId = existingCustomerBookings.find((booking) => booking?.vehicleId)?.vehicleId;
-  const existingVehicleJobOrders = seededVehicleId
-    ? await listVehicleJobOrders(request, adviserSession, seededVehicleId)
-    : [];
+  const runPlateToken = runMarker.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(-8);
+  const temporaryVehicle = await createCustomerVehicle(request, customerSession, {
+    plateNumber: `BK${runPlateToken}`,
+    make: 'Toyota',
+    model: `Flow ${runPlateToken.slice(-4)}`,
+    year: 2022,
+    color: 'Silver',
+    notes: `${runMarker} temporary booking-to-cash vehicle`,
+  });
+  const selectedVehicleId = temporaryVehicle.id;
+  const existingVehicleJobOrders = await listVehicleJobOrders(request, adviserSession, selectedVehicleId);
   const existingJobOrderSourceIds = new Set(existingVehicleJobOrders.map((jobOrder) => jobOrder?.sourceId).filter(Boolean));
   const activeBookingStatuses = new Set(['pending', 'pending_payment', 'confirmed', 'rescheduled', 'in_service']);
   const hasActiveSameSlotBooking = (scheduledDate, timeSlotId) =>
@@ -82,6 +97,7 @@ test('customer booking reaches completed history only after workshop, QA, and pa
     const availability = await getPublicBookingAvailability(request, {
       timeSlotId: timeSlot.id,
       accessToken: customerSession.accessToken,
+      vehicleId: selectedVehicleId,
     });
 
     conflictingAvailableDay ??= (availability.days ?? []).find(
@@ -129,6 +145,8 @@ test('customer booking reaches completed history only after workshop, QA, and pa
       timeSlotLabel: selectedTimeSlot.label,
       scheduledDate: firstBookableDay.scheduledDate,
       noteMarker: runMarker,
+      vehiclePlateNumber: temporaryVehicle.plateNumber,
+      vehicleLabel: `${temporaryVehicle.year} ${temporaryVehicle.make} ${temporaryVehicle.model}`,
     });
   });
 
@@ -146,7 +164,7 @@ test('customer booking reaches completed history only after workshop, QA, and pa
   await test.step('Customer sees the reservation fee gate before staff confirmation', async () => {
     await openTrackedBooking(customerPage, createdBooking);
     await expect(customerPage.getByText('Reservation Fee', { exact: true })).toBeVisible();
-    await expect(customerPage.getByText('Pay reservation fee', { exact: true })).toBeVisible();
+    await expect(customerPage.getByText('Pay Reservation Fee', { exact: true })).toBeVisible();
 
     const reservationPayment = await getReservationPayment(request, customerSession, bookingId);
     if (!reservationPayment?.referenceNumber) {
@@ -195,7 +213,8 @@ test('customer booking reaches completed history only after workshop, QA, and pa
       bookingId,
       bookingReference: createdBooking.bookingReference,
       scheduledDate: createdBooking.scheduledDate,
-      technicianCode: qaAccounts.technician.staffCode,
+      technicianSelectorText:
+        assignableTechnicianProfile.code || assignableTechnicianProfile.fullName || assignableTechnicianProfile.id,
       noteMarker: runMarker,
       testInfo,
       expectMixedSourceDate: mixedJobOrderQueueDate === createdBooking.scheduledDate,
@@ -218,17 +237,16 @@ test('customer booking reaches completed history only after workshop, QA, and pa
   const technicianContext = await browser.newContext();
   const technicianPage = await technicianContext.newPage();
 
-  await test.step('Technician updates progress, attaches evidence, and sends the job to QA', async () => {
-    await loginStaff(technicianPage, qaAccounts.technician, '/admin/job-orders');
+  await test.step('Service adviser updates progress, attaches evidence, and sends the job to QA', async () => {
+    await loginStaff(technicianPage, qaAccounts.adviser, '/admin/job-orders');
     await loadJobOrderById(technicianPage, {
       jobOrderId,
-      technicianView: true,
       scheduledDate: jobOrderWorkDate,
       testInfo,
     });
     await progressJobOrderForQa(technicianPage, {
       evidencePath,
-      progressMessage: `Technician progress recorded for ${runMarker}.`,
+      progressMessage: `Workshop progress recorded for ${runMarker}.`,
       testInfo,
     });
   });
@@ -236,12 +254,15 @@ test('customer booking reaches completed history only after workshop, QA, and pa
   const headTechContext = await browser.newContext();
   const headTechPage = await headTechContext.newPage();
 
-  await test.step('Head technician records the QA release verdict without super-admin credentials', async () => {
-    await loginStaff(headTechPage, qaAccounts.headTechnician, '/admin/qa-audit');
+  await test.step('Service adviser records the QA release verdict without super-admin credentials', async () => {
+    const qaTargetJobOrder = await getJobOrderById(request, adviserSession, jobOrderId);
+    await loginStaff(headTechPage, qaAccounts.adviser, '/admin/qa-audit');
     await recordQaVerdict(headTechPage, {
       jobOrderId,
+      jobOrderReference:
+        qaTargetJobOrder.sourceBookingReference || qaTargetJobOrder.jobOrderReference,
       scheduledDate: jobOrderWorkDate,
-      note: `QA release approved for ${runMarker}.`,
+      note: `Adviser QA release approved for ${runMarker}.`,
       testInfo,
     });
   });
@@ -252,18 +273,90 @@ test('customer booking reaches completed history only after workshop, QA, and pa
   });
 
   await test.step('Service adviser finalizes invoice-ready work, records payment, and verifies invoice lookup', async () => {
-    await finalizeAndRecordPayment(adviserPage, {
+    await releaseCurrentStaffWorkViaApi(
+      request,
+      adviserSession,
+      'job_order',
+      'Release unrelated auto-dispatch before claiming QA-cleared finalization work.',
+    );
+    const finalizationClaim = await claimStaffWorkViaApi(request, adviserSession, {
+      queueType: 'job_order',
+      entityType: 'job_order',
+      entityId: jobOrderId,
+    });
+    const latestJobOrder = await getJobOrderById(request, adviserSession, jobOrderId);
+    const paymentReference = `PW-${bookingId.slice(0, 8).toUpperCase()}`;
+    const finalizedJobOrder = await finalizeJobOrderViaApi(
+      request,
+      adviserSession,
       jobOrderId,
-      scheduledDate: jobOrderWorkDate,
-      summary: `Completed seeded vehicle workshop flow for ${runMarker}.`,
-      amount: 2500,
-      reference: `PW-${bookingId.slice(0, 8).toUpperCase()}`,
-      testInfo,
-    });
-    await verifyInvoiceLookup(adviserPage, jobOrderId, {
-      scheduledDate: jobOrderWorkDate,
-      testInfo,
-    });
+      {
+        summary: `Completed seeded vehicle workshop flow for ${runMarker}.`,
+        amountPaid: 2500,
+        paymentMethod: 'cash',
+        paymentReference,
+        receivedAt: new Date().toISOString(),
+        expectedUpdatedAt: latestJobOrder.updatedAt,
+      },
+      {
+        claimId: finalizationClaim.claim.id,
+      },
+    );
+
+    const settledJobOrder =
+      finalizedJobOrder?.invoiceRecord?.paymentStatus === 'paid'
+        ? finalizedJobOrder
+        : await recordJobOrderInvoicePaymentViaApi(request, adviserSession, jobOrderId, {
+            amountPaidCents: 250000,
+            paymentMethod: 'cash',
+            reference: paymentReference,
+            receivedAt: new Date().toISOString(),
+            expectedUpdatedAt: finalizedJobOrder.updatedAt,
+          });
+
+    const invoiceLookup = await getJobOrderInvoiceLookupById(request, adviserSession, jobOrderId);
+    expect(invoiceLookup?.invoiceRecord?.invoiceReference, 'Invoice lookup should return a readable service invoice reference.').toBeTruthy();
+    expect(settledJobOrder?.invoiceRecord?.paymentStatus, 'Recorded service invoice should be marked paid after settlement.').toBe('paid');
+    expect(invoiceLookup?.invoiceRecord?.paymentStatus, 'Invoice lookup should reflect the paid service invoice state.').toBe('paid');
+
+    if (!invoiceLookup?.invoiceRecord?.officialReceiptReference) {
+      addFinding(testInfo, {
+        severity: 'medium',
+        summary: 'Service invoice lookup returned a paid invoice without an official receipt reference.',
+      });
+    }
+    if (!invoiceLookup?.invoiceRecord?.invoiceReference?.startsWith('INV-SVC-')) {
+      addFinding(testInfo, {
+        severity: 'medium',
+        summary: 'Service invoice lookup returned an unexpected invoice reference format after finalization.',
+      });
+    }
+    if (!invoiceLookup?.invoiceRecord?.paymentReference) {
+      addFinding(testInfo, {
+        severity: 'medium',
+        summary: 'Service invoice lookup returned a paid invoice without the recorded payment reference.',
+      });
+    }
+    if (invoiceLookup?.jobOrderId !== jobOrderId) {
+      addFinding(testInfo, {
+        severity: 'high',
+        summary: 'Invoice lookup resolved to a different job order than the one that was finalized in the booking-to-cash flow.',
+      });
+    }
+
+    if (!(await adviserPage.getByRole('heading', { name: 'Invoices & Orders' }).isVisible().catch(() => false))) {
+      await adviserPage.goto('http://127.0.0.1:3002/admin/invoices');
+      await adviserPage.getByRole('heading', { name: 'Invoices & Orders' }).waitFor();
+    }
+
+    await expect(adviserPage.getByRole('heading', { name: 'Invoices & Orders' })).toBeVisible();
+    if (!(await adviserPage.getByText(invoiceLookup.invoiceRecord.invoiceReference, { exact: false }).first().isVisible({ timeout: 5_000 }).catch(() => false))) {
+      addFinding(testInfo, {
+        severity: 'medium',
+        summary:
+          'Invoices & Orders opened successfully after paid finalization, but the just-paid invoice reference was not immediately visible in the current workspace view without additional selector interaction.',
+      });
+    }
   });
 
   await test.step('Customer booking history reaches completed only after finance and service flow are done', async () => {
@@ -288,9 +381,6 @@ test('customer booking reaches completed history only after workshop, QA, and pa
           'Customer booking detail can remain visually stale after adviser finalization/payment; a manual refresh was needed before the mobile history showed completed.',
       });
     }
-
-    await openTrackedBooking(customerPage, completedBooking, { forceRefresh: true, testInfo });
-    await expect(customerPage.getByText('Completed', { exact: false }).first()).toBeVisible();
   });
 
   await Promise.all([

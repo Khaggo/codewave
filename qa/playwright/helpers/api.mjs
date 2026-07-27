@@ -144,7 +144,7 @@ export async function getPublicBookingCatalog(request) {
   };
 }
 
-export async function getPublicBookingAvailability(request, { timeSlotId, accessToken }) {
+export async function getPublicBookingAvailability(request, { timeSlotId, accessToken, vehicleId }) {
   const today = new Date();
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14);
@@ -154,6 +154,10 @@ export async function getPublicBookingAvailability(request, { timeSlotId, access
     endDate: toIsoDate(end),
   });
 
+  if (vehicleId) {
+    params.set('vehicleId', vehicleId);
+  }
+
   const response = await request.get(buildApiUrl(`/api/bookings/availability?${params.toString()}`), {
     headers: accessToken
       ? {
@@ -162,6 +166,70 @@ export async function getPublicBookingAvailability(request, { timeSlotId, access
       : undefined,
   });
   return expectJson(response, 'Load booking availability');
+}
+
+export async function listCustomerVehicles(request, session) {
+  const response = await request.get(buildApiUrl(`/api/users/${session.user.id}/vehicles`), {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+  });
+
+  return expectJson(response, 'List customer vehicles');
+}
+
+export async function createCustomerVehicle(request, session, payload) {
+  const response = await request.post(buildApiUrl('/api/vehicles'), {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+    data: {
+      userId: session.user.id,
+      ...payload,
+    },
+  });
+
+  return expectJson(response, 'Create customer vehicle');
+}
+
+export async function createCustomerBooking(request, session, payload) {
+  const response = await request.post(buildApiUrl('/api/bookings'), {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+    data: {
+      userId: session.user.id,
+      ...payload,
+    },
+  });
+
+  return expectJson(response, 'Create customer booking');
+}
+
+export async function getAssignableTechnicianProfile(request, session) {
+  const response = await request.get(buildApiUrl('/api/admin/technician-profiles'), {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+  });
+
+  const profiles = await expectJson(response, 'List technician profiles');
+  const profile = Array.isArray(profiles)
+    ? profiles.find(
+        (entry) =>
+          entry?.id &&
+          entry?.isActive !== false &&
+          Array.isArray(entry?.specialties) &&
+          entry.specialties.length > 0,
+      )
+    : null;
+
+  expect(
+    profile,
+    'At least one active technician profile with a specialty is required for adviser-owned workshop QA flows.',
+  ).toBeTruthy();
+
+  return profile;
 }
 
 export async function listCustomerBookings(request, session) {
@@ -202,6 +270,107 @@ export async function listVehicleJobOrders(request, session, vehicleId) {
   });
 
   return expectJson(response, `List job orders for vehicle ${vehicleId}`);
+}
+
+export async function getJobOrderById(request, session, jobOrderId) {
+  const response = await request.get(buildApiUrl(`/api/job-orders/${jobOrderId}`), {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+  });
+
+  return expectJson(response, `Get job order ${jobOrderId}`);
+}
+
+export async function claimStaffWorkViaApi(
+  request,
+  session,
+  { queueType, entityType, entityId },
+) {
+  const response = await request.post(buildApiUrl(`/api/staff-work-queues/${queueType}/claims`), {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+    data: {
+      entityType,
+      entityId,
+    },
+  });
+
+  return expectJson(response, `Claim ${queueType} work ${entityId}`);
+}
+
+export async function releaseCurrentStaffWorkViaApi(
+  request,
+  session,
+  queueType,
+  reason = 'Playwright workflow handoff.',
+) {
+  const queueResponse = await request.get(
+    buildApiUrl(`/api/staff-work-queues/${queueType}?view=my&limit=25`),
+    {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    },
+  );
+  const queue = await expectJson(queueResponse, `Read current ${queueType} claim`);
+  const claimId = queue?.session?.currentClaimId;
+
+  if (!claimId) {
+    return null;
+  }
+
+  const releaseResponse = await request.post(
+    buildApiUrl(`/api/staff-work-queues/claims/${claimId}/release`),
+    {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+      data: { reason },
+    },
+  );
+
+  return expectJson(releaseResponse, `Release current ${queueType} claim`);
+}
+
+export async function finalizeJobOrderViaApi(
+  request,
+  session,
+  jobOrderId,
+  payload,
+  { claimId } = {},
+) {
+  const response = await request.post(buildApiUrl(`/api/job-orders/${jobOrderId}/finalize`), {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+      'X-Work-Claim-Id': claimId,
+    },
+    data: payload,
+  });
+
+  return expectJson(response, `Finalize job order ${jobOrderId}`);
+}
+
+export async function recordJobOrderInvoicePaymentViaApi(request, session, jobOrderId, payload) {
+  const response = await request.post(buildApiUrl(`/api/job-orders/${jobOrderId}/invoice/payments`), {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+    data: payload,
+  });
+
+  return expectJson(response, `Record invoice payment for job order ${jobOrderId}`);
+}
+
+export async function getJobOrderInvoiceLookupById(request, session, jobOrderId) {
+  const response = await request.get(buildApiUrl(`/api/job-orders/${jobOrderId}/invoice-record`), {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+  });
+
+  return expectJson(response, `Get invoice lookup for job order ${jobOrderId}`);
 }
 
 export async function pollUntil(label, action, predicate, { timeoutMs = 75_000, intervalMs = 1_500 } = {}) {

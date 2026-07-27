@@ -7,6 +7,7 @@ import { AppModule } from '../apps/main-service/src/app.module';
 import { backJobs, jobOrderQualityGates, jobOrders } from '../shared/db/schema';
 import { DRIZZLE_DB } from '../shared/db/database.constants';
 import type { AppDatabase } from '../shared/db/database.types';
+import { assertOperationalSafety, parseOperationalArgs } from './operational-safety';
 
 type CleanupArgs = {
   execute: boolean;
@@ -194,6 +195,12 @@ async function executeCleanup(db: AppDatabase, eligible: EligibleRecord[]) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const operationalArgs = parseOperationalArgs(process.argv.slice(2));
+  const safety = assertOperationalSafety({
+    command: 'cleanup:legacy-back-job-rework',
+    args: operationalArgs,
+    databaseUrl: process.env.DATABASE_URL,
+  });
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn'],
   });
@@ -207,6 +214,7 @@ async function main() {
       JSON.stringify(
         {
           mode: args.execute ? 'execute' : 'dry_run',
+          safety,
           filters: {
             jobOrderId: args.jobOrderId,
             backJobId: args.backJobId,
