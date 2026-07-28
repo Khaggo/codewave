@@ -1,7 +1,8 @@
-const INSURANCE_REQUEST_TIMEOUT_MS = 8000;
-const INSURANCE_CLIENT_RUNTIME_KEY = '__insuranceClientRuntime';
-
-let insuranceClientRuntimePromise = null;
+import {
+  buildAuthHeaders,
+  getInsuranceClientRuntime,
+  request,
+} from './insuranceTransport.js';
 
 const customerInsuranceStatusHints = {
   submitted: 'Your inquiry is recorded and waiting for staff review.',
@@ -30,13 +31,6 @@ const customerInsuranceDocumentTypeLabels = {
 
 const closedDocumentUploadStatuses = ['closed', 'rejected'];
 
-const buildAuthHeaders = (accessToken) =>
-  accessToken
-    ? {
-        Authorization: `Bearer ${accessToken}`,
-      }
-    : undefined;
-
 const trimOrNull = (value) => {
   const normalizedValue = String(value ?? '').trim();
   return normalizedValue ? normalizedValue : null;
@@ -44,129 +38,16 @@ const trimOrNull = (value) => {
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
-const getInsuranceClientRuntime = async () => {
-  if (globalThis[INSURANCE_CLIENT_RUNTIME_KEY]) {
-    return globalThis[INSURANCE_CLIENT_RUNTIME_KEY];
+export const createCustomerInsuranceRequestId = () => {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
   }
 
-  if (!insuranceClientRuntimePromise) {
-    insuranceClientRuntimePromise = import('./authClient.js');
-  }
-
-  return insuranceClientRuntimePromise;
-};
-
-const request = async (path, options = {}) => {
-  const { ApiError, getApiBaseUrl, notifyCustomerSessionExpired } = await getInsuranceClientRuntime();
-  const API_BASE_URL = getApiBaseUrl();
-  const {
-    body,
-    headers,
-    timeoutMs = INSURANCE_REQUEST_TIMEOUT_MS,
-    ...rest
-  } = options;
-  const abortController =
-    typeof AbortController === 'function' &&
-    Number.isFinite(timeoutMs) &&
-    timeoutMs > 0
-      ? new AbortController()
-      : null;
-  let timeoutId = null;
-
-  try {
-    const runRequest = async () => {
-      const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
-      const response = await fetch(`${API_BASE_URL}${path}`, {
-        ...rest,
-        signal: abortController?.signal,
-        headers: isFormData
-          ? { ...(headers ?? {}) }
-          : {
-              'Content-Type': 'application/json',
-              ...(headers ?? {}),
-            },
-        body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
-      });
-
-      const rawText = await response.text();
-      let data = null;
-
-      if (rawText) {
-        try {
-          data = JSON.parse(rawText);
-        } catch {
-          data = rawText;
-        }
-      }
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          notifyCustomerSessionExpired({
-            path,
-            source: 'insuranceClient',
-          });
-        }
-
-        const message =
-          data?.message && typeof data.message === 'string'
-            ? data.message
-            : `Request failed with status ${response.status}`;
-
-        throw new ApiError(message, response.status, data);
-      }
-
-      return data;
-    };
-
-    const timeoutPromise =
-      Number.isFinite(timeoutMs) && timeoutMs > 0
-        ? new Promise((_, reject) => {
-            timeoutId = setTimeout(() => {
-              abortController?.abort();
-              reject(
-                new ApiError(
-                  `Timed out reaching ${API_BASE_URL}${path} after ${timeoutMs}ms. Check EXPO_PUBLIC_API_BASE_URL for the current device.`,
-                  0,
-                  {
-                    path,
-                    apiBaseUrl: API_BASE_URL,
-                    timeoutMs,
-                    reason: 'timeout',
-                  },
-                ),
-              );
-            }, timeoutMs);
-          })
-        : null;
-
-    return timeoutPromise
-      ? await Promise.race([runRequest(), timeoutPromise])
-      : await runRequest();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-
-    const errorMessage =
-      error instanceof Error && error.message
-        ? error.message
-        : 'Unable to reach the API server.';
-
-    throw new ApiError(
-      `Unable to reach ${API_BASE_URL}${path}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
-      0,
-      {
-        path,
-        apiBaseUrl: API_BASE_URL,
-        timeoutMs,
-        reason: 'network',
-      },
-    );
-  } finally {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (token) => {
+    const randomValue = Math.floor(Math.random() * 16);
+    const value = token === 'x' ? randomValue : (randomValue & 0x3) | 0x8;
+    return value.toString(16);
+  });
 };
 
 const buildCustomerInsuranceStatusHint = (status) =>
@@ -206,11 +87,14 @@ export const buildOwnedVehicleInsuranceLabel = (vehicle) => {
 };
 
 export const createInitialCustomerInsuranceDraft = () => ({
+  clientRequestId: createCustomerInsuranceRequestId(),
   purpose: 'claim',
   inquiryType: 'comprehensive',
   description: '',
   providerName: '',
   policyNumber: '',
+  incidentOccurredAt: '',
+  incidentLocation: '',
   notes: '',
   renewalPolicyMode: 'reuse',
 });
@@ -232,15 +116,26 @@ export const normalizeCustomerInsuranceDocument = (document) => {
 
   return {
     id: document.id ?? null,
-    inquiryId: document.inquiryId ?? null,
     fileName: String(document.fileName ?? '').trim(),
     fileUrl: String(document.fileUrl ?? '').trim(),
     documentType: document.documentType ?? 'other',
     documentTypeLabel: humanizeDocumentType(document.documentType),
     notes: trimOrNull(document.notes),
-    uploadedByUserId: document.uploadedByUserId ?? null,
     createdAt: document.createdAt ?? null,
     updatedAt: document.updatedAt ?? null,
+  };
+};
+
+export const normalizeCustomerInsuranceActivity = (activity) => {
+  if (!activity || typeof activity !== 'object') {
+    return null;
+  }
+
+  return {
+    action: String(activity.action ?? '').trim(),
+    documentType: trimOrNull(activity.documentType),
+    customerMessage: trimOrNull(activity.customerMessage),
+    createdAt: activity.createdAt ?? null,
   };
 };
 
@@ -252,10 +147,16 @@ export const normalizeCustomerInsuranceInquiry = (inquiry) => {
   const documents = asArray(inquiry.documents)
     .map(normalizeCustomerInsuranceDocument)
     .filter(Boolean);
+  const activities = asArray(inquiry.activities)
+    .map(normalizeCustomerInsuranceActivity)
+    .filter(Boolean);
+  const latestCustomerMessage =
+    [...activities]
+      .reverse()
+      .find((activity) => activity.customerMessage)?.customerMessage ?? null;
 
   return {
     id: inquiry.id ?? null,
-    userId: inquiry.userId ?? null,
     vehicleId: inquiry.vehicleId ?? null,
     inquiryType: inquiry.inquiryType ?? 'comprehensive',
     inquiryTypeLabel: humanizeInquiryType(inquiry.inquiryType),
@@ -269,13 +170,16 @@ export const normalizeCustomerInsuranceInquiry = (inquiry) => {
     renewalStatus: inquiry.renewalStatus ?? 'not_applicable',
     providerName: trimOrNull(inquiry.providerName),
     policyNumber: trimOrNull(inquiry.policyNumber),
+    incidentOccurredAt: inquiry.incidentOccurredAt ?? null,
+    incidentLocation: trimOrNull(inquiry.incidentLocation),
     notes: trimOrNull(inquiry.notes),
-    reviewNotes: trimOrNull(inquiry.reviewNotes),
+    latestCustomerMessage,
     paymentDueAt: inquiry.paymentDueAt ?? null,
     policyExpiryAt: inquiry.policyExpiryAt ?? null,
     renewalDueAt: inquiry.renewalDueAt ?? null,
     documentCount: documents.length,
     documents,
+    activities,
     canAttachDocuments: !closedDocumentUploadStatuses.includes(inquiry.status),
     createdAt: inquiry.createdAt ?? null,
     updatedAt: inquiry.updatedAt ?? null,
@@ -288,10 +192,6 @@ export const normalizeCustomerInsuranceRecord = (record) => {
   }
 
   return {
-    id: record.id ?? null,
-    inquiryId: record.inquiryId ?? null,
-    userId: record.userId ?? null,
-    vehicleId: record.vehicleId ?? null,
     inquiryType: record.inquiryType ?? 'comprehensive',
     inquiryTypeLabel: humanizeInquiryType(record.inquiryType),
     status: record.status ?? 'submitted',
@@ -335,12 +235,15 @@ export const createEmptyCustomerInsuranceSnapshot = ({
 export const createInsuranceInquiry = async ({
   userId,
   vehicleId,
+  clientRequestId,
   purpose,
   inquiryType,
   subject,
   description,
   providerName,
   policyNumber,
+  incidentOccurredAt,
+  incidentLocation,
   notes,
   accessToken,
 }) => {
@@ -369,16 +272,75 @@ export const createInsuranceInquiry = async ({
       body: {
         userId,
         vehicleId,
+        clientRequestId: trimOrNull(clientRequestId) ?? createCustomerInsuranceRequestId(),
         inquiryType,
         purpose: trimOrNull(purpose) ?? 'quotation',
         subject: String(subject ?? '').trim(),
         description: String(description ?? '').trim(),
         providerName: trimOrNull(providerName) ?? undefined,
         policyNumber: trimOrNull(policyNumber) ?? undefined,
+        incidentOccurredAt: trimOrNull(incidentOccurredAt) ?? undefined,
+        incidentLocation: trimOrNull(incidentLocation) ?? undefined,
         notes: trimOrNull(notes) ?? undefined,
       },
     }),
   );
+};
+
+export const listMyInsuranceInquiries = async ({
+  vehicleId,
+  status,
+  cursor,
+  limit = 20,
+  accessToken,
+}) => {
+  const query = [
+    vehicleId ? `vehicleId=${encodeURIComponent(vehicleId)}` : '',
+    status ? `status=${encodeURIComponent(status)}` : '',
+    cursor ? `cursor=${encodeURIComponent(cursor)}` : '',
+    `limit=${Math.min(50, Math.max(1, Number(limit) || 20))}`,
+  ]
+    .filter(Boolean)
+    .join('&');
+  const response = await request(`/api/insurance/inquiries/mine?${query}`, {
+    method: 'GET',
+    headers: buildAuthHeaders(accessToken),
+  });
+
+  return {
+    items: asArray(response?.items)
+      .map(normalizeCustomerInsuranceInquiry)
+      .filter(Boolean),
+    page: {
+      limit: Number(response?.page?.limit) || limit,
+      hasNext: Boolean(response?.page?.hasNext),
+      nextCursor: trimOrNull(response?.page?.nextCursor),
+    },
+  };
+};
+
+export const getInsuranceRequirements = async ({
+  purpose,
+  inquiryType,
+  accessToken,
+}) => {
+  const query = [
+    `purpose=${encodeURIComponent(purpose || 'quotation')}`,
+    inquiryType ? `inquiryType=${encodeURIComponent(inquiryType)}` : '',
+  ]
+    .filter(Boolean)
+    .join('&');
+  const response = await request(`/api/insurance/requirements?${query}`, {
+    method: 'GET',
+    headers: buildAuthHeaders(accessToken),
+  });
+
+  return {
+    purpose: response?.purpose ?? purpose ?? 'quotation',
+    inquiryType: response?.inquiryType ?? inquiryType ?? null,
+    requiredDocumentTypes: asArray(response?.requiredDocumentTypes),
+    optionalDocumentTypes: asArray(response?.optionalDocumentTypes),
+  };
 };
 
 export const getInsuranceInquiryById = async ({ inquiryId, accessToken }) => {

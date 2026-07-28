@@ -60,7 +60,7 @@ test('mobile app persists and restores the active session across refreshes', () 
   }
 })
 
-test('mobile garage supports adding another vehicle, paginating the garage, and rendering the approved customer summary', () => {
+test('mobile garage supports vehicle creation, bounded timeline paging, and customer-safe summaries', () => {
   const source = read('./VehicleLifecycleScreen.js')
 
   const requiredFragments = [
@@ -71,9 +71,15 @@ test('mobile garage supports adding another vehicle, paginating the garage, and 
     '{Math.min((vehiclePage + 1) * GARAGE_PAGE_SIZE, vehicles.length)} of {vehicles.length} vehicles',
     '<Text style={styles.vehiclePagerButtonText}>Prev</Text>',
     '<Text style={styles.vehiclePagerButtonText}>Next</Text>',
-    '<Text style={styles.summaryProofTitle}>Customer-visible reviewed summary</Text>',
-    '<Text style={styles.summaryProofText}>{snapshot.summaryCard.summaryText}</Text>',
-    '<Text style={styles.modalTitle}>Add another vehicle</Text>',
+    'getCustomerGarageSummary({',
+    'listCustomerVehicleTimelinePage({',
+    'limit: 20,',
+    'cursor: snapshot.page.nextCursor,',
+    'setIsLoadingMore(true);',
+    'Load more',
+    '<Text style={styles.summaryProofTitle}>Service summary</Text>',
+    '<Text style={styles.modalTitle}>Add vehicle</Text>',
+    'accessibilityLiveRegion="assertive"',
   ]
 
   for (const fragment of requiredFragments) {

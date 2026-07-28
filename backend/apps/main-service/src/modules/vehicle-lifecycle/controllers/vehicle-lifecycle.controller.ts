@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import {
   ApiBearerAuth,
@@ -17,6 +17,9 @@ import { Roles } from '@main-modules/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 
+import { CustomerGarageSummaryResponseDto } from '../dto/customer-garage-summary-response.dto';
+import { CustomerVehicleTimelinePageResponseDto } from '../dto/customer-vehicle-timeline-response.dto';
+import { ListCustomerVehicleTimelineQueryDto } from '../dto/list-customer-vehicle-timeline-query.dto';
 import { ReviewVehicleLifecycleSummaryDto } from '../dto/review-vehicle-lifecycle-summary.dto';
 import { VehicleLifecycleSummaryResponseDto } from '../dto/vehicle-lifecycle-summary-response.dto';
 import { VehicleTimelineEventResponseDto } from '../dto/vehicle-timeline-event-response.dto';
@@ -26,6 +29,59 @@ import { VehicleLifecycleService } from '../services/vehicle-lifecycle.service';
 @Controller()
 export class VehicleLifecycleController {
   constructor(private readonly vehicleLifecycleService: VehicleLifecycleService) {}
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer')
+  @Get('vehicles/:id/garage-summary')
+  @ApiOperation({ summary: 'Get a customer-safe operational summary for one owned vehicle.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Vehicle identifier.',
+    example: '7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d',
+  })
+  @ApiOkResponse({
+    description: 'Vehicle, active booking, workshop, and insurance summary.',
+    type: CustomerGarageSummaryResponseDto,
+  })
+  @ApiForbiddenResponse({ description: 'Customers can only access summaries for their own vehicles.' })
+  @ApiNotFoundResponse({ description: 'Vehicle not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  getCustomerGarageSummary(@Param('id') id: string, @Req() request: Request) {
+    return this.vehicleLifecycleService.getCustomerGarageSummary(
+      id,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer')
+  @Get('vehicles/:id/customer-timeline')
+  @ApiOperation({ summary: 'Get a bounded customer-safe lifecycle timeline for a vehicle.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    description: 'Vehicle identifier.',
+    example: '7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d',
+  })
+  @ApiOkResponse({
+    description: 'Customer-safe lifecycle events with stable keyset pagination.',
+    type: CustomerVehicleTimelinePageResponseDto,
+  })
+  @ApiForbiddenResponse({ description: 'Customers can only access timelines for their own vehicles.' })
+  @ApiNotFoundResponse({ description: 'Vehicle not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  listCustomerTimeline(
+    @Param('id') id: string,
+    @Query() query: ListCustomerVehicleTimelineQueryDto,
+    @Req() request: Request,
+  ) {
+    return this.vehicleLifecycleService.listCustomerTimeline(
+      id,
+      query,
+      request.user as { userId: string; role: string },
+    );
+  }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('customer', 'service_adviser', 'super_admin')

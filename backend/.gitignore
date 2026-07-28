@@ -3,6 +3,5 @@ dist
 .env
 .env.railway
 coverage
-drizzle
 .runtime
 .runtime-*

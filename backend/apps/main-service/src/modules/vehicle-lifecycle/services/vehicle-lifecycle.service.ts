@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
 import { InspectionsRepository } from '@main-modules/inspections/repositories/inspections.repository';
 import { InsuranceRepository } from '@main-modules/insurance/repositories/insurance.repository';
@@ -24,12 +23,11 @@ import {
 } from '@shared/queue/ai-worker.constants';
 import { AiWorkerJobMetadata, createQueuedAiJobMetadata } from '@shared/queue/ai-worker.types';
 import { toBullSafeJobId } from '@shared/queue/queue-job-id.util';
-
 import { AppendVehicleTimelineEventDto } from '../dto/append-vehicle-timeline-event.dto';
+import { ListCustomerVehicleTimelineQueryDto } from '../dto/list-customer-vehicle-timeline-query.dto';
 import { ReviewVehicleLifecycleSummaryDto } from '../dto/review-vehicle-lifecycle-summary.dto';
 import { VehicleLifecycleRepository } from '../repositories/vehicle-lifecycle.repository';
 import { VehicleLifecycleSummaryProviderService } from './vehicle-lifecycle-summary-provider.service';
-
 type LifecycleActor = {
   userId: string;
   role: string;
@@ -39,8 +37,76 @@ type JobOrderRecord = Awaited<ReturnType<JobOrdersRepository['findById']>>;
 type QualityGateRecord = Awaited<ReturnType<QualityGatesRepository['findByJobOrderId']>>;
 type VehicleLifecycleSummaryRecord = Awaited<ReturnType<VehicleLifecycleRepository['findSummaryById']>>;
 
+const CUSTOMER_TIMELINE_REFRESH_TTL_MS = 5 * 60 * 1000;
+
+const customerTimelineCopy: Record<string, { title: string; summary: string }> = {
+  booking_created: {
+    title: 'Booking requested',
+    summary: 'Your service booking was added to the schedule.',
+  },
+  booking_confirmed: {
+    title: 'Booking confirmed',
+    summary: 'The workshop confirmed your service booking.',
+  },
+  booking_rescheduled: {
+    title: 'Booking rescheduled',
+    summary: 'Your service booking schedule was updated.',
+  },
+  booking_completed: {
+    title: 'Booking completed',
+    summary: 'The scheduled service visit was completed.',
+  },
+  inspection_completion_completed: {
+    title: 'Inspection completed',
+    summary: 'The workshop completed the vehicle inspection.',
+  },
+  job_order_created: {
+    title: 'Workshop job created',
+    summary: 'A workshop job was created for your vehicle.',
+  },
+  job_order_assigned: {
+    title: 'Workshop job assigned',
+    summary: 'The service work was assigned for workshop handling.',
+  },
+  job_order_in_progress: {
+    title: 'Service work in progress',
+    summary: 'The workshop is currently working on your vehicle.',
+  },
+  job_order_completed: {
+    title: 'Service work completed',
+    summary: 'The workshop marked the service work as complete.',
+  },
+  job_order_finalized: {
+    title: 'Service finalized',
+    summary: 'The workshop finalized the completed service.',
+  },
+  quality_gate_passed: {
+    title: 'Quality review passed',
+    summary: 'The completed service passed the workshop quality review.',
+  },
+  quality_gate_blocked: {
+    title: 'Correction in progress',
+    summary: 'The quality review returned the service for a workshop correction.',
+  },
+  quality_gate_overridden: {
+    title: 'Quality review completed',
+    summary: 'An authorized quality review decision was recorded.',
+  },
+  insurance_inquiry_submitted: {
+    title: 'Insurance request submitted',
+    summary: 'Your insurance request was submitted for staff review.',
+  },
+  lifecycle_summary_approved: {
+    title: 'Service summary available',
+    summary: 'A reviewed service summary is now available for your vehicle.',
+  },
+};
+
 @Injectable()
 export class VehicleLifecycleService {
+  private readonly customerTimelineRefreshedAt = new Map<string, number>();
+  private readonly customerTimelineRefreshes = new Map<string, Promise<void>>();
+
   constructor(
     private readonly vehicleLifecycleRepository: VehicleLifecycleRepository,
     private readonly vehiclesService: VehiclesService,
@@ -60,6 +126,110 @@ export class VehicleLifecycleService {
     await this.refreshVehicleTimeline(vehicleId);
 
     return this.vehicleLifecycleRepository.findByVehicleId(vehicleId);
+  }
+
+  async listCustomerTimeline(
+    vehicleId: string,
+    query: ListCustomerVehicleTimelineQueryDto,
+    actor: LifecycleActor,
+  ) {
+    if (actor.role !== 'customer') {
+      throw new ForbiddenException('Only customers can access the customer vehicle timeline');
+    }
+
+    await this.vehiclesService.findById(vehicleId, actor);
+    await this.ensureCustomerTimelineFresh(vehicleId);
+
+    const limit = query.limit ?? 20;
+    const page = await this.vehicleLifecycleRepository.listCustomerPage({
+      vehicleId,
+      sourceType: query.sourceType,
+      cursor: this.decodeCustomerTimelineCursor(query.cursor),
+      limit,
+    });
+    const lastItem = page.items[page.items.length - 1];
+
+    return {
+      items: page.items.map((event) => this.presentCustomerTimelineEvent(event)),
+      page: {
+        limit,
+        hasNext: page.hasNext,
+        nextCursor:
+          page.hasNext && lastItem
+            ? this.encodeCustomerTimelineCursor(lastItem.occurredAt, lastItem.id)
+            : null,
+      },
+    };
+  }
+
+  async getCustomerGarageSummary(vehicleId: string, actor: LifecycleActor) {
+    if (actor.role !== 'customer') {
+      throw new ForbiddenException('Only customers can access the customer garage summary');
+    }
+
+    const vehicle = await this.vehiclesService.findById(vehicleId, actor);
+    const [bookings, jobOrders, insuranceInquiries, insuranceRecords] = await Promise.all([
+      this.bookingsRepository.findByVehicleId(vehicleId),
+      this.jobOrdersRepository.findByVehicleId(vehicleId),
+      this.insuranceRepository?.findInquiriesByVehicleId(vehicleId) ?? [],
+      this.insuranceRepository?.findRecordsByVehicleId(vehicleId) ?? [],
+    ]);
+    const activeBooking = bookings.find(
+      (booking) => !['completed', 'cancelled', 'declined'].includes(booking.status),
+    );
+    const latestJob = [...jobOrders].sort(
+      (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    )[0];
+    const lastCompletedService = [...jobOrders]
+      .filter((jobOrder) => jobOrder.status === 'finalized')
+      .sort(
+        (left, right) =>
+          new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+      )[0];
+    const latestInsuranceInquiry = insuranceInquiries[0];
+    const latestInsuranceRecord = insuranceRecords[0];
+
+    const presentJob = (jobOrder: (typeof jobOrders)[number] | undefined) =>
+      jobOrder
+        ? {
+            status: jobOrder.status,
+            workshopStage: jobOrder.currentWorkshopStage ?? null,
+            invoiceReference: jobOrder.invoiceRecord?.invoiceReference ?? null,
+            updatedAt: new Date(jobOrder.updatedAt).toISOString(),
+          }
+        : null;
+
+    return {
+      vehicle: {
+        id: vehicle.id,
+        plateNumber: vehicle.plateNumber,
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year,
+        color: vehicle.color ?? null,
+      },
+      activeBooking: activeBooking
+        ? {
+            reference: activeBooking.bookingReference,
+            status: activeBooking.status,
+            scheduledDate: activeBooking.scheduledDate,
+          }
+        : null,
+      latestJob: presentJob(latestJob),
+      lastCompletedService: presentJob(lastCompletedService),
+      insurance: latestInsuranceRecord || latestInsuranceInquiry
+        ? {
+            status: latestInsuranceRecord?.status ?? latestInsuranceInquiry?.status ?? 'submitted',
+            providerName:
+              latestInsuranceRecord?.providerName ?? latestInsuranceInquiry?.providerName ?? null,
+            policyNumber:
+              latestInsuranceRecord?.policyNumber ?? latestInsuranceInquiry?.policyNumber ?? null,
+            policyExpiryAt: latestInsuranceInquiry?.policyExpiryAt
+              ? new Date(latestInsuranceInquiry.policyExpiryAt).toISOString()
+              : null,
+          }
+        : null,
+    };
   }
 
   async findLatestCustomerVisibleSummary(vehicleId: string, actor?: LifecycleActor) {
@@ -352,6 +522,94 @@ export class VehicleLifecycleService {
 
     await this.vehicleLifecycleRepository.replaceForVehicle(vehicleId, timelineEvents);
     return timelineEvents;
+  }
+
+  private async ensureCustomerTimelineFresh(vehicleId: string) {
+    const refreshedAt = this.customerTimelineRefreshedAt.get(vehicleId) ?? 0;
+    if (Date.now() - refreshedAt < CUSTOMER_TIMELINE_REFRESH_TTL_MS) {
+      return;
+    }
+
+    const existingRefresh = this.customerTimelineRefreshes.get(vehicleId);
+    if (existingRefresh) {
+      return existingRefresh;
+    }
+
+    const refresh = this.refreshVehicleTimeline(vehicleId)
+      .then(() => {
+        this.customerTimelineRefreshedAt.set(vehicleId, Date.now());
+      })
+      .finally(() => {
+        this.customerTimelineRefreshes.delete(vehicleId);
+      });
+    this.customerTimelineRefreshes.set(vehicleId, refresh);
+    await refresh;
+  }
+
+  private presentCustomerTimelineEvent(event: {
+    eventType: string;
+    sourceType: string;
+    verified: boolean;
+    occurredAt: Date | string;
+  }) {
+    const copy = customerTimelineCopy[event.eventType] ?? {
+      title: this.humanizeTimelineEventType(event.eventType),
+      summary: 'A new vehicle service update was recorded.',
+    };
+
+    return {
+      eventType: event.eventType,
+      sourceType: event.eventType.startsWith('insurance_') ? 'insurance' : event.sourceType,
+      title: copy.title,
+      summary: copy.summary,
+      verified: event.verified,
+      occurredAt: new Date(event.occurredAt).toISOString(),
+    };
+  }
+
+  private humanizeTimelineEventType(eventType: string) {
+    return eventType.split('_').filter(Boolean)
+      .map((segment) => `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`).join(' ');
+  }
+  private encodeCustomerTimelineCursor(occurredAt: Date | string, id: string) {
+    return Buffer.from(
+      JSON.stringify({
+        v: 1,
+        occurredAt: new Date(occurredAt).toISOString(),
+        id,
+      }),
+      'utf8',
+    ).toString('base64url');
+  }
+
+  private decodeCustomerTimelineCursor(cursor?: string) {
+    if (!cursor) {
+      return undefined;
+    }
+
+    try {
+      const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
+        v?: unknown;
+        occurredAt?: unknown;
+        id?: unknown;
+      };
+      const occurredAt = new Date(String(parsed.occurredAt ?? ''));
+      if (
+        parsed.v !== 1 ||
+        Number.isNaN(occurredAt.getTime()) ||
+        typeof parsed.id !== 'string' ||
+        !parsed.id
+      ) {
+        throw new Error('Invalid cursor');
+      }
+
+      return {
+        occurredAt,
+        id: parsed.id,
+      };
+    } catch {
+      throw new BadRequestException('Vehicle timeline cursor is invalid or expired');
+    }
   }
 
   private buildJobOrderTimelineEvents(jobOrder: JobOrderRecord, qualityGate: QualityGateRecord | null) {

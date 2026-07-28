@@ -130,6 +130,75 @@ describe('VehicleLifecycleController integration', () => {
         return left.dedupeKey.localeCompare(right.dedupeKey);
       });
       expect(occurredAtValues).toEqual(sortedValues);
+
+      const customerTimelineFirstPage = await request(app.getHttpServer())
+        .get(`/api/vehicles/${vehicleResponse.body.id}/customer-timeline`)
+        .query({ limit: 2 })
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+      expect(customerTimelineFirstPage.status).toBe(200);
+      expect(customerTimelineFirstPage.body.items).toHaveLength(2);
+      expect(customerTimelineFirstPage.body.page).toEqual(
+        expect.objectContaining({
+          limit: 2,
+          hasNext: true,
+          nextCursor: expect.any(String),
+        }),
+      );
+      for (const event of customerTimelineFirstPage.body.items) {
+        expect(event).not.toHaveProperty('id');
+        expect(event).not.toHaveProperty('vehicleId');
+        expect(event).not.toHaveProperty('sourceId');
+        expect(event).not.toHaveProperty('actorUserId');
+        expect(event).not.toHaveProperty('dedupeKey');
+        expect(event).not.toHaveProperty('notes');
+      }
+
+      const customerTimelineSecondPage = await request(app.getHttpServer())
+        .get(`/api/vehicles/${vehicleResponse.body.id}/customer-timeline`)
+        .query({
+          limit: 2,
+          cursor: customerTimelineFirstPage.body.page.nextCursor,
+        })
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+      expect(customerTimelineSecondPage.status).toBe(200);
+      expect(customerTimelineSecondPage.body.items.length).toBeLessThanOrEqual(2);
+
+      const customerInspectionTimeline = await request(app.getHttpServer())
+        .get(`/api/vehicles/${vehicleResponse.body.id}/customer-timeline`)
+        .query({ limit: 20, sourceType: 'inspection' })
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+      expect(customerInspectionTimeline.status).toBe(200);
+      expect(customerInspectionTimeline.body.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            eventType: 'inspection_completion_completed',
+            sourceType: 'inspection',
+            title: 'Inspection completed',
+          }),
+        ]),
+      );
+
+      const garageSummaryResponse = await request(app.getHttpServer())
+        .get(`/api/vehicles/${vehicleResponse.body.id}/garage-summary`)
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
+      expect(garageSummaryResponse.status).toBe(200);
+      expect(garageSummaryResponse.body).toEqual(
+        expect.objectContaining({
+          vehicle: expect.objectContaining({
+            id: vehicleResponse.body.id,
+            plateNumber: 'LFC1234',
+            make: 'Toyota',
+            model: 'Vios',
+          }),
+          activeBooking: expect.objectContaining({
+            reference: bookingResponse.body.bookingReference,
+            status: 'confirmed',
+          }),
+          latestJob: null,
+          lastCompletedService: null,
+          insurance: null,
+        }),
+      );
     } finally {
       await app.close();
     }

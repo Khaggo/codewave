@@ -73,38 +73,50 @@ export const insuranceRenewalStatusEnum = pgEnum('insurance_renewal_status', [
   'cancelled',
 ]);
 
-export const insuranceInquiries = pgTable('insurance_inquiries', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  vehicleId: uuid('vehicle_id')
-    .notNull()
-    .references(() => vehicles.id, { onDelete: 'cascade' }),
-  inquiryType: insuranceInquiryTypeEnum('inquiry_type').notNull(),
-  purpose: insuranceCasePurposeEnum('purpose').notNull().default('quotation'),
-  subject: varchar('subject', { length: 180 }).notNull(),
-  description: text('description').notNull(),
-  providerName: varchar('provider_name', { length: 180 }),
-  policyNumber: varchar('policy_number', { length: 120 }),
-  notes: text('notes'),
-  status: insuranceInquiryStatusEnum('status').notNull().default('submitted'),
-  documentStatus: insuranceDocumentReviewStatusEnum('document_status').notNull().default('incomplete'),
-  paymentStatus: insurancePaymentStatusEnum('payment_status').notNull().default('not_required'),
-  renewalStatus: insuranceRenewalStatusEnum('renewal_status').notNull().default('not_applicable'),
-  assignedStaffId: uuid('assigned_staff_id').references(() => users.id, { onDelete: 'set null' }),
-  paymentDueAt: timestamp('payment_due_at', { withTimezone: true }),
-  policyExpiryAt: timestamp('policy_expiry_at', { withTimezone: true }),
-  renewalDueAt: timestamp('renewal_due_at', { withTimezone: true }),
-  reviewNotes: text('review_notes'),
-  createdByUserId: uuid('created_by_user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'restrict' }),
-  reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
-  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const insuranceInquiries = pgTable(
+  'insurance_inquiries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    vehicleId: uuid('vehicle_id')
+      .notNull()
+      .references(() => vehicles.id, { onDelete: 'cascade' }),
+    clientRequestId: uuid('client_request_id'),
+    inquiryType: insuranceInquiryTypeEnum('inquiry_type').notNull(),
+    purpose: insuranceCasePurposeEnum('purpose').notNull().default('quotation'),
+    subject: varchar('subject', { length: 180 }).notNull(),
+    description: text('description').notNull(),
+    providerName: varchar('provider_name', { length: 180 }),
+    policyNumber: varchar('policy_number', { length: 120 }),
+    incidentOccurredAt: timestamp('incident_occurred_at', { withTimezone: true }),
+    incidentLocation: varchar('incident_location', { length: 255 }),
+    notes: text('notes'),
+    status: insuranceInquiryStatusEnum('status').notNull().default('submitted'),
+    documentStatus: insuranceDocumentReviewStatusEnum('document_status').notNull().default('incomplete'),
+    paymentStatus: insurancePaymentStatusEnum('payment_status').notNull().default('not_required'),
+    renewalStatus: insuranceRenewalStatusEnum('renewal_status').notNull().default('not_applicable'),
+    assignedStaffId: uuid('assigned_staff_id').references(() => users.id, { onDelete: 'set null' }),
+    paymentDueAt: timestamp('payment_due_at', { withTimezone: true }),
+    policyExpiryAt: timestamp('policy_expiry_at', { withTimezone: true }),
+    renewalDueAt: timestamp('renewal_due_at', { withTimezone: true }),
+    reviewNotes: text('review_notes'),
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    insuranceInquiryClientRequestUnique: uniqueIndex('insurance_inquiries_user_client_request_idx').on(
+      table.userId,
+      table.clientRequestId,
+    ),
+  }),
+);
 
 export const insuranceDocuments = pgTable('insurance_documents', {
   id: uuid('id').defaultRandom().primaryKey(),

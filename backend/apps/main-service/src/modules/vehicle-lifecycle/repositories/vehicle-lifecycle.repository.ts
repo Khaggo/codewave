@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, like, lt, or } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -7,6 +7,7 @@ import { AppDatabase } from '@shared/db/database.types';
 import { AiWorkerJobMetadata } from '@shared/queue/ai-worker.types';
 
 import { AppendVehicleTimelineEventDto } from '../dto/append-vehicle-timeline-event.dto';
+import { customerVehicleTimelineSourceTypes } from '../dto/list-customer-vehicle-timeline-query.dto';
 import {
   vehicleLifecycleSummaries,
   VehicleLifecycleSummaryProvenance,
@@ -103,6 +104,57 @@ export class VehicleLifecycleRepository extends BaseRepository {
       where: eq(vehicleTimelineEvents.vehicleId, vehicleId),
       orderBy: [asc(vehicleTimelineEvents.occurredAt), asc(vehicleTimelineEvents.dedupeKey)],
     });
+  }
+
+  async listCustomerPage({
+    vehicleId,
+    sourceType,
+    cursor,
+    limit,
+  }: {
+    vehicleId: string;
+    sourceType?: (typeof customerVehicleTimelineSourceTypes)[number];
+    cursor?: { occurredAt: Date; id: string };
+    limit: number;
+  }) {
+    const sourceCondition =
+      sourceType === 'insurance'
+        ? like(vehicleTimelineEvents.eventType, 'insurance_%')
+        : sourceType
+          ? eq(vehicleTimelineEvents.sourceType, sourceType)
+          : or(
+              inArray(vehicleTimelineEvents.sourceType, [
+                'booking',
+                'inspection',
+                'job_order',
+                'quality_gate',
+                'lifecycle_summary',
+              ]),
+              like(vehicleTimelineEvents.eventType, 'insurance_%'),
+            );
+    const events = await this.db.query.vehicleTimelineEvents.findMany({
+      where: and(
+        eq(vehicleTimelineEvents.vehicleId, vehicleId),
+        sourceCondition,
+        cursor
+          ? or(
+              lt(vehicleTimelineEvents.occurredAt, cursor.occurredAt),
+              and(
+                eq(vehicleTimelineEvents.occurredAt, cursor.occurredAt),
+                lt(vehicleTimelineEvents.id, cursor.id),
+              ),
+            )
+          : undefined,
+      ),
+      orderBy: [desc(vehicleTimelineEvents.occurredAt), desc(vehicleTimelineEvents.id)],
+      limit: limit + 1,
+    });
+    const hasNext = events.length > limit;
+
+    return {
+      items: hasNext ? events.slice(0, limit) : events,
+      hasNext,
+    };
   }
 
   async createSummary(payload: CreateVehicleLifecycleSummaryInput) {

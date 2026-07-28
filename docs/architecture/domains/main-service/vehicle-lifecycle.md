@@ -58,6 +58,10 @@ Key relations:
 - queue layman-friendly AI summary generation on the shared `ai-worker-jobs` BullMQ lane and expose `generationJob` metadata on the lifecycle summary record
 - hide AI summaries from customers until a reviewer approves them
 - expose an ordered timeline view for vehicle history consumers
+- expose a customer-only timeline projection with stable keyset pagination, a default 20-item page, and source filters
+- exclude raw source identifiers, staff notes, and unsupported manual events from customer timeline responses
+- expose a customer-safe Garage summary for current booking, workshop, and insurance state
+- bound projection refresh work with a short refresh window so repeated reads do not rebuild the entire timeline
 - prevent duplicate timeline entries during retries or replays
 
 ## Process Flow
@@ -69,7 +73,8 @@ Key relations:
 5. Optional AI summary generation creates a queued draft and enqueues `generate-vehicle-lifecycle-summary` on the shared AI worker queue.
 6. Successful worker completion moves the summary to `pending_review`; worker failure moves it to `generation_failed` with visible metadata.
 7. Customer visibility changes only after human review approval.
-8. The projection is refreshed and returned for UI consumption.
+8. Staff reads may use the complete internal timeline. Customer reads use the bounded customer projection and receive only safe display fields.
+9. The mobile Garage loads a 20-item first page and explicitly requests later pages through the returned cursor.
 
 ## Use Cases
 
@@ -82,6 +87,8 @@ Key relations:
 ## API Surface
 
 - `GET /vehicles/:id/timeline`
+- `GET /api/vehicles/:id/customer-timeline?cursor=&limit=&sourceType=`
+- `GET /api/vehicles/:id/garage-summary`
 - `POST /vehicles/:id/lifecycle-summary/generate`
 - `PATCH /vehicles/:id/lifecycle-summary/:summaryId/review`
 - internal `appendVehicleTimelineEvent`
@@ -93,6 +100,8 @@ Key relations:
 - verified flag set without a valid inspection reference
 - current lifecycle projection must not claim full job-order status history when the source domain only exposes the latest stable milestone
 - customer-facing timeline accidentally includes internal notes
+- a 500-event vehicle causes an unbounded response or hundreds of initial mobile rows
+- new timeline events arrive between page requests and destabilize pagination
 - AI summary is published before human review
 - queued or failed summary generation is hidden from customers but must stay visible to staff for retry and review coordination
 - tied booking and inspection timestamps must still sort deterministically

@@ -14,6 +14,10 @@ import { Test } from '@nestjs/testing';
 import { PassportModule } from '@nestjs/passport';
 import * as bcrypt from 'bcrypt';
 
+import {
+  InMemoryStaffWorkQueuesService,
+  type SeededWorkClaim,
+} from './in-memory-staff-work-queues';
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { LoyaltyAccrualPlannerService } from '@shared/events/loyalty-accrual-planner.service';
 import { HealthController } from '../../src/health.controller';
@@ -774,12 +778,15 @@ export type InsuranceInquiryRecord = {
   id: string;
   userId: string;
   vehicleId: string;
+  clientRequestId?: string | null;
   inquiryType: InsuranceInquiryType;
   purpose?: 'quotation' | 'claim' | 'renewal' | 'new_application';
   subject: string;
   description: string;
   providerName: string | null;
   policyNumber: string | null;
+  incidentOccurredAt?: Date | null;
+  incidentLocation?: string | null;
   notes: string | null;
   status: InsuranceInquiryStatus;
   documentStatus?: 'incomplete' | 'complete';
@@ -812,6 +819,7 @@ export type InsuranceActivityRecord = {
   actorUserId: string | null;
   documentType: InsuranceDocumentType | null;
   notes: string | null;
+  customerMessage?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -2961,6 +2969,47 @@ class InMemoryVehicleLifecycleRepository {
       .map((event) => ({ ...event }));
   }
 
+  async listCustomerPage({
+    vehicleId,
+    sourceType,
+    cursor,
+    limit,
+  }: {
+    vehicleId: string;
+    sourceType?: string;
+    cursor?: { occurredAt: Date; id: string };
+    limit: number;
+  }) {
+    const events = Array.from(this.events.values())
+      .filter((event) => event.vehicleId === vehicleId)
+      .filter((event) => {
+        if (sourceType === 'insurance') {
+          return event.eventType.startsWith('insurance_');
+        }
+        if (sourceType) {
+          return event.sourceType === sourceType;
+        }
+        return event.sourceType !== 'manual' || event.eventType.startsWith('insurance_');
+      })
+      .filter(
+        (event) =>
+          !cursor ||
+          event.occurredAt < cursor.occurredAt ||
+          (event.occurredAt.getTime() === cursor.occurredAt.getTime() &&
+            event.id < cursor.id),
+      )
+      .sort(
+        (left, right) =>
+          right.occurredAt.getTime() - left.occurredAt.getTime() ||
+          right.id.localeCompare(left.id),
+      );
+
+    return {
+      items: events.slice(0, limit).map((event) => ({ ...event })),
+      hasNext: events.length > limit,
+    };
+  }
+
   async createSummary(payload: {
     vehicleId: string;
     requestedByUserId: string;
@@ -3166,17 +3215,31 @@ class InMemoryInsuranceRepository {
   }
 
   async create(payload: CreateInsuranceInquiryDto & { createdByUserId: string }) {
+    if (payload.clientRequestId) {
+      const existingInquiry = Array.from(this.inquiries.values()).find(
+        (inquiry) =>
+          inquiry.userId === payload.userId &&
+          inquiry.clientRequestId === payload.clientRequestId,
+      );
+      if (existingInquiry) {
+        return this.findById(existingInquiry.id);
+      }
+    }
+
     const now = new Date();
     const inquiry: InsuranceInquiryRecord = {
       id: randomUUID(),
       userId: payload.userId,
       vehicleId: payload.vehicleId,
+      clientRequestId: payload.clientRequestId ?? null,
       inquiryType: payload.inquiryType,
       purpose: payload.purpose ?? 'quotation',
       subject: payload.subject,
       description: payload.description,
       providerName: payload.providerName ?? null,
       policyNumber: payload.policyNumber ?? null,
+      incidentOccurredAt: payload.incidentOccurredAt ? new Date(payload.incidentOccurredAt) : null,
+      incidentLocation: payload.incidentLocation ?? null,
       notes: payload.notes ?? null,
       status: 'submitted',
       documentStatus: 'incomplete',
@@ -3192,6 +3255,16 @@ class InMemoryInsuranceRepository {
 
     this.inquiries.set(inquiry.id, inquiry);
     return this.findById(inquiry.id);
+  }
+
+  async findByClientRequestId(userId: string, clientRequestId: string) {
+    const inquiry = Array.from(this.inquiries.values()).find(
+      (candidate) =>
+        candidate.userId === userId &&
+        candidate.clientRequestId === clientRequestId,
+    );
+
+    return inquiry ? this.findById(inquiry.id) : null;
   }
 
   async findById(id: string) {
@@ -3213,6 +3286,14 @@ class InMemoryInsuranceRepository {
   async updateStatus(
     id: string,
     payload: UpdateInsuranceInquiryStatusDto & { reviewedByUserId: string; reviewedAt: Date },
+    _recordUpsert?: unknown,
+    activity?: {
+      action: string;
+      actorUserId?: string | null;
+      documentType?: InsuranceDocumentType | null;
+      notes?: string | null;
+      customerMessage?: string | null;
+    },
   ) {
     const inquiry = this.inquiries.get(id);
     if (!inquiry) {
@@ -3229,6 +3310,20 @@ class InMemoryInsuranceRepository {
     };
 
     this.inquiries.set(id, updatedInquiry);
+    if (activity) {
+      const now = new Date();
+      this.activities.push({
+        id: randomUUID(),
+        inquiryId: id,
+        action: activity.action,
+        actorUserId: activity.actorUserId ?? null,
+        documentType: activity.documentType ?? null,
+        notes: activity.notes ?? null,
+        customerMessage: activity.customerMessage ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
     return this.findById(id);
   }
 
@@ -3264,6 +3359,7 @@ class InMemoryInsuranceRepository {
         actorUserId?: string | null;
         documentType?: InsuranceDocumentType | null;
         notes?: string | null;
+        customerMessage?: string | null;
       };
       uploadedByUserId: string;
     },
@@ -3300,6 +3396,7 @@ class InMemoryInsuranceRepository {
       actorUserId: payload.activity.actorUserId ?? null,
       documentType: payload.activity.documentType ?? null,
       notes: payload.activity.notes ?? null,
+      customerMessage: payload.activity.customerMessage ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -3314,6 +3411,7 @@ class InMemoryInsuranceRepository {
       actorUserId?: string | null;
       documentType?: InsuranceDocumentType | null;
       notes?: string | null;
+      customerMessage?: string | null;
     },
   ) {
     if (!this.inquiries.has(inquiryId)) {
@@ -3328,6 +3426,7 @@ class InMemoryInsuranceRepository {
       actorUserId: payload.actorUserId ?? null,
       documentType: payload.documentType ?? null,
       notes: payload.notes ?? null,
+      customerMessage: payload.customerMessage ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -3348,6 +3447,45 @@ class InMemoryInsuranceRepository {
       .filter((inquiry) => inquiry.userId === userId)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((inquiry) => cloneInsuranceInquiry(inquiry, this.documents, this.activities));
+  }
+
+  async listForCustomer({
+    userId,
+    vehicleId,
+    status,
+    cursor,
+    limit,
+  }: {
+    userId: string;
+    vehicleId?: string;
+    status?: InsuranceInquiryStatus;
+    cursor?: { createdAt: Date; id: string };
+    limit: number;
+  }) {
+    const inquiries = Array.from(this.inquiries.values())
+      .filter((inquiry) => inquiry.userId === userId)
+      .filter((inquiry) => !vehicleId || inquiry.vehicleId === vehicleId)
+      .filter((inquiry) => !status || inquiry.status === status)
+      .filter(
+        (inquiry) =>
+          !cursor ||
+          inquiry.createdAt < cursor.createdAt ||
+          (inquiry.createdAt.getTime() === cursor.createdAt.getTime() &&
+            inquiry.id < cursor.id),
+      )
+      .sort(
+        (left, right) =>
+          right.createdAt.getTime() - left.createdAt.getTime() ||
+          right.id.localeCompare(left.id),
+      );
+    const pageItems = inquiries.slice(0, limit);
+
+    return {
+      items: pageItems.map((inquiry) =>
+        cloneInsuranceInquiry(inquiry, this.documents, this.activities),
+      ),
+      hasNext: inquiries.length > limit,
+    };
   }
 
   async upsertRecordFromInquiry(payload: {
@@ -4710,84 +4848,6 @@ class FakeMailDeliveryService {
     return {
       messageId: randomUUID(),
     };
-  }
-}
-
-type SeededWorkClaim = {
-  id: string;
-  queueType: 'job_order' | 'qa';
-  entityType: 'booking_handoff' | 'job_order';
-  entityId: string;
-  ownerUserId: string;
-};
-
-class InMemoryStaffWorkQueuesService {
-  private readonly claims = new Map<string, SeededWorkClaim>();
-
-  seedClaim(payload: Omit<SeededWorkClaim, 'id'>): SeededWorkClaim {
-    const claim = { id: randomUUID(), ...payload };
-    this.claims.set(claim.id, claim);
-    return claim;
-  }
-
-  assertClaimAccess(
-    claimId: string | undefined,
-    queueType: SeededWorkClaim['queueType'],
-    entityType: SeededWorkClaim['entityType'],
-    entityId: string,
-    ownerUserId: string,
-    options: { allowUnclaimedWithoutHeader?: boolean } = {},
-  ) {
-    const activeClaim = [...this.claims.values()].find(
-      (claim) =>
-        claim.queueType === queueType &&
-        claim.entityType === entityType &&
-        claim.entityId === entityId,
-    );
-    if (!claimId) {
-      if (!activeClaim && options.allowUnclaimedWithoutHeader) {
-        return null;
-      }
-      throw new ConflictException({
-        code: 'WORK_CLAIM_REQUIRED',
-        message: 'Claim this work before editing it.',
-      });
-    }
-
-    const claim = this.claims.get(claimId);
-    if (
-      !claim ||
-      claim.queueType !== queueType ||
-      claim.entityType !== entityType ||
-      claim.entityId !== entityId ||
-      claim.ownerUserId !== ownerUserId
-    ) {
-      throw new ConflictException({
-        code: 'WORK_CLAIM_CONFLICT',
-        message: 'This work claim is not valid for the requested record.',
-      });
-    }
-
-    return claim;
-  }
-
-  completeClaim(
-    queueType: SeededWorkClaim['queueType'],
-    entityType: SeededWorkClaim['entityType'],
-    entityId: string,
-    ownerUserId?: string,
-  ) {
-    const claim = [...this.claims.values()].find(
-      (entry) =>
-        entry.queueType === queueType &&
-        entry.entityType === entityType &&
-        entry.entityId === entityId &&
-        (!ownerUserId || entry.ownerUserId === ownerUserId),
-    );
-    if (claim) {
-      this.claims.delete(claim.id);
-    }
-    return Promise.resolve(claim ?? null);
   }
 }
 

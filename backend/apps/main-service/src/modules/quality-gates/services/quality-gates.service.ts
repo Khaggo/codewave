@@ -238,10 +238,9 @@ export class QualityGatesService {
     }
 
     const status = gate.status as QualityGateStatus;
-    if (
-      !['passed', 'overridden'].includes(status)
-      || gate.reviewerVerdict !== 'passed'
-    ) {
+    const isPassedRelease = status === 'passed' && gate.reviewerVerdict === 'passed';
+    const isOverriddenRelease = status === 'overridden';
+    if (!isPassedRelease && !isOverriddenRelease) {
       const verdict =
         gate.reviewerVerdict === 'blocked'
           ? 'Finalization blocked: workshop QA verdict is blocked'

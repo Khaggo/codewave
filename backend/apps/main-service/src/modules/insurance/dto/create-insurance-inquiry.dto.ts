@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 import { insuranceCasePurposeEnum, insuranceInquiryTypeEnum } from '../schemas/insurance.schema';
 
@@ -17,6 +17,14 @@ export class CreateInsuranceInquiryDto {
   })
   @IsString()
   vehicleId!: string;
+
+  @ApiPropertyOptional({
+    example: '3cf443c0-c91f-4ad3-a76a-1cc0dd7402aa',
+    description: 'Retry-stable request identifier generated once by the client.',
+  })
+  @IsOptional()
+  @IsUUID()
+  clientRequestId?: string;
 
   @ApiProperty({
     enum: insuranceInquiryTypeEnum.enumValues,
@@ -64,6 +72,25 @@ export class CreateInsuranceInquiryDto {
   @IsString()
   @MaxLength(120)
   policyNumber?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-07-28T08:30:00.000Z',
+    format: 'date-time',
+    description: 'When the incident occurred. Used only for claim assistance.',
+  })
+  @IsOptional()
+  @IsDateString()
+  incidentOccurredAt?: string;
+
+  @ApiPropertyOptional({
+    example: 'EDSA, Quezon City',
+    maxLength: 255,
+    description: 'Customer-provided incident location for claim assistance.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  incidentLocation?: string;
 
   @ApiPropertyOptional({
     example: 'Customer will upload the OR/CR and policy copy later today.',

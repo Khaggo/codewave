@@ -1,6 +1,5 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-
 import {
   buildInsuranceBroadcastRequest,
   buildInsuranceDocumentReviewState,
@@ -22,7 +21,6 @@ import {
   getInsuranceSummaryCards,
 } from './insuranceView.mjs'
 import * as insuranceStaffClient from '../../lib/insuranceStaffClient.js'
-
 const {
   createInsuranceRenewalFollowUp,
   sendInsuranceBroadcasts,
@@ -30,7 +28,6 @@ const {
   updateInsuranceInquiryStatus,
   updateInsuranceInquiryWorkflow,
 } = insuranceStaffClient
-
 const buildInquiryFixture = (overrides = {}) => ({
   id: 'inq-1',
   status: 'payment_pending',
@@ -62,8 +59,8 @@ test('getInsuranceSummaryCards returns queue and active inquiry summary values',
       { label: 'Selected Inquiry', value: 'Under Review', sub: 'Bumper damage' },
       {
         label: 'Editable Fields',
-        value: '2',
-        sub: 'status and review notes only',
+        value: '3',
+        sub: 'status, internal notes, and customer updates',
       },
     ],
   )
@@ -212,6 +209,7 @@ test('getNextInsuranceWorkspaceViewState rehydrates draft from saved inquiry sta
       updateDraft: {
         status: 'active',
         reviewNotes: 'Waiting for proof review.',
+        customerMessage: '',
       },
       updateMessage: 'Insurance workflow updated to Payment Pending.',
       updateState: 'status_update_saved',
@@ -287,6 +285,7 @@ test('getNextInsuranceWorkspaceViewState resets tab and hydrates draft when the 
       updateDraft: {
         status: 'for_approval',
         reviewNotes: '',
+        customerMessage: '',
       },
       updateMessage: '',
       updateState: 'status_update_ready',

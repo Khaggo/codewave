@@ -25,6 +25,7 @@ import {
   ApiConsumes,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiExtraModels,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -33,6 +34,7 @@ import {
   ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
+  getSchemaPath,
 } from '@nestjs/swagger';
 
 import { Roles } from '@main-modules/auth/decorators/roles.decorator';
@@ -42,9 +44,19 @@ import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
 import { CreateRenewalFollowUpDto } from '../dto/create-renewal-follow-up.dto';
+import {
+  CustomerInsuranceInquiryPageResponseDto,
+  CustomerInsuranceInquiryResponseDto,
+} from '../dto/customer-insurance-inquiry-response.dto';
+import { CustomerInsuranceRecordResponseDto } from '../dto/customer-insurance-record-response.dto';
 import { InsuranceInquiryResponseDto } from '../dto/insurance-inquiry-response.dto';
 import { InsuranceRecordResponseDto } from '../dto/insurance-record-response.dto';
+import {
+  InsuranceRequirementsQueryDto,
+  InsuranceRequirementsResponseDto,
+} from '../dto/insurance-requirements.dto';
 import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
+import { ListMyInsuranceInquiriesQueryDto } from '../dto/list-my-insurance-inquiries-query.dto';
 import { SendInsuranceBroadcastsDto } from '../dto/send-insurance-broadcasts.dto';
 import { SendInsuranceBroadcastsResponseDto } from '../dto/send-insurance-broadcasts-response.dto';
 import { SendInsuranceRemindersDto } from '../dto/send-insurance-reminders.dto';
@@ -66,6 +78,12 @@ type InsuranceReminderRouteService = {
 };
 
 @ApiTags('insurance')
+@ApiExtraModels(
+  InsuranceInquiryResponseDto,
+  CustomerInsuranceInquiryResponseDto,
+  InsuranceRecordResponseDto,
+  CustomerInsuranceRecordResponseDto,
+)
 @Controller()
 export class InsuranceController {
   constructor(private readonly insuranceService: InsuranceService) {}
@@ -185,6 +203,35 @@ export class InsuranceController {
     return this.insuranceService.listForStaff(query, request.user as { userId: string; role: string });
   }
 
+  @Get('insurance/inquiries/mine')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer')
+  @ApiOperation({ summary: 'List the signed-in customer insurance inquiries with stable pagination.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'Customer-safe insurance inquiries owned by the signed-in customer.',
+    type: CustomerInsuranceInquiryPageResponseDto,
+  })
+  @ApiForbiddenResponse({ description: 'Only customers can list their own insurance inquiries.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  listMine(@Query() query: ListMyInsuranceInquiriesQueryDto, @Req() request: Request) {
+    return this.insuranceService.listMine(query, request.user as { userId: string; role: string });
+  }
+
+  @Get('insurance/requirements')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Get authoritative insurance document requirements for a request type.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'Required and optional insurance document types.',
+    type: InsuranceRequirementsResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  getRequirements(@Query() query: InsuranceRequirementsQueryDto) {
+    return this.insuranceService.getRequirements(query);
+  }
+
   @Get('insurance/inquiries/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('customer', 'service_adviser', 'super_admin')
@@ -197,7 +244,12 @@ export class InsuranceController {
   })
   @ApiOkResponse({
     description: 'The matching insurance inquiry.',
-    type: InsuranceInquiryResponseDto,
+    schema: {
+      oneOf: [
+        { $ref: getSchemaPath(InsuranceInquiryResponseDto) },
+        { $ref: getSchemaPath(CustomerInsuranceInquiryResponseDto) },
+      ],
+    },
   })
   @ApiForbiddenResponse({ description: 'Customers can only access their own insurance inquiries.' })
   @ApiNotFoundResponse({ description: 'Insurance inquiry not found.' })
@@ -400,9 +452,17 @@ export class InsuranceController {
     example: '7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d',
   })
   @ApiOkResponse({
-    description: 'Insurance records attached to the vehicle.',
-    type: InsuranceRecordResponseDto,
-    isArray: true,
+    description:
+      'Customer-safe records for customers; operational record identifiers remain available to authorized staff.',
+    schema: {
+      type: 'array',
+      items: {
+        oneOf: [
+          { $ref: getSchemaPath(CustomerInsuranceRecordResponseDto) },
+          { $ref: getSchemaPath(InsuranceRecordResponseDto) },
+        ],
+      },
+    },
   })
   @ApiForbiddenResponse({ description: 'Customers can only access insurance records for their own vehicle.' })
   @ApiNotFoundResponse({ description: 'Vehicle not found.' })

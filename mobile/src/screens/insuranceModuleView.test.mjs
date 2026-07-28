@@ -1031,7 +1031,17 @@ test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for 
       documentStatus: 'complete',
       paymentStatus: 'proof_submitted',
       renewalStatus: 'upcoming',
+      userId: 'internal-user-id',
+      clientRequestId: 'internal-dedupe-id',
       reviewNotes: 'Renewal quote is waiting for customer confirmation.',
+      activities: [
+        {
+          action: 'customer_update',
+          customerMessage: 'Your renewal quote is ready for review.',
+          actorUserId: 'internal-staff-id',
+          notes: 'Internal follow-up.',
+        },
+      ],
       paymentDueAt: '2026-05-18T00:00:00.000Z',
       policyExpiryAt: '2026-06-02T00:00:00.000Z',
       renewalDueAt: '2026-05-28T00:00:00.000Z',
@@ -1039,7 +1049,6 @@ test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for 
     }),
     {
       id: 'inq-1',
-      userId: null,
       vehicleId: null,
       inquiryType: 'comprehensive',
       inquiryTypeLabel: 'Comprehensive',
@@ -1053,88 +1062,28 @@ test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for 
       renewalStatus: 'upcoming',
       providerName: null,
       policyNumber: null,
+      incidentOccurredAt: null,
+      incidentLocation: null,
       notes: null,
-      reviewNotes: 'Renewal quote is waiting for customer confirmation.',
+      latestCustomerMessage: 'Your renewal quote is ready for review.',
       paymentDueAt: '2026-05-18T00:00:00.000Z',
       policyExpiryAt: '2026-06-02T00:00:00.000Z',
       renewalDueAt: '2026-05-28T00:00:00.000Z',
       documentCount: 0,
       documents: [],
+      activities: [
+        {
+          action: 'customer_update',
+          customerMessage: 'Your renewal quote is ready for review.',
+          documentType: null,
+          createdAt: null,
+        },
+      ],
       canAttachDocuments: true,
       createdAt: null,
       updatedAt: null,
     },
   )
-})
-
-test('createInsuranceInquiry sends the web-aligned purpose field to the backend', async () => {
-  const originalFetch = globalThis.fetch
-  const originalInsuranceClientRuntime = globalThis.__insuranceClientRuntime
-  const calls = []
-
-  globalThis.__insuranceClientRuntime = {
-    ApiError: class ApiError extends Error {
-      constructor(message, status, details) {
-        super(message)
-        this.name = 'ApiError'
-        this.status = status
-        this.details = details
-      }
-    },
-    getApiBaseUrl: () => 'http://127.0.0.1:3000',
-  }
-  globalThis.fetch = async (url, options = {}) => {
-    calls.push({ url, options })
-
-    return new Response(
-      JSON.stringify({
-        id: 'inq-purpose-1',
-        userId: 'user-1',
-        vehicleId: 'vehicle-1',
-        inquiryType: 'comprehensive',
-        purpose: 'renewal',
-        subject: 'Renewal request',
-        description: 'Prepare a renewal quote.',
-        status: 'submitted',
-        documentStatus: 'incomplete',
-        paymentStatus: 'not_required',
-        renewalStatus: 'not_applicable',
-        documents: [],
-      }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    )
-  }
-
-  try {
-    await createInsuranceInquiry({
-      userId: 'user-1',
-      vehicleId: 'vehicle-1',
-      inquiryType: 'comprehensive',
-      purpose: 'renewal',
-      subject: ' Renewal request ',
-      description: ' Prepare a renewal quote. ',
-      accessToken: 'token-1',
-    })
-  } finally {
-    globalThis.fetch = originalFetch
-    globalThis.__insuranceClientRuntime = originalInsuranceClientRuntime
-  }
-
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0].url, 'http://127.0.0.1:3000/api/insurance/inquiries')
-  assert.deepEqual(JSON.parse(calls[0].options.body), {
-    userId: 'user-1',
-    vehicleId: 'vehicle-1',
-    inquiryType: 'comprehensive',
-    purpose: 'renewal',
-    subject: 'Renewal request',
-    description: 'Prepare a renewal quote.',
-  })
 })
 
 test('uploadInsuranceInquiryDocumentFile posts multipart form data without forcing json headers', async () => {

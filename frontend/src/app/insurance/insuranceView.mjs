@@ -5,9 +5,8 @@ export function formatStatusLabel(value) {
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(' ')
 }
-
 const TERMINAL_INQUIRY_STATUSES = ['closed', 'cancelled', 'rejected']
-const EDITABLE_WORKFLOW_FIELDS = ['status', 'reviewNotes']
+const EDITABLE_WORKFLOW_FIELDS = ['status', 'reviewNotes', 'customerMessage']
 const REMINDER_FILTER_FIELDS = ['purpose', 'status', 'paymentStatus', 'renewalStatus']
 const BROADCAST_TARGET_MODES = ['selected_cases', 'filtered_results']
 const TARGET_MODE_LABELS = {
@@ -102,6 +101,7 @@ const countMatchingInquiries = (inquiries, predicate) =>
 const buildInsuranceUpdateDraft = (inquiry, nextStatuses = []) => ({
   status: nextStatuses[0] ?? inquiry?.status ?? 'submitted',
   reviewNotes: inquiry?.reviewNotes ?? '',
+  customerMessage: '',
 })
 
 const areInsuranceUpdateDraftsEqual = (left = {}, right = {}) =>
@@ -243,7 +243,7 @@ export function getInsuranceSummaryCards(input = {}) {
     {
       label: 'Editable Fields',
       value: String(EDITABLE_WORKFLOW_FIELDS.length),
-      sub: 'status and review notes only',
+      sub: 'status, internal notes, and customer updates',
     },
   ]
 }

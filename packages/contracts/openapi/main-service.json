@@ -2115,8 +2115,25 @@
       },
       "CreateInsuranceInquiryDto": {
         "properties": {
+          "clientRequestId": {
+            "description": "Retry-stable request identifier generated once by the client.",
+            "example": "3cf443c0-c91f-4ad3-a76a-1cc0dd7402aa",
+            "type": "string"
+          },
           "description": {
             "example": "Customer reported front-bumper and headlight damage after a collision.",
+            "type": "string"
+          },
+          "incidentLocation": {
+            "description": "Customer-provided incident location for claim assistance.",
+            "example": "EDSA, Quezon City",
+            "maxLength": 255,
+            "type": "string"
+          },
+          "incidentOccurredAt": {
+            "description": "When the incident occurred. Used only for claim assistance.",
+            "example": "2026-07-28T08:30:00.000Z",
+            "format": "date-time",
             "type": "string"
           },
           "inquiryType": {
@@ -2586,6 +2603,451 @@
         "properties": {},
         "type": "object"
       },
+      "CustomerGarageBookingDto": {
+        "properties": {
+          "reference": {
+            "type": "string"
+          },
+          "scheduledDate": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "status",
+          "scheduledDate"
+        ],
+        "type": "object"
+      },
+      "CustomerGarageInsuranceDto": {
+        "properties": {
+          "policyExpiryAt": {
+            "type": "object"
+          },
+          "policyNumber": {
+            "type": "object"
+          },
+          "providerName": {
+            "type": "object"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "CustomerGarageJobDto": {
+        "properties": {
+          "invoiceReference": {
+            "type": "object"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "workshopStage": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "status",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "CustomerGarageSummaryResponseDto": {
+        "properties": {
+          "activeBooking": {
+            "$ref": "#/components/schemas/CustomerGarageBookingDto"
+          },
+          "insurance": {
+            "$ref": "#/components/schemas/CustomerGarageInsuranceDto"
+          },
+          "lastCompletedService": {
+            "$ref": "#/components/schemas/CustomerGarageJobDto"
+          },
+          "latestJob": {
+            "$ref": "#/components/schemas/CustomerGarageJobDto"
+          },
+          "vehicle": {
+            "$ref": "#/components/schemas/CustomerGarageVehicleDto"
+          }
+        },
+        "required": [
+          "vehicle"
+        ],
+        "type": "object"
+      },
+      "CustomerGarageVehicleDto": {
+        "properties": {
+          "color": {
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "make": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "plateNumber": {
+            "type": "string"
+          },
+          "year": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "plateNumber",
+          "make",
+          "model",
+          "year"
+        ],
+        "type": "object"
+      },
+      "CustomerInsuranceActivityResponseDto": {
+        "properties": {
+          "action": {
+            "example": "document_uploaded",
+            "type": "string"
+          },
+          "createdAt": {
+            "example": "2026-05-14T08:00:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "customerMessage": {
+            "example": "Your renewal quote is ready for review.",
+            "type": "object"
+          },
+          "documentType": {
+            "enum": [
+              "or_cr",
+              "policy",
+              "valid_id",
+              "police_report",
+              "photo",
+              "estimate",
+              "proof_of_payment",
+              "other"
+            ],
+            "example": "proof_of_payment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "CustomerInsuranceDocumentResponseDto": {
+        "properties": {
+          "createdAt": {
+            "example": "2026-04-22T09:31:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "documentType": {
+            "enum": [
+              "or_cr",
+              "policy",
+              "valid_id",
+              "police_report",
+              "photo",
+              "estimate",
+              "proof_of_payment",
+              "other"
+            ],
+            "example": "photo",
+            "type": "string"
+          },
+          "fileName": {
+            "example": "damage-photo-front.jpg",
+            "type": "string"
+          },
+          "fileUrl": {
+            "example": "https://files.autocare.local/insurance/damage-photo-front.jpg",
+            "type": "string"
+          },
+          "id": {
+            "example": "4d1b2c47-c5e2-44a8-9180-4096ea4c9d05",
+            "type": "string"
+          },
+          "notes": {
+            "example": "Front bumper damage before estimate review.",
+            "type": "object"
+          },
+          "updatedAt": {
+            "example": "2026-04-22T09:31:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "fileName",
+          "fileUrl",
+          "documentType",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "CustomerInsuranceInquiryPageResponseDto": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerInsuranceInquiryResponseDto"
+            },
+            "type": "array"
+          },
+          "page": {
+            "example": {
+              "hasNext": true,
+              "limit": 20,
+              "nextCursor": "eyJ2IjoxLCJjcmVhdGVkQXQiOiIyMDI2LTA3LTI4VDA4OjMwOjAwLjAwMFoiLCJpZCI6Ii4uLiJ9"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object"
+      },
+      "CustomerInsuranceInquiryResponseDto": {
+        "properties": {
+          "activities": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerInsuranceActivityResponseDto"
+            },
+            "type": "array"
+          },
+          "createdAt": {
+            "example": "2026-04-22T09:30:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "example": "Customer reported front-bumper and headlight damage after a collision.",
+            "type": "string"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerInsuranceDocumentResponseDto"
+            },
+            "type": "array"
+          },
+          "documentStatus": {
+            "enum": [
+              "complete",
+              "incomplete",
+              "under_verification",
+              "rejected"
+            ],
+            "example": "incomplete",
+            "type": "string"
+          },
+          "id": {
+            "example": "4c559c0b-4d1b-492f-a11f-e61271f4a32d",
+            "type": "string"
+          },
+          "incidentLocation": {
+            "example": "EDSA, Quezon City",
+            "type": "object"
+          },
+          "incidentOccurredAt": {
+            "example": "2026-07-28T08:30:00.000Z",
+            "format": "date-time",
+            "type": "object"
+          },
+          "inquiryType": {
+            "enum": [
+              "ctpl",
+              "comprehensive"
+            ],
+            "example": "comprehensive",
+            "type": "string"
+          },
+          "notes": {
+            "example": "Customer will upload the OR/CR and policy copy later today.",
+            "type": "object"
+          },
+          "paymentDueAt": {
+            "example": "2026-05-30T00:00:00.000Z",
+            "format": "date-time",
+            "type": "object"
+          },
+          "paymentStatus": {
+            "enum": [
+              "not_required",
+              "unpaid",
+              "proof_submitted",
+              "verifying",
+              "paid",
+              "overdue"
+            ],
+            "example": "not_required",
+            "type": "string"
+          },
+          "policyExpiryAt": {
+            "example": "2026-08-15T00:00:00.000Z",
+            "format": "date-time",
+            "type": "object"
+          },
+          "policyNumber": {
+            "example": "POL-2026-00045",
+            "type": "object"
+          },
+          "providerName": {
+            "example": "Provider will be confirmed after the initial review.",
+            "type": "object"
+          },
+          "purpose": {
+            "enum": [
+              "new_application",
+              "renewal",
+              "claim",
+              "quotation"
+            ],
+            "example": "quotation",
+            "type": "string"
+          },
+          "renewalDueAt": {
+            "example": "2026-07-15T00:00:00.000Z",
+            "format": "date-time",
+            "type": "object"
+          },
+          "renewalStatus": {
+            "enum": [
+              "not_applicable",
+              "upcoming",
+              "quote_preparing",
+              "quoted",
+              "awaiting_customer",
+              "renewed",
+              "expired",
+              "cancelled"
+            ],
+            "example": "not_applicable",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "submitted",
+              "needs_documents",
+              "under_review",
+              "for_approval",
+              "approved",
+              "payment_pending",
+              "active",
+              "for_renewal",
+              "rejected",
+              "cancelled",
+              "closed"
+            ],
+            "example": "submitted",
+            "type": "string"
+          },
+          "subject": {
+            "example": "Accident repair inquiry",
+            "type": "string"
+          },
+          "updatedAt": {
+            "example": "2026-04-22T09:30:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "vehicleId": {
+            "example": "7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "vehicleId",
+          "inquiryType",
+          "purpose",
+          "subject",
+          "description",
+          "status",
+          "documentStatus",
+          "paymentStatus",
+          "renewalStatus",
+          "createdAt",
+          "updatedAt",
+          "documents",
+          "activities"
+        ],
+        "type": "object"
+      },
+      "CustomerInsuranceRecordResponseDto": {
+        "properties": {
+          "createdAt": {
+            "example": "2026-04-22T10:00:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "inquiryType": {
+            "enum": [
+              "ctpl",
+              "comprehensive"
+            ],
+            "example": "comprehensive",
+            "type": "string"
+          },
+          "policyNumber": {
+            "example": "POL-2026-00045",
+            "type": "object"
+          },
+          "providerName": {
+            "example": "Provider will be confirmed after the initial review.",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "submitted",
+              "needs_documents",
+              "under_review",
+              "for_approval",
+              "approved",
+              "payment_pending",
+              "active",
+              "for_renewal",
+              "rejected",
+              "cancelled",
+              "closed"
+            ],
+            "example": "approved",
+            "type": "string"
+          },
+          "updatedAt": {
+            "example": "2026-04-22T10:00:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "inquiryType",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
       "CustomerServiceHistoryResponseDto": {
         "properties": {
           "bookingDate": {
@@ -2644,6 +3106,75 @@
           "vehicleLabel",
           "completedServiceNames",
           "status"
+        ],
+        "type": "object"
+      },
+      "CustomerVehicleTimelineEventResponseDto": {
+        "properties": {
+          "eventType": {
+            "example": "job_order_completed",
+            "type": "string"
+          },
+          "occurredAt": {
+            "example": "2026-07-28T08:30:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "sourceType": {
+            "enum": [
+              "booking",
+              "inspection",
+              "job_order",
+              "quality_gate",
+              "insurance",
+              "lifecycle_summary"
+            ],
+            "example": "job_order",
+            "type": "string"
+          },
+          "summary": {
+            "example": "The workshop marked the service work as complete.",
+            "type": "string"
+          },
+          "title": {
+            "example": "Service work completed",
+            "type": "string"
+          },
+          "verified": {
+            "example": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "eventType",
+          "sourceType",
+          "title",
+          "summary",
+          "verified",
+          "occurredAt"
+        ],
+        "type": "object"
+      },
+      "CustomerVehicleTimelinePageResponseDto": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerVehicleTimelineEventResponseDto"
+            },
+            "type": "array"
+          },
+          "page": {
+            "example": {
+              "hasNext": true,
+              "limit": 20,
+              "nextCursor": "eyJ2IjoxLCJvY2N1cnJlZEF0IjoiMjAyNi0wNy0yOFQwODozMDowMC4wMDBaIiwiaWQiOiIuLi4ifQ"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "items",
+          "page"
         ],
         "type": "object"
       },
@@ -3557,6 +4088,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "customerMessage": {
+            "example": "Your renewal quote is ready for review.",
+            "type": "object"
+          },
           "documentType": {
             "enum": [
               "or_cr",
@@ -3703,6 +4238,15 @@
           "id": {
             "example": "4c559c0b-4d1b-492f-a11f-e61271f4a32d",
             "type": "string"
+          },
+          "incidentLocation": {
+            "example": "EDSA, Quezon City",
+            "type": "object"
+          },
+          "incidentOccurredAt": {
+            "example": "2026-07-28T08:30:00.000Z",
+            "format": "date-time",
+            "type": "object"
           },
           "inquiryType": {
             "enum": [
@@ -3918,6 +4462,78 @@
           "status",
           "createdAt",
           "updatedAt"
+        ],
+        "type": "object"
+      },
+      "InsuranceRequirementsResponseDto": {
+        "properties": {
+          "inquiryType": {
+            "enum": [
+              "ctpl",
+              "comprehensive"
+            ],
+            "example": "comprehensive",
+            "type": "string"
+          },
+          "optionalDocumentTypes": {
+            "example": [
+              "valid_id",
+              "police_report",
+              "photo",
+              "estimate",
+              "proof_of_payment",
+              "other"
+            ],
+            "items": {
+              "enum": [
+                "or_cr",
+                "policy",
+                "valid_id",
+                "police_report",
+                "photo",
+                "estimate",
+                "proof_of_payment",
+                "other"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "purpose": {
+            "enum": [
+              "new_application",
+              "renewal",
+              "claim",
+              "quotation"
+            ],
+            "example": "renewal",
+            "type": "string"
+          },
+          "requiredDocumentTypes": {
+            "example": [
+              "or_cr",
+              "policy"
+            ],
+            "items": {
+              "enum": [
+                "or_cr",
+                "policy",
+                "valid_id",
+                "police_report",
+                "photo",
+                "estimate",
+                "proof_of_payment",
+                "other"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "purpose",
+          "requiredDocumentTypes",
+          "optionalDocumentTypes"
         ],
         "type": "object"
       },
@@ -7137,6 +7753,12 @@
       },
       "UpdateInsuranceInquiryStatusDto": {
         "properties": {
+          "customerMessage": {
+            "description": "Optional update explicitly approved for customer visibility.",
+            "example": "We are reviewing your submitted documents. No action is needed right now.",
+            "maxLength": 1000,
+            "type": "string"
+          },
           "expectedUpdatedAt": {
             "description": "Optimistic concurrency token from the latest loaded insurance inquiry detail.",
             "example": "2026-05-18T08:30:00.000Z",
@@ -7174,6 +7796,12 @@
         "properties": {
           "assignedStaffId": {
             "example": "a3cce1f2-a6eb-4fdd-bf11-8b17d3ddfc17",
+            "type": "string"
+          },
+          "customerMessage": {
+            "description": "Optional update explicitly approved for customer visibility.",
+            "example": "Your renewal quote is ready for review.",
+            "maxLength": 1000,
             "type": "string"
           },
           "documentStatus": {
@@ -7606,6 +8234,15 @@
           "id": {
             "example": "4c559c0b-4d1b-492f-a11f-e61271f4a32d",
             "type": "string"
+          },
+          "incidentLocation": {
+            "example": "EDSA, Quezon City",
+            "type": "object"
+          },
+          "incidentOccurredAt": {
+            "example": "2026-07-28T08:30:00.000Z",
+            "format": "date-time",
+            "type": "object"
           },
           "inquiryType": {
             "enum": [
@@ -10991,7 +11628,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InsuranceInquiryResponseDto"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InsuranceInquiryResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CustomerInsuranceInquiryResponseDto"
+                    }
+                  ]
                 }
               }
             },
@@ -11296,6 +11940,92 @@
         ]
       }
     },
+    "/api/insurance/inquiries/mine": {
+      "get": {
+        "operationId": "InsuranceController_listMine",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "vehicleId",
+            "required": false,
+            "schema": {
+              "example": "7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "submitted",
+                "needs_documents",
+                "under_review",
+                "for_approval",
+                "approved",
+                "payment_pending",
+                "active",
+                "for_renewal",
+                "rejected",
+                "cancelled",
+                "closed"
+              ],
+              "example": "under_review",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Opaque versioned keyset cursor returned by the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerInsuranceInquiryPageResponseDto"
+                }
+              }
+            },
+            "description": "Customer-safe insurance inquiries owned by the signed-in customer."
+          },
+          "401": {
+            "description": "Missing or invalid access token."
+          },
+          "403": {
+            "description": "Only customers can list their own insurance inquiries."
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "List the signed-in customer insurance inquiries with stable pagination.",
+        "tags": [
+          "insurance"
+        ]
+      }
+    },
     "/api/insurance/reminders/send": {
       "post": {
         "operationId": "InsuranceController_sendReminders",
@@ -11389,6 +12119,65 @@
           }
         ],
         "summary": "Create a staff-only manual insurance renewal follow-up.",
+        "tags": [
+          "insurance"
+        ]
+      }
+    },
+    "/api/insurance/requirements": {
+      "get": {
+        "operationId": "InsuranceController_getRequirements",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "purpose",
+            "required": true,
+            "schema": {
+              "enum": [
+                "new_application",
+                "renewal",
+                "claim",
+                "quotation"
+              ],
+              "example": "renewal",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "inquiryType",
+            "required": false,
+            "schema": {
+              "enum": [
+                "ctpl",
+                "comprehensive"
+              ],
+              "example": "comprehensive",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceRequirementsResponseDto"
+                }
+              }
+            },
+            "description": "Required and optional insurance document types."
+          },
+          "401": {
+            "description": "Missing or invalid access token."
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Get authoritative insurance document requirements for a request type.",
         "tags": [
           "insurance"
         ]
@@ -14279,6 +15068,137 @@
         ]
       }
     },
+    "/api/vehicles/{id}/customer-timeline": {
+      "get": {
+        "operationId": "VehicleLifecycleController_listCustomerTimeline",
+        "parameters": [
+          {
+            "description": "Vehicle identifier.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "example": "7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourceType",
+            "required": false,
+            "schema": {
+              "enum": [
+                "booking",
+                "inspection",
+                "job_order",
+                "quality_gate",
+                "insurance",
+                "lifecycle_summary"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Opaque versioned keyset cursor returned by the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerVehicleTimelinePageResponseDto"
+                }
+              }
+            },
+            "description": "Customer-safe lifecycle events with stable keyset pagination."
+          },
+          "401": {
+            "description": "Missing or invalid access token."
+          },
+          "403": {
+            "description": "Customers can only access timelines for their own vehicles."
+          },
+          "404": {
+            "description": "Vehicle not found."
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Get a bounded customer-safe lifecycle timeline for a vehicle.",
+        "tags": [
+          "vehicle-lifecycle"
+        ]
+      }
+    },
+    "/api/vehicles/{id}/garage-summary": {
+      "get": {
+        "operationId": "VehicleLifecycleController_getCustomerGarageSummary",
+        "parameters": [
+          {
+            "description": "Vehicle identifier.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "example": "7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerGarageSummaryResponseDto"
+                }
+              }
+            },
+            "description": "Vehicle, active booking, workshop, and insurance summary."
+          },
+          "401": {
+            "description": "Missing or invalid access token."
+          },
+          "403": {
+            "description": "Customers can only access summaries for their own vehicles."
+          },
+          "404": {
+            "description": "Vehicle not found."
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Get a customer-safe operational summary for one owned vehicle.",
+        "tags": [
+          "vehicle-lifecycle"
+        ]
+      }
+    },
     "/api/vehicles/{id}/inspections": {
       "get": {
         "operationId": "InspectionsController_findByVehicleId",
@@ -14451,13 +15371,20 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/InsuranceRecordResponseDto"
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/CustomerInsuranceRecordResponseDto"
+                      },
+                      {
+                        "$ref": "#/components/schemas/InsuranceRecordResponseDto"
+                      }
+                    ]
                   },
                   "type": "array"
                 }
               }
             },
-            "description": "Insurance records attached to the vehicle."
+            "description": "Customer-safe records for customers; operational record identifiers remain available to authorized staff."
           },
           "401": {
             "description": "Missing or invalid access token."

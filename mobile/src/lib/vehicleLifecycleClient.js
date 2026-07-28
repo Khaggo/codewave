@@ -1,118 +1,20 @@
-import { ApiError, getApiBaseUrl } from './authClient';
 import { formatDate } from '../utils/validation';
+import {
+  buildAuthHeaders as transportBuildAuthHeaders,
+  request as transportRequest,
+} from './vehicleLifecycleTransport';
 
-const VEHICLE_LIFECYCLE_REQUEST_TIMEOUT_MS = 8000;
+const customerTimelineFilters = [
+  { label: 'All', sourceType: null },
+  { label: 'Bookings', sourceType: 'booking' },
+  { label: 'Workshop', sourceType: 'job_order' },
+  { label: 'Insurance', sourceType: 'insurance' },
+  { label: 'Summary', sourceType: 'lifecycle_summary' },
+];
 
-const customerTimelineFilters = ['All', 'Verified', 'Administrative', 'Summary'];
+const buildAuthHeaders = transportBuildAuthHeaders;
 
-const buildAuthHeaders = (accessToken) =>
-  accessToken
-    ? {
-        Authorization: `Bearer ${accessToken}`,
-      }
-    : undefined;
-
-const request = async (path, options = {}) => {
-  const {
-    body,
-    headers,
-    timeoutMs = VEHICLE_LIFECYCLE_REQUEST_TIMEOUT_MS,
-    ...rest
-  } = options;
-  const abortController =
-    typeof AbortController === 'function' &&
-    Number.isFinite(timeoutMs) &&
-    timeoutMs > 0
-      ? new AbortController()
-      : null;
-  let timeoutId = null;
-
-  try {
-    const apiBaseUrl = getApiBaseUrl();
-    const runRequest = async () => {
-      const response = await fetch(`${apiBaseUrl}${path}`, {
-        ...rest,
-        signal: abortController?.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(headers ?? {}),
-        },
-        body: body ? JSON.stringify(body) : undefined,
-      });
-
-      const rawText = await response.text();
-      let data = null;
-
-      if (rawText) {
-        try {
-          data = JSON.parse(rawText);
-        } catch {
-          data = rawText;
-        }
-      }
-
-      if (!response.ok) {
-        const message =
-          data?.message && typeof data.message === 'string'
-            ? data.message
-            : `Request failed with status ${response.status}`;
-
-        throw new ApiError(message, response.status, data);
-      }
-
-      return data;
-    };
-
-    const timeoutPromise =
-      Number.isFinite(timeoutMs) && timeoutMs > 0
-        ? new Promise((_, reject) => {
-            timeoutId = setTimeout(() => {
-              abortController?.abort();
-              reject(
-                new ApiError(
-                  `Timed out reaching ${apiBaseUrl}${path} after ${timeoutMs}ms. Check EXPO_PUBLIC_API_BASE_URL for the current device.`,
-                  0,
-                  {
-                    path,
-                    apiBaseUrl,
-                    timeoutMs,
-                    reason: 'timeout',
-                  },
-                ),
-              );
-            }, timeoutMs);
-          })
-        : null;
-
-    return timeoutPromise
-      ? await Promise.race([runRequest(), timeoutPromise])
-      : await runRequest();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-
-    const errorMessage =
-      error instanceof Error && error.message
-        ? error.message
-        : 'Unable to reach the API server.';
-
-    throw new ApiError(
-      `Unable to reach ${apiBaseUrl}${path}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
-      0,
-      {
-        path,
-        apiBaseUrl,
-        timeoutMs,
-        reason: 'network',
-      },
-    );
-  } finally {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  }
-};
+const request = transportRequest;
 
 const eventTitleMap = {
   booking_created: 'Booking created',
@@ -141,6 +43,7 @@ const sourceLabelMap = {
   job_order: 'Job Order',
   quality_gate: 'Quality Gate',
   lifecycle_summary: 'Reviewed Summary',
+  insurance: 'Insurance',
   manual: 'Manual Event',
 };
 
@@ -242,27 +145,34 @@ const getTimelineEventIcon = (event) => {
   }
 };
 
-const buildCustomerTimelineEventPresentation = (event) => {
+export const buildCustomerTimelineEventPresentation = (event) => {
   const filter =
     event.sourceType === 'lifecycle_summary'
       ? 'Summary'
-      : event.eventCategory === 'verified'
-        ? 'Verified'
-        : 'Administrative';
+      : sourceLabelMap[event.sourceType] ?? 'Lifecycle Event';
+  const verified = event.verified ?? event.eventCategory === 'verified';
 
   return {
-    id: event.id,
+    id: [
+      event.eventType,
+      event.sourceType,
+      event.occurredAt,
+      event.title,
+    ]
+      .filter(Boolean)
+      .join(':'),
+    sourceType: event.sourceType ?? null,
     occurredAt: event.occurredAt,
     dateLabel: toDisplayDate(event.occurredAt),
-    title: eventTitleMap[event.eventType] ?? humanizeEventType(event.eventType),
-    summary: getCustomerSafeLifecycleEventSummary(event),
-    statusLabel: event.eventCategory === 'verified' ? 'Verified' : 'Administrative',
-    statusTone: event.eventCategory === 'verified' ? 'verified' : 'administrative',
+    title: event.title ?? eventTitleMap[event.eventType] ?? humanizeEventType(event.eventType),
+    summary: event.summary ?? getCustomerSafeLifecycleEventSummary(event),
+    statusLabel: verified ? 'Verified' : 'Update',
+    statusTone: verified ? 'verified' : 'administrative',
     typeLabel: sourceLabelMap[event.sourceType] ?? 'Lifecycle Event',
     typeTone:
       event.sourceType === 'lifecycle_summary'
         ? 'summary'
-        : event.eventCategory === 'verified'
+        : verified
           ? 'verified'
           : 'administrative',
     icon: getTimelineEventIcon(event),
@@ -270,9 +180,7 @@ const buildCustomerTimelineEventPresentation = (event) => {
     metaLabel:
       event.sourceType === 'lifecycle_summary'
         ? 'Reviewed summary decision'
-        : event.eventCategory === 'verified'
-          ? 'Inspection-backed milestone'
-          : 'Operational milestone',
+        : sourceLabelMap[event.sourceType] ?? 'Vehicle update',
     filter,
   };
 };
@@ -318,9 +226,8 @@ export const buildCustomerLifecycleSummaryCard = ({
     return {
       state,
       stateLabel: 'Visible',
-      title: 'Reviewed lifecycle summary',
-      helperText:
-        'This summary is customer-safe because a service adviser or super admin approved it after review.',
+      title: 'Service summary',
+      helperText: 'Reviewed and approved by the service team.',
       summaryText: summary.summaryText,
       reviewedAt:
         summary.customerVisibleAt ?? summary.reviewedAt ?? summary.updatedAt ?? null,
@@ -335,9 +242,8 @@ export const buildCustomerLifecycleSummaryCard = ({
     return {
       state,
       stateLabel: 'Visible',
-      title: 'Reviewed lifecycle summary available',
-      helperText:
-        'A reviewed summary is approved for customer visibility, but the current customer timeline route does not include the full summary text yet.',
+      title: 'Service summary available',
+      helperText: 'Reviewed and approved by the service team.',
       summaryText: null,
       reviewedAt: reviewedEvent?.occurredAt ?? null,
       source: 'timeline-review-event',
@@ -348,11 +254,8 @@ export const buildCustomerLifecycleSummaryCard = ({
     return {
       state,
       stateLabel: 'Pending',
-      title: 'Summary still hidden',
-      helperText:
-        summary?.status === 'queued' || summary?.status === 'generating'
-          ? 'AI summary generation is still running and stays hidden until staff review is complete.'
-          : 'A summary draft exists but is still waiting for human review, so customers must not treat it as final.',
+      title: 'Summary under review',
+      helperText: 'The service team is reviewing this summary.',
       summaryText: null,
       reviewedAt: null,
       source: 'summary-response',
@@ -362,9 +265,8 @@ export const buildCustomerLifecycleSummaryCard = ({
   return {
     state,
     stateLabel: 'Hidden',
-    title: 'No customer-visible summary yet',
-    helperText:
-      'Lifecycle summary text stays hidden until a service adviser approves it, even when lifecycle events are already available.',
+    title: 'No approved summary yet',
+    helperText: 'An approved service summary will appear here when available.',
     summaryText: null,
     reviewedAt: null,
     source: 'hidden',
@@ -380,6 +282,11 @@ export const createEmptyCustomerVehicleLifecycleSnapshot = () => ({
     administrativeEvents: 0,
   },
   filters: customerTimelineFilters,
+  page: {
+    limit: 20,
+    hasNext: false,
+    nextCursor: null,
+  },
   summaryCard: buildCustomerLifecycleSummaryCard({
     summary: null,
     timelineEvents: [],
@@ -403,6 +310,63 @@ export const listVehicleTimeline = async ({ vehicleId, accessToken }) => {
   });
 
   return Array.isArray(response) ? response : [];
+};
+
+export const listCustomerVehicleTimelinePage = async ({
+  vehicleId,
+  cursor,
+  limit = 20,
+  sourceType,
+  accessToken,
+}) => {
+  if (!vehicleId) {
+    throw new ApiError(
+      'Select an owned vehicle before loading its lifecycle history.',
+      400,
+      {
+        path: '/api/vehicles/:id/customer-timeline',
+      },
+    );
+  }
+
+  const query = [
+    cursor ? `cursor=${encodeURIComponent(cursor)}` : '',
+    sourceType ? `sourceType=${encodeURIComponent(sourceType)}` : '',
+    `limit=${Math.min(50, Math.max(1, Number(limit) || 20))}`,
+  ]
+    .filter(Boolean)
+    .join('&');
+  const response = await request(
+    `/api/vehicles/${vehicleId}/customer-timeline?${query}`,
+    {
+      method: 'GET',
+      headers: buildAuthHeaders(accessToken),
+    },
+  );
+
+  return {
+    items: Array.isArray(response?.items) ? response.items : [],
+    page: {
+      limit: Number(response?.page?.limit) || limit,
+      hasNext: Boolean(response?.page?.hasNext),
+      nextCursor: response?.page?.nextCursor ?? null,
+    },
+  };
+};
+
+export const getCustomerGarageSummary = async ({ vehicleId, accessToken }) => {
+  if (!vehicleId) {
+    throw new ApiError('Select an owned vehicle before loading its Garage summary.', 400, {
+      path: '/api/vehicles/:id/garage-summary',
+    });
+  }
+
+  const response = await request(`/api/vehicles/${vehicleId}/garage-summary`, {
+    method: 'GET',
+    headers: buildAuthHeaders(accessToken),
+  });
+
+  return response && typeof response === 'object' ? response : null;
 };
 
 export const getLatestCustomerVisibleLifecycleSummary = async ({
@@ -430,6 +394,7 @@ export const getLatestCustomerVisibleLifecycleSummary = async ({
 export const buildCustomerVehicleLifecycleSnapshot = ({
   timelineEvents = [],
   summary = null,
+  page = null,
 }) => {
   const orderedTimelineEvents = [...timelineEvents]
     .sort(sortTimelineEventsDescending)
@@ -448,6 +413,11 @@ export const buildCustomerVehicleLifecycleSnapshot = ({
       administrativeEvents: orderedTimelineEvents.length - verifiedEvents,
     },
     filters: customerTimelineFilters,
+    page: page ?? {
+      limit: 20,
+      hasNext: false,
+      nextCursor: null,
+    },
     summaryCard: buildCustomerLifecycleSummaryCard({
       summary,
       timelineEvents,
@@ -459,10 +429,13 @@ export const loadCustomerVehicleLifecycleSnapshot = async ({
   vehicleId,
   accessToken,
   summary = null,
+  sourceType = null,
 }) => {
-  const [timelineEvents, latestSummary] = await Promise.all([
-    listVehicleTimeline({
+  const [timelinePage, latestSummary] = await Promise.all([
+    listCustomerVehicleTimelinePage({
       vehicleId,
+      sourceType,
+      limit: 20,
       accessToken,
     }),
     summary === null
@@ -474,7 +447,8 @@ export const loadCustomerVehicleLifecycleSnapshot = async ({
   ]);
 
   return buildCustomerVehicleLifecycleSnapshot({
-    timelineEvents,
+    timelineEvents: timelinePage.items,
     summary: latestSummary,
+    page: timelinePage.page,
   });
 };

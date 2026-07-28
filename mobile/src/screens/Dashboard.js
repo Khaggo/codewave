@@ -120,8 +120,7 @@ const tabs = [
   { key: 'messages', label: 'Garage', icon: 'garage-variant' },
   { key: 'notifications', label: 'Book', icon: 'calendar-check-outline' },
   { key: 'insurance', label: 'Insurance', icon: 'shield-outline' },
-  { key: 'rewards', label: 'Rewards', icon: 'star-four-points-outline' },
-  { key: 'store', label: 'Shop', icon: 'shopping-outline' },
+  { key: 'more', label: 'More', icon: 'dots-grid' },
 ];
 
 const genderOptions = ['Male', 'Female', 'Prefer not to say'];
@@ -2134,7 +2133,7 @@ function TimelineEventCard({ item }) {
   );
 }
 
-function TimelineStateCard({ icon, title, message }) {
+function TimelineStateCard({ icon, title, message, actionLabel, onAction }) {
   return (
     <View style={styles.timelineStateCard}>
       <View style={styles.timelineStateIconWrap}>
@@ -2142,6 +2141,15 @@ function TimelineStateCard({ icon, title, message }) {
       </View>
       <Text style={styles.timelineStateTitle}>{title}</Text>
       <Text style={styles.timelineStateText}>{message}</Text>
+      {actionLabel && onAction ? (
+        <TouchableOpacity
+          style={styles.timelineStateAction}
+          onPress={onAction}
+          activeOpacity={0.86}
+        >
+          <Text style={styles.timelineStateActionText}>{actionLabel}</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -2246,7 +2254,7 @@ export default function Dashboard({
   const [isStoreOrderDetailVisible, setIsStoreOrderDetailVisible] = useState(false);
   const [isNotificationsVisible, setIsNotificationsVisible] = useState(false);
   const [isProfileTooltipVisible, setIsProfileTooltipVisible] = useState(false);
-  const [timelineFilter, setTimelineFilter] = useState('All');
+  const [timelineFilter, setTimelineFilter] = useState(null);
   const [digitalGarageState, setDigitalGarageState] = useState(
     createInitialDigitalGarageState,
   );
@@ -3529,6 +3537,10 @@ export default function Dashboard({
     if (tabKey === activeTab && tabKey === 'messages') {
       setGarageReloadKey((value) => value + 1);
       return;
+    }
+
+    if (tabKey === 'more') {
+      setMenuScreen('root');
     }
 
     setActiveTab(tabKey);
@@ -4989,7 +5001,7 @@ export default function Dashboard({
     renderScrollableContent(styles.menuRootContent, (
       <>
       <View style={styles.profileHomeHeader}>
-        <Text style={styles.profileHomeTitle}>My Profile</Text>
+        <Text style={styles.profileHomeTitle}>More</Text>
         <View style={styles.profileHomeActions}>
           <NotificationIconButton
             count={notificationsFeed.filter((item) => item.unread).length}
@@ -5135,6 +5147,16 @@ export default function Dashboard({
       ) : null}
 
       <View style={styles.profileSettingsList}>
+        <MenuRow
+          icon="shopping-outline"
+          label="Shop"
+          onPress={() => setActiveTab('store')}
+        />
+        <MenuRow
+          icon="star-four-points-outline"
+          label="Rewards"
+          onPress={() => setActiveTab('rewards')}
+        />
         <MenuRow
           icon="cog-outline"
           label="Account Settings"
@@ -7070,7 +7092,7 @@ export default function Dashboard({
 
   const renderTimelineContent = () => {
     const visibleTimelineItems = vehicleLifecycleState.events.filter((item) =>
-      timelineFilter === 'All' ? true : item.filter === timelineFilter,
+      timelineFilter ? item.sourceType === timelineFilter : true,
     );
 
     const renderGarageVehicleState = () => {
@@ -7111,7 +7133,13 @@ export default function Dashboard({
           <TimelineStateCard
             icon="car-off"
             title="No owned vehicles yet"
-            message="Add your first vehicle during onboarding or profile updates before booking, insurance, and lifecycle history can share one garage context."
+            message="Add your first vehicle to use booking, insurance, and service history."
+            actionLabel="Add vehicle"
+            onAction={() =>
+              navigation.navigate('VehicleLifecycleScreen', {
+                openAddVehicle: true,
+              })
+            }
           />
         );
       }
@@ -7162,7 +7190,7 @@ export default function Dashboard({
                     }}
                     activeOpacity={0.86}
                   >
-                    <Text style={styles.garageActionText}>Lifecycle</Text>
+                    <Text style={styles.garageActionText}>Timeline</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.garageActionButton}
@@ -7271,7 +7299,7 @@ export default function Dashboard({
           <MotionPressable
             style={styles.timelineFilterIconButton}
             onPress={() => {
-              setTimelineFilter('All');
+              setTimelineFilter(null);
               setGarageReloadKey((value) => value + 1);
             }}
           >
@@ -7340,22 +7368,22 @@ export default function Dashboard({
         </View>
 
         <View style={styles.timelineFilterRow}>
-          {vehicleLifecycleState.filters.map((filterLabel) => (
+          {vehicleLifecycleState.filters.map((filter) => (
             <MotionPressable
-              key={filterLabel}
+              key={filter.label}
               style={[
                 styles.timelineFilterChip,
-                timelineFilter === filterLabel && styles.timelineFilterChipActive,
+                timelineFilter === filter.sourceType && styles.timelineFilterChipActive,
               ]}
-              onPress={() => setTimelineFilter(filterLabel)}
+              onPress={() => setTimelineFilter(filter.sourceType)}
             >
               <Text
                 style={[
                   styles.timelineFilterChipText,
-                  timelineFilter === filterLabel && styles.timelineFilterChipTextActive,
+                  timelineFilter === filter.sourceType && styles.timelineFilterChipTextActive,
                 ]}
               >
-                {filterLabel}
+                {filter.label}
               </Text>
             </MotionPressable>
           ))}
@@ -8541,6 +8569,9 @@ export default function Dashboard({
                   ]}
                   onPress={() => handleTabPress(tab.key)}
                   scaleTo={0.94}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: isActive }}
+                  accessibilityLabel={tab.label}
                 >
                   <MaterialCommunityIcons
                     name={tab.icon}
@@ -8549,7 +8580,6 @@ export default function Dashboard({
                   />
                   <Text
                     numberOfLines={1}
-                    adjustsFontSizeToFit
                     style={[
                       styles.tabLabel,
                       isCompactPhone && styles.tabLabelCompact,
@@ -9571,6 +9601,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     textAlign: 'center',
+  },
+  timelineStateAction: {
+    minHeight: 44,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    marginTop: 14,
+  },
+  timelineStateActionText: {
+    color: colors.onPrimary,
+    fontSize: 14,
+    fontWeight: '800',
   },
   timelineStatsRow: {
     flexDirection: 'row',
@@ -13271,23 +13315,23 @@ const styles = StyleSheet.create({
     minHeight: 54,
     marginHorizontal: 3,
     minWidth: 0,
-    borderRadius: 18,
+    borderRadius: 8,
     zIndex: 1,
   },
   tabButtonCompact: {
     minHeight: 50,
-    borderRadius: 15,
+    borderRadius: 8,
   },
   tabLabel: {
     color: colors.mutedText,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
     textAlign: 'center',
   },
   tabLabelCompact: {
-    fontSize: 8,
-    maxWidth: 50,
+    fontSize: 11,
+    maxWidth: 64,
   },
   tabLabelActive: {
     color: colors.primary,

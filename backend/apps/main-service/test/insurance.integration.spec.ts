@@ -5,6 +5,11 @@ import { join } from 'path';
 import request from 'supertest';
 
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
+import {
+  failNextInsuranceUploadPersistence,
+  failNextInsuranceWorkflowPersistence,
+  seedInsuranceInquiryWorkflowState,
+} from './helpers/insurance-test-controls';
 import { InsuranceRepository } from '../src/modules/insurance/repositories/insurance.repository';
 import { NotificationsService } from '../src/modules/notifications/services/notifications.service';
 
@@ -14,47 +19,6 @@ const insuranceUploadRuntimeDirectory = join(
   'uploads',
   'insurance-documents',
 );
-
-function seedInsuranceInquiryWorkflowState(
-  app: Awaited<ReturnType<typeof createMainServiceTestApp>>['app'],
-  inquiryId: string,
-  patch: Record<string, unknown>,
-) {
-  const insuranceRepository = app.get(InsuranceRepository) as {
-    inquiries?: Map<string, Record<string, unknown>>;
-  };
-  const inquiry = insuranceRepository.inquiries?.get(inquiryId);
-
-  if (!insuranceRepository.inquiries || !inquiry) {
-    throw new Error(`Unable to seed insurance inquiry workflow state for ${inquiryId}`);
-  }
-
-  insuranceRepository.inquiries.set(inquiryId, {
-    ...inquiry,
-    ...patch,
-    updatedAt: new Date(),
-  });
-}
-
-function failNextInsuranceUploadPersistence(
-  app: Awaited<ReturnType<typeof createMainServiceTestApp>>['app'],
-) {
-  const insuranceRepository = app.get(InsuranceRepository) as {
-    failNextUploadedDocumentPersistence?: boolean;
-  };
-
-  insuranceRepository.failNextUploadedDocumentPersistence = true;
-}
-
-function failNextInsuranceWorkflowPersistence(
-  app: Awaited<ReturnType<typeof createMainServiceTestApp>>['app'],
-) {
-  const insuranceRepository = app.get(InsuranceRepository) as {
-    failNextWorkflowPersistence?: boolean;
-  };
-
-  insuranceRepository.failNextWorkflowPersistence = true;
-}
 
 function installInsuranceWorkflowRepositoryContract(
   app: Awaited<ReturnType<typeof createMainServiceTestApp>>['app'],
@@ -68,6 +32,7 @@ function installInsuranceWorkflowRepositoryContract(
       id: string,
       patch: Record<string, unknown>,
       recordUpsert?: Record<string, unknown>,
+      activity?: Record<string, unknown>,
     ) => Promise<Record<string, unknown>>;
     updateWorkflow?: (
       id: string,
@@ -109,7 +74,7 @@ function installInsuranceWorkflowRepositoryContract(
     });
   };
 
-  insuranceRepository.updateStatus = async (id, patch, recordUpsert) => {
+  insuranceRepository.updateStatus = async (id, patch, recordUpsert, activity) => {
     const inquiry = insuranceRepository.inquiries?.get(id);
 
     if (!insuranceRepository.inquiries || !inquiry) {
@@ -127,6 +92,19 @@ function installInsuranceWorkflowRepositoryContract(
       ...patch,
       updatedAt: now,
     });
+    if (activity && insuranceRepository.activities) {
+      insuranceRepository.activities.push({
+        id: randomUUID(),
+        inquiryId: id,
+        action: activity.action,
+        actorUserId: activity.actorUserId ?? null,
+        documentType: activity.documentType ?? null,
+        notes: activity.notes ?? null,
+        customerMessage: activity.customerMessage ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
     applyRecordUpsert(recordUpsert, now);
     return insuranceRepository.findById(id);
   };
@@ -157,6 +135,7 @@ function installInsuranceWorkflowRepositoryContract(
         actorUserId: activity.actorUserId ?? null,
         documentType: activity.documentType ?? null,
         notes: activity.notes ?? null,
+        customerMessage: activity.customerMessage ?? null,
         createdAt: now,
         updatedAt: now,
       })),
@@ -226,12 +205,14 @@ describe('InsuranceController integration', () => {
       expect(createInquiryResponse.status).toBe(201);
       expect(createInquiryResponse.body).toEqual(
         expect.objectContaining({
-          userId: customer.id,
           vehicleId: vehicleResponse.body.id,
           status: 'submitted',
           documents: [],
         }),
       );
+      expect(createInquiryResponse.body).not.toHaveProperty('userId');
+      expect(createInquiryResponse.body).not.toHaveProperty('createdByUserId');
+      expect(createInquiryResponse.body).not.toHaveProperty('reviewNotes');
 
       const addDocumentResponse = await request(app.getHttpServer())
         .post(`/api/insurance/inquiries/${createInquiryResponse.body.id}/documents`)
@@ -292,11 +273,13 @@ describe('InsuranceController integration', () => {
       expect(vehicleRecordsResponse.status).toBe(200);
       expect(vehicleRecordsResponse.body[0]).toEqual(
         expect.objectContaining({
-          inquiryId: createInquiryResponse.body.id,
-          vehicleId: vehicleResponse.body.id,
           status: 'closed',
         }),
       );
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('id');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('inquiryId');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('userId');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('vehicleId');
     } finally {
       await app.close();
     }
@@ -1175,11 +1158,13 @@ describe('InsuranceController integration', () => {
       expect(vehicleRecordsResponse.status).toBe(200);
       expect(vehicleRecordsResponse.body[0]).toEqual(
         expect.objectContaining({
-          inquiryId: createInquiryResponse.body.id,
-          vehicleId: vehicleResponse.body.id,
           status: 'closed',
         }),
       );
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('id');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('inquiryId');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('userId');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('vehicleId');
     } finally {
       await app.close();
     }
@@ -1291,10 +1276,12 @@ describe('InsuranceController integration', () => {
         expect.arrayContaining([
           expect.objectContaining({
             action: 'manual_broadcast_sent',
-            notes: 'Insurance processing update',
+            customerMessage: 'Please review your insurance request in the app for the latest update.',
           }),
         ]),
       );
+      expect(firstReadBackResponse.body.activities[0]).not.toHaveProperty('actorUserId');
+      expect(firstReadBackResponse.body.activities[0]).not.toHaveProperty('notes');
     } finally {
       await app.close();
     }
@@ -1492,11 +1479,13 @@ describe('InsuranceController integration', () => {
       expect(vehicleRecordsResponse.status).toBe(200);
       expect(vehicleRecordsResponse.body[0]).toEqual(
         expect.objectContaining({
-          inquiryId: createInquiryResponse.body.id,
-          vehicleId: vehicleResponse.body.id,
           status: 'closed',
         }),
       );
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('id');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('inquiryId');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('userId');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('vehicleId');
     } finally {
       await app.close();
     }
@@ -1592,11 +1581,13 @@ describe('InsuranceController integration', () => {
       expect(vehicleRecordsResponse.status).toBe(200);
       expect(vehicleRecordsResponse.body[0]).toEqual(
         expect.objectContaining({
-          inquiryId: createInquiryResponse.body.id,
-          vehicleId: vehicleResponse.body.id,
           status: 'closed',
         }),
       );
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('id');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('inquiryId');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('userId');
+      expect(vehicleRecordsResponse.body[0]).not.toHaveProperty('vehicleId');
     } finally {
       await app.close();
     }
@@ -1683,10 +1674,10 @@ describe('InsuranceController integration', () => {
         expect.objectContaining({
           id: createInquiryResponse.body.id,
           status: 'approved',
-          reviewNotes: null,
           activities: [],
         }),
       );
+      expect(readBackResponse.body).not.toHaveProperty('reviewNotes');
     } finally {
       await app.close();
     }
@@ -1749,13 +1740,13 @@ describe('InsuranceController integration', () => {
       expect(uploadResponse.body.activities).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            id: expect.any(String),
             action: 'document_uploaded',
             documentType: 'proof_of_payment',
           }),
         ]),
       );
-      expect(uploadResponse.body.activities.at(-1)?.id).not.toMatch(/^synthetic-/);
+      expect(uploadResponse.body.activities[0]).not.toHaveProperty('id');
+      expect(uploadResponse.body.activities[0]).not.toHaveProperty('actorUserId');
 
       const readBackResponse = await request(app.getHttpServer())
         .get(`/api/insurance/inquiries/${createInquiryResponse.body.id}`)
@@ -1772,7 +1763,6 @@ describe('InsuranceController integration', () => {
       expect(readBackResponse.body.activities).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            id: uploadResponse.body.activities.at(-1)?.id,
             action: 'document_uploaded',
             documentType: 'proof_of_payment',
           }),

@@ -1,12 +1,10 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
-
 import { InsuranceRepository } from '@main-modules/insurance/repositories/insurance.repository';
 import { InsuranceService } from '@main-modules/insurance/services/insurance.service';
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
-
 describe('InsuranceRepository', () => {
   it('hydrates staff-facing customer and vehicle labels when finding an inquiry by id', async () => {
     const insuranceDb = {
@@ -1786,11 +1784,13 @@ describe('InsuranceService', () => {
       action: 'manual_broadcast_sent',
       actorUserId: 'adviser-1',
       notes: 'Insurance processing update',
+      customerMessage: 'Please review your insurance request in the app for the latest update.',
     });
     expect(insuranceRepository.appendActivity).toHaveBeenNthCalledWith(2, 'case-customer-1-b', {
       action: 'manual_broadcast_sent',
       actorUserId: 'adviser-1',
       notes: 'Insurance processing update',
+      customerMessage: 'Please review your insurance request in the app for the latest update.',
     });
     expect(result).toEqual({
       targetedCaseCount: 4,

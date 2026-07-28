@@ -81,6 +81,16 @@ export class UpdateInsuranceInquiryWorkflowDto {
   reviewNotes?: string;
 
   @ApiPropertyOptional({
+    example: 'Your renewal quote is ready for review.',
+    maxLength: 1000,
+    description: 'Optional update explicitly approved for customer visibility.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  customerMessage?: string;
+
+  @ApiPropertyOptional({
     example: '2026-05-18T08:30:00.000Z',
     description: 'Optimistic concurrency token from the latest loaded insurance inquiry detail.',
   })

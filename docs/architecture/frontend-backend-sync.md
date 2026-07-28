@@ -60,6 +60,15 @@ This file defines the canonical coordination model between frontend and backend 
 - Typed request and response shapes should be treated as the frontend integration baseline, not ad hoc JSON guessed from UI needs.
 - Shared runtime packages are not required in the current stage; generated or curated frontend contracts are the default.
 
+## Customer Mobile Navigation
+
+- Customer mobile uses five primary destinations: `Home`, `Garage`, `Book`, `Insurance`, and `More`.
+- `Rewards` and `Shop` remain supported under `More` and may also appear as contextual Home shortcuts.
+- Garage is the authoritative vehicle-first surface for vehicle selection, Add Vehicle, live summary, and paginated timeline access. Dashboard cards may link into Garage but must not own a competing full implementation.
+- Insurance is a guided inquiry and document-tracking service. It must not imply insurer approval, repair authorization, or claim settlement.
+- Customer responses must come from customer-specific projections; client-side sanitization is defense in depth, not the privacy boundary.
+- Bottom-navigation labels must remain readable on compact phones, with at least 44 by 44 point touch targets and accessible selected-state metadata.
+
 ## Slice Acceptance Workflow
 
 1. Codex prepares or refreshes the slice contract pack.

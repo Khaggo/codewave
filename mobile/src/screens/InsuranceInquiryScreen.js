@@ -10,7 +10,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -25,8 +24,10 @@ import {
   createInitialCustomerInsuranceDraft,
   createInsuranceInquiry,
   customerInsuranceDocumentTypeOptions,
+  getInsuranceRequirements,
   getInsuranceInquiryById,
   getCustomerInsuranceTrackingState,
+  listMyInsuranceInquiries,
   listVehicleInsuranceRecords,
   uploadInsuranceInquiryDocumentFile,
 } from '../lib/insuranceClient';
@@ -57,6 +58,13 @@ import {
 } from './insurance/InsurancePanelPrimitives';
 import InsuranceRequestPanel from './insurance/InsuranceRequestPanel';
 import InsuranceStatusDetailPanel from './insurance/InsuranceStatusDetailPanel';
+import {
+  buildAuthoritativeRequirementsChecklist,
+  getInsuranceRequestDraftStorageKey,
+  hydrateInsuranceRequestDraft,
+  serializeInsuranceRequestDraft,
+} from './insurance/insuranceRequestFlow.mjs';
+import styles from './insuranceInquiryStyles';
 import { colors, radius } from '../theme';
 
 const inquiryTypeOptions = [
@@ -474,6 +482,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const [isVehiclePickerOpen, setIsVehiclePickerOpen] = useState(false);
   const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
   const [stagedDocuments, setStagedDocuments] = useState([]);
+  const [isDraftDirty, setIsDraftDirty] = useState(false);
+  const [requirementsByKey, setRequirementsByKey] = useState({});
   const [documentDraft, setDocumentDraft] = useState(buildInitialDocumentUploadDraft());
   const [intakeState, setIntakeState] = useState(initialSnapshot.intakeState);
   const [intakeMessage, setIntakeMessage] = useState('');
@@ -496,6 +506,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     vehicleId: null,
     inquiryId: routeInquiryId ?? undefined,
   });
+  const hydratedDraftStorageKeyRef = useRef(null);
 
   useEffect(() => {
     setActivePanel('home');
@@ -519,7 +530,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     !latestInquiry || isTerminalCustomerInquiryStatus(latestInquiry.status);
   const canReuseOnFileDocuments =
     Boolean(latestInquiry?.id) && !isTerminalCustomerInquiryStatus(latestInquiry.status);
-  const activePurpose = latestInquiry?.purpose ?? draft.purpose;
+  const activePurpose =
+    latestInquiry && !canSubmitNewInquiry ? latestInquiry.purpose : draft.purpose;
   const requestPurpose = draft.purpose;
   const requestOnFileDocuments = useMemo(
     () => (canReuseOnFileDocuments ? latestInquiry?.documents ?? [] : []),
@@ -552,21 +564,49 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     [activePurpose],
   );
   const requestRequirementsChecklist = useMemo(
-    () =>
-      buildRequirementsChecklist({
+    () => {
+      const requirementKey = `${requestPurpose}:${draft.inquiryType}`;
+      const authoritativeRequirements = requirementsByKey[requirementKey];
+
+      return authoritativeRequirements
+        ? buildAuthoritativeRequirementsChecklist({
+            requirements: authoritativeRequirements,
+            uploadedTypes: requestChecklistUploadedTypes,
+            documentTypeOptions: customerInsuranceDocumentTypeOptions,
+          })
+        : buildRequirementsChecklist({
         purpose: requestPurpose,
         uploadedTypes: requestChecklistUploadedTypes,
-      }),
-    [requestChecklistUploadedTypes, requestPurpose],
+          });
+    },
+    [
+      draft.inquiryType,
+      requestChecklistUploadedTypes,
+      requestPurpose,
+      requirementsByKey,
+    ],
   );
   const requirementsChecklist = useMemo(
-    () =>
-      buildRequirementsChecklist({
+    () => {
+      const activeInquiryType = latestInquiry?.inquiryType ?? draft.inquiryType;
+      const requirementKey = `${activePurpose}:${activeInquiryType}`;
+      const authoritativeRequirements = requirementsByKey[requirementKey];
+      const uploadedTypes =
+        latestInquiry?.documents?.map((document) => document.documentType) ?? [];
+
+      return authoritativeRequirements
+        ? buildAuthoritativeRequirementsChecklist({
+            requirements: authoritativeRequirements,
+            uploadedTypes,
+            documentTypeOptions: customerInsuranceDocumentTypeOptions,
+          })
+        : buildRequirementsChecklist({
         purpose: activePurpose,
         status: latestInquiry?.status,
-        uploadedTypes: latestInquiry?.documents?.map((document) => document.documentType) ?? [],
-      }),
-    [activePurpose, latestInquiry],
+            uploadedTypes,
+          });
+    },
+    [activePurpose, draft.inquiryType, latestInquiry, requirementsByKey],
   );
   const missingRequiredDocuments = useMemo(
     () => requirementsChecklist.required.filter((item) => !item.complete),
@@ -738,6 +778,142 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     }
   }, [accountOwnedVehicles]);
   const rememberedInquiryStorageKey = getRememberedInquiryStorageKey(account?.userId);
+  const insuranceDraftStorageKey = getInsuranceRequestDraftStorageKey({
+    userId,
+    vehicleId: selectedVehicleId,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    hydratedDraftStorageKeyRef.current = null;
+
+    if (!hasSession || !selectedVehicleId) {
+      setDraft(createInitialCustomerInsuranceDraft());
+      setStagedDocuments([]);
+      setIsDraftDirty(false);
+      return undefined;
+    }
+
+    AsyncStorage.getItem(insuranceDraftStorageKey)
+      .then(async (serializedDraft) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const restoredDraft = hydrateInsuranceRequestDraft({
+          serializedDraft,
+          createInitialDraft: createInitialCustomerInsuranceDraft,
+        });
+
+        setDraft(restoredDraft.draft);
+        setStagedDocuments(restoredDraft.stagedDocuments);
+        setIsDraftDirty(restoredDraft.restored);
+        hydratedDraftStorageKeyRef.current = insuranceDraftStorageKey;
+
+        if (restoredDraft.expired) {
+          await AsyncStorage.removeItem(insuranceDraftStorageKey);
+        } else if (restoredDraft.restored) {
+          setIntakeState('draft_ready');
+          setIntakeMessage('Your unfinished insurance request was restored.');
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          hydratedDraftStorageKeyRef.current = insuranceDraftStorageKey;
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hasSession, insuranceDraftStorageKey, selectedVehicleId]);
+
+  useEffect(() => {
+    if (
+      hydratedDraftStorageKeyRef.current !== insuranceDraftStorageKey ||
+      (!isDraftDirty && !stagedDocuments.length)
+    ) {
+      return undefined;
+    }
+
+    const saveTimer = setTimeout(() => {
+      AsyncStorage.setItem(
+        insuranceDraftStorageKey,
+        serializeInsuranceRequestDraft({
+          draft,
+          stagedDocuments,
+        }),
+      ).catch(() => {
+        // Draft persistence is best effort and must never block the customer.
+      });
+    }, 250);
+
+    return () => clearTimeout(saveTimer);
+  }, [draft, insuranceDraftStorageKey, isDraftDirty, stagedDocuments]);
+
+  useEffect(() => {
+    if (!hasSession) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    const requirementSpecs = [
+      {
+        purpose: draft.purpose,
+        inquiryType: draft.inquiryType,
+      },
+      latestInquiry
+        ? {
+            purpose: latestInquiry.purpose,
+            inquiryType: latestInquiry.inquiryType,
+          }
+        : null,
+    ].filter(Boolean);
+    const uniqueSpecs = [
+      ...new Map(
+        requirementSpecs.map((spec) => [
+          `${spec.purpose}:${spec.inquiryType}`,
+          spec,
+        ]),
+      ).entries(),
+    ].filter(([key]) => !requirementsByKey[key]);
+
+    if (!uniqueSpecs.length) {
+      return undefined;
+    }
+
+    Promise.all(
+      uniqueSpecs.map(async ([key, spec]) => [
+        key,
+        await getInsuranceRequirements({
+          ...spec,
+          accessToken,
+        }),
+      ]),
+    )
+      .then((entries) => {
+        if (isMounted) {
+          setRequirementsByKey((current) => ({
+            ...current,
+            ...Object.fromEntries(entries),
+          }));
+        }
+      })
+      .catch(() => {
+        // The existing local requirement matrix remains a temporary offline fallback.
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    accessToken,
+    draft.inquiryType,
+    draft.purpose,
+    hasSession,
+    latestInquiry,
+    requirementsByKey,
+  ]);
 
   useEffect(() => {
     let isMounted = true;
@@ -926,6 +1102,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const resetDraftState = () => {
     setDraft(createInitialCustomerInsuranceDraft());
     setStagedDocuments([]);
+    setIsDraftDirty(false);
   };
 
   const resetDocumentDraftState = () => {
@@ -1000,10 +1177,22 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setTrackingMessage('');
 
     try {
-      let nextInquiry = latestInquiry;
+      const recoveredInquiries = await listMyInsuranceInquiries({
+        vehicleId: selectedVehicleId,
+        limit: 50,
+        accessToken,
+      });
+      let nextInquiry =
+        recoveredInquiries.items.find((inquiry) => inquiry.id === knownInquiryId) ??
+        recoveredInquiries.items.find(
+          (inquiry) => !isTerminalCustomerInquiryStatus(inquiry.status),
+        ) ??
+        recoveredInquiries.items[0] ??
+        null;
       let inquiryNotFound = false;
 
-      if (knownInquiryId) {
+      if (knownInquiryId && nextInquiry?.id !== knownInquiryId) {
+        const recoveredFallbackInquiry = nextInquiry;
         try {
           nextInquiry = await getInsuranceInquiryById({
             inquiryId: knownInquiryId,
@@ -1016,12 +1205,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             })
           ) {
             inquiryNotFound = true;
-            nextInquiry = null;
+            nextInquiry = recoveredFallbackInquiry;
           }
         } catch (error) {
           if (error instanceof ApiError && error.status === 404) {
             inquiryNotFound = true;
-            nextInquiry = null;
+            nextInquiry = recoveredFallbackInquiry;
           } else {
             throw error;
           }
@@ -1115,6 +1304,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   ]);
 
   const handleDraftPatch = () => {
+    setIsDraftDirty(true);
     if (hasSession && ownedVehicles.length && selectedVehicle) {
       setIntakeState('draft_ready');
       setIntakeMessage('');
@@ -1147,6 +1337,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setDocumentUploadMessage('');
     resetDocumentDraftState();
     setStagedDocuments([]);
+    setIsDraftDirty(false);
     if (hasSession && ownedVehicles.length) {
       setIntakeState('draft_ready');
     }
@@ -1156,6 +1347,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setStagedDocuments((currentDocuments) =>
       currentDocuments.filter((document) => document.documentType !== documentType),
     );
+    setIsDraftDirty(true);
     handleDraftPatch();
   };
 
@@ -1188,6 +1380,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         const nextDocuments = currentDocuments.filter((document) => document.documentType !== documentType);
         return [...nextDocuments, stagedDocument];
       });
+      setIsDraftDirty(true);
       setIntakeState('draft_ready');
       setIntakeMessage(`${asset.name} is staged and ready to submit with this request.`);
     } catch (error) {
@@ -1313,12 +1506,15 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       const createdInquiry = await createInsuranceInquiry({
         userId,
         vehicleId: selectedVehicle.id,
+        clientRequestId: draft.clientRequestId,
         purpose: draft.purpose,
         inquiryType: draft.inquiryType,
         subject: requestSubject,
         description: draft.description,
         providerName: draft.providerName,
         policyNumber: draft.policyNumber,
+        incidentOccurredAt: draft.incidentOccurredAt,
+        incidentLocation: draft.incidentLocation,
         notes: draft.notes,
         accessToken,
       });
@@ -1357,6 +1553,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         const firstFailedDocument = failedUploads[0]?.document ?? null;
         const remainingDocuments = failedUploads.map((entry) => entry.document);
         setStagedDocuments(remainingDocuments);
+        setIsDraftDirty(true);
         if (firstFailedDocument) {
           setDocumentDraft({
             documentType: firstFailedDocument.documentType,
@@ -1390,6 +1587,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }
 
       setStagedDocuments([]);
+      setIsDraftDirty(false);
+      hydratedDraftStorageKeyRef.current = null;
+      await AsyncStorage.removeItem(insuranceDraftStorageKey).catch(() => {});
       setDocumentUploadState('document_idle');
       setDocumentUploadMessage('');
       setIntakeState('submitted_inquiry');
@@ -1434,9 +1634,6 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       notes: stagedDocument.notes,
       fileSizeLabel: stagedDocument.fileSizeLabel,
     });
-    setStagedDocuments((currentDocuments) =>
-      currentDocuments.filter((document) => document.documentType !== documentType),
-    );
     setDocumentUploadState('document_ready');
     setDocumentUploadMessage(
       `${stagedDocument.fileName} is ready to upload to this request.`,
@@ -1450,6 +1647,11 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setStagedDocuments((currentDocuments) =>
       currentDocuments.filter((document) => document.documentType !== documentType),
     );
+    if (stagedDocuments.length <= 1) {
+      setIsDraftDirty(false);
+      hydratedDraftStorageKeyRef.current = null;
+      AsyncStorage.removeItem(insuranceDraftStorageKey).catch(() => {});
+    }
     setDocumentUploadState('document_ready');
     setDocumentUploadMessage(
       stagedDocument?.fileName
@@ -1516,6 +1718,20 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       setDocumentUploadMessage(
         `Document attached. This inquiry now has ${updatedInquiry?.documentCount ?? 0} supporting document${updatedInquiry?.documentCount === 1 ? '' : 's'}.`,
       );
+      setStagedDocuments((currentDocuments) =>
+        currentDocuments.filter(
+          (document) => document.documentType !== documentDraft.documentType,
+        ),
+      );
+      if (
+        stagedDocuments.filter(
+          (document) => document.documentType !== documentDraft.documentType,
+        ).length === 0
+      ) {
+        setIsDraftDirty(false);
+        hydratedDraftStorageKeyRef.current = null;
+        await AsyncStorage.removeItem(insuranceDraftStorageKey).catch(() => {});
+      }
       resetDocumentDraftState();
     } catch (error) {
       if (error instanceof ApiError && error.status === 400) {
@@ -1674,8 +1890,14 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         <InsuranceStatePanel
           icon="car-off"
           title="No owned vehicle on file"
-          message="Insurance intake starts from a customer-owned vehicle."
-          tone="danger"
+          message="Add a vehicle, then return to this insurance request."
+          actionLabel="Add vehicle"
+          onAction={() =>
+            navigation.navigate('VehicleLifecycleScreen', {
+              openAddVehicle: true,
+              returnTo: 'InsuranceInquiryScreen',
+            })
+          }
         />
       ) : null}
 
@@ -1712,6 +1934,21 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
                     </TouchableOpacity>
                   );
                 })}
+                <TouchableOpacity
+                  style={styles.sheetAddRow}
+                  onPress={() => {
+                    setIsVehiclePickerOpen(false);
+                    navigation.navigate('VehicleLifecycleScreen', {
+                      openAddVehicle: true,
+                      returnTo: 'InsuranceInquiryScreen',
+                    });
+                  }}
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                >
+                  <MaterialCommunityIcons name="plus" size={20} color={colors.primary} />
+                  <Text style={styles.sheetAddRowText}>Add vehicle</Text>
+                </TouchableOpacity>
               </ScrollView>
             </Pressable>
           </Pressable>
@@ -1817,6 +2054,14 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               <Text style={styles.statusSectionSubtitle}>{currentRequestSummary.statusHint}</Text>
             </InsuranceSectionDivider>
 
+            {latestInquiry?.latestCustomerMessage ? (
+              <InsuranceSectionDivider title="Latest staff update">
+                <Text style={styles.statusSectionSubtitle}>
+                  {latestInquiry.latestCustomerMessage}
+                </Text>
+              </InsuranceSectionDivider>
+            ) : null}
+
             {latestInquiry?.paymentDueAt || latestInquiry?.renewalDueAt || latestInquiry?.policyExpiryAt ? (
               <InsuranceSectionDivider title="Deadlines">
                 {latestInquiry?.paymentDueAt ? (
@@ -1891,676 +2136,3 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-    ...Platform.select({
-      web: {
-        minHeight: '100vh',
-        overflowX: 'hidden',
-      },
-    }),
-  },
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    paddingHorizontal: 20,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  fixedModeViewport: {
-    flex: 1,
-  },
-  fixedModeContent: {
-    flex: 1,
-    minHeight: 0,
-  },
-  homeFocusWrap: {
-    marginBottom: 2,
-  },
-  sheetBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(15, 23, 42, 0.38)',
-  },
-  sheetCard: {
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    backgroundColor: colors.surface,
-    padding: 20,
-    gap: 10,
-  },
-  sheetList: {
-    maxHeight: 360,
-  },
-  sheetListContent: {
-    paddingBottom: 4,
-  },
-  sheetTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  sheetRow: {
-    minHeight: 52,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSoft,
-    justifyContent: 'center',
-    paddingVertical: 10,
-  },
-  sheetRowSelected: {
-    backgroundColor: colors.primarySoft,
-  },
-  sheetRowLabel: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  sheetRowMeta: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  typeRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  typeChip: {
-    flex: 1,
-    minHeight: 46,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceStrong,
-  },
-  typeChipSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  typeChipText: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  typeChipTextSelected: {
-    color: colors.primary,
-  },
-  fieldLabel: {
-    color: colors.labelText,
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 8,
-    marginTop: 2,
-  },
-  input: {
-    minHeight: 52,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.input,
-    color: colors.text,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    marginBottom: 14,
-  },
-  multilineInput: {
-    minHeight: 102,
-  },
-  primaryButton: {
-    minHeight: 54,
-    borderRadius: radius.medium,
-    backgroundColor: colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  primaryButtonDisabled: {
-    opacity: 0.78,
-  },
-  primaryButtonText: {
-    color: colors.onPrimary,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  secondaryActionButton: {
-    minHeight: 48,
-    paddingHorizontal: 14,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: colors.primaryGlow,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-  },
-  secondaryActionButtonText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  homeCardGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 14,
-  },
-  homeCard: {
-    flexGrow: 1,
-    flexBasis: 160,
-    minWidth: 150,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
-    borderRadius: radius.large,
-    padding: 14,
-    minHeight: 148,
-  },
-  homeCardEmphasized: {
-    borderColor: colors.primaryGlow,
-    backgroundColor: '#1C1A20',
-  },
-  homeCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  homeCardIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  homeCardTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  homeCardText: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 18,
-    flex: 1,
-  },
-  homeCardActionRow: {
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderSoft,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  homeCardActionText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  documentSection: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
-    borderRadius: radius.large,
-    padding: 16,
-    marginBottom: 14,
-  },
-  documentSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 14,
-  },
-  documentSectionCopy: {
-    flex: 1,
-  },
-  documentSectionTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  documentSectionText: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  documentCountBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: colors.primaryGlow,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  documentCountText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  documentList: {
-    gap: 10,
-    marginBottom: 14,
-  },
-  documentCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radius.medium,
-    padding: 14,
-  },
-  documentCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  documentCardCopy: {
-    flex: 1,
-  },
-  documentCardTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  documentCardText: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  emptyDocumentCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
-    backgroundColor: colors.surface,
-    borderRadius: radius.medium,
-    padding: 16,
-    marginBottom: 14,
-  },
-  emptyDocumentTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  emptyDocumentText: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 19,
-  },
-  documentUploadForm: {
-    marginTop: 2,
-  },
-  selectedDocumentCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radius.medium,
-    padding: 14,
-    marginBottom: 14,
-  },
-  selectedDocumentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  selectedDocumentIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  selectedDocumentCopy: {
-    flex: 1,
-  },
-  selectedDocumentTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  selectedDocumentMeta: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  selectedDocumentActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 14,
-  },
-  checklistHeading: {
-    color: colors.labelText,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  checklistGroup: {
-    gap: 8,
-    marginBottom: 14,
-  },
-  checklistRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  checklistIconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checklistIconWrapComplete: {
-    borderColor: colors.primaryGlow,
-    backgroundColor: colors.primarySoft,
-  },
-  checklistRowText: {
-    color: colors.text,
-    fontSize: 13,
-    lineHeight: 18,
-    flex: 1,
-  },
-  checklistRowTextComplete: {
-    color: colors.primary,
-    fontWeight: '700',
-  },
-  checklistHelperText: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  documentTypeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
-  },
-  documentTypeChip: {
-    minHeight: 40,
-    paddingHorizontal: 12,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  documentTypeChipSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  documentTypeChipText: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  documentTypeChipTextSelected: {
-    color: colors.primary,
-  },
-  statePanel: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
-    borderRadius: radius.large,
-    padding: 16,
-    marginBottom: 14,
-  },
-  statePanelDanger: {
-    borderColor: 'rgba(255, 107, 107, 0.4)',
-  },
-  statePanelWarning: {
-    borderColor: 'rgba(234, 179, 8, 0.35)',
-  },
-  statePanelSuccess: {
-    borderColor: 'rgba(63, 215, 143, 0.35)',
-  },
-  statePanelHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  statePanelIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  statePanelCopy: {
-    flex: 1,
-  },
-  statePanelTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  statePanelText: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  statePanelButton: {
-    alignSelf: 'flex-start',
-    marginTop: 14,
-    minHeight: 40,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statePanelButtonText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  timelineStepList: {
-    gap: 10,
-  },
-  timelineStepRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 2,
-  },
-  timelineStepRail: {
-    alignItems: 'center',
-    paddingTop: 4,
-  },
-  timelineStepDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  timelineStepDotDone: {
-    borderColor: colors.primaryGlow,
-    backgroundColor: colors.primary,
-  },
-  timelineStepDotCurrent: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  timelineStepCopy: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radius.medium,
-    padding: 12,
-  },
-  timelineStepHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 6,
-  },
-  timelineStepTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-    flex: 1,
-  },
-  timelineStepText: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  timelineStepMeta: {
-    color: colors.labelText,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 8,
-  },
-  timelineCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceStrong,
-    borderRadius: radius.large,
-    padding: 16,
-    marginBottom: 14,
-  },
-  timelineCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 12,
-  },
-  timelineCardCopy: {
-    flex: 1,
-  },
-  timelineCardTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  timelineCardSubtitle: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primaryGlow,
-  },
-  statusBadgeText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  detailRow: {
-    marginTop: 8,
-  },
-  detailRowLabel: {
-    color: colors.labelText,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-    textTransform: 'uppercase',
-  },
-  detailRowValue: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  statusSectionEyebrow: {
-    color: insurancePalette.amber,
-    fontFamily: insuranceFonts.body,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
-  statusSectionTitle: {
-    color: insurancePalette.text,
-    fontFamily: insuranceFonts.heading,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  statusSectionSubtitle: {
-    color: insurancePalette.textMuted,
-    fontFamily: insuranceFonts.body,
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  statusSectionMeta: {
-    color: insurancePalette.textDim,
-    fontFamily: insuranceFonts.body,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
-  },
-  statusHistoryList: {
-    marginTop: 2,
-  },
-  statusHistoryRow: {
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: insurancePalette.divider,
-    gap: 4,
-  },
-  statusHistoryLabel: {
-    color: insurancePalette.text,
-    fontFamily: insuranceFonts.heading,
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  statusHistorySummary: {
-    color: insurancePalette.textMuted,
-    fontFamily: insuranceFonts.body,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  statusHistoryEmpty: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-});

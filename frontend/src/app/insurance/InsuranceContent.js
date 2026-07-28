@@ -60,6 +60,7 @@ import {
   summarizeInsuranceReminderResult,
   shouldIncludeInsuranceInquiryInLiveQueue,
 } from './insuranceView.mjs'
+import InsuranceNotesFields from './InsuranceNotesFields'
 
 const INQUIRY_STATUS_OPTIONS = [
   'submitted',
@@ -120,6 +121,7 @@ const DEFAULT_FILTERS = {
 const DEFAULT_UPDATE_DRAFT = {
   status: 'submitted',
   reviewNotes: '',
+  customerMessage: '',
 }
 const DEFAULT_REMINDER_TYPE = 'missing_documents'
 const DEFAULT_REMINDER_TARGET_MODE = 'selected_cases'
@@ -1263,6 +1265,7 @@ export default function InsuranceContent() {
         inquiryId: requestInquiryId,
         status: updateDraft.status,
         reviewNotes: updateDraft.reviewNotes,
+        customerMessage: updateDraft.customerMessage,
         expectedUpdatedAt: selectedInquiry?.updatedAt,
         accessToken: user.accessToken,
       })
@@ -1270,6 +1273,7 @@ export default function InsuranceContent() {
       const refreshedUpdateDraft = {
         status: refreshedNextStatuses[0] ?? updatedInquiry.status,
         reviewNotes: updatedInquiry.reviewNotes ?? '',
+        customerMessage: '',
       }
 
       setInquiries((currentInquiries) =>
@@ -1320,6 +1324,7 @@ export default function InsuranceContent() {
               setUpdateDraft({
                 status: refreshedNextStatuses[0] ?? refreshedInquiry.status,
                 reviewNotes: refreshedInquiry.reviewNotes ?? '',
+                customerMessage: '',
               })
               setUpdateState('update_conflict')
               setUpdateMessage('Another staff member already updated this insurance case. The latest record was reloaded.')
@@ -1939,22 +1944,15 @@ export default function InsuranceContent() {
                 />
               </label>
 
-              <label className="label md:col-span-2">
-                Review Notes
-                <textarea
-                  value={updateDraft.reviewNotes}
-                  onChange={(event) =>
-                    {
-                      setUpdateDraft((current) => ({ ...current, reviewNotes: event.target.value }))
-                      setUpdateState('status_update_ready')
-                      setUpdateMessage('')
-                    }
-                  }
-                  rows={4}
-                  className="input min-h-[120px] resize-y"
-                  placeholder="Add staff notes."
-                />
-              </label>
+              <InsuranceNotesFields
+                reviewNotes={updateDraft.reviewNotes}
+                customerMessage={updateDraft.customerMessage}
+                onChange={(field, value) => {
+                  setUpdateDraft((current) => ({ ...current, [field]: value }))
+                  setUpdateState('status_update_ready')
+                  setUpdateMessage('')
+                }}
+              />
             </div>
 
             {updateMessage ? (

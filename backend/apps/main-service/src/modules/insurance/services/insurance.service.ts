@@ -8,7 +8,6 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesService } from '@main-modules/vehicles/services/vehicles.service';
@@ -16,11 +15,12 @@ import {
   createNotificationTrigger,
   type InsuranceCustomerReminderState,
 } from '@shared/events/contracts/notification-triggers';
-
 import { AddInsuranceDocumentDto } from '../dto/add-insurance-document.dto';
 import { CreateInsuranceInquiryDto } from '../dto/create-insurance-inquiry.dto';
 import { CreateRenewalFollowUpDto } from '../dto/create-renewal-follow-up.dto';
+import { InsuranceRequirementsQueryDto } from '../dto/insurance-requirements.dto';
 import { ListInsuranceInquiriesQueryDto } from '../dto/list-insurance-inquiries-query.dto';
+import { ListMyInsuranceInquiriesQueryDto } from '../dto/list-my-insurance-inquiries-query.dto';
 import { SendInsuranceBroadcastsDto } from '../dto/send-insurance-broadcasts.dto';
 import {
   type InsuranceManualReminderType,
@@ -36,13 +36,18 @@ import {
   insurancePaymentStatusEnum,
   insuranceRenewalStatusEnum,
 } from '../schemas/insurance.schema';
+import {
+  getInsuranceRequirements,
+  listCustomerInsuranceInquiries,
+  normalizeInquiryDocumentStatus,
+  presentInquiryForActor,
+  presentInsuranceRecordsForActor,
+} from './insurance-customer-view';
 import { InsuranceDocumentStorageService } from './insurance-document-storage.service';
-
 type InsuranceActor = {
   userId: string;
   role: string;
 };
-
 export type InsuranceUploadFile = {
   originalname: string;
   mimetype?: string;
@@ -79,13 +84,6 @@ const allowedStatusTransitions: Record<InsuranceInquiryStatus, InsuranceInquiryS
   rejected: ['closed', 'cancelled'],
   cancelled: [],
   closed: [],
-};
-
-const requiredDocumentTypesByPurpose: Record<string, string[]> = {
-  renewal: ['or_cr', 'policy'],
-  new_application: ['or_cr'],
-  claim: ['or_cr'],
-  quotation: ['or_cr'],
 };
 
 type InsuranceReminderSourceState = {
@@ -142,12 +140,25 @@ export class InsuranceService {
     await this.assertActorCanCreate(payload.userId, actor);
     await this.assertCustomerAndVehicle(payload.userId, payload.vehicleId);
 
+    if (payload.clientRequestId) {
+      const existingInquiry = await this.insuranceRepository.findByClientRequestId(
+        payload.userId,
+        payload.clientRequestId,
+      );
+      if (existingInquiry) {
+        return presentInquiryForActor(
+          normalizeInquiryDocumentStatus(existingInquiry),
+          actor,
+        );
+      }
+    }
+
     const inquiry = await this.insuranceRepository.create({
       ...payload,
       createdByUserId: actor.userId,
     });
 
-    return this.presentInquiryForActor(
+    return presentInquiryForActor(
       {
         ...inquiry,
         purpose: inquiry.purpose ?? payload.purpose ?? 'quotation',
@@ -237,7 +248,7 @@ export class InsuranceService {
   async findById(id: string, actor: InsuranceActor) {
     const inquiry = await this.insuranceRepository.findById(id);
     await this.assertCanAccessInquiry(inquiry.userId, actor);
-    return this.presentInquiryForActor(this.normalizeInquiryDocumentStatus(inquiry), actor);
+    return presentInquiryForActor(normalizeInquiryDocumentStatus(inquiry), actor);
   }
 
   async findByUserId(userId: string, actor: InsuranceActor) {
@@ -248,7 +259,18 @@ export class InsuranceService {
     }
 
     const inquiries = await this.insuranceRepository.findByUserId(userId);
-    return inquiries.map((inquiry) => this.normalizeInquiryDocumentStatus(inquiry));
+    return inquiries.map((inquiry) => normalizeInquiryDocumentStatus(inquiry));
+  }
+
+  async listMine(query: ListMyInsuranceInquiriesQueryDto, actor: InsuranceActor) {
+    if (actor.role !== 'customer') {
+      throw new ForbiddenException('Only customers can list their own insurance inquiries');
+    }
+    return listCustomerInsuranceInquiries(this.insuranceRepository, query, actor);
+  }
+
+  getRequirements(query: InsuranceRequirementsQueryDto) {
+    return getInsuranceRequirements(query);
   }
 
   async listForStaff(query: ListInsuranceInquiriesQueryDto, actor: InsuranceActor) {
@@ -256,7 +278,7 @@ export class InsuranceService {
 
     if (typeof this.insuranceRepository.listForStaff === 'function') {
       const inquiries = await this.insuranceRepository.listForStaff(query);
-      return inquiries.map((inquiry) => this.normalizeInquiryDocumentStatus(inquiry));
+      return inquiries.map((inquiry) => normalizeInquiryDocumentStatus(inquiry));
     }
 
     const inquiries = await this.insuranceRepository.listForAnalytics();
@@ -283,7 +305,7 @@ export class InsuranceService {
           this.vehiclesService.findById(inquiry.vehicleId),
         ]);
 
-        return this.normalizeInquiryDocumentStatus({
+        return normalizeInquiryDocumentStatus({
           ...inquiry,
           customerDisplayName: this.buildCustomerDisplayName(user?.profile),
           vehicleLabel: this.buildVehicleLabel(vehicle),
@@ -298,11 +320,21 @@ export class InsuranceService {
     const inquiry = await this.insuranceRepository.findById(id);
     this.assertAllowedWorkflowTransition(inquiry.status, payload.status);
 
-    const updatedInquiry = await this.insuranceRepository.updateStatus(id, {
+    const customerMessage = payload.customerMessage?.trim() || null;
+    const statusPatch = {
       ...payload,
       reviewedByUserId: actor.userId,
       reviewedAt: new Date(),
-    }, this.buildCloseRecordUpsert(inquiry, payload.status));
+    };
+    const recordUpsert = this.buildCloseRecordUpsert(inquiry, payload.status);
+    const updatedInquiry = customerMessage
+      ? await this.insuranceRepository.updateStatus(id, statusPatch, recordUpsert, {
+          action: `status_${payload.status}`,
+          actorUserId: actor.userId,
+          notes: payload.reviewNotes ?? null,
+          customerMessage,
+        })
+      : await this.insuranceRepository.updateStatus(id, statusPatch, recordUpsert);
 
     await this.emitCustomerReminderTrigger(
       this.asReminderSourceState(inquiry),
@@ -367,8 +399,8 @@ export class InsuranceService {
       throw new BadRequestException('Document URL must use HTTP or HTTPS; use the upload action for local files');
     }
 
-    return this.presentInquiryForActor(
-      this.normalizeInquiryDocumentStatus(await this.insuranceRepository.addDocument(id, payload, actor.userId)),
+    return presentInquiryForActor(
+      normalizeInquiryDocumentStatus(await this.insuranceRepository.addDocument(id, payload, actor.userId)),
       actor,
     );
   }
@@ -398,8 +430,8 @@ export class InsuranceService {
     });
 
     try {
-      return this.presentInquiryForActor(
-        this.normalizeInquiryDocumentStatus(await this.insuranceRepository.addUploadedDocument(id, {
+      return presentInquiryForActor(
+        normalizeInquiryDocumentStatus(await this.insuranceRepository.addUploadedDocument(id, {
           document: {
             fileName: file.originalname,
             fileUrl: savedDocument.fileUrl,
@@ -435,7 +467,8 @@ export class InsuranceService {
   async findRecordsByVehicleId(vehicleId: string, actor: InsuranceActor) {
     const vehicle = await this.vehiclesService.findById(vehicleId);
     await this.assertCanAccessVehicleRecords(vehicle.userId, actor);
-    return this.insuranceRepository.findRecordsByVehicleId(vehicleId);
+    const records = await this.insuranceRepository.findRecordsByVehicleId(vehicleId);
+    return presentInsuranceRecordsForActor(records, actor);
   }
 
   async sendManualBroadcasts(payload: SendInsuranceBroadcastsDto, actor: InsuranceActor) {
@@ -490,6 +523,7 @@ export class InsuranceService {
               action: 'manual_broadcast_sent',
               actorUserId: actor.userId,
               notes: payload.title,
+              customerMessage: payload.message,
             });
           }
 
@@ -949,51 +983,6 @@ export class InsuranceService {
     });
   }
 
-  private presentInquiryForActor<
-    T extends {
-      customerDisplayName?: string;
-      vehicleLabel?: string;
-    },
-  >(inquiry: T, actor: InsuranceActor) {
-    if (actor.role !== 'customer') {
-      return inquiry;
-    }
-
-    const { customerDisplayName: _customerDisplayName, vehicleLabel: _vehicleLabel, ...customerInquiry } =
-      inquiry;
-
-    return customerInquiry;
-  }
-
-  private normalizeInquiryDocumentStatus<
-    T extends {
-      purpose?: string | null;
-      documentStatus?: string | null;
-      documents?: Array<{ documentType?: string | null }> | null;
-    },
-  >(inquiry: T): T {
-    if (inquiry?.documentStatus !== 'incomplete') {
-      return inquiry;
-    }
-
-    const requiredDocumentTypes =
-      requiredDocumentTypesByPurpose[String(inquiry?.purpose ?? 'quotation')] ?? requiredDocumentTypesByPurpose.quotation;
-    const uploadedDocumentTypes = new Set(
-      (Array.isArray(inquiry?.documents) ? inquiry.documents : [])
-        .map((document) => document?.documentType)
-        .filter(Boolean),
-    );
-
-    if (!requiredDocumentTypes.every((documentType) => uploadedDocumentTypes.has(documentType))) {
-      return inquiry;
-    }
-
-    return {
-      ...inquiry,
-      documentStatus: 'complete',
-    };
-  }
-
   private buildWorkflowActivities(
     inquiry: {
       paymentStatus?: string | null;
@@ -1004,9 +993,10 @@ export class InsuranceService {
     actorUserId: string,
   ) {
     const activities: Array<{
-      action: PaymentActivityAction | RenewalActivityAction;
+      action: PaymentActivityAction | RenewalActivityAction | 'customer_update';
       actorUserId: string;
       notes: string | null;
+      customerMessage?: string | null;
     }> = [];
     const paymentStatusActionByStatus: Partial<Record<NonNullable<typeof payload.paymentStatus>, PaymentActivityAction>> = {
       paid: 'payment_marked_paid',
@@ -1049,6 +1039,16 @@ export class InsuranceService {
         action: 'payment_due_date_updated',
         actorUserId,
         notes: payload.reviewNotes ?? null,
+      });
+    }
+
+    const customerMessage = payload.customerMessage?.trim();
+    if (customerMessage) {
+      activities.push({
+        action: 'customer_update',
+        actorUserId,
+        notes: payload.reviewNotes ?? null,
+        customerMessage,
       });
     }
 

@@ -57,7 +57,7 @@ test('Objective 5 proof surfaces expose discrepancy and customer-summary evidenc
     assert.ok(qaAudit.includes(fragment), `Expected Objective 5 QA fragment: ${fragment}`)
   }
 
-  assert.match(customerSummaryScreen, /Customer-visible reviewed summary/)
+  assert.match(customerSummaryScreen, /Service summary/)
   assert.match(customerSummaryScreen, /snapshot\.summaryCard\.summaryText/)
   assert.match(customerSummaryClient, /\/api\/vehicles\/\$\{vehicleId\}\/lifecycle-summary\/latest/)
 })

@@ -14,6 +14,7 @@ export const insuranceActivities = pgTable('insurance_activities', {
   actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
   documentType: insuranceDocumentTypeEnum('document_type'),
   notes: text('notes'),
+  customerMessage: text('customer_message'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

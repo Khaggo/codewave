@@ -772,10 +772,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "e8c4bf0bfa215a229cbccd0e8c6d3e1c342cc71ff4d411c6fa1cc4b5ff0c778c"
+        "value": "e2e851921d49b461d0216a6849c49c3c86e6506c4c015f37cef3400d4b2c0693"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-07-28T18:33:00+08:00"
     },
     {
       "path": "domains/main-service/job-orders.md",
@@ -989,10 +989,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "2d2ef8508d27d78e4841057bb7e63d7da452761e197bfa85fa224cdbb37a7368"
+        "value": "c3d1e7121ec39268465ae1d535a8a1785a60199bfef989dd10dd30483d5cbea8"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-16T09:51:27.4510031+08:00"
+      "lastVerifiedAt": "2026-07-28T18:33:00+08:00"
     },
     {
       "path": "domains/main-service/vehicles.md",
@@ -1071,6 +1071,7 @@
         "Contract Artifacts",
         "Contract Pack Rules",
         "Frontend Consumption Rules",
+        "Customer Mobile Navigation",
         "Slice Acceptance Workflow"
       ],
       "directDependencies": [
@@ -1084,10 +1085,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "6635ab1193fc16f288c015a883c13c23b04a5ec37a4e80d8592d164240bfb154"
+        "value": "71c889b275952acdc02b80a13cf9f834c8cb1f4e6d7bfcfd7d32c1dc8799258c"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-23T00:53:58.0011069+08:00"
+      "lastVerifiedAt": "2026-07-28T18:33:00+08:00"
     },
     {
       "path": "golden-domain-template.md",

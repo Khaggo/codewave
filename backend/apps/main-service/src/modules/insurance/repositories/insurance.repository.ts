@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -51,6 +51,7 @@ export type InsuranceActivityPersistenceInput = {
   actorUserId?: string | null;
   documentType?: (typeof insuranceDocumentTypeEnum.enumValues)[number] | null;
   notes?: string | null;
+  customerMessage?: string | null;
 };
 
 type UploadInsuranceDocumentPersistenceInput = {
@@ -89,23 +90,37 @@ export class InsuranceRepository extends BaseRepository {
     const values = {
       userId: payload.userId,
       vehicleId: payload.vehicleId,
+      clientRequestId: payload.clientRequestId ?? null,
       inquiryType: payload.inquiryType,
       ...(payload.purpose ? { purpose: payload.purpose } : {}),
       subject: payload.subject,
       description: payload.description,
       providerName: payload.providerName ?? null,
       policyNumber: payload.policyNumber ?? null,
+      incidentOccurredAt: payload.incidentOccurredAt ? new Date(payload.incidentOccurredAt) : null,
+      incidentLocation: payload.incidentLocation ?? null,
       notes: payload.notes ?? null,
       status: 'submitted' as const,
       createdByUserId: payload.createdByUserId,
     };
 
-    const [createdInquiry] = await this.db
-      .insert(insuranceInquiries)
-      .values(values)
-      .returning();
+    try {
+      const [createdInquiry] = await this.db
+        .insert(insuranceInquiries)
+        .values(values)
+        .returning();
 
-    return this.findById(createdInquiry.id);
+      return this.findById(createdInquiry.id);
+    } catch (error) {
+      if (payload.clientRequestId && this.isUniqueViolation(error)) {
+        const existingInquiry = await this.findByClientRequestId(payload.userId, payload.clientRequestId);
+        if (existingInquiry) {
+          return existingInquiry;
+        }
+      }
+
+      throw error;
+    }
   }
 
   async createRenewalFollowUp(
@@ -190,6 +205,73 @@ export class InsuranceRepository extends BaseRepository {
     return this.attachActivitiesToInquiries(inquiries);
   }
 
+  async findByClientRequestId(userId: string, clientRequestId: string) {
+    const inquiry = await this.db.query.insuranceInquiries.findFirst({
+      where: and(
+        eq(insuranceInquiries.userId, userId),
+        eq(insuranceInquiries.clientRequestId, clientRequestId),
+      ),
+      with: {
+        documents: {
+          orderBy: desc(insuranceDocuments.createdAt),
+        },
+      },
+    });
+
+    if (!inquiry) {
+      return null;
+    }
+
+    const [withActivities] = await this.attachActivitiesToInquiries([inquiry]);
+    return withActivities;
+  }
+
+  async listForCustomer({
+    userId,
+    vehicleId,
+    status,
+    cursor,
+    limit,
+  }: {
+    userId: string;
+    vehicleId?: string;
+    status?: (typeof insuranceInquiryStatusEnum.enumValues)[number];
+    cursor?: { createdAt: Date; id: string };
+    limit: number;
+  }) {
+    const inquiries = await this.db.query.insuranceInquiries.findMany({
+      where: and(
+        eq(insuranceInquiries.userId, userId),
+        vehicleId ? eq(insuranceInquiries.vehicleId, vehicleId) : undefined,
+        status ? eq(insuranceInquiries.status, status) : undefined,
+        cursor
+          ? or(
+              lt(insuranceInquiries.createdAt, cursor.createdAt),
+              and(
+                eq(insuranceInquiries.createdAt, cursor.createdAt),
+                lt(insuranceInquiries.id, cursor.id),
+              ),
+            )
+          : undefined,
+      ),
+      with: {
+        documents: {
+          orderBy: desc(insuranceDocuments.createdAt),
+        },
+      },
+      orderBy: [desc(insuranceInquiries.createdAt), desc(insuranceInquiries.id)],
+      limit: limit + 1,
+    });
+
+    const hasNext = inquiries.length > limit;
+    const pageItems = hasNext ? inquiries.slice(0, limit) : inquiries;
+
+    return {
+      items: await this.attachActivitiesToInquiries(pageItems),
+      hasNext,
+    };
+  }
+
   async findInquiriesByVehicleId(vehicleId: string) {
     const inquiries = await this.db.query.insuranceInquiries.findMany({
       where: eq(insuranceInquiries.vehicleId, vehicleId),
@@ -246,6 +328,7 @@ export class InsuranceRepository extends BaseRepository {
     id: string,
     payload: UpdateInsuranceInquiryStatusPersistenceInput,
     recordUpsert?: UpsertInsuranceRecordInput,
+    activity?: InsuranceActivityPersistenceInput,
   ) {
     return this.db.transaction(async (tx) => {
       const [updatedInquiry] = await tx
@@ -275,6 +358,17 @@ export class InsuranceRepository extends BaseRepository {
 
       if (recordUpsert) {
         await this.upsertRecordFromInquiry(recordUpsert, tx);
+      }
+
+      if (activity) {
+        await tx.insert(insuranceActivities).values({
+          inquiryId: id,
+          action: activity.action,
+          actorUserId: activity.actorUserId ?? null,
+          documentType: activity.documentType ?? null,
+          notes: activity.notes ?? null,
+          customerMessage: activity.customerMessage ?? null,
+        });
       }
 
       return this.findById(id, tx);
@@ -330,6 +424,7 @@ export class InsuranceRepository extends BaseRepository {
             actorUserId: activity.actorUserId ?? null,
             documentType: activity.documentType ?? null,
             notes: activity.notes ?? null,
+            customerMessage: activity.customerMessage ?? null,
           })),
         );
       }
@@ -397,6 +492,7 @@ export class InsuranceRepository extends BaseRepository {
         actorUserId: payload.actorUserId ?? null,
         documentType: payload.documentType ?? null,
         notes: payload.notes ?? null,
+        customerMessage: payload.customerMessage ?? null,
       })
       .returning();
 
@@ -584,5 +680,14 @@ export class InsuranceRepository extends BaseRepository {
     }
 
     return `${vehicle.make} ${vehicle.model} (${vehicle.plateNumber})`;
+  }
+
+  private isUniqueViolation(error: unknown) {
+    return Boolean(
+      error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        (error as { code?: unknown }).code === '23505',
+    );
   }
 }

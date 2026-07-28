@@ -39,6 +39,11 @@ export class InsuranceActivityResponseDto {
   })
   notes?: string | null;
 
+  @ApiPropertyOptional({
+    example: 'Your renewal quote is ready for review.',
+  })
+  customerMessage?: string | null;
+
   @ApiProperty({
     example: '2026-05-14T08:00:00.000Z',
     format: 'date-time',
@@ -104,6 +109,17 @@ export class InsuranceInquiryResponseDto {
     example: 'Customer will upload the OR/CR and policy copy later today.',
   })
   notes?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-07-28T08:30:00.000Z',
+    format: 'date-time',
+  })
+  incidentOccurredAt?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'EDSA, Quezon City',
+  })
+  incidentLocation?: string | null;
 
   @ApiProperty({
     enum: insuranceInquiryStatusEnum.enumValues,

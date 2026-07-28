@@ -1,10 +1,8 @@
 import { ApiError, notifyStaffSessionUnauthorized } from './authClient.js';
-
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 const INSURANCE_REMINDER_FILTER_FIELDS = ['purpose', 'status', 'paymentStatus', 'renewalStatus'];
 const INSURANCE_BROADCAST_FILTER_FIELDS = ['purpose', 'status', 'paymentStatus', 'renewalStatus'];
 const INSURANCE_BROADCAST_TARGET_MODES = ['selected_cases', 'filtered_results'];
-
 const insuranceStatusHints = {
   submitted: 'New customer intake waiting for staff review.',
   needs_documents: 'The customer must add more supporting files before the inquiry can continue.',
@@ -379,6 +377,7 @@ export const updateInsuranceInquiryStatus = async ({
   inquiryId,
   status,
   reviewNotes,
+  customerMessage,
   expectedUpdatedAt,
   accessToken,
 }) => {
@@ -395,6 +394,7 @@ export const updateInsuranceInquiryStatus = async ({
       body: {
         status,
         reviewNotes: trimOrNull(reviewNotes) ?? undefined,
+        customerMessage: trimOrNull(customerMessage) ?? undefined,
         expectedUpdatedAt: trimOrNull(expectedUpdatedAt) ?? undefined,
       },
     }),
