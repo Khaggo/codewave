@@ -33,7 +33,6 @@ import {
   canStaffReadQualityGate,
   canStaffRecordQualityGateVerdict,
   getBlockingQualityGateFindings,
-  getFindingRiskContribution,
   getLatestQualityGateOverride,
   getQualityGateReleaseState,
   getReviewNeededQualityGateFindings,
@@ -46,6 +45,19 @@ import {
   createQaReviewRequestCoordinator,
   isQaReviewTargetCurrent,
 } from './qaReviewRequestCoordinator.mjs'
+import {
+  EmptyPanelState,
+  formatDateTime,
+  formatLabel,
+  getLoadedJobOrderReference,
+  getPendingReviewGuidance,
+  getReleaseCopy,
+  InlineMessage,
+  QualityFindingCard,
+  releaseSummaryByState,
+  SectionFrame,
+  StatusMessage,
+} from './QAAuditPresentation'
 
 const initialQaState = {
   status: 'qa_ready',
@@ -68,244 +80,6 @@ const initialQaDetailState = {
 const initialVerdictState = {
   status: 'verdict_ready',
   message: '',
-}
-
-const releaseSummaryByState = {
-  release_allowed: {
-    value: 'Allowed',
-    toneClass: 'badge badge-green',
-  },
-  release_allowed_by_override: {
-    value: 'Allowed by Override',
-    toneClass: 'badge badge-blue',
-  },
-  release_blocked: {
-    value: 'Blocked',
-    toneClass: 'badge badge-red',
-  },
-  release_pending_audit: {
-    value: 'Pending Review',
-    toneClass: 'badge badge-orange',
-  },
-  release_unavailable: {
-    value: 'Awaiting Load',
-    toneClass: 'badge badge-gray',
-  },
-}
-
-function normalizeBusinessToken(value, fallback = 'WORK') {
-  const normalizedValue = String(value ?? '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-
-  return normalizedValue || fallback
-}
-
-function formatCompactDateToken(value) {
-  if (!value) return ''
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}${month}${day}`
-}
-
-function formatCompactTimeToken(value) {
-  if (!value) return ''
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  const seconds = String(date.getSeconds()).padStart(2, '0')
-  return `${hours}${minutes}${seconds}`
-}
-
-function formatJobOrderReference(jobOrder) {
-  if (jobOrder?.jobOrderReference) {
-    return jobOrder.jobOrderReference
-  }
-
-  if (jobOrder?.sourceBackJobReference) {
-    return `JO-RW · ${jobOrder.sourceBackJobReference}`
-  }
-
-  if (jobOrder?.sourceBookingReference) {
-    return `JO · ${jobOrder.sourceBookingReference}`
-  }
-
-  const compactDate = formatCompactDateToken(jobOrder?.workDate ?? jobOrder?.createdAt)
-  const timeToken = formatCompactTimeToken(jobOrder?.createdAt ?? jobOrder?.updatedAt)
-  const plateToken = normalizeBusinessToken(
-    jobOrder?.plateNumber ?? jobOrder?.vehicleDisplayName ?? jobOrder?.serviceAdviserCode,
-    'WORK',
-  )
-  const prefix = jobOrder?.jobType === 'back_job' ? 'JO-RW' : 'JO'
-
-  return compactDate ? `${prefix}-${compactDate}-${timeToken || plateToken}` : `${prefix}-${plateToken}`
-}
-
-function getLoadedJobOrderReference(jobOrderId, jobOrderOptions, qualityGate = null) {
-  if (qualityGate?.jobOrderReference) {
-    return qualityGate.jobOrderReference
-  }
-
-  const matchingJobOrder =
-    jobOrderOptions.find((jobOrder) => jobOrder.id === jobOrderId) ??
-    (qualityGate?.jobOrderId ? jobOrderOptions.find((jobOrder) => jobOrder.id === qualityGate.jobOrderId) : null)
-
-  if (matchingJobOrder) {
-    return formatJobOrderReference(matchingJobOrder)
-  }
-
-  return 'Selected job order'
-}
-
-function getPendingReviewGuidance({
-  qualityGate,
-  blockingFindings,
-  reviewNeededFindings,
-  canRecordLiveVerdict,
-}) {
-  if (!qualityGate || qualityGate.status !== 'pending_review') {
-    return null
-  }
-
-  if (blockingFindings.length > 0) {
-    return {
-      toneClass: 'rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100',
-      message: qualityGate.blockingReason || 'Resolve the blocking QA findings before release can continue.',
-    }
-  }
-
-  if (reviewNeededFindings.length > 0) {
-    return {
-      toneClass: 'rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100',
-      message: 'QA is awaiting reviewer attention. Clear the warning findings, then record the adviser release verdict.',
-    }
-  }
-
-  return {
-    toneClass: 'rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-100',
-    message: canRecordLiveVerdict
-      ? 'No blocking findings remain. Record a Pass verdict to clear this release.'
-      : 'No blocking findings remain. A service adviser or super admin still needs to record Pass before release can continue.',
-  }
-}
-
-function formatLabel(value) {
-  return String(value ?? '')
-    .split('_')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function formatDateTime(value) {
-  if (!value) return 'Not recorded'
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return String(value)
-  }
-
-  return date.toLocaleString('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function getReleaseCopy(state) {
-  if (state === 'release_allowed_by_override') return 'Release allowed by override.'
-  if (state === 'release_allowed') return 'Release allowed.'
-  if (state === 'release_blocked') return 'Release blocked.'
-  if (state === 'release_pending_audit') return 'Awaiting review.'
-  return 'Load a QA gate to review release.'
-}
-
-function EmptyPanelState({ title, copy }) {
-  return (
-    <div className="empty-panel">
-      <ShieldCheck size={28} className="mx-auto text-ink-muted" />
-      <p className="mt-3 text-sm font-semibold text-ink-primary">{title}</p>
-      <p className="mt-2 text-sm text-ink-secondary">{copy}</p>
-    </div>
-  )
-}
-
-function StatusMessage({ state }) {
-  if (!state.message) return null
-
-  const toneClass =
-    state.status === 'qa_loaded' || state.status === 'qa_completed'
-      ? 'status-message status-message-success'
-      : state.status === 'qa_unavailable'
-        ? 'status-message status-message-warning'
-        : 'status-message status-message-danger'
-
-  return <div className={toneClass}>{state.message}</div>
-}
-
-function InlineMessage({ state, successStatus }) {
-  if (!state.message) return null
-
-  return (
-    <div className={state.status === successStatus ? 'status-message status-message-success' : 'status-message status-message-danger'}>
-      {state.message}
-    </div>
-  )
-}
-
-function QualityFindingCard({ finding }) {
-  const riskContribution = getFindingRiskContribution(finding)
-  const severityTone =
-    finding.severity === 'critical'
-      ? 'badge badge-red'
-      : finding.severity === 'warning'
-        ? 'badge badge-orange'
-        : 'badge badge-gray'
-
-  return (
-    <article className="rounded-2xl border border-surface-border bg-surface-card p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="badge badge-gray">{formatLabel(finding.gate)}</span>
-        <span className={severityTone}>{formatLabel(finding.severity)}</span>
-        {riskContribution !== null ? <span className="badge badge-gray">Risk {riskContribution}</span> : null}
-      </div>
-      <p className="mt-3 text-sm font-semibold text-ink-primary">{finding.code}</p>
-      {finding.message ? <p className="mt-2 text-sm text-ink-secondary">{finding.message}</p> : null}
-      {finding.provenance?.evidenceSummary ? (
-        <p className="mt-3 text-xs text-ink-muted">{finding.provenance.evidenceSummary}</p>
-      ) : null}
-    </article>
-  )
-}
-
-function SectionFrame({ id, title, copy, badge, children }) {
-  return (
-    <section id={id} className="ops-panel scroll-mt-24">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="card-title">{title}</p>
-          {copy ? <p className="mt-2 text-sm text-ink-secondary">{copy}</p> : null}
-        </div>
-        {badge ? badge : null}
-      </div>
-      <div className="mt-4">{children}</div>
-    </section>
-  )
 }
 
 export default function QAAuditWorkspace() {

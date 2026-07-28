@@ -40,6 +40,13 @@ import BookingActionConfirmModal from './BookingActionConfirmModal'
 import BookingsCalendarView from './BookingsCalendarView'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import PageHeader from '@/components/ui/PageHeader'
+import {
+  formatClockLabel,
+  formatDateTime,
+  formatPesoFromCents,
+  formatTimeSlotWindow,
+  getReservationPaymentStatusLabel,
+} from './bookingOperationsFormat.mjs'
 
 const STAFF_BOOKING_ROLES = new Set(['service_adviser', 'super_admin'])
 
@@ -245,68 +252,6 @@ function formatDate(dateKey) {
     day: 'numeric',
     year: 'numeric',
   })
-}
-
-function formatDateTime(value) {
-  if (!value) return 'Not generated yet'
-
-  return new Date(value).toLocaleString('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function formatPesoFromCents(amountCents) {
-  const amount = Number(amountCents ?? 0) / 100
-  return new Intl.NumberFormat('en-PH', {
-    style: 'currency',
-    currency: 'PHP',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(amount) ? amount : 0)
-}
-
-function getReservationPaymentStatusLabel(payment) {
-  switch (payment?.status) {
-    case 'paid':
-      return 'Paid'
-    case 'failed':
-      return 'Payment failed'
-    case 'cancelled':
-      return 'Payment cancelled'
-    case 'refunded':
-      return 'Refund review'
-    case 'expired':
-      return 'Hold expired'
-    default:
-      return 'Awaiting payment'
-  }
-}
-
-function formatClockLabel(value) {
-  const normalizedValue = String(value ?? '').trim()
-  const match = /^(\d{2}):(\d{2})/.exec(normalizedValue)
-
-  if (!match) {
-    return normalizedValue || '--'
-  }
-
-  const hours = Number(match[1])
-  const minutes = match[2]
-  const meridiem = hours >= 12 ? 'PM' : 'AM'
-  const displayHour = hours % 12 === 0 ? 12 : hours % 12
-
-  return `${displayHour}:${minutes} ${meridiem}`
-}
-
-function formatTimeSlotWindow(slot) {
-  if (!slot?.startTime || !slot?.endTime) {
-    return ''
-  }
-
-  return `${formatClockLabel(slot.startTime)} - ${formatClockLabel(slot.endTime)}`
 }
 
 function toSortableTimeValue(value) {

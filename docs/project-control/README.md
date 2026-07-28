@@ -1,12 +1,12 @@
 # Project Control Pack
 
-Last updated: 2026-05-21
+Last updated: 2026-07-28
 
 This folder is the continuity source of truth for AUTOCARE recovery work after the panel evaluation.
 
 Every new chat or agent working on this project should read these files before making changes:
 
-1. `CURRENT_STATE.md`
+1. `CURRENT_STATE.md` (canonical current implementation, runtime, and verification state)
 2. `PANELIST_FEEDBACK_MATRIX.md`
 3. `OBJECTIVE_COMPLIANCE_MATRIX.md`
 4. `QA_LEDGER.md`

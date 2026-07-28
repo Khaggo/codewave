@@ -1,6 +1,6 @@
 # AUTOCARE Current State
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 ## Project Goal
 
@@ -29,13 +29,13 @@ The reliability-first repository modernization baseline is implemented:
   reason, and an additional production acknowledgement.
 - Generated OpenAPI transport contracts and framework-independent domain utilities live under
   `packages/`; contract drift is deterministic and checked in CI.
-- Graphify now excludes generated output and passes with 8,200 source nodes and 19,829 edges.
+- Graphify now excludes generated output and passes with 1,373 source nodes and 3,157 edges.
   File-growth guards prevent existing oversized modules from growing and apply 500-line UI,
   800-line backend, and 1,000-line test limits to new modules.
 - Backend coverage is ratcheted from the measured 71.88% line, 71.96% statement, 43.31% branch,
   and 60.52% function baseline.
 - Staff web bundle budgets allow at most 5% unexplained growth. Current first-load values are
-  114 kB for the Job Orders board, 146 kB for the focused workspace, and 161 kB for QA Audit.
+  115 kB for the Job Orders board, 150 kB for the focused workspace, and 164 kB for QA Audit.
   The current Android export baseline is 3.74 MiB.
 - Job Order service-progress rules and mobile invoice-checkout rules have begun moving out of
   the oversized screens into independently tested feature models.
@@ -51,6 +51,42 @@ branch protections and repository security features in the host UI, and continue
 characterization-first decomposition of the large Job Order, mobile dashboard, booking, and
 insurance modules. The existing mixed worktree must be reviewed and split into subsystem commits
 before merge.
+
+## Repository Checkup - 2026-07-28
+
+The current reliability pass is locally green:
+
+- Root workspace dependency resolution is clean (`npm ls --depth=0`) and still uses one root
+  lockfile.
+- Backend typechecks and production builds pass for both services.
+- Staff web lint, all 216 Node-runner tests, and an isolated production build pass.
+- All 73 mobile tests and all 3 runtime-manager tests pass.
+- Focused Job Order, QA, and staff-work-queue backend coverage passes with 36 tests across
+  4 suites.
+- Repository policy, file-growth policy, OpenAPI contract drift, agent manifests, and all
+  41 canonical architecture documents pass.
+- The rebuilt Graphify source graph passes policy with 1,373 nodes and 3,157 edges. Graphify MCP
+  reports 99% extracted and 1% inferred confidence.
+- Critical staff-web bundle growth remains within the 5% budget: Job Orders board 0.36%,
+  focused Job Order workspace 1.88%, and QA Audit 1.16%.
+- The backend on port `3000` and staff web on port `3002` remain managed by the detached runtime
+  manager and are included in the final live health smoke.
+
+Repository hygiene remediation is prepared in the worktree:
+
+- 1,325 generated browser/runtime files under `frontend/.runtime` and `mobile/.runtime` are staged
+  for removal from version control while the local runtime directories remain available.
+- A root `.gitattributes` policy now keeps source text on LF while preserving CRLF for Windows
+  command and PowerShell scripts.
+- Oversized Job Order, QA, queue, booking, and backend test/service modules were decomposed behind
+  existing public interfaces; the file-growth policy now passes without raising baselines.
+- The web bundle checker accepts `NEXT_DIST_DIR`, so isolated verification no longer touches a
+  running development build.
+
+The fresh online package-advisory audit remains unverified in this pass because the execution
+environment did not authorize sending package metadata to the external npm registry. The prior
+2026-07-26 dependency-audit result below remains historical evidence, not a new audit result.
+Static secret and unsafe-pattern scans found no high-confidence findings in the current tree.
 
 ## Performance and Security Baseline - 2026-07-26
 
@@ -80,7 +116,8 @@ Security baseline after remediation:
 
 Open repository-hygiene follow-ups:
 
-- Remove the 741 generated files already tracked under `mobile/.runtime` in a dedicated cleanup change after confirming no release process depends on them.
+- Review and commit the staged removal of generated runtime files after confirming the cleanup
+  does not overlap another active branch.
 - Plan the Expo SDK 57 / React Native 0.86 migration and rerun Android export plus device QA.
 - Upgrade or replace the remaining dev-only lint, test, CLI, and Drizzle toolchain packages when compatible major versions are approved.
 

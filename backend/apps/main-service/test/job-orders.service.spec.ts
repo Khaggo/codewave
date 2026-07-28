@@ -1,4 +1,3 @@
-import { Test as NestTest } from '@nestjs/testing';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
@@ -11,30 +10,13 @@ import { JobOrdersRepository } from '@main-modules/job-orders/repositories/job-o
 import { JobOrdersService } from '@main-modules/job-orders/services/job-orders.service';
 import { StaffWorkQueuesService } from '@main-modules/staff-work-queues/services/staff-work-queues.service';
 import { TechnicianProfilesService } from '@main-modules/technician-profiles/services/technician-profiles.service';
+import { ServiceTest as Test } from './helpers/main-service-unit-test-module';
 
-const staffWorkQueuesProvider = () => ({
-  provide: StaffWorkQueuesService,
-  useValue: {
-    completeClaim: jest.fn().mockResolvedValue(null),
-  },
-});
-
-const Test = {
-  createTestingModule(
-    metadata: Parameters<typeof NestTest.createTestingModule>[0],
-  ) {
-    return NestTest.createTestingModule({
-      ...metadata,
-      providers: [staffWorkQueuesProvider(), ...(metadata.providers ?? [])],
-    });
-  },
-};
+const createEventBus = () => ({ publish: jest.fn() });
 
 describe('JobOrdersService', () => {
   it('creates a job order from a confirmed booking with adviser and technician validation', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const jobOrdersRepository = {
       hasBookingSource: jest.fn().mockResolvedValue(false),
       create: jest.fn().mockResolvedValue({
@@ -153,9 +135,7 @@ describe('JobOrdersService', () => {
   });
 
   it('rejects job-order creation when the booking source is not confirmed', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const moduleRef = await Test.createTestingModule({
       providers: [
         JobOrdersService,
@@ -222,9 +202,7 @@ describe('JobOrdersService', () => {
   });
 
   it('rejects invalid technician assignments during job-order creation', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const jobOrdersRepository = {
       hasBookingSource: jest.fn().mockResolvedValue(false),
       create: jest.fn(),
@@ -328,9 +306,7 @@ describe('JobOrdersService', () => {
   });
 
   it('replaces saved assignments, promotes draft job orders, and blocks clearing operational work', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const replacedResult = {
       id: 'job-order-1',
       status: 'assigned',
@@ -427,9 +403,7 @@ describe('JobOrdersService', () => {
   });
 
   it('downgrades assignmentless operational job orders to draft and flags finalized records for review', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const jobOrdersRepository = {
       findByStatuses: jest.fn().mockResolvedValue([
         {
@@ -531,9 +505,7 @@ describe('JobOrdersService', () => {
   });
 
   it('restricts technician status changes to assigned operational states only', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const moduleRef = await Test.createTestingModule({
       providers: [
         JobOrdersService,
@@ -597,9 +569,7 @@ describe('JobOrdersService', () => {
   });
 
   it('lets a service adviser append progress entries and mark completed items', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const updateResult = {
       id: 'job-order-1',
       progressEntries: [
@@ -703,9 +673,7 @@ describe('JobOrdersService', () => {
   });
 
   it('rejects retired technician progress and photo evidence on closed job orders', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const jobOrdersRepository = {
       findById: jest
         .fn()
@@ -776,9 +744,7 @@ describe('JobOrdersService', () => {
   });
 
   it('finalizes a ready-for-QA job order into an invoice-ready record with adviser snapshot data', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const finalizedResult = {
       id: 'job-order-1',
       customerUserId: 'customer-1',
@@ -1109,9 +1075,7 @@ describe('JobOrdersService', () => {
   });
 
   it('syncs linked back-jobs to resolved when a rework job order is finalized', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const finalizedResult = {
       id: 'job-order-rework-1',
       customerUserId: 'customer-1',
@@ -1203,9 +1167,7 @@ describe('JobOrdersService', () => {
   });
 
   it('records invoice settlement only for finalized job orders and emits the paid service event', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const paidResult = {
       id: 'job-order-1',
       customerUserId: 'customer-1',
@@ -1332,9 +1294,7 @@ describe('JobOrdersService', () => {
   });
 
   it('rejects invoice generation for incomplete, blocked, or already-invoiced job orders', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const jobOrdersRepository = {
       findById: jest
         .fn()
@@ -1432,9 +1392,7 @@ describe('JobOrdersService', () => {
   });
 
   it('allows the claimed adviser to finalize and completes the Job Order claim', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const qualityGatesService = {
       beginQualityGate: jest.fn(),
       assertReleaseAllowed: jest.fn().mockResolvedValue(undefined),
@@ -1548,9 +1506,7 @@ describe('JobOrdersService', () => {
   });
 
   it('creates a rework job order from an approved back-job case and links the lineage', async () => {
-    const eventBus = {
-      publish: jest.fn(),
-    };
+    const eventBus = createEventBus();
     const backJobsRepository = {
       findOptionalById: jest.fn().mockResolvedValue({
         id: 'back-job-1',

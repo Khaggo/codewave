@@ -168,6 +168,15 @@ import {
 } from '../../../../shared/queue/ai-worker.constants';
 import { AiWorkerJobMetadata } from '../../../../shared/queue/ai-worker.types';
 import { setupSwagger } from '../../src/swagger';
+import {
+  cloneBackJob,
+  cloneBooking,
+  cloneInsuranceInquiry,
+  cloneJobOrder,
+  cloneNotification,
+  cloneQualityGate,
+  cloneUser,
+} from './main-service-test-cloners';
 
 type UserRole = 'customer' | 'technician' | 'head_technician' | 'service_adviser' | 'super_admin';
 
@@ -196,7 +205,7 @@ type AddressRecord = {
   updatedAt: Date;
 };
 
-type UserRecord = {
+export type UserRecord = {
   id: string;
   email: string;
   deletedEmail?: string | null;
@@ -249,7 +258,7 @@ type RefreshTokenRecord = {
   updatedAt: Date;
 };
 
-type VehicleRecord = {
+export type VehicleRecord = {
   id: string;
   userId: string;
   plateNumber: string;
@@ -271,7 +280,7 @@ type RescheduleBookingCommand = RescheduleBookingDto & {
   changedByUserId?: string | null;
 };
 
-type ServiceRecord = {
+export type ServiceRecord = {
   id: string;
   categoryId: string | null;
   name: string;
@@ -283,7 +292,7 @@ type ServiceRecord = {
   updatedAt: Date;
 };
 
-type TimeSlotRecord = {
+export type TimeSlotRecord = {
   id: string;
   label: string;
   startTime: string;
@@ -307,7 +316,7 @@ type BookingDateClosureRecord = {
   updatedAt: Date;
 };
 
-type BookingRecord = {
+export type BookingRecord = {
   id: string;
   userId: string;
   vehicleId: string;
@@ -332,7 +341,7 @@ type BookingPaymentPolicyRecord = {
   updatedAt: Date;
 };
 
-type BookingReservationPaymentRecord = {
+export type BookingReservationPaymentRecord = {
   id: string;
   bookingId: string;
   provider: 'paymongo' | 'manual_counter';
@@ -353,14 +362,14 @@ type BookingReservationPaymentRecord = {
   updatedAt: Date;
 };
 
-type BookingServiceRecord = {
+export type BookingServiceRecord = {
   id: string;
   bookingId: string;
   serviceId: string;
   createdAt: Date;
 };
 
-type BookingStatusHistoryRecord = {
+export type BookingStatusHistoryRecord = {
   id: string;
   bookingId: string;
   previousStatus: BookingStatus | null;
@@ -426,7 +435,7 @@ type JobOrderProgressEntryType = (typeof jobOrderProgressEntryTypeEnum.enumValue
 type JobOrderInvoicePaymentStatus = (typeof jobOrderInvoicePaymentStatusEnum.enumValues)[number];
 type JobOrderInvoicePaymentMethod = (typeof jobOrderInvoicePaymentMethodEnum.enumValues)[number];
 
-type JobOrderRecord = {
+export type JobOrderRecord = {
   id: string;
   sourceType: JobOrderSourceType;
   sourceId: string;
@@ -442,7 +451,7 @@ type JobOrderRecord = {
   updatedAt: Date;
 };
 
-type JobOrderItemRecord = {
+export type JobOrderItemRecord = {
   id: string;
   jobOrderId: string;
   name: string;
@@ -454,14 +463,14 @@ type JobOrderItemRecord = {
   updatedAt: Date;
 };
 
-type JobOrderAssignmentRecord = {
+export type JobOrderAssignmentRecord = {
   id: string;
   jobOrderId: string;
   technicianUserId: string;
   assignedAt: Date;
 };
 
-type JobOrderProgressEntryRecord = {
+export type JobOrderProgressEntryRecord = {
   id: string;
   jobOrderId: string;
   technicianUserId: string;
@@ -471,7 +480,7 @@ type JobOrderProgressEntryRecord = {
   createdAt: Date;
 };
 
-type JobOrderPhotoRecord = {
+export type JobOrderPhotoRecord = {
   id: string;
   jobOrderId: string;
   takenByUserId: string;
@@ -483,7 +492,7 @@ type JobOrderPhotoRecord = {
   createdAt: Date;
 };
 
-type JobOrderInvoiceRecord = {
+export type JobOrderInvoiceRecord = {
   id: string;
   jobOrderId: string;
   invoiceReference: string;
@@ -545,7 +554,7 @@ type QualityGateStatus = (typeof qualityGateStatusEnum.enumValues)[number];
 type QualityGateFindingGate = (typeof qualityGateFindingGateEnum.enumValues)[number];
 type QualityGateFindingSeverity = (typeof qualityGateFindingSeverityEnum.enumValues)[number];
 
-type QualityGateRecord = {
+export type QualityGateRecord = {
   id: string;
   jobOrderId: string;
   status: QualityGateStatus;
@@ -562,7 +571,7 @@ type QualityGateRecord = {
   updatedAt: Date;
 };
 
-type QualityGateFindingRecord = {
+export type QualityGateFindingRecord = {
   id: string;
   qualityGateId: string;
   gate: QualityGateFindingGate;
@@ -573,7 +582,7 @@ type QualityGateFindingRecord = {
   createdAt: Date;
 };
 
-type QualityGateOverrideRecord = {
+export type QualityGateOverrideRecord = {
   id: string;
   qualityGateId: string;
   actorUserId: string;
@@ -728,7 +737,7 @@ type RewardRedemptionRecord = {
 type BackJobStatus = (typeof backJobStatusEnum.enumValues)[number];
 type BackJobFindingSeverity = (typeof backJobFindingSeverityEnum.enumValues)[number];
 
-type BackJobRecord = {
+export type BackJobRecord = {
   id: string;
   customerUserId: string;
   vehicleId: string;
@@ -745,7 +754,7 @@ type BackJobRecord = {
   updatedAt: Date;
 };
 
-type BackJobFindingRecord = {
+export type BackJobFindingRecord = {
   id: string;
   backJobId: string;
   category: string;
@@ -761,7 +770,7 @@ type InsuranceInquiryType = (typeof insuranceInquiryTypeEnum.enumValues)[number]
 type InsuranceInquiryStatus = (typeof insuranceInquiryStatusEnum.enumValues)[number];
 type InsuranceDocumentType = (typeof insuranceDocumentTypeEnum.enumValues)[number];
 
-type InsuranceInquiryRecord = {
+export type InsuranceInquiryRecord = {
   id: string;
   userId: string;
   vehicleId: string;
@@ -784,7 +793,7 @@ type InsuranceInquiryRecord = {
   updatedAt: Date;
 };
 
-type InsuranceDocumentRecord = {
+export type InsuranceDocumentRecord = {
   id: string;
   inquiryId: string;
   fileName: string;
@@ -796,7 +805,7 @@ type InsuranceDocumentRecord = {
   updatedAt: Date;
 };
 
-type InsuranceActivityRecord = {
+export type InsuranceActivityRecord = {
   id: string;
   inquiryId: string;
   action: string;
@@ -901,7 +910,7 @@ type NotificationPreferenceRecord = {
   updatedAt: Date;
 };
 
-type NotificationRecord = {
+export type NotificationRecord = {
   id: string;
   userId: string;
   category: NotificationCategory;
@@ -932,7 +941,7 @@ type ReminderRuleRecord = {
   updatedAt: Date;
 };
 
-type NotificationDeliveryAttemptRecord = {
+export type NotificationDeliveryAttemptRecord = {
   id: string;
   notificationId: string;
   attemptNumber: number;
@@ -940,170 +949,6 @@ type NotificationDeliveryAttemptRecord = {
   providerMessageId: string | null;
   errorMessage: string | null;
   attemptedAt: Date;
-};
-
-const cloneUser = (user: UserRecord | null | undefined) => {
-  if (!user) {
-    return user ?? null;
-  }
-
-  return {
-    ...user,
-    profile: { ...user.profile },
-    addresses: user.addresses.map((address) => ({ ...address })),
-  };
-};
-
-const cloneBooking = (
-  booking: BookingRecord | null | undefined,
-  servicesById: Map<string, ServiceRecord>,
-  timeSlotsById: Map<string, TimeSlotRecord>,
-  bookingServicesList: BookingServiceRecord[],
-  bookingStatusHistoryList: BookingStatusHistoryRecord[],
-  reservationPaymentsByBookingId: Map<string, BookingReservationPaymentRecord>,
-  user?: UserRecord | null,
-  vehicle?: VehicleRecord | null,
-) => {
-  if (!booking) {
-    return booking ?? null;
-  }
-
-  return {
-    ...booking,
-    user: cloneUser(user),
-    vehicle: vehicle ? { ...vehicle } : null,
-    timeSlot: { ...timeSlotsById.get(booking.timeSlotId)! },
-    requestedServices: bookingServicesList
-      .filter((entry) => entry.bookingId === booking.id)
-      .map((entry) => ({
-        ...entry,
-        service: { ...servicesById.get(entry.serviceId)! },
-      })),
-    reservationPayment: reservationPaymentsByBookingId.get(booking.id)
-      ? { ...reservationPaymentsByBookingId.get(booking.id)! }
-      : null,
-    statusHistory: bookingStatusHistoryList
-      .filter((entry) => entry.bookingId === booking.id)
-      .sort((left, right) => right.changedAt.getTime() - left.changedAt.getTime())
-      .map((entry) => ({ ...entry })),
-  };
-};
-
-const cloneJobOrder = (
-  jobOrder: JobOrderRecord | null | undefined,
-  items: JobOrderItemRecord[],
-  assignments: JobOrderAssignmentRecord[],
-  progressEntries: JobOrderProgressEntryRecord[],
-  photos: JobOrderPhotoRecord[],
-  invoiceRecords: JobOrderInvoiceRecord[],
-) => {
-  if (!jobOrder) {
-    return jobOrder ?? null;
-  }
-
-  return {
-    ...jobOrder,
-    items: items
-      .filter((item) => item.jobOrderId === jobOrder.id)
-      .sort((left, right) => left.sortOrder - right.sortOrder)
-      .map((item) => ({ ...item })),
-    assignments: assignments
-      .filter((assignment) => assignment.jobOrderId === jobOrder.id)
-      .sort((left, right) => left.assignedAt.getTime() - right.assignedAt.getTime())
-      .map((assignment) => ({ ...assignment })),
-    progressEntries: progressEntries
-      .filter((entry) => entry.jobOrderId === jobOrder.id)
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .map((entry) => ({ ...entry })),
-    photos: photos
-      .filter((photo) => photo.jobOrderId === jobOrder.id)
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .map((photo) => ({ ...photo })),
-    invoiceRecord:
-      invoiceRecords
-        .filter((record) => record.jobOrderId === jobOrder.id)
-        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-        .map((record) => ({ ...record }))[0] ?? null,
-  };
-};
-
-const cloneQualityGate = (
-  qualityGate: QualityGateRecord | null | undefined,
-  findings: QualityGateFindingRecord[],
-  overrides: QualityGateOverrideRecord[],
-) => {
-  if (!qualityGate) {
-    return qualityGate ?? null;
-  }
-
-  return {
-    ...qualityGate,
-    auditJob: qualityGate.auditJob ? { ...qualityGate.auditJob } : null,
-    findings: findings
-      .filter((finding) => finding.qualityGateId === qualityGate.id)
-      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
-      .map((finding) => ({ ...finding, provenance: finding.provenance ? { ...finding.provenance } : null })),
-    overrides: overrides
-      .filter((override) => override.qualityGateId === qualityGate.id)
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .map((override) => ({ ...override })),
-  };
-};
-
-const cloneBackJob = (
-  backJob: BackJobRecord | null | undefined,
-  findings: BackJobFindingRecord[],
-) => {
-  if (!backJob) {
-    return backJob ?? null;
-  }
-
-  return {
-    ...backJob,
-    findings: findings
-      .filter((finding) => finding.backJobId === backJob.id)
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .map((finding) => ({ ...finding })),
-  };
-};
-
-const cloneInsuranceInquiry = (
-  inquiry: InsuranceInquiryRecord | null | undefined,
-  documents: InsuranceDocumentRecord[],
-  activities: InsuranceActivityRecord[],
-) => {
-  if (!inquiry) {
-    return inquiry ?? null;
-  }
-
-  return {
-    ...inquiry,
-    documents: documents
-      .filter((document) => document.inquiryId === inquiry.id)
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .map((document) => ({ ...document })),
-    activities: activities
-      .filter((activity) => activity.inquiryId === inquiry.id)
-      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
-      .map((activity) => ({ ...activity })),
-  };
-};
-
-const cloneNotification = (
-  notification: NotificationRecord | null | undefined,
-  attempts: NotificationDeliveryAttemptRecord[],
-) => {
-  if (!notification) {
-    return notification ?? null;
-  }
-
-  return {
-    ...notification,
-    attempts: attempts
-      .filter((attempt) => attempt.notificationId === notification.id)
-      .sort((left, right) => right.attemptedAt.getTime() - left.attemptedAt.getTime())
-      .map((attempt) => ({ ...attempt })),
-  };
 };
 
 class InMemoryUsersRepository {

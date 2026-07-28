@@ -2,13 +2,16 @@ import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } fro
 import path from 'node:path'
 
 const repoRoot = process.cwd()
-const buildRoot = path.join(repoRoot, 'frontend', '.next')
+const distDir = process.env.NEXT_DIST_DIR?.trim() || '.next'
+const buildRoot = path.join(repoRoot, 'frontend', distDir)
 const manifestPath = path.join(buildRoot, 'app-build-manifest.json')
 const baselinePath = path.join(repoRoot, 'tools', 'web-performance-baseline.json')
 const reportPath = path.join(buildRoot, 'web-bundle-report.json')
 
 if (!existsSync(manifestPath)) {
-  console.error('Missing frontend/.next/app-build-manifest.json. Run npm run build:web first.')
+  console.error(
+    `Missing ${path.relative(repoRoot, manifestPath)}. Run npm run build:web first.`,
+  )
   process.exit(2)
 }
 
