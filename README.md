@@ -2,7 +2,7 @@
 
 Codewave powers Cruisers Crib Auto Care Center:
 
-- `backend/`: NestJS main and ecommerce services
+- `backend/`: NestJS service-operations API
 - `frontend/`: Next.js staff and administrator workspace
 - `mobile/`: Expo customer application
 - `qa/playwright/`: cross-application workflow tests
@@ -30,14 +30,19 @@ credentials or production connection strings.
 | Surface | Command | Port |
 | --- | --- | --- |
 | Main API | `npm run dev:main` | `3000` |
-| Ecommerce API | `npm run dev:ecommerce` | `3001` |
 | Staff web | `npm run dev:web` | `3002` |
+| Staff web Storybook | `npm run dev:storybook` | `6006` |
+| Mobile Storybook | `npm run dev:storybook:mobile` | `8085` |
 | Expo LAN | `npm run dev:mobile` | `8081` |
 | Expo web | `npm run dev:mobile:web` | `8090` |
 
 The runtime commands start detached, return immediately, reuse a healthy listener, and
 refuse to replace an unknown process. Use `runtime:wait` when the next operation needs
-an explicit bounded readiness check.
+an explicit bounded readiness check. A cold `mobile-web` wait may take up to 150 seconds
+because it compiles the actual Expo web bundle before reporting ready; later browser loads
+reuse that warmed bundle. Runtime-manager commands print their deadline immediately,
+bound OS process probes, and terminate with exit code `124` if the manager exceeds its
+operation contract.
 
 ```powershell
 npm run runtime:status
@@ -47,9 +52,9 @@ npm run runtime:stop -- backend-main
 npm run runtime:logs -- backend-main
 ```
 
-Runtime names are `backend-main`, `backend-ecommerce`, `staff-web`, `mobile-lan`, and
-`mobile-web`. Use the corresponding `dev:*:foreground` command only when a developer
-explicitly wants attached live logs.
+Runtime names are `backend-main`, `staff-web`, `storybook-web`, `storybook-mobile`,
+`mobile-lan`, and `mobile-web`. Use the corresponding `dev:*:foreground` command only
+when a developer explicitly wants attached live logs.
 
 ## Quality Gates
 
@@ -59,6 +64,7 @@ npm test
 npm run build
 npm run audit
 npm run contracts:check
+npm run ui:check
 ```
 
 Use the narrowest affected check while developing. Run `npm run check` before a review or

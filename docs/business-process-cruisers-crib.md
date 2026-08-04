@@ -119,8 +119,8 @@ The PDF proposes that the system should support:
 | Insurance document handling | Mobile insurance request with multiple supporting files, staff insurance workspace | QA passed for multi-file upload/open/download |
 | Insurance estimate and approval workflow | Insurance inquiry purpose/status tracking plus estimate document uploads | Partial only. Current system does not yet implement a structured estimate-to-insurer-to-approved-job-order bridge. |
 | Customer complaint/back-job handling | Staff-linked Back-Jobs and rework lifecycle tied to prior service | QA passed for staff-linked path; customer initiation not claimed |
-| Payment tracking | Invoices & Orders, manual payment recording, service/ecommerce invoice status | QA passed, with invoice lookup/visibility polish still monitored |
-| Customer loyalty | Rewards and rule-driven accrual after qualifying paid invoice events | QA passed for service and ecommerce paid-invoice timing |
+| Payment tracking | Service invoices and manual payment recording from finalized Job Orders | QA passed, with invoice lookup/visibility polish still monitored |
+| Customer loyalty | Rewards and rule-driven accrual after qualifying paid service events | QA passed for paid-service timing |
 | Vehicle history | Unified vehicle lifecycle timeline with service, invoice/payment, insurance, and reviewed-summary events | Objective 2 QA passed / monitor |
 | Communication and alerts | Current scope should be documented carefully as email/status updates and future enhancement areas where applicable | Do not over-claim unsupported direct chat/push behavior |
 

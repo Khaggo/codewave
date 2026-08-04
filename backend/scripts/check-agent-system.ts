@@ -2,6 +2,8 @@ import { createHash } from 'crypto';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import path from 'path';
 
+import { inspectTaskStatus } from './agent-task-status';
+
 type Manifest = {
   files: Array<{
     path: string;
@@ -60,9 +62,6 @@ const getTaskFiles = (directory: string): string[] =>
     return /^T\d+.*\.md$/u.test(entry.name) ? [entryPath] : [];
   });
 
-const getTaskStatus = (contents: string) =>
-  contents.match(/^## Status\s*\r?\n+\s*`([^`]+)`/mu)?.[1] ?? 'missing';
-
 const main = () => {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -112,8 +111,18 @@ const main = () => {
 
   const statusCounts = new Map<string, number>();
   for (const taskFile of getTaskFiles(tasksRoot)) {
-    const status = getTaskStatus(readFileSync(taskFile, 'utf8'));
-    statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1);
+    const relativePath = path.relative(repoRoot, taskFile).split(path.sep).join('/');
+    const inspection = inspectTaskStatus(
+      relativePath,
+      readFileSync(taskFile, 'utf8'),
+    );
+    errors.push(...inspection.errors);
+    if (inspection.status) {
+      statusCounts.set(
+        inspection.status,
+        (statusCounts.get(inspection.status) ?? 0) + 1,
+      );
+    }
   }
 
   const readyCount = statusCounts.get('ready') ?? 0;

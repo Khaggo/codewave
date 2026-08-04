@@ -1,6 +1,7 @@
 import {
   assertOperationalSafety,
   databaseFingerprint,
+  normalizeSpawnEnvironment,
   parseOperationalArgs,
 } from './operational-safety';
 
@@ -51,5 +52,21 @@ describe('operational safety', () => {
         databaseUrl: 'postgresql://admin:secret@db.example.test:5432/codewave',
       }).mode,
     ).toBe('execute');
+  });
+
+  it('normalizes duplicate Windows environment names before spawning tools', () => {
+    expect(
+      normalizeSpawnEnvironment(
+        {
+          PATH: 'legacy-path',
+          Path: 'canonical-path',
+          DATABASE_URL: 'postgresql://localhost:5433/codewave',
+        },
+        'win32',
+      ),
+    ).toEqual({
+      Path: 'canonical-path',
+      DATABASE_URL: 'postgresql://localhost:5433/codewave',
+    });
   });
 });

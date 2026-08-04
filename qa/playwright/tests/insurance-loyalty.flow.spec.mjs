@@ -192,7 +192,11 @@ async function chooseBookingCandidate(request, customerSession, services, timeSl
 }
 
 async function finalizeInvoiceWithoutPayment(page, { jobOrderId, scheduledDate, summary, testInfo }) {
-  await loadJobOrderById(page, { jobOrderId, scheduledDate, testInfo });
+  await loadJobOrderById(page, {
+    jobOrderId,
+    expectedStage: 'finalize',
+    claimIfAvailable: true,
+  });
   await page.getByRole('textbox', { name: 'Finalization summary' }).fill(summary);
   await page.getByRole('button', { name: 'Finalize Invoice-Ready Work - adviser/admin' }).click();
   await page.locator('.status-message').filter({ hasText: 'Invoice-ready record' }).waitFor();
@@ -426,7 +430,10 @@ test('loyalty points accrue only after paid service invoice, not reservation fee
   const headTechPage = await headTechContext.newPage();
   await loginStaff(headTechPage, qaAccounts.adviser, '/admin/qa-audit');
   await recordQaVerdict(headTechPage, {
-    jobOrderId,
+    jobOrderReference:
+      createdJobOrder.sourceBookingReference ||
+      createdJobOrder.jobOrderReference ||
+      createdBooking.bookingReference,
     scheduledDate: jobOrderWorkDate,
     note: `Adviser QA release for ${runMarker}`,
     testInfo,

@@ -19,10 +19,6 @@ const ROUTE_META = {
     title: 'Insurance',
     subtitle: 'Inquiry review, requirements, and coordination status',
   },
-  '/shop': {
-    title: 'Shop & Inventory',
-    subtitle: 'Catalog browsing and stock visibility',
-  },
   '/loyalty': {
     title: 'Loyalty Management',
     subtitle: 'Rewards, redemptions, and customer retention controls',
@@ -52,16 +48,20 @@ const ROUTE_META = {
     subtitle: 'Quality gate review and release decisions',
   },
   '/admin/invoices': {
-    title: 'Invoices & Orders',
-    subtitle: 'Invoice readiness and order record lookup',
+    title: 'Service Invoices',
+    subtitle: 'Finalized job-order invoices and payment status',
   },
-  '/admin/catalog': {
-    title: 'Catalog Admin',
-    subtitle: 'Marketplace publishing and customer-facing product visibility',
+  '/admin/accessories/orders': {
+    title: 'Accessory Orders',
+    subtitle: 'Pickup preparation, collection, cancellations, and refunds',
   },
-  '/admin/inventory': {
-    title: 'Inventory',
-    subtitle: 'Stock levels, restock needs, and item availability',
+  '/admin/accessories/catalog': {
+    title: 'Accessory Catalog',
+    subtitle: 'Products, variants, fitment, lighting review, media, and publication',
+  },
+  '/admin/accessories/stock': {
+    title: 'Accessory Stock',
+    subtitle: 'Inventory balances and audited stock adjustments',
   },
   '/admin/summaries': {
     title: 'Analytics',

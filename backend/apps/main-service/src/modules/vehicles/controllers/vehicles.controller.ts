@@ -1,10 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { ApiOkResponse, ApiOperation } from '@nestjs/swagger';
 import { Request } from 'express';
 
 import { Roles } from '@main-modules/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 import { CreateVehicleDto } from '../dto/create-vehicle.dto';
+import { CustomerGaragePageResponseDto } from '../dto/customer-garage-page-response.dto';
+import { ListCustomerGarageQueryDto } from '../dto/list-customer-garage-query.dto';
 import { UpdateVehicleDto } from '../dto/update-vehicle.dto';
 import { VehiclesService } from '../services/vehicles.service';
 
@@ -39,6 +42,23 @@ export class VehiclesController {
     return this.vehiclesService.update(
       id,
       updateVehicleDto,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'List a bounded customer-safe Garage vehicle page' })
+  @ApiOkResponse({ type: CustomerGaragePageResponseDto })
+  @Get('users/:userId/vehicles/garage')
+  findGaragePage(
+    @Param('userId') userId: string,
+    @Query() query: ListCustomerGarageQueryDto,
+    @Req() request: Request,
+  ) {
+    return this.vehiclesService.findGaragePage(
+      userId,
+      query,
       request.user as { userId: string; role: string },
     );
   }

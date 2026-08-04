@@ -2,14 +2,7 @@
 
 import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  AlertTriangle,
-  ArrowRight,
-  BadgeCheck,
-  FileSearch,
-  Loader2,
-  Plus,
-} from 'lucide-react'
+import { AlertTriangle, ArrowRight, BadgeCheck, FileSearch, Loader2, Plus } from 'lucide-react'
 
 import PageHeader from '@/components/ui/PageHeader'
 import PortalSelect from '@/components/ui/PortalSelect'
@@ -53,6 +46,7 @@ import {
   getIntakeWorkspaceHeroCopy,
   getIntakeWorkspacePrimaryActionLabel,
 } from './digitalIntakeInspectionWorkspaceView.mjs'
+import { WORKSPACE_INFORMATION_ARCHITECTURE } from './workspaceInformationArchitecture.mjs'
 
 const intakeStatusMeta = {
   pending: {
@@ -899,7 +893,7 @@ export default function DigitalIntakeInspectionWorkspace() {
             <div>
               <p className="card-title">Front-Desk Flow</p>
               <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                Capture the visit, then record the vehicle condition.
+                {WORKSPACE_INFORMATION_ARCHITECTURE.intake.description}
               </p>
             </div>
             <span className={draftStatus.badgeClassName}>{draftStatus.label}</span>
@@ -940,7 +934,7 @@ export default function DigitalIntakeInspectionWorkspace() {
               <>
                 <IntakeSection
                   step="1"
-                  title="Arrival"
+                  title={WORKSPACE_INFORMATION_ARCHITECTURE.intake.sections.arrival}
                   description="Identify the arrival and link the right record."
                   badge={draft.arrivalType === 'with_booking' ? 'Booking arrival' : 'Walk-in arrival'}
                 >
@@ -1028,7 +1022,7 @@ export default function DigitalIntakeInspectionWorkspace() {
 
                 <IntakeSection
                   step="2"
-                  title="Visit Type"
+                  title={WORKSPACE_INFORMATION_ARCHITECTURE.intake.sections.visitType}
                   description="Pick the handoff lane."
                   badge={selectedVisitTypeMeta.label}
                 >
@@ -1083,7 +1077,7 @@ export default function DigitalIntakeInspectionWorkspace() {
               <>
                 <IntakeSection
                   step="3"
-                  title="Customer Concern"
+                  title={WORKSPACE_INFORMATION_ARCHITECTURE.intake.sections.concern}
                   description="Capture the front-desk summary."
                   badge={draft.serviceConcern.trim() ? 'Concern captured' : 'Waiting for concern'}
                 >
@@ -1125,7 +1119,7 @@ export default function DigitalIntakeInspectionWorkspace() {
 
                 <IntakeSection
                   step="4"
-                  title="Requirements"
+                  title={WORKSPACE_INFORMATION_ARCHITECTURE.intake.sections.requirements}
                   description="Check what the customer already brought in."
                   badge={requirementsBadge}
                 >
@@ -1169,7 +1163,7 @@ export default function DigitalIntakeInspectionWorkspace() {
             {activeIntakeTab === 'inspection_signoff' ? (
               <IntakeSection
                 step="5"
-                title="Arrival Inspection"
+                title={WORKSPACE_INFORMATION_ARCHITECTURE.intake.sections.inspection}
                 description="Record the condition before handoff."
                 badge={draft.damageAreas.length ? `${draft.damageAreas.length} marked area(s)` : 'No damage marked'}
               >

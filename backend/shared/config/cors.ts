@@ -6,11 +6,18 @@ type CorsOriginCheck = {
 
 const STAFF_WEB_PORT = '3002';
 
-export const STAFF_API_CORS_ALLOWED_HEADERS = [
+export const CUSTOMER_API_CORS_ALLOWED_HEADERS = [
   'Content-Type',
   'Authorization',
-  'X-Work-Claim-Id',
+  'Idempotency-Key',
   'If-Match',
+  'X-Mobile-Success-Url',
+  'X-Mobile-Cancel-Url',
+];
+
+export const STAFF_API_CORS_ALLOWED_HEADERS = [
+  ...CUSTOMER_API_CORS_ALLOWED_HEADERS,
+  'X-Work-Claim-Id',
 ];
 
 const isPrivateIpv4Host = (hostname: string): boolean => {

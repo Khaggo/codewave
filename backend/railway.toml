@@ -1,6 +1,6 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "if [ \"$PORT\" = \"3001\" ]; then npm --workspace backend run build:ecommerce; else npm --workspace backend run build:main; fi"
+buildCommand = "npm --workspace backend run build:main"
 watchPatterns = [
   "/backend/**",
   "/packages/**",
@@ -9,7 +9,7 @@ watchPatterns = [
 ]
 
 [deploy]
-startCommand = "if [ \"$PORT\" = \"3001\" ]; then npm --workspace backend run start:ecommerce; else npm --workspace backend run start:main; fi"
+startCommand = "npm --workspace backend run start:main"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

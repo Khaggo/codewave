@@ -2,7 +2,6 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 
 import { UsersService } from '@main-modules/users/services/users.service';
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
-import { AnyCommerceEventEnvelope } from '@shared/events/contracts/commerce-events';
 import { AnyServiceEventEnvelope } from '@shared/events/contracts/service-events';
 
 import { LoyaltyService } from './loyalty.service';
@@ -23,9 +22,6 @@ export class LoyaltyRuntimeService implements OnModuleInit, OnModuleDestroy {
       this.eventBus.subscribe('service.payment_recorded', (event) =>
         this.handleAccrualTrigger(event as AnyServiceEventEnvelope),
       ),
-      this.eventBus.subscribe('invoice.payment_recorded', (event) =>
-        this.handleAccrualTrigger(event as AnyCommerceEventEnvelope),
-      ),
     );
 
     await this.ensureDefaultServicePaymentRule();
@@ -38,7 +34,7 @@ export class LoyaltyRuntimeService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async handleAccrualTrigger(event: AnyServiceEventEnvelope | AnyCommerceEventEnvelope) {
+  async handleAccrualTrigger(event: AnyServiceEventEnvelope) {
     try {
       await this.loyaltyService.applyLoyaltyAccrual(event);
     } catch (error) {

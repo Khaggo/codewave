@@ -1,7 +1,8 @@
 import { forwardRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { useTheme } from '../../theme';
+import { createPlatformShadow } from '../../utils/platformShadow';
 
 const Input = forwardRef(function Input(
   {
@@ -31,6 +32,11 @@ const Input = forwardRef(function Input(
     returnKeyType,
     onSubmitEditing,
     blurOnSubmit,
+    nativeID,
+    testID,
+    accessibilityLabel,
+    accessibilityHint,
+    rightIconAccessibilityLabel,
   },
   ref,
 ) {
@@ -42,11 +48,13 @@ const Input = forwardRef(function Input(
     : focused && editable
     ? colors.brand.orange
     : colors.surface.border;
+  const helperId = nativeID ? `${nativeID}-description` : undefined;
 
   return (
     <View style={[styles.wrap, style]}>
       {label ? (
         <Text
+          nativeID={nativeID ? `${nativeID}-label` : undefined}
           style={[
             type.label,
             { color: colors.ink.muted, marginBottom: spacing[2] },
@@ -69,12 +77,12 @@ const Input = forwardRef(function Input(
           },
           focused &&
             editable &&
-            !error && {
-              shadowColor: colors.brand.orange,
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.18,
-              shadowRadius: 10,
-            },
+            !error &&
+            createPlatformShadow({
+              color: colors.brand.orange,
+              opacity: 0.18,
+              radius: 10,
+            }),
         ]}
       >
         {leftIcon ? (
@@ -88,6 +96,13 @@ const Input = forwardRef(function Input(
 
         <TextInput
           ref={ref}
+          nativeID={nativeID}
+          testID={testID}
+          accessibilityLabel={accessibilityLabel || label || placeholder}
+          accessibilityHint={accessibilityHint}
+          accessibilityState={{ disabled: !editable }}
+          accessibilityLabelledBy={nativeID ? `${nativeID}-label` : undefined}
+          accessibilityDescribedBy={helperId}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
@@ -131,8 +146,10 @@ const Input = forwardRef(function Input(
           <Pressable
             onPress={onRightIconPress}
             disabled={!onRightIconPress}
-            hitSlop={8}
-            style={{ marginLeft: spacing[2], paddingVertical: 4, paddingHorizontal: 4 }}
+            accessibilityRole="button"
+            accessibilityLabel={rightIconAccessibilityLabel || 'Input action'}
+            accessibilityState={{ disabled: !onRightIconPress }}
+            style={[styles.rightAction, { marginLeft: spacing[1] }]}
           >
             <Feather name={rightIcon} size={18} color={colors.ink.muted} />
           </Pressable>
@@ -141,6 +158,9 @@ const Input = forwardRef(function Input(
 
       {error ? (
         <Text
+          nativeID={helperId}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
           style={[
             type.small,
             { color: colors.semantic.danger, marginTop: spacing[2] },
@@ -150,6 +170,7 @@ const Input = forwardRef(function Input(
         </Text>
       ) : helperText ? (
         <Text
+          nativeID={helperId}
           style={[
             type.small,
             { color: colors.ink.muted, marginTop: spacing[2] },
@@ -167,6 +188,7 @@ export default Input;
 const styles = StyleSheet.create({
   wrap: {
     width: '100%',
+    minWidth: 0,
   },
   inputBox: {
     flexDirection: 'row',
@@ -174,6 +196,13 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    minWidth: 0,
     paddingHorizontal: 0,
+  },
+  rightAction: {
+    width: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

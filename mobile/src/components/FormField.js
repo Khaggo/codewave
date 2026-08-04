@@ -1,7 +1,8 @@
-import { forwardRef } from 'react';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { forwardRef, useId } from 'react';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius } from '../theme';
+import { createPlatformShadow } from '../utils/platformShadow';
 
 const FormField = forwardRef(function FormField({
   label,
@@ -29,13 +30,22 @@ const FormField = forwardRef(function FormField({
   returnKeyType,
   blurOnSubmit,
   onSubmitEditing,
+  nativeID,
+  name,
+  accessibilityLabel,
+  accessibilityHint,
 }, ref) {
+  const generatedId = useId();
+  const fieldId = nativeID || `field-${generatedId}`;
+  const labelId = `${fieldId}-label`;
+  const descriptionId = `${fieldId}-description`;
+
   return (
     <View
       style={[styles.container, containerStyle]}
       importantForAutofill={importantForAutofill}
     >
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? <Text nativeID={labelId} style={styles.label}>{label}</Text> : null}
 
       <View
         style={[
@@ -58,6 +68,8 @@ const FormField = forwardRef(function FormField({
 
         <TextInput
           ref={ref}
+          nativeID={fieldId}
+          name={Platform.OS === 'web' ? name : undefined}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
@@ -86,10 +98,20 @@ const FormField = forwardRef(function FormField({
           blurOnSubmit={blurOnSubmit}
           onSubmitEditing={onSubmitEditing}
           selectionColor={colors.primary}
+          accessibilityLabel={accessibilityLabel || label || placeholder}
+          accessibilityHint={accessibilityHint}
+          accessibilityLabelledBy={label ? labelId : undefined}
+          accessibilityDescribedBy={error || helperText ? descriptionId : undefined}
+          accessibilityState={{ disabled: !editable }}
+          aria-invalid={Platform.OS === 'web' ? Boolean(error) : undefined}
         />
       </View>
-      {error && !hideErrorText ? <Text style={styles.errorText}>{error}</Text> : null}
-      {!error && helperText ? <Text style={styles.helperText}>{helperText}</Text> : null}
+      {error && !hideErrorText ? (
+        <Text nativeID={descriptionId} style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      ) : null}
+      {!error && helperText ? <Text nativeID={descriptionId} style={styles.helperText}>{helperText}</Text> : null}
     </View>
   );
 });
@@ -99,12 +121,13 @@ export default FormField;
 const styles = StyleSheet.create({
   container: {
     marginBottom: 16,
+    minWidth: 0,
   },
   label: {
     color: colors.labelText,
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
     marginBottom: 6,
     textTransform: 'uppercase',
   },
@@ -130,17 +153,19 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    minWidth: 0,
     color: colors.text,
     paddingVertical: 12,
     fontSize: 14,
   },
   inputFocused: {
     borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 2,
+    ...createPlatformShadow({
+      color: colors.primary,
+      opacity: 0.18,
+      radius: 10,
+      elevation: 2,
+    }),
   },
   inputReadonly: {
     backgroundColor: colors.readonly,

@@ -1,5 +1,5 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -9,16 +9,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ApiError, createCustomerVehicle, listCustomerVehicles } from '../lib/authClient';
-import {
-  buildCustomerTimelineEventPresentation,
-  createEmptyCustomerVehicleLifecycleSnapshot,
-  getCustomerGarageSummary,
-  listCustomerVehicleTimelinePage,
-  loadCustomerVehicleLifecycleSnapshot,
-} from '../lib/vehicleLifecycleClient';
+import { ApiError, createCustomerVehicle } from '../lib/authClient';
 import { colors, radius } from '../theme';
+import { GARAGE_PAGE_SIZE } from './garagePaginationModel.mjs';
+import { buildGarageWorkshopMetric } from './garageWorkspaceModel.mjs';
 import styles from './vehicleLifecycleStyles';
+import useGarageWorkspaceController from './useGarageWorkspaceController';
+import Sheet from '../components/ui/Sheet';
 import {
   formatVehicleDisplayName,
   normalizeLicensePlate,
@@ -26,8 +23,6 @@ import {
   validateVehicleYear,
 } from '../utils/validation';
 
-const emptySnapshot = createEmptyCustomerVehicleLifecycleSnapshot();
-const GARAGE_PAGE_SIZE = 3;
 const createEmptyVehicleDraft = () => ({
   licensePlate: '',
   vehicleMake: '',
@@ -55,7 +50,13 @@ function StateCard({ icon = 'timeline-clock-outline', title, message, actionLabe
       <Text style={styles.stateTitle}>{title}</Text>
       <Text style={styles.stateText}>{message}</Text>
       {actionLabel && onAction ? (
-        <TouchableOpacity activeOpacity={0.86} onPress={onAction} style={styles.primaryButton}>
+        <TouchableOpacity
+          accessibilityLabel={actionLabel}
+          accessibilityRole="button"
+          activeOpacity={0.86}
+          onPress={onAction}
+          style={styles.primaryButton}
+        >
           <Text style={styles.primaryButtonText}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
@@ -68,6 +69,8 @@ function ActionButton({ icon, label, emphasis = 'secondary', onPress }) {
 
   return (
     <TouchableOpacity
+      accessibilityLabel={label}
+      accessibilityRole="button"
       activeOpacity={0.86}
       onPress={onPress}
       style={[styles.actionButton, isPrimary ? styles.actionButtonPrimary : styles.actionButtonSecondary]}
@@ -84,31 +87,27 @@ function ActionButton({ icon, label, emphasis = 'secondary', onPress }) {
   );
 }
 
-function VehicleChip({ vehicle, isActive, onPress, ordinalLabel }) {
+function VehiclePickerRow({ vehicle, isActive, onPress }) {
   return (
     <TouchableOpacity
+      accessibilityLabel={`${getVehicleLabel(vehicle)}, ${getVehiclePlate(vehicle)}`}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isActive }}
       activeOpacity={0.86}
       onPress={onPress}
-      style={[styles.vehicleChip, isActive && styles.vehicleChipActive]}
+      style={[styles.vehiclePickerRow, isActive && styles.vehiclePickerRowActive]}
     >
-      <MaterialCommunityIcons
-        name="car-outline"
-        size={18}
-        color={isActive ? colors.onPrimary : colors.primary}
-      />
-      <View style={styles.vehicleChipCopy}>
-        {ordinalLabel ? <Text style={[styles.vehicleChipEyebrow, isActive && styles.vehicleChipEyebrowActive]}>{ordinalLabel}</Text> : null}
-        <Text style={[styles.vehicleChipTitle, isActive && styles.vehicleChipTitleActive]}>
-          {getVehicleLabel(vehicle)}
-        </Text>
-        <Text style={[styles.vehicleChipPlate, isActive && styles.vehicleChipPlateActive]}>
-          {getVehiclePlate(vehicle)}
-        </Text>
+      <View style={styles.vehiclePickerRowIcon}>
+        <MaterialCommunityIcons name="car-outline" size={20} color={colors.primary} />
+      </View>
+      <View style={styles.vehiclePickerRowCopy}>
+        <Text style={styles.vehiclePickerRowTitle}>{getVehicleLabel(vehicle)}</Text>
+        <Text style={styles.vehiclePickerRowMeta}>{getVehiclePlate(vehicle)}</Text>
       </View>
       <MaterialCommunityIcons
-        name={isActive ? 'arrow-top-right' : 'chevron-right'}
-        size={18}
-        color={isActive ? colors.onPrimary : colors.labelText}
+        name={isActive ? 'check-circle' : 'chevron-right'}
+        size={21}
+        color={isActive ? colors.primary : colors.mutedText}
       />
     </TouchableOpacity>
   );
@@ -218,137 +217,78 @@ function InsightCard({ icon, title, message }) {
   );
 }
 
-export default function VehicleLifecycleScreen({ account, navigation, route }) {
-  const [vehicles, setVehicles] = useState(account?.ownedVehicles ?? []);
-  const [selectedVehicleId, setSelectedVehicleId] = useState(
-    route?.params?.vehicleId ?? account?.primaryVehicleId ?? account?.ownedVehicles?.[0]?.id ?? null,
-  );
-  const [vehiclePage, setVehiclePage] = useState(0);
+export default function VehicleLifecycleScreen({
+  account,
+  navigation,
+  route,
+  embedded = false,
+  onBookVehicle,
+  onOpenInsurance,
+  onSelectedVehicleChange,
+  refreshSignal,
+}) {
+  const [isVehiclePickerOpen, setIsVehiclePickerOpen] = useState(false);
+  const {
+    activeSourceType,
+    addCreatedVehicle,
+    canGoNext,
+    canGoPrevious,
+    changeSource: handleChangeSource,
+    errorMessage,
+    garagePageModel,
+    garageSummary,
+    isLoadingMore,
+    loadLifecycle,
+    loadMore: handleLoadMore,
+    nextVehiclePage,
+    ownedVehicleCount,
+    paginatedVehicles,
+    previousVehiclePage,
+    searchVehicles,
+    selectedVehicle,
+    selectVehicle: handleSelectVehicle,
+    snapshot,
+    status,
+    vehicleSearch,
+    vehicles,
+  } = useGarageWorkspaceController({
+    account,
+    onSelectedVehicleChange,
+    refreshSignal,
+    routeVehicleId: route?.params?.vehicleId,
+  });
   const [isAddVehicleModalOpen, setIsAddVehicleModalOpen] = useState(false);
   const [isSavingVehicle, setIsSavingVehicle] = useState(false);
   const [vehicleDraft, setVehicleDraft] = useState(createEmptyVehicleDraft);
   const [vehicleDraftError, setVehicleDraftError] = useState('');
   const [vehicleDraftErrors, setVehicleDraftErrors] = useState({});
-  const [status, setStatus] = useState('loading');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [snapshot, setSnapshot] = useState(emptySnapshot);
-  const [garageSummary, setGarageSummary] = useState(null);
-  const [activeSourceType, setActiveSourceType] = useState(null);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-
-  const selectedVehicle = useMemo(
-    () => vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? vehicles[0] ?? null,
-    [selectedVehicleId, vehicles],
-  );
-  const totalVehiclePages = Math.max(1, Math.ceil(vehicles.length / GARAGE_PAGE_SIZE));
-  const paginatedVehicles = useMemo(
-    () =>
-      vehicles.slice(
-        vehiclePage * GARAGE_PAGE_SIZE,
-        (vehiclePage + 1) * GARAGE_PAGE_SIZE,
-      ),
-    [vehiclePage, vehicles],
-  );
+  const [vehicleSearchInput, setVehicleSearchInput] = useState(vehicleSearch);
+  const vehicleSearchInitializedRef = useRef(false);
+  const searchVehiclesRef = useRef(searchVehicles);
+  const insuranceReturnContextRef = useRef(null);
 
   useEffect(() => {
-    if (!selectedVehicleId && selectedVehicle?.id) {
-      setSelectedVehicleId(selectedVehicle.id);
-    }
-  }, [selectedVehicle?.id, selectedVehicleId]);
+    searchVehiclesRef.current = searchVehicles;
+  }, [searchVehicles]);
 
   useEffect(() => {
-    setVehiclePage((currentPage) => Math.min(currentPage, totalVehiclePages - 1));
-  }, [totalVehiclePages]);
-
-  const loadSelectedVehicle = async (vehicleId, sourceType = activeSourceType) => {
-    if (!vehicleId || !account?.accessToken) {
-      setSnapshot(emptySnapshot);
-      setGarageSummary(null);
-      setStatus('empty');
-      return;
+    if (!vehicleSearchInitializedRef.current) {
+      vehicleSearchInitializedRef.current = true;
+      return undefined;
     }
 
-    setStatus('loading');
-    setErrorMessage('');
+    const timeout = setTimeout(() => {
+      void searchVehiclesRef.current(vehicleSearchInput);
+    }, 300);
 
-    try {
-      const [nextSnapshot, nextGarageSummary] = await Promise.all([
-        loadCustomerVehicleLifecycleSnapshot({
-          vehicleId,
-          sourceType,
-          accessToken: account.accessToken,
-        }),
-        getCustomerGarageSummary({
-          vehicleId,
-          accessToken: account.accessToken,
-        }),
-      ]);
-
-      setSnapshot(nextSnapshot);
-      setGarageSummary(nextGarageSummary);
-      setStatus(nextSnapshot.timelineState === 'timeline_ready' ? 'ready' : 'empty');
-    } catch (error) {
-      setSnapshot(emptySnapshot);
-      setGarageSummary(null);
-      setStatus('error');
-      setErrorMessage(
-        error instanceof ApiError || error instanceof Error
-          ? error.message
-          : 'We could not load Garage details right now.',
-      );
-    }
-  };
-
-  const loadLifecycle = async () => {
-    const accessToken = account?.accessToken;
-    const userId = account?.userId;
-
-    if (!accessToken || !userId) {
-      setStatus('error');
-      setErrorMessage('Sign in again before loading your vehicle lifecycle.');
-      return;
-    }
-
-    setStatus('loading');
-    setErrorMessage('');
-
-    try {
-      const liveVehicles = await listCustomerVehicles({ userId, accessToken });
-      const nextVehicles = liveVehicles.length ? liveVehicles : account?.ownedVehicles ?? [];
-      const preferredVehicleId =
-        selectedVehicleId ??
-        route?.params?.vehicleId ??
-        account?.primaryVehicleId ??
-        nextVehicles[0]?.id ??
-        null;
-      const nextSelectedVehicle =
-        nextVehicles.find((vehicle) => vehicle.id === preferredVehicleId) ?? nextVehicles[0] ?? null;
-
-      setVehicles(nextVehicles);
-      setSelectedVehicleId(nextSelectedVehicle?.id ?? null);
-
-      if (!nextSelectedVehicle?.id) {
-        setSnapshot(emptySnapshot);
-        setStatus('empty');
-        return;
-      }
-
-      await loadSelectedVehicle(nextSelectedVehicle.id);
-    } catch (error) {
-      setSnapshot(emptySnapshot);
-      setStatus('error');
-      setErrorMessage(
-        error instanceof ApiError || error instanceof Error
-          ? error.message
-          : 'We could not load lifecycle history right now.',
-      );
-    }
-  };
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [vehicleSearchInput]);
 
   useEffect(() => {
-    loadLifecycle();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account?.accessToken, account?.userId, route?.params?.vehicleId]);
+    setVehicleSearchInput(vehicleSearch);
+  }, [vehicleSearch]);
 
   const handleOpenAddVehicleModal = () => {
     setVehicleDraft(createEmptyVehicleDraft());
@@ -415,17 +355,20 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
         accessToken: account.accessToken,
       });
 
-      const nextVehicles = [...vehicles, createdVehicle];
-      setVehicles(nextVehicles);
-      setSelectedVehicleId(createdVehicle.id);
-      setVehiclePage(Math.max(0, Math.ceil(nextVehicles.length / GARAGE_PAGE_SIZE) - 1));
+      await addCreatedVehicle(createdVehicle);
       setIsAddVehicleModalOpen(false);
       setVehicleDraft(createEmptyVehicleDraft());
-      setActiveSourceType(null);
-      await loadSelectedVehicle(createdVehicle.id, null);
       if (route?.params?.returnTo === 'InsuranceInquiryScreen') {
+        const returnContext = insuranceReturnContextRef.current ?? {};
         navigation.navigate('InsuranceInquiryScreen', {
           vehicleId: createdVehicle.id,
+          resumeDraftFromVehicleId:
+            returnContext.sourceVehicleId ??
+            route?.params?.returnInsuranceSourceVehicleId,
+          resumeInsuranceTab:
+            returnContext.insuranceTab ??
+            route?.params?.returnInsuranceTab ??
+            'request',
         });
       }
     } catch (error) {
@@ -449,74 +392,26 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
     ? vehicles.findIndex((vehicle) => vehicle.id === selectedVehicle.id)
     : -1;
   const selectedVehicleOrdinalLabel =
-    selectedVehicleIndex >= 0 ? `Vehicle ${selectedVehicleIndex + 1} of ${vehicles.length || 1}` : 'Vehicle context';
+    selectedVehicleIndex >= 0
+      ? `Vehicle ${
+          garagePageModel.firstVisibleNumber + selectedVehicleIndex
+        } of ${garagePageModel.totalVehicles || 1}`
+      : 'Vehicle context';
   const heroHelperText = selectedVehicle
     ? 'Bookings, workshop progress, insurance, and approved service updates for this vehicle.'
-    : 'Add a vehicle to start using Garage.';
-
-  const handleSelectVehicle = async (vehicleId) => {
-    setSelectedVehicleId(vehicleId);
-    setActiveSourceType(null);
-    await loadSelectedVehicle(vehicleId, null);
-  };
-
-  const handleChangeSource = async (sourceType) => {
-    setActiveSourceType(sourceType);
-    await loadSelectedVehicle(selectedVehicle?.id, sourceType);
-  };
-
-  const handleLoadMore = async () => {
-    if (
-      !selectedVehicle?.id ||
-      !snapshot.page?.hasNext ||
-      !snapshot.page?.nextCursor ||
-      isLoadingMore
-    ) {
-      return;
-    }
-
-    setIsLoadingMore(true);
-    try {
-      const nextPage = await listCustomerVehicleTimelinePage({
-        vehicleId: selectedVehicle.id,
-        cursor: snapshot.page.nextCursor,
-        sourceType: activeSourceType,
-        limit: 20,
-        accessToken: account?.accessToken,
-      });
-      const nextEvents = nextPage.items.map(buildCustomerTimelineEventPresentation);
-      setSnapshot((currentSnapshot) => {
-        const mergedEvents = [...currentSnapshot.events, ...nextEvents];
-        const uniqueEvents = [
-          ...new Map(mergedEvents.map((event) => [event.id, event])).values(),
-        ];
-        const verifiedEvents = uniqueEvents.filter(
-          (event) => event.statusTone === 'verified',
-        ).length;
-
-        return {
-          ...currentSnapshot,
-          timelineState: uniqueEvents.length ? 'timeline_ready' : 'timeline_empty',
-          events: uniqueEvents,
-          stats: {
-            totalEvents: uniqueEvents.length,
-            verifiedEvents,
-            administrativeEvents: uniqueEvents.length - verifiedEvents,
-          },
-          page: nextPage.page,
-        };
-      });
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'We could not load more Garage updates.',
-      );
-    } finally {
-      setIsLoadingMore(false);
-    }
-  };
+    : vehicleSearch
+      ? 'No vehicle matches the current search.'
+      : 'Add a vehicle to start using Garage.';
+  const workshopMetric = buildGarageWorkshopMetric(garageSummary?.latestJob);
 
   useEffect(() => {
     if (route?.params?.openAddVehicle) {
+      if (route?.params?.returnTo === 'InsuranceInquiryScreen') {
+        insuranceReturnContextRef.current = {
+          sourceVehicleId: route?.params?.returnInsuranceSourceVehicleId ?? null,
+          insuranceTab: route?.params?.returnInsuranceTab ?? 'request',
+        };
+      }
       handleOpenAddVehicleModal();
       navigation.setParams({ openAddVehicle: undefined });
     }
@@ -527,20 +422,6 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.heroShell}>
-          <View style={styles.heroTopRow}>
-            <TouchableOpacity
-              activeOpacity={0.86}
-              onPress={() => navigation.goBack()}
-              style={styles.backButton}
-            >
-              <MaterialCommunityIcons name="arrow-left" size={21} color={colors.text} />
-            </TouchableOpacity>
-            <View style={styles.heroActions}>
-              <ActionButton icon="refresh" label="Refresh" onPress={loadLifecycle} />
-              <ActionButton icon="plus" label="Add vehicle" emphasis="primary" onPress={handleOpenAddVehicleModal} />
-            </View>
-          </View>
-
           <View style={styles.heroPanel}>
             <View style={styles.headerCopy}>
               <Text style={styles.eyebrow}>DIGITAL GARAGE</Text>
@@ -551,68 +432,152 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             <View style={styles.heroBadgeRow}>
               <ShowcaseBadge
                 icon="car-multiple"
-                label={`${vehicles.length || 0} saved vehicle${vehicles.length === 1 ? '' : 's'}`}
+                label={`${ownedVehicleCount} saved vehicle${
+                  ownedVehicleCount === 1 ? '' : 's'
+                }`}
                 tone="accent"
               />
-              <ShowcaseBadge
-                icon="timeline-clock-outline"
-                label={`${snapshot.stats.totalEvents} loaded update${snapshot.stats.totalEvents === 1 ? '' : 's'}`}
-              />
             </View>
+          </View>
 
+          <View style={styles.heroTopRow}>
+            {embedded ? (
+              <View />
+            ) : (
+              <TouchableOpacity
+                accessibilityLabel="Back"
+                accessibilityRole="button"
+                activeOpacity={0.86}
+                onPress={() => navigation.goBack()}
+                style={styles.backButton}
+              >
+                <MaterialCommunityIcons name="arrow-left" size={21} color={colors.text} />
+              </TouchableOpacity>
+            )}
+            <View style={styles.heroActions}>
+              <ActionButton icon="refresh" label="Refresh" onPress={loadLifecycle} />
+              <ActionButton icon="plus" label="Add vehicle" emphasis="primary" onPress={handleOpenAddVehicleModal} />
+            </View>
           </View>
         </View>
 
         <View style={styles.selectorSection}>
-          <SectionHeading
-            eyebrow="Vehicles"
-            title="Your vehicles"
-            description="Choose a vehicle to view its current work and history."
-          />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vehicleScroller}>
-            {paginatedVehicles.map((vehicle, index) => (
-              <VehicleChip
+          <Text style={styles.selectorLabel}>Selected vehicle</Text>
+          <TouchableOpacity
+            accessibilityLabel="Choose a Garage vehicle"
+            accessibilityRole="button"
+            activeOpacity={0.86}
+            onPress={() => setIsVehiclePickerOpen(true)}
+            style={styles.vehiclePickerButton}
+          >
+            <View style={styles.vehiclePickerRowIcon}>
+              <MaterialCommunityIcons name="car-outline" size={20} color={colors.primary} />
+            </View>
+            <View style={styles.vehiclePickerRowCopy}>
+              <Text style={styles.vehiclePickerRowTitle}>
+                {selectedVehicle ? getVehicleLabel(selectedVehicle) : 'Choose a vehicle'}
+              </Text>
+              <Text style={styles.vehiclePickerRowMeta}>
+                {selectedVehicle ? getVehiclePlate(selectedVehicle) : `${ownedVehicleCount} saved vehicles`}
+              </Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-down" size={21} color={colors.mutedText} />
+          </TouchableOpacity>
+        </View>
+
+        <Sheet
+          visible={isVehiclePickerOpen}
+          onClose={() => setIsVehiclePickerOpen(false)}
+          variant="bottom"
+          contentStyle={styles.vehiclePickerSheet}
+        >
+          <View style={styles.vehiclePickerSheetHeader}>
+            <View style={styles.vehiclePickerSheetCopy}>
+              <Text style={styles.vehiclePickerSheetTitle}>Choose a vehicle</Text>
+              <Text style={styles.vehiclePickerSheetSubtitle}>
+                {garagePageModel.totalVehicles} saved vehicle{garagePageModel.totalVehicles === 1 ? '' : 's'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              accessibilityLabel="Close vehicle picker"
+              accessibilityRole="button"
+              onPress={() => setIsVehiclePickerOpen(false)}
+              style={styles.vehiclePickerCloseButton}
+            >
+              <MaterialCommunityIcons name="close" size={21} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.vehicleSearchField}>
+            <MaterialCommunityIcons color={colors.mutedText} name="magnify" size={20} />
+            <TextInput
+              accessibilityLabel="Search Garage vehicles"
+              autoCapitalize="none"
+              autoCorrect={false}
+              nativeID="garage-vehicle-search"
+              onChangeText={setVehicleSearchInput}
+              placeholder="Search make, model, or plate"
+              placeholderTextColor={colors.mutedText}
+              returnKeyType="search"
+              style={styles.vehicleSearchInput}
+              value={vehicleSearchInput}
+            />
+            {vehicleSearchInput ? (
+              <TouchableOpacity
+                accessibilityLabel="Clear Garage vehicle search"
+                accessibilityRole="button"
+                onPress={() => setVehicleSearchInput('')}
+                style={styles.vehicleSearchClearButton}
+              >
+                <MaterialCommunityIcons color={colors.mutedText} name="close-circle" size={20} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          <ScrollView style={styles.vehiclePickerList} showsVerticalScrollIndicator={false}>
+            {paginatedVehicles.map((vehicle) => (
+              <VehiclePickerRow
                 key={vehicle.id}
                 vehicle={vehicle}
-                ordinalLabel={`Vehicle ${vehiclePage * GARAGE_PAGE_SIZE + index + 1}`}
                 isActive={vehicle.id === selectedVehicle?.id}
-                onPress={() => handleSelectVehicle(vehicle.id)}
+                onPress={() => {
+                  handleSelectVehicle(vehicle.id);
+                  setIsVehiclePickerOpen(false);
+                }}
               />
             ))}
           </ScrollView>
-          {vehicles.length > GARAGE_PAGE_SIZE ? (
-            <View style={styles.vehiclePagerRow}>
+          {garagePageModel.totalVehicles > GARAGE_PAGE_SIZE ? (
+            <View style={styles.vehiclePickerPager}>
               <Text style={styles.vehiclePagerText}>
-                Showing {Math.min(vehiclePage * GARAGE_PAGE_SIZE + 1, vehicles.length)}-
-                {Math.min((vehiclePage + 1) * GARAGE_PAGE_SIZE, vehicles.length)} of {vehicles.length} vehicles
+                {garagePageModel.firstVisibleNumber}-{garagePageModel.lastVisibleNumber} of {garagePageModel.totalVehicles}
               </Text>
               <View style={styles.vehiclePagerActions}>
                 <TouchableOpacity
-                  activeOpacity={vehiclePage === 0 ? 1 : 0.86}
-                  disabled={vehiclePage === 0}
-                  onPress={() => setVehiclePage((currentPage) => Math.max(0, currentPage - 1))}
-                  style={[styles.vehiclePagerButton, vehiclePage === 0 && styles.vehiclePagerButtonDisabled]}
+                  accessibilityLabel="Previous vehicles"
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !canGoPrevious }}
+                  disabled={!canGoPrevious}
+                  onPress={() => void previousVehiclePage()}
+                  style={[styles.vehiclePagerButton, !canGoPrevious && styles.vehiclePagerButtonDisabled]}
                 >
-                  <Text style={styles.vehiclePagerButtonText}>Prev</Text>
+                  <MaterialCommunityIcons name="chevron-left" size={20} color={colors.text} />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  activeOpacity={vehiclePage >= totalVehiclePages - 1 ? 1 : 0.86}
-                  disabled={vehiclePage >= totalVehiclePages - 1}
-                  onPress={() =>
-                    setVehiclePage((currentPage) => Math.min(totalVehiclePages - 1, currentPage + 1))
-                  }
-                  style={[
-                    styles.vehiclePagerButton,
-                    vehiclePage >= totalVehiclePages - 1 && styles.vehiclePagerButtonDisabled,
-                  ]}
+                  accessibilityLabel="Next vehicles"
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !canGoNext }}
+                  disabled={!canGoNext}
+                  onPress={() => void nextVehiclePage()}
+                  style={[styles.vehiclePagerButton, !canGoNext && styles.vehiclePagerButtonDisabled]}
                 >
-                  <Text style={styles.vehiclePagerButtonText}>Next</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text} />
                 </TouchableOpacity>
               </View>
             </View>
           ) : null}
-        </View>
+        </Sheet>
 
+        {selectedVehicle ? (
+          <>
         <View style={styles.vehicleHero}>
           <View style={styles.vehicleHeroTopRow}>
             <Text style={styles.vehicleHeroLabel}>Selected Vehicle</Text>
@@ -636,20 +601,28 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
               icon="calendar-plus"
               label="Book service"
               emphasis="primary"
-              onPress={() =>
+              onPress={() => {
+                if (onBookVehicle) {
+                  onBookVehicle(selectedVehicle.id);
+                  return;
+                }
                 navigation.navigate('BookingScreen', {
-                  vehicleId: selectedVehicle?.id,
-                })
-              }
+                  vehicleId: selectedVehicle.id,
+                });
+              }}
             />
             <ActionButton
               icon="shield-car"
               label="Insurance"
-              onPress={() =>
+              onPress={() => {
+                if (onOpenInsurance) {
+                  onOpenInsurance(selectedVehicle.id);
+                  return;
+                }
                 navigation.navigate('InsuranceInquiryScreen', {
-                  vehicleId: selectedVehicle?.id,
-                })
-              }
+                  vehicleId: selectedVehicle.id,
+                });
+              }}
             />
           </View> : null}
         </View>
@@ -665,11 +638,8 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
           <MetricCard
             icon="wrench-clock-outline"
             label="Workshop"
-            value={garageSummary?.latestJob?.status?.replaceAll('_', ' ') ?? 'None'}
-            helper={
-              garageSummary?.latestJob?.workshopStage?.replaceAll('_', ' ') ??
-              'No active work'
-            }
+            value={workshopMetric.value}
+            helper={workshopMetric.helper}
           />
           <MetricCard
             icon="shield-car"
@@ -678,6 +648,8 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             helper={garageSummary?.insurance?.providerName ?? 'No active request'}
           />
         </View>
+          </>
+        ) : null}
 
         {status === 'loading' ? (
           <View style={styles.loadingCard}>
@@ -714,6 +686,18 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
           />
         ) : null}
 
+        {status === 'search_empty' ? (
+          <StateCard
+            icon="car-search-outline"
+            title="No matching vehicles"
+            message="Try a different make, model, or plate number."
+            actionLabel="Clear search"
+            onAction={() => setVehicleSearchInput('')}
+          />
+        ) : null}
+
+        {selectedVehicle ? (
+          <>
         <View style={styles.section}>
           <SectionHeading
             eyebrow="Vehicle History"
@@ -797,6 +781,8 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             </View>
           </View>
         ) : null}
+          </>
+        ) : null}
       </ScrollView>
       <Modal
         visible={isAddVehicleModalOpen}
@@ -804,7 +790,7 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
         animationType="slide"
         onRequestClose={handleCloseAddVehicleModal}
       >
-        <View style={styles.modalBackdrop}>
+        <View accessibilityViewIsModal style={styles.modalBackdrop}>
           <ScrollView
             style={styles.modalScroll}
             contentContainerStyle={styles.modalCard}
@@ -816,6 +802,7 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             <TextInput
                 value={vehicleDraft.licensePlate}
                 onChangeText={(value) => {
+                  setVehicleDraftError('');
                   setVehicleDraft((current) => ({
                     ...current,
                     licensePlate: normalizeLicensePlate(value),
@@ -835,6 +822,7 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             <TextInput
               value={vehicleDraft.vehicleMake}
               onChangeText={(value) => {
+                setVehicleDraftError('');
                 setVehicleDraft((current) => ({ ...current, vehicleMake: value }));
                 setVehicleDraftErrors((current) => ({ ...current, vehicleMake: undefined }));
               }}
@@ -851,6 +839,7 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             <TextInput
               value={vehicleDraft.vehicleModel}
               onChangeText={(value) => {
+                setVehicleDraftError('');
                 setVehicleDraft((current) => ({ ...current, vehicleModel: value }));
                 setVehicleDraftErrors((current) => ({ ...current, vehicleModel: undefined }));
               }}
@@ -867,6 +856,7 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             <TextInput
               value={vehicleDraft.vehicleYear}
               onChangeText={(value) => {
+                setVehicleDraftError('');
                 setVehicleDraft((current) => ({
                   ...current,
                   vehicleYear: value.replace(/\D/g, '').slice(0, 4),
@@ -885,7 +875,10 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             <Text style={styles.modalFieldLabel}>Color (optional)</Text>
             <TextInput
               value={vehicleDraft.color}
-              onChangeText={(value) => setVehicleDraft((current) => ({ ...current, color: value }))}
+              onChangeText={(value) => {
+                setVehicleDraftError('');
+                setVehicleDraft((current) => ({ ...current, color: value }));
+              }}
               placeholder="Color (optional)"
               placeholderTextColor={colors.mutedText}
               style={styles.modalInput}
@@ -899,6 +892,9 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
             ) : null}
             <View style={styles.modalActions}>
               <TouchableOpacity
+                accessibilityLabel="Cancel adding vehicle"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isSavingVehicle }}
                 activeOpacity={isSavingVehicle ? 1 : 0.86}
                 disabled={isSavingVehicle}
                 onPress={handleCloseAddVehicleModal}
@@ -907,6 +903,9 @@ export default function VehicleLifecycleScreen({ account, navigation, route }) {
                 <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
+                accessibilityLabel={isSavingVehicle ? 'Saving vehicle' : 'Save vehicle'}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isSavingVehicle, busy: isSavingVehicle }}
                 activeOpacity={isSavingVehicle ? 1 : 0.86}
                 disabled={isSavingVehicle}
                 onPress={handleSaveVehicle}

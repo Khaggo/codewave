@@ -1,10 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
 import {
-  AnyCommerceEventEnvelope,
-  CommerceEventEnvelope,
-} from '@shared/events/contracts/commerce-events';
-import {
   AnyNotificationTriggerEnvelope,
   NotificationTriggerEnvelope,
   NotificationTriggerName,
@@ -96,80 +92,16 @@ export type NotificationTriggerPlanAction =
     };
 
 export interface NotificationTriggerPlan {
-  triggerName:
-    | NotificationTriggerName
-    | CommerceEventEnvelope['name'];
-  sourceDomain:
-    | AnyNotificationTriggerEnvelope['sourceDomain']
-    | AnyCommerceEventEnvelope['sourceDomain'];
+  triggerName: NotificationTriggerName;
+  sourceDomain: AnyNotificationTriggerEnvelope['sourceDomain'];
   dedupePolicy: 'stable-source-dedupe-v1';
   retryPolicy: 'bullmq-deliver-notification-v1';
   actions: NotificationTriggerPlanAction[];
 }
 
-type NotificationTriggerCandidate = AnyNotificationTriggerEnvelope | AnyCommerceEventEnvelope;
-
 @Injectable()
 export class NotificationTriggerPlannerService {
-  plan(trigger: NotificationTriggerCandidate): NotificationTriggerPlan {
-    if (this.isCommerceInvoiceIssued(trigger)) {
-      return {
-        triggerName: trigger.name,
-        sourceDomain: trigger.sourceDomain,
-        dedupePolicy: 'stable-source-dedupe-v1',
-        retryPolicy: 'bullmq-deliver-notification-v1',
-        actions: [
-          {
-            kind: 'schedule_reminder',
-            userId: trigger.payload.customerUserId,
-            category: 'invoice_aging',
-            channel: 'email',
-            sourceType: 'invoice_payment',
-            sourceId: trigger.payload.invoiceId,
-            title: `Invoice ${trigger.payload.invoiceNumber} is ready`,
-            message: `Your AUTOCARE invoice ${trigger.payload.invoiceNumber} is ready. Payment is due on ${trigger.payload.dueAt}.`,
-            dedupeKey: `notification:order.invoice_issued:${trigger.payload.invoiceId}`,
-            scheduledFor: new Date(trigger.payload.dueAt),
-            customerVisible: true,
-          },
-        ],
-      };
-    }
-
-    if (this.isCommerceInvoicePaymentRecorded(trigger)) {
-      const shouldCancelAgingPolicy =
-        trigger.payload.amountDueCents <= 0 ||
-        trigger.payload.invoiceStatus === 'paid' ||
-        trigger.payload.invoiceStatus === 'cancelled';
-
-      return {
-        triggerName: trigger.name,
-        sourceDomain: trigger.sourceDomain,
-        dedupePolicy: 'stable-source-dedupe-v1',
-        retryPolicy: 'bullmq-deliver-notification-v1',
-        actions: shouldCancelAgingPolicy
-          ? [
-              {
-                kind: 'cancel_reminder_rules',
-                sourceType: 'invoice_payment',
-                sourceId: trigger.payload.invoiceId,
-                reminderType: 'invoice_aging',
-                customerVisible: false,
-                reason: 'Invoice payment facts stop the aging reminder policy once nothing is due.',
-              },
-              {
-                kind: 'cancel_notifications',
-                sourceType: 'invoice_payment',
-                sourceId: trigger.payload.invoiceId,
-                category: 'invoice_aging',
-                customerVisible: false,
-                reason: 'Queued invoice-aging notices must not continue after the invoice is settled.',
-              },
-            ]
-          : [],
-      };
-    }
-
+  plan(trigger: AnyNotificationTriggerEnvelope): NotificationTriggerPlan {
     if (trigger.name === 'booking.reminder_requested') {
       return {
         triggerName: trigger.name,
@@ -271,18 +203,7 @@ export class NotificationTriggerPlannerService {
       };
     }
 
-    throw new Error(`Unsupported notification trigger: ${trigger.name}`);
+    throw new Error('Unsupported notification trigger');
   }
 
-  private isCommerceInvoiceIssued(
-    trigger: NotificationTriggerCandidate,
-  ): trigger is CommerceEventEnvelope<'order.invoice_issued'> {
-    return trigger.name === 'order.invoice_issued';
-  }
-
-  private isCommerceInvoicePaymentRecorded(
-    trigger: NotificationTriggerCandidate,
-  ): trigger is CommerceEventEnvelope<'invoice.payment_recorded'> {
-    return trigger.name === 'invoice.payment_recorded';
-  }
 }

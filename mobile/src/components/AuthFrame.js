@@ -1,4 +1,4 @@
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { useEffect, useRef } from 'react';
 import {
   Animated,
@@ -85,6 +85,7 @@ export default function AuthFrame({
                 onPress={onBack}
                 activeOpacity={0.7}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
                 accessibilityLabel={backLabel || 'Go back'}
               >
                 <Feather name="arrow-left" size={20} color={colors.text} />
@@ -157,25 +158,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.32,
-    shadowRadius: 20,
-    elevation: 4,
     ...Platform.select({
       web: {
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.32)',
         minHeight: '100%',
+      },
+      default: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.32,
+        shadowRadius: 20,
+        elevation: 4,
       },
     }),
   },
   cardCompact: {
     borderRadius: 0,
     borderWidth: 0,
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
     flexGrow: 1,
     backgroundColor: 'transparent',
+    ...Platform.select({
+      web: {
+        boxShadow: 'none',
+      },
+      default: {
+        shadowOpacity: 0,
+        shadowRadius: 0,
+        elevation: 0,
+      },
+    }),
   },
   backRow: {
     flexDirection: 'row',
@@ -184,8 +195,8 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   backButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',

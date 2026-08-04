@@ -19,7 +19,7 @@ Purpose: implementation-ready evidence for planning Job Orders, QA Audit, staff 
 Use sources in this order when resolving disagreement:
 
 1. Backend schema, controller, service, and repository code.
-2. Live OpenAPI snapshots in `contracts/`.
+2. The canonical OpenAPI document at `packages/contracts/openapi/main-service.json`.
 3. Frontend client adapters and route components.
 4. Automated tests.
 5. Existing planning and historical documentation.
@@ -38,9 +38,7 @@ The live Swagger MCP transport was unavailable during collection. The same runni
 | [planning-backlog.md](planning-backlog.md) | Prioritized implementation tickets with acceptance criteria and rollout order. |
 | [target-workflow-and-ux-spec.md](target-workflow-and-ux-spec.md) | Proposed workflow, page specifications, conflict states, API/database changes, usability tests, and rollout. |
 | [Critical Workflow Implementation Plan](../../../../AUTOCARE_Critical_Workflow_Implementation_Plan.md) | Active decision-complete releases, interfaces, migrations, tests, rollout controls, and 17-ticket backlog. |
-| `contracts/openapi-job-orders.json` | Filtered Job Order OpenAPI paths plus referenced component schemas. |
-| `contracts/openapi-quality-gates.json` | Filtered QA OpenAPI paths plus referenced component schemas. |
-| `contracts/openapi-staff-work-queues.json` | Filtered queue OpenAPI paths plus referenced component schemas. |
+| `../../../../../packages/contracts/openapi/main-service.json` | Canonical generated API contract for all active service workflows. |
 | `screenshots/` | Current live evidence and user-reported historical captures. |
 
 ## Executive Findings
@@ -103,17 +101,12 @@ The canonical staff web model allows service advisers and super admins. Some gen
 | --- | --- |
 | Main API | Listening on `127.0.0.1:3000`; `/api/health` returned `status: ok`. |
 | Staff web | Listening on `127.0.0.1:3002`; route returned HTTP 200. |
-| Alternate web/API port 3001 | Not listening. |
 | Expo/Metro ports 8081, 8085, 8090 | Not listening. |
 | Current browser console | No errors or warnings after the reproduced QA flow. |
 
 ## Contract Integrity
 
-| Snapshot | Paths | SHA-256 |
-| --- | ---: | --- |
-| `openapi-job-orders.json` | 23 | `692B0D3E3FC82CF5785D975A5ADDD2B2332521945FFAD3F0751881A420B08D83` |
-| `openapi-quality-gates.json` | 3 | `C4AD2AEBEC8BF5A6D419AA9E3B076D3727BA18D02C5C40B90D60304C5B2965C5` |
-| `openapi-staff-work-queues.json` | 8 | `86EA63170CB83C60200560BACEBED8138AB4BCC6C539B3F16694AB39EBB59D8D` |
+Run `npm run contracts:check` from the repository root. It deterministically verifies the canonical generated API contract against the backend DTOs and controllers.
 
 ## Screenshot Index
 

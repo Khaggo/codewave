@@ -1,7 +1,8 @@
-import { forwardRef, useState } from 'react';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { forwardRef, useId, useState } from 'react';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { colors, radius } from '../theme';
+import { createPlatformShadow } from '../utils/platformShadow';
 
 const PasswordField = forwardRef(function PasswordField({
   label,
@@ -23,15 +24,23 @@ const PasswordField = forwardRef(function PasswordField({
   returnKeyType,
   blurOnSubmit,
   onSubmitEditing,
+  nativeID,
+  name,
+  accessibilityLabel,
+  accessibilityHint,
 }, ref) {
   const [isVisible, setIsVisible] = useState(false);
+  const generatedId = useId();
+  const fieldId = nativeID || `password-${generatedId}`;
+  const labelId = `${fieldId}-label`;
+  const descriptionId = `${fieldId}-description`;
 
   return (
     <View
       style={[styles.container, containerStyle]}
       importantForAutofill={importantForAutofill}
     >
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? <Text nativeID={labelId} style={styles.label}>{label}</Text> : null}
 
       <View
         style={[
@@ -51,6 +60,8 @@ const PasswordField = forwardRef(function PasswordField({
 
         <TextInput
           ref={ref}
+          nativeID={fieldId}
+          name={Platform.OS === 'web' ? name : undefined}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
@@ -70,6 +81,12 @@ const PasswordField = forwardRef(function PasswordField({
           blurOnSubmit={blurOnSubmit}
           onSubmitEditing={onSubmitEditing}
           selectionColor={colors.primary}
+          accessibilityLabel={accessibilityLabel || label || placeholder}
+          accessibilityHint={accessibilityHint}
+          accessibilityLabelledBy={label ? labelId : undefined}
+          accessibilityDescribedBy={error || helperText ? descriptionId : undefined}
+          accessibilityState={{ disabled: !editable }}
+          aria-invalid={Platform.OS === 'web' ? Boolean(error) : undefined}
         />
 
         <TouchableOpacity
@@ -77,6 +94,9 @@ const PasswordField = forwardRef(function PasswordField({
           onPress={() => setIsVisible((currentValue) => !currentValue)}
           disabled={!editable}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={isVisible ? 'Hide password' : 'Show password'}
+          accessibilityState={{ disabled: !editable }}
         >
           <MaterialCommunityIcons
             name={isVisible ? 'eye-off-outline' : 'eye-outline'}
@@ -86,8 +106,12 @@ const PasswordField = forwardRef(function PasswordField({
         </TouchableOpacity>
       </View>
 
-      {error && !hideErrorText ? <Text style={styles.errorText}>{error}</Text> : null}
-      {!error && helperText ? <Text style={styles.helperText}>{helperText}</Text> : null}
+      {error && !hideErrorText ? (
+        <Text nativeID={descriptionId} style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      ) : null}
+      {!error && helperText ? <Text nativeID={descriptionId} style={styles.helperText}>{helperText}</Text> : null}
     </View>
   );
 });
@@ -97,12 +121,13 @@ export default PasswordField;
 const styles = StyleSheet.create({
   container: {
     marginBottom: 16,
+    minWidth: 0,
   },
   label: {
     color: colors.labelText,
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
     marginBottom: 6,
     textTransform: 'uppercase',
   },
@@ -122,17 +147,19 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    minWidth: 0,
     color: colors.text,
     fontSize: 14,
     paddingVertical: 12,
   },
   inputFocused: {
     borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 2,
+    ...createPlatformShadow({
+      color: colors.primary,
+      opacity: 0.18,
+      radius: 10,
+      elevation: 2,
+    }),
   },
   inputReadonly: {
     backgroundColor: colors.readonly,
@@ -147,7 +174,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingLeft: 8,
     paddingHorizontal: 6,
-    minHeight: 36,
+    minHeight: 44,
+    minWidth: 44,
     justifyContent: 'center',
   },
   errorText: {

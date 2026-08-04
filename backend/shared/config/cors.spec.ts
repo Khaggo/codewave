@@ -1,12 +1,31 @@
 import {
+  CUSTOMER_API_CORS_ALLOWED_HEADERS,
   isAllowedCorsOrigin,
   STAFF_API_CORS_ALLOWED_HEADERS,
 } from './cors';
 
+describe('CUSTOMER_API_CORS_ALLOWED_HEADERS', () => {
+  it('allows the mobile checkout return URL headers used by customer flows', () => {
+    expect(CUSTOMER_API_CORS_ALLOWED_HEADERS).toEqual(
+      expect.arrayContaining([
+        'Idempotency-Key',
+        'If-Match',
+        'X-Mobile-Success-Url',
+        'X-Mobile-Cancel-Url',
+      ]),
+    );
+  });
+});
+
 describe('STAFF_API_CORS_ALLOWED_HEADERS', () => {
   it('allows the work claim and optimistic-concurrency headers used by staff workflows', () => {
     expect(STAFF_API_CORS_ALLOWED_HEADERS).toEqual(
-      expect.arrayContaining(['X-Work-Claim-Id', 'If-Match']),
+      expect.arrayContaining([
+        'X-Mobile-Success-Url',
+        'X-Mobile-Cancel-Url',
+        'X-Work-Claim-Id',
+        'If-Match',
+      ]),
     );
   });
 });

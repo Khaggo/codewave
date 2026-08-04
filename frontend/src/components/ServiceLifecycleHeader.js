@@ -37,9 +37,9 @@ export default function ServiceLifecycleHeader({
   return (
     <section
       aria-label="Service lifecycle"
-      className="rounded-lg border border-surface-border bg-surface-card px-4 py-4"
+      className="rounded-lg border border-surface-border bg-surface-card px-4 py-3"
     >
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-mono text-xs font-bold text-brand-orange">
@@ -47,7 +47,7 @@ export default function ServiceLifecycleHeader({
             </p>
             {status ? <span className="badge badge-gray">{status}</span> : null}
           </div>
-          <p className="mt-2 text-sm font-semibold text-ink-primary">
+          <p className="mt-1 text-sm font-semibold text-ink-primary">
             {[customer, vehicle].filter(Boolean).join(' / ') || 'Select a record to begin'}
           </p>
         </div>
@@ -67,8 +67,8 @@ export default function ServiceLifecycleHeader({
         </div>
       </div>
 
-      <div className="mt-4 overflow-x-auto pb-1">
-      <ol className="grid min-w-[640px] grid-cols-6 gap-2" aria-label="Service stages">
+      <div className="mt-3 overflow-x-auto pb-1">
+      <ol className="grid min-w-[560px] grid-cols-6 gap-1.5" aria-label="Service stages">
         {SERVICE_STEPS.map((step, index) => {
           const isDone = index < currentStepIndex
           const isCurrent = index === currentStepIndex
@@ -76,7 +76,7 @@ export default function ServiceLifecycleHeader({
             <li
               key={step.key}
               aria-current={isCurrent ? 'step' : undefined}
-              className={`flex min-h-12 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+              className={`flex min-h-9 items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-semibold ${
                 isDone
                   ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
                   : isCurrent
@@ -95,22 +95,22 @@ export default function ServiceLifecycleHeader({
       </div>
 
       {blocker || nextAction ? (
-        <div className="mt-4 grid gap-2 lg:grid-cols-2">
-          <div className={`rounded-lg border px-3 py-2 text-sm ${
-            blocker
-              ? 'border-red-500/25 bg-red-500/10 text-red-100'
-              : 'border-surface-border bg-surface-raised text-ink-muted'
-          }`}>
+        <div className={`mt-3 grid gap-2 ${blocker && nextAction ? 'lg:grid-cols-2' : ''}`}>
+          {blocker ? (
+          <div className="rounded-md border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-100">
             <span className="inline-flex items-center gap-2 font-semibold">
-              {blocker ? <AlertTriangle size={14} /> : <Check size={14} />}
-              {blocker ? 'Blocked' : 'No active blocker'}
+              <AlertTriangle size={14} />
+              Blocked
             </span>
-            {blocker ? <span className="ml-2">{blocker}</span> : null}
+            <span className="ml-2">{blocker}</span>
           </div>
-          <div className="rounded-lg border border-brand-orange/25 bg-brand-orange/10 px-3 py-2 text-sm text-ink-primary">
+          ) : null}
+          {nextAction ? (
+          <div className="rounded-md border border-brand-orange/25 bg-brand-orange/10 px-3 py-2 text-sm text-ink-primary">
             <span className="font-semibold">Next action:</span>{' '}
-            {nextAction || 'Select a record to continue.'}
+            {nextAction}
           </div>
+          ) : null}
         </div>
       ) : null}
     </section>

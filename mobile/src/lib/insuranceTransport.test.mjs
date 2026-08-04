@@ -1,76 +1,104 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from 'node:assert/strict';
+import test from 'node:test';
 
-import { createInsuranceInquiry } from './insuranceClient.js'
+import { request, shouldUseBrowserNoStoreCache } from './insuranceTransport.js';
 
-test('createInsuranceInquiry sends the web-aligned purpose field to the backend', async () => {
-  const originalFetch = globalThis.fetch
-  const originalInsuranceClientRuntime = globalThis.__insuranceClientRuntime
-  const calls = []
+class TestApiError extends Error {
+  constructor(message, status, details) {
+    super(message);
+    this.status = status;
+    this.details = details;
+  }
+}
+
+test('insurance transport preserves caller cancellation as AbortError', async (context) => {
+  const previousRuntime = globalThis.__insuranceClientRuntime;
+  const previousFetch = globalThis.fetch;
+  const controller = new AbortController();
+
+  context.after(() => {
+    globalThis.__insuranceClientRuntime = previousRuntime;
+    globalThis.fetch = previousFetch;
+  });
 
   globalThis.__insuranceClientRuntime = {
-    ApiError: class ApiError extends Error {
-      constructor(message, status, details) {
-        super(message)
-        this.name = 'ApiError'
-        this.status = status
-        this.details = details
-      }
-    },
-    getApiBaseUrl: () => 'http://127.0.0.1:3000',
-  }
-  globalThis.fetch = async (url, options = {}) => {
-    calls.push({ url, options })
-
-    return new Response(
-      JSON.stringify({
-        id: 'inq-purpose-1',
-        userId: 'user-1',
-        vehicleId: 'vehicle-1',
-        inquiryType: 'comprehensive',
-        purpose: 'renewal',
-        subject: 'Renewal request',
-        description: 'Prepare a renewal quote.',
-        status: 'submitted',
-        documentStatus: 'incomplete',
-        paymentStatus: 'not_required',
-        renewalStatus: 'not_applicable',
-        documents: [],
-      }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
+    ApiError: TestApiError,
+    getApiBaseUrl: () => 'http://local.test',
+    notifyCustomerSessionExpired: () => {},
+  };
+  globalThis.fetch = async (_url, { signal }) =>
+    new Promise((_resolve, reject) => {
+      signal.addEventListener(
+        'abort',
+        () => {
+          const error = new Error('aborted by test');
+          error.name = 'AbortError';
+          reject(error);
         },
-      },
-    )
-  }
+        { once: true },
+      );
+    });
 
-  try {
-    await createInsuranceInquiry({
-      userId: 'user-1',
-      vehicleId: 'vehicle-1',
-      clientRequestId: '11111111-1111-4111-8111-111111111111',
-      inquiryType: 'comprehensive',
-      purpose: 'renewal',
-      subject: ' Renewal request ',
-      description: ' Prepare a renewal quote. ',
-      accessToken: 'token-1',
-    })
-  } finally {
-    globalThis.fetch = originalFetch
-    globalThis.__insuranceClientRuntime = originalInsuranceClientRuntime
-  }
+  const pendingRequest = request('/api/insurance/test', {
+    method: 'GET',
+    signal: controller.signal,
+    timeoutMs: 0,
+  });
 
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0].url, 'http://127.0.0.1:3000/api/insurance/inquiries')
-  assert.deepEqual(JSON.parse(calls[0].options.body), {
-    userId: 'user-1',
-    vehicleId: 'vehicle-1',
-    clientRequestId: '11111111-1111-4111-8111-111111111111',
-    inquiryType: 'comprehensive',
-    purpose: 'renewal',
-    subject: 'Renewal request',
-    description: 'Prepare a renewal quote.',
-  })
-})
+  await Promise.resolve();
+  controller.abort();
+
+  await assert.rejects(pendingRequest, {
+    name: 'AbortError',
+  });
+});
+
+test('insurance transport prevents authenticated GET responses from using browser cache', async (context) => {
+  const previousRuntime = globalThis.__insuranceClientRuntime;
+  const previousFetch = globalThis.fetch;
+  let capturedOptions = null;
+
+  context.after(() => {
+    globalThis.__insuranceClientRuntime = previousRuntime;
+    globalThis.fetch = previousFetch;
+  });
+
+  globalThis.__insuranceClientRuntime = {
+    ApiError: TestApiError,
+    getApiBaseUrl: () => 'http://local.test',
+    notifyCustomerSessionExpired: () => {},
+  };
+  globalThis.fetch = async (_url, options) => {
+    capturedOptions = options;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => '{"items":[]}',
+    };
+  };
+
+  await request('/api/insurance/test', {
+    method: 'GET',
+    headers: {
+      Authorization: 'Bearer test-token',
+    },
+    timeoutMs: 0,
+  });
+
+  assert.equal(capturedOptions.cache, 'no-store');
+});
+
+test('insurance transport omits browser cache directives in React Native', () => {
+  assert.equal(
+    shouldUseBrowserNoStoreCache('GET', { product: 'ReactNative' }),
+    false,
+  );
+  assert.equal(
+    shouldUseBrowserNoStoreCache('GET', { product: 'Gecko' }),
+    true,
+  );
+  assert.equal(
+    shouldUseBrowserNoStoreCache('POST', { product: 'Gecko' }),
+    false,
+  );
+});

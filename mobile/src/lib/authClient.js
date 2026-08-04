@@ -173,7 +173,7 @@ export const getCustomerMobileSessionAccessState = (account) => {
   return 'customer_session_active';
 };
 
-const buildAuthorizedHeaders = (accessToken) =>
+export const buildAuthorizedHeaders = (accessToken) =>
   accessToken
     ? {
         Authorization: `Bearer ${accessToken}`,
@@ -388,7 +388,7 @@ const buildUsername = (email) => {
   return localPart ? localPart.toLowerCase() : 'autocare-user';
 };
 
-const request = async (path, options = {}) => {
+export const request = async (path, options = {}) => {
   const { body, headers, ...rest } = options;
   const apiBaseUrlCandidates = getApiBaseUrlCandidates();
   const fallbackAttemptTimeoutMs =
@@ -431,21 +431,18 @@ const request = async (path, options = {}) => {
   }
 
   if (!response) {
-    const errorMessage =
-      lastNetworkError instanceof Error && lastNetworkError.name === 'AbortError'
-        ? 'The request took too long to complete.'
-        : lastNetworkError instanceof Error && lastNetworkError.message
-          ? lastNetworkError.message
-          : 'Unable to reach the API server.';
+    const timedOut = lastNetworkError instanceof Error && lastNetworkError.name === 'AbortError';
 
     throw new ApiError(
-      `Unable to reach ${activeApiBaseUrl}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
+      timedOut
+        ? 'AutoCare took too long to respond. Check your connection and try again.'
+        : 'Unable to reach AutoCare. Check your connection and try again.',
       0,
       {
         path,
         apiBaseUrl: activeApiBaseUrl,
         attemptedApiBaseUrls: apiBaseUrlCandidates,
-        timedOut: lastNetworkError instanceof Error && lastNetworkError.name === 'AbortError',
+        timedOut,
       },
     );
   }

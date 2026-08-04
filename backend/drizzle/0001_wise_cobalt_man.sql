@@ -1,2 +1,0 @@
-DROP INDEX "staff_work_claims_active_owner_queue_idx";--> statement-breakpoint
-CREATE INDEX "staff_work_claims_active_owner_queue_idx" ON "staff_work_claims" USING btree ("queue_type","owner_user_id","status");

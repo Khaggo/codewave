@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 import {
-  earningRuleAccrualSourceEnum,
   earningRuleAuditActionEnum,
   earningRuleFormulaTypeEnum,
   earningRuleStatusEnum,
@@ -19,10 +18,10 @@ export class EarningRuleSnapshotResponseDto {
   description?: string | null;
 
   @ApiProperty({
-    enum: earningRuleAccrualSourceEnum.enumValues,
+    enum: ['service'],
     example: 'service',
   })
-  accrualSource!: (typeof earningRuleAccrualSourceEnum.enumValues)[number];
+  accrualSource!: 'service';
 
   @ApiProperty({
     enum: earningRuleFormulaTypeEnum.enumValues,
@@ -65,18 +64,6 @@ export class EarningRuleSnapshotResponseDto {
     isArray: true,
   })
   eligibleServiceCategories!: string[];
-
-  @ApiProperty({
-    type: String,
-    isArray: true,
-  })
-  eligibleProductIds!: string[];
-
-  @ApiProperty({
-    type: String,
-    isArray: true,
-  })
-  eligibleProductCategoryIds!: string[];
 
   @ApiPropertyOptional({
     example: 'Collision Week Bonus',

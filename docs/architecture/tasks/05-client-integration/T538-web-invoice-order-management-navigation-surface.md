@@ -1,4 +1,4 @@
-# Web Invoice Order Management Navigation Surface
+# Web Service Invoice Navigation Surface
 
 ## Task ID
 
@@ -6,7 +6,7 @@
 
 ## Title
 
-Make Invoice & Order Management clearly discoverable in the staff web portal.
+Expose finalized Job Order invoices as a focused staff workflow.
 
 ## Type
 
@@ -24,79 +24,34 @@ Make Invoice & Order Management clearly discoverable in the staff web portal.
 
 `integration-worker`
 
-## Source of Truth
-
-- `../../domains/main-service/job-orders.md`
-- `../../domains/ecommerce/orders.md`
-- `../../domains/ecommerce/invoice-payments.md`
-- `../../domains/ecommerce/cart.md`
-- `../../frontend-backend-sync.md`
-- `../01-main-service/T108-invoice-generation-from-job-orders.md`
-- `../02-ecommerce-service/T203-cart-and-invoice-checkout.md`
-- `../02-ecommerce-service/T204-order-tracking-and-purchase-history.md`
-- `../02-ecommerce-service/T205-invoice-only-payment-tracking.md`
-- `T525-cart-and-invoice-checkout-mobile-flow.md`
-- `T526-order-history-and-invoice-tracking-mobile-flow.md`
-
 ## Depends On
 
-- `T108`
-- `T203`
-- `T204`
-- `T205`
-- `T526`
+- `T517`
+- Job Order finalization and invoice lookup contracts
 
-## Goal
+## Objective
 
-Make the progress-report `Invoice & Order Management` module visible in the web portal instead of only appearing as embedded job-order invoice actions, shop cart state, or analytics invoice-aging summaries.
+Expose `/admin/invoices` as a focused staff surface for finalized Job Order invoices,
+payment state, aging reminders, and direct return to the owning Job Order workspace.
 
-## Deliverables
+## Scope
 
-- a clear staff/admin web entry point for invoice and order management
-- distinction between service invoices from job orders and ecommerce orders/invoices
-- read-only order/invoice state where mutation endpoints are not available
-- clear payment-state copy that does not imply gateway settlement when only manual payment records exist
+- search finalized Job Orders by reference
+- show service invoice totals and reservation-fee deductions
+- show recorded payments and remaining balance
+- show aging/reminder state
+- preserve adviser and super-admin access boundaries
 
-## Implementation Notes
+## Acceptance Criteria
 
-- service invoice payment remains tied to finalized job orders
-- ecommerce order history and invoice truth remain owned by the ecommerce service
-- do not create a payment gateway integration in this slice
-- if the backend lacks a broad staff invoice/order list endpoint, document the exact route gap and expose the safest available linked surfaces
+- the staff navigation labels the surface `Service Invoices`
+- no unrelated sales queue is rendered
+- selecting a finalized Job Order loads its invoice record
+- payment and aging state refresh without reloading the page
+- missing and unavailable invoice states are explicit and recoverable
 
-## Acceptance Checks
+## Verification
 
-- staff/admin users can find an Invoice & Order Management surface from the web portal
-- service invoice status is reachable from the job-order workflow
-- ecommerce order/invoice truth is either listed from live staff routes or clearly marked as a required API gap
-- invoice aging remains visible from analytics without being mistaken for the only invoice module surface
-- no customer mobile ecommerce checkout or order-history flow regresses
-
-## Implementation Summary
-
-- Added `/admin/invoices` as the staff web Invoice & Order Management hub.
-- Added role-aware sidebar and staff-session navigation visibility for service advisers and super admins.
-- Added a web client boundary for known ecommerce order and invoice reads against the ecommerce owner routes.
-- Kept service invoice finalization and payment recording in the Job Order Workbench while making service invoice state discoverable from the new hub.
-- Surfaced invoice-aging analytics directly from `GET /api/analytics/invoice-aging` with copy that distinguishes reminder analytics from payment settlement truth.
-
-## Required API Gaps Captured
-
-- `GET /api/orders?status=&invoiceStatus=` for a broad staff/admin ecommerce order queue.
-- `GET /api/invoices?status=&agingBucket=` for a broad staff/admin invoice queue.
-- `GET /api/invoices/export?from=&to=` for future finance export and date-range workflows.
-
-## Acceptance Evidence
-
-- Web surface: `frontend/src/app/admin/invoices/page.js`
-- Web workspace: `frontend/src/screens/InvoiceOrderManagementWorkspace.js`
-- Web client boundary: `frontend/src/lib/invoiceOrderManagementClient.js`
-- Contract pack: `frontend/src/lib/api/generated/invoice-orders/staff-web-invoice-order-management.ts`
-- Navigation: `frontend/src/components/layout/Sidebar.js`
-- Role visibility: `frontend/src/lib/api/generated/auth/staff-web-session.ts`
-
-## Out of Scope
-
-- online payment gateway settlement
-- changing mobile checkout behavior
-- merging service invoices and ecommerce orders into one backend table
+- service invoice view-model tests
+- staff web production build
+- Booking to Job Order to QA to finalization to payment Playwright flow

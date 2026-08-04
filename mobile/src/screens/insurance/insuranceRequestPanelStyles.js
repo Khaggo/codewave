@@ -12,28 +12,8 @@ export default StyleSheet.create({
     minHeight: 0,
   },
   content: {
-    gap: 18,
+    gap: 12,
     paddingBottom: 128,
-  },
-  heroCard: {
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: insurancePalette.border,
-    backgroundColor: insurancePalette.card,
-    padding: 18,
-    gap: 8,
-  },
-  heroTitle: {
-    color: insurancePalette.text,
-    fontFamily: insuranceFonts.heading,
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  heroSubtitle: {
-    color: insurancePalette.textMuted,
-    fontFamily: insuranceFonts.body,
-    fontSize: 14,
-    lineHeight: 22,
   },
   stageRail: {
     flexDirection: 'row',
@@ -41,8 +21,8 @@ export default StyleSheet.create({
   },
   stageTab: {
     flex: 1,
-    minHeight: 64,
-    borderRadius: radius.lg,
+    minHeight: 58,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: insurancePalette.border,
     backgroundColor: insurancePalette.cardSoft,
@@ -74,7 +54,7 @@ export default StyleSheet.create({
     color: insurancePalette.amber,
   },
   slimCard: {
-    borderRadius: radius.xl,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: insurancePalette.border,
     backgroundColor: insurancePalette.card,
@@ -99,7 +79,7 @@ export default StyleSheet.create({
   segmentButton: {
     flex: 1,
     minHeight: 46,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: insurancePalette.border,
     backgroundColor: insurancePalette.cardSoft,
@@ -123,7 +103,7 @@ export default StyleSheet.create({
   purposeButton: {
     minWidth: '22%',
     minHeight: 44,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: insurancePalette.border,
     backgroundColor: insurancePalette.cardSoft,
@@ -135,7 +115,7 @@ export default StyleSheet.create({
     gap: 8,
   },
   notesCard: {
-    borderRadius: radius.xl,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: insurancePalette.border,
     backgroundColor: insurancePalette.card,

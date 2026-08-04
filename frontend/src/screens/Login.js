@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { AlertCircle, Eye, EyeOff, LoaderCircle, Lock, Mail, ShieldCheck, UserCog } from 'lucide-react'
 
@@ -37,6 +37,7 @@ const InputField = ({
   autoComplete,
   error,
   trailing,
+  inputRef,
 }) => (
   <div>
     <label
@@ -53,6 +54,7 @@ const InputField = ({
         style={{ color: 'rgba(255,255,255,0.25)' }}
       />
       <input
+        ref={inputRef}
         id={id}
         name={name}
         type={type}
@@ -88,6 +90,8 @@ export default function Login({ onAuthenticated, initialError, restoring = false
   )
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const emailInputRef = useRef(null)
+  const passwordInputRef = useRef(null)
 
   useEffect(() => {
     if (!initialError) {
@@ -102,7 +106,12 @@ export default function Login({ onAuthenticated, initialError, restoring = false
 
   const handleApiError = (error, fallback) => {
     if (error instanceof ApiError) {
-      setNotice({ tone: 'error', text: error.message })
+      const message = error.status === 401
+        ? 'The email or password is incorrect.'
+        : error.status >= 500
+          ? 'AutoCare is temporarily unavailable. Try again in a moment.'
+          : error.message
+      setNotice({ tone: 'error', text: message })
       return
     }
 
@@ -116,6 +125,8 @@ export default function Login({ onAuthenticated, initialError, restoring = false
     setNotice(null)
 
     if (Object.keys(nextErrors).length) {
+      if (nextErrors.email) emailInputRef.current?.focus()
+      else if (nextErrors.password) passwordInputRef.current?.focus()
       return
     }
 
@@ -141,7 +152,7 @@ export default function Login({ onAuthenticated, initialError, restoring = false
   }
 
   return (
-    <div className="min-h-screen flex bg-[#0a0a0a]">
+    <main className="min-h-screen flex bg-[#0a0a0a]">
       <div className="hidden lg:flex lg:w-[58%] flex-col justify-between relative overflow-hidden">
         <Image
           src="/21352.webp"
@@ -271,6 +282,7 @@ export default function Login({ onAuthenticated, initialError, restoring = false
                   placeholder="email@example.com"
                   autoComplete="email"
                   error={errors.email}
+                  inputRef={emailInputRef}
                 />
                 <InputField
                   id="staff-password"
@@ -283,13 +295,14 @@ export default function Login({ onAuthenticated, initialError, restoring = false
                   placeholder="Enter your password"
                   autoComplete="current-password"
                   error={errors.password}
+                  inputRef={passwordInputRef}
                   trailing={
                     <button
                       type="button"
                       aria-label={showPassword ? 'Hide password' : 'Show password'}
                       title={showPassword ? 'Hide password' : 'Show password'}
                       onClick={() => setShowPassword((value) => !value)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-muted"
+                      className="absolute right-1 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -314,6 +327,6 @@ export default function Login({ onAuthenticated, initialError, restoring = false
           )}
         </div>
       </div>
-    </div>
+    </main>
   )
 }

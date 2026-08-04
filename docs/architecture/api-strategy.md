@@ -11,6 +11,7 @@ This file defines the canonical API strategy for the AUTOCARE backend. Use it to
 - Keep third-party APIs out of scope unless a concrete business requirement is approved.
 - Approved AI provider APIs are one canonical exception, and only through a provider adapter for review-gated Phase 2 features.
 - Approved Google identity-verification APIs and approved SMTP mail delivery through Nodemailer are the other canonical exceptions because they support the target signup and activation security model.
+- PayMongo is also approved for booking/service payments and the isolated Accessories payment adapter. Accessories webhooks require raw request bytes, timestamp-tolerant signature verification, provider-event deduplication, livemode validation, and amount/currency/order matching.
 - SMTP mail delivery is email-only in the current scope. Do not add SMS transports to canonical docs or contracts unless a later approved plan changes the cost model.
 
 ## REST and Swagger Contract
@@ -79,24 +80,16 @@ The `main-service` owns REST APIs for:
   - inquiry create, read, status, and document endpoints
 - `notifications`, `loyalty`, `chatbot`, and `analytics`
   - REST APIs only where direct user or admin access is required
+- `accessories`
+  - customer routes live only under `/api/accessories`
+  - staff routes live only under `/api/admin/accessories`
+  - list endpoints use versioned keyset cursors with a maximum page size of 25
+  - checkout, payment-session creation, stock adjustment, cancellation approval, and refund mutations require `Idempotency-Key`
+  - versioned updates require `If-Match`
+  - `ACCESSORY_COMMERCE_MODE` gates new ordering without disabling history, fulfillment, refunds, or webhook reconciliation
 
-## E-Commerce REST Surface
-
-The `ecommerce-service` owns REST APIs for:
-
-- `catalog`
-  - product and category endpoints
-- `inventory`
-  - stock and reservation endpoints
-- `cart`
-  - cart lifecycle endpoints
-- `orders`
-  - checkout and order-history endpoints
-- `invoice-payments`
-  - invoice creation, payment-entry, and status-tracking endpoints
-
-Key invoice-based commerce endpoint:
-- `POST /checkout/invoice`
+The retired generic ecommerce routes and service must not be restored. Accessory APIs do not reuse
+service catalog, Job Order, QA, or service-invoice endpoints.
 
 ## RabbitMQ Event Contract
 
@@ -116,9 +109,6 @@ Recommended event families:
 - `quality_gate.overridden`
 - `service.invoice_finalized`
 - `service.payment_recorded`
-- `order.created`
-- `order.invoice_issued`
-- `invoice.payment_recorded`
 - `loyalty.points_earned`
 
 Rules:

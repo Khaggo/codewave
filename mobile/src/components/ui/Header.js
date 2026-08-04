@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   left: {
-    width: 40,
+    width: 44,
     alignItems: 'flex-start',
   },
   center: {
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   right: {
-    minWidth: 40,
+    minWidth: 44,
     alignItems: 'flex-end',
   },
 });

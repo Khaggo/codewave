@@ -35,14 +35,18 @@ npm run dev:mobile:web
 
 These repo-root runtime scripts now go through a single-instance watchdog. If the expected port is already occupied, the watchdog refuses to spawn a duplicate Node or Expo process.
 
-If `mobile/.runtime/qa-mobile-web-export/index.html` already exists, the harness will auto-serve that static export on `http://127.0.0.1:8095` and use it instead of requiring a live Expo web server.
+The managed live mobile-web runtime on `http://127.0.0.1:8090` is the default. An existing static export is never selected implicitly because it may not match the current source.
 
 ## Important local assumptions
 
 - `mobile/.env.local` must point `EXPO_PUBLIC_API_BASE_URL` at the currently valid backend host.
 - The seeded QA accounts from `backend/scripts/seed-booking-job-order-qa-accounts.ts` must already exist.
+  Account seeding no longer has a known fallback password and never prints the configured password.
+  Set `BOOKING_JOB_ORDER_QA_PASSWORD` to a local-only value of at least 12 characters before an
+  `--execute` seed, then provide the same value to Playwright through
+  `QA_CUSTOMER_PASSWORD` and `QA_STAFF_PASSWORD` (or leave the shared variable set).
 - PayMongo is treated as a fragile local dependency. The suite covers the reservation-fee gate and supports manual-counter confirmation on staff web so the booking can still move through the operational flow in local QA.
-- If you want to refresh the static mobile fallback, run `cd mobile && npx expo export --platform web --output-dir .runtime/qa-mobile-web-export`.
+- To use a static mobile export deliberately, run `cd mobile && npx expo export --platform web --output-dir .runtime/qa-mobile-web-export`, then set `QA_USE_STATIC_MOBILE_EXPORT=true`. The harness serves that export on `http://127.0.0.1:8095`.
 - The Playwright mobile-web surrogate proxies absolute mobile API calls to the configured local backend so browser CORS does not mask the native Expo booking flow.
 
 ## Run

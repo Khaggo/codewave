@@ -3,8 +3,14 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { UsersService } from '@main-modules/users/services/users.service';
 
 import { CreateVehicleDto } from '../dto/create-vehicle.dto';
+import { ListCustomerGarageQueryDto } from '../dto/list-customer-garage-query.dto';
 import { UpdateVehicleDto } from '../dto/update-vehicle.dto';
 import { VehiclesRepository } from '../repositories/vehicles.repository';
+import {
+  decodeVehicleGarageCursor,
+  encodeVehicleGarageCursor,
+  normalizeVehicleGarageSearch,
+} from './vehicle-garage-pagination';
 
 @Injectable()
 export class VehiclesService {
@@ -54,6 +60,53 @@ export class VehiclesService {
       this.assertVehicleActorCanAccessUser(userId, actor);
     }
     return this.vehiclesRepository.findByUserId(userId);
+  }
+
+  async findGaragePage(
+    userId: string,
+    query: ListCustomerGarageQueryDto,
+    actor?: { userId: string; role: string },
+  ) {
+    if (actor) {
+      this.assertVehicleActorCanAccessUser(userId, actor);
+    }
+
+    const limit = query.limit ?? 3;
+    const search = normalizeVehicleGarageSearch(query.search);
+    const page = await this.vehiclesRepository.findGaragePage({
+      userId,
+      search,
+      cursor: decodeVehicleGarageCursor(query.cursor, search),
+      limit,
+    });
+    const lastItem = page.items[page.items.length - 1];
+
+    return {
+      items: page.items.map((vehicle) => ({
+        id: vehicle.id,
+        plateNumber: vehicle.plateNumber,
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year,
+        color: vehicle.color,
+        vin: vehicle.vin,
+      })),
+      page: {
+        limit,
+        total: page.total,
+        hasNext: page.hasNext,
+        nextCursor:
+          page.hasNext && lastItem
+            ? encodeVehicleGarageCursor(
+                {
+                  createdAt: lastItem.createdAt,
+                  id: lastItem.id,
+                },
+                search,
+              )
+            : null,
+      },
+    };
   }
 
   async update(id: string, updateVehicleDto: UpdateVehicleDto, actor?: { userId: string; role: string }) {

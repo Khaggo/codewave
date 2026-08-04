@@ -19,8 +19,6 @@ Send the right operational notices at the right time while keeping delivery poli
 - `insurance.inquiry_status_changed` internal trigger contracts from `main-service.insurance`
 - `back_job.status_changed` internal trigger contracts from `main-service.back-jobs`
 - `job_order.service_follow_up_requested` internal trigger contracts from `main-service.job-orders`
-- `order.invoice_issued` facts from `ecommerce-service`
-- `invoice.payment_recorded` facts from `ecommerce-service`
 - auth OTP delivery requests
 - user notification preferences
 - reminder rules and queue jobs
@@ -40,7 +38,7 @@ Send the right operational notices at the right time while keeping delivery poli
 - `main-service.bookings`
 - `main-service.insurance`
 - `main-service.back-jobs`
-- `ecommerce.invoice-payments`
+- `main-service.job-orders`
 
 ## Owned Data / ERD
 
@@ -53,7 +51,7 @@ Primary tables or equivalents:
 Key relations:
 - one user may have one preference profile
 - one domain event may generate many notification records
-- reminder rules can be attached to booking or invoice-aging flows
+- reminder rules can be attached to booking and service follow-up flows
 
 ## Primary Business Logic
 
@@ -64,7 +62,6 @@ Key relations:
 - support operational email delivery without changing trigger ownership
 - expose user-facing preference and history endpoints for operational notifications
 - deliver email OTP challenges for signup and staff activation without taking ownership of activation decisions
-- react to commerce invoice-issued and payment-recorded facts without reaching into ecommerce tables directly
 - keep trigger contracts explicit per source domain instead of relying on one generic `notification.requested` event
 - hide internal-only operational events from customer notification streams
 - keep SMS and other paid delivery channels out of the canonical scope unless explicitly reapproved
@@ -84,8 +81,6 @@ Key relations:
 - insurance inquiry update notice
 - back-job status change notice
 - service follow-up reminder after a completed job-order workflow
-- invoice issuance starts aging reminder policy for unpaid commerce orders
-- invoice payment recorded updates or stops aging reminder policy
 - insurance renewal and service reminder notices
 - customer signup email OTP delivery
 - pending staff activation email OTP delivery
@@ -106,7 +101,6 @@ Key relations:
 - duplicate trigger delivery reuses the same dedupe key and must not create a second customer-visible notification
 - user opts out of a channel after a job is already queued
 - reminder jobs remain queued after booking cancellation
-- invoice reminders keep sending after payment is fully recorded
 - email delivery fails after a reminder has already been scheduled
 - reminder preferences change between queueing time and delivery time
 - auth email OTP expiry and OTP flood control are handled in `auth`

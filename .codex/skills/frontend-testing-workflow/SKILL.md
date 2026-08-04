@@ -55,10 +55,13 @@ npm test
 - Staff/admin login works
 - Customer accounts are not exposed as web self-registration
 - Admin routes still load:
-  - `/admin/appointments`
-  - `/admin/catalog`
-  - `/admin/inventory`
+  - `/admin/intake-inspections`
+  - `/admin/job-orders`
   - `/admin/qa-audit`
+  - `/admin/invoices`
+  - `/admin/customers`
+  - `/admin/services`
+  - `/admin/users` for super admins
   - `/admin/summaries`
   - `/settings`
 
@@ -85,4 +88,3 @@ npm test
 - A screen works with mocked local state but fails with real backend data.
 - Shared package behavior diverges between `frontend/` and `mobile/`.
 - A route renders, but role gating or onboarding sequence is broken.
-

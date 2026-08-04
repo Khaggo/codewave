@@ -2,9 +2,7 @@ export type NotificationTriggerName =
   | 'booking.reminder_requested'
   | 'insurance.inquiry_status_changed'
   | 'back_job.status_changed'
-  | 'job_order.service_follow_up_requested'
-  | 'order.invoice_issued'
-  | 'invoice.payment_recorded';
+  | 'job_order.service_follow_up_requested';
 
 export interface BookingReminderRequestedTrigger {
   name: 'booking.reminder_requested';
@@ -77,9 +75,7 @@ export interface NotificationTriggerPlan {
     | 'main-service.bookings'
     | 'main-service.insurance'
     | 'main-service.back-jobs'
-    | 'main-service.job-orders'
-    | 'ecommerce.orders'
-    | 'ecommerce.invoice-payments';
+    | 'main-service.job-orders';
   dedupePolicy: 'stable-source-dedupe-v1';
   retryPolicy: 'bullmq-deliver-notification-v1';
   actions: NotificationTriggerPlanAction[];

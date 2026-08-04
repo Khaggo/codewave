@@ -33,6 +33,21 @@ test('normalizeCustomerNotification keeps in-app insurance reminders visible and
   assert.equal(normalized.requiresAction, true);
 });
 
+test('normalizeCustomerNotification formats embedded timestamps for customers', () => {
+  const normalized = normalizeCustomerNotification({
+    id: 'notification-booking-payment',
+    category: 'booking_payment',
+    sourceType: 'booking_payment',
+    sourceId: 'booking-1',
+    title: 'Reservation payment required',
+    message: 'Complete payment before 2026-04-21T09:00:00.000Z.',
+    status: 'sent',
+  });
+
+  assert.doesNotMatch(normalized.message, /2026-04-21T09:00:00\.000Z/);
+  assert.match(normalized.message, /Apr 21, 2026/);
+});
+
 test('markCustomerNotificationReadLocally sets sent notifications to delivered_local_read', () => {
   const notification = normalizeCustomerNotification({
     id: 'notification-1',

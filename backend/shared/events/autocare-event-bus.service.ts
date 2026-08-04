@@ -11,14 +11,6 @@ import {
   createAuditEvent,
 } from './contracts/audit-events';
 import {
-  AnyCommerceEventEnvelope,
-  CommerceEventEnvelope,
-  CommerceEventName,
-  CommerceEventPayloadByName,
-  commerceEventNames,
-  createCommerceEvent,
-} from './contracts/commerce-events';
-import {
   AnyServiceEventEnvelope,
   createServiceEvent,
   ServiceEventEnvelope,
@@ -39,7 +31,7 @@ import { AUTOCARE_EVENTS_CLIENT } from './events.constants';
 export class AutocareEventBusService {
   private readonly logger = new Logger(AutocareEventBusService.name);
   private readonly publishedEvents: Array<
-    AnyAuditEventEnvelope | AnyCommerceEventEnvelope | AnyLifecycleEventEnvelope | AnyServiceEventEnvelope
+    AnyAuditEventEnvelope | AnyLifecycleEventEnvelope | AnyServiceEventEnvelope
   > = [];
   private readonly subscribers = new Map<
     string,
@@ -47,7 +39,6 @@ export class AutocareEventBusService {
       (
         event:
           | AnyAuditEventEnvelope
-          | AnyCommerceEventEnvelope
           | AnyLifecycleEventEnvelope
           | AnyServiceEventEnvelope,
       ) => void | Promise<void>
@@ -64,10 +55,6 @@ export class AutocareEventBusService {
     name: TName,
     payload: AuditEventPayloadByName[TName],
   ): AuditEventEnvelope<TName>;
-  publish<TName extends CommerceEventName>(
-    name: TName,
-    payload: CommerceEventPayloadByName[TName],
-  ): CommerceEventEnvelope<TName>;
   publish<TName extends LifecycleEventName>(
     name: TName,
     payload: LifecycleEventPayloadByName[TName],
@@ -77,10 +64,9 @@ export class AutocareEventBusService {
     payload: ServiceEventPayloadByName[TName],
   ): ServiceEventEnvelope<TName>;
   publish(
-    name: AuditEventName | CommerceEventName | LifecycleEventName | ServiceEventName,
+    name: AuditEventName | LifecycleEventName | ServiceEventName,
     payload:
       | AuditEventPayloadByName[AuditEventName]
-      | CommerceEventPayloadByName[CommerceEventName]
       | LifecycleEventPayloadByName[LifecycleEventName]
       | ServiceEventPayloadByName[ServiceEventName],
   ) {
@@ -88,14 +74,6 @@ export class AutocareEventBusService {
       const event = createAuditEvent(
         name as AuditEventName,
         payload as AuditEventPayloadByName[AuditEventName],
-      );
-      return this.publishEnvelope(event);
-    }
-
-    if (commerceEventNames.includes(name as CommerceEventName)) {
-      const event = createCommerceEvent(
-        name as CommerceEventName,
-        payload as CommerceEventPayloadByName[CommerceEventName],
       );
       return this.publishEnvelope(event);
     }
@@ -116,17 +94,15 @@ export class AutocareEventBusService {
   }
 
   publishEnvelope<TName extends AuditEventName>(event: AuditEventEnvelope<TName>): AuditEventEnvelope<TName>;
-  publishEnvelope<TName extends CommerceEventName>(event: CommerceEventEnvelope<TName>): CommerceEventEnvelope<TName>;
   publishEnvelope<TName extends LifecycleEventName>(event: LifecycleEventEnvelope<TName>): LifecycleEventEnvelope<TName>;
   publishEnvelope<TName extends ServiceEventName>(event: ServiceEventEnvelope<TName>): ServiceEventEnvelope<TName>;
   publishEnvelope(
-    event: AnyAuditEventEnvelope | AnyCommerceEventEnvelope | AnyLifecycleEventEnvelope | AnyServiceEventEnvelope,
+    event: AnyAuditEventEnvelope | AnyLifecycleEventEnvelope | AnyServiceEventEnvelope,
   ) {
     this.publishedEvents.push(
       this.clone(
         event as
           | AnyAuditEventEnvelope
-          | AnyCommerceEventEnvelope
           | AnyLifecycleEventEnvelope
           | AnyServiceEventEnvelope,
       ),
@@ -157,7 +133,6 @@ export class AutocareEventBusService {
     handler: (
       event:
         | AnyAuditEventEnvelope
-        | AnyCommerceEventEnvelope
         | AnyLifecycleEventEnvelope
         | AnyServiceEventEnvelope,
     ) => void | Promise<void>,
@@ -182,7 +157,6 @@ export class AutocareEventBusService {
   private clone<
     TEvent extends
       | AnyAuditEventEnvelope
-      | AnyCommerceEventEnvelope
       | AnyLifecycleEventEnvelope
       | AnyServiceEventEnvelope,
   >(
@@ -194,7 +168,6 @@ export class AutocareEventBusService {
   private notifySubscribers(
     event:
       | AnyAuditEventEnvelope
-      | AnyCommerceEventEnvelope
       | AnyLifecycleEventEnvelope
       | AnyServiceEventEnvelope,
   ) {

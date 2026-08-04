@@ -1,6 +1,6 @@
 # AUTOCARE Planning Context
 
-Last reviewed: 2026-07-27
+Last reviewed: 2026-08-01
 
 ## Purpose
 
@@ -17,12 +17,11 @@ other secrets in this file.
 
 ## Product Summary
 
-AUTOCARE supports Cruisers Crib Auto Care Center across four runtime applications:
+AUTOCARE supports Cruisers Crib Auto Care Center across three runtime applications:
 
 | Application | Directory | Audience | Default local port |
 | --- | --- | --- | --- |
 | Main API | `backend/apps/main-service` | Staff web and customer mobile | `3000` |
-| Ecommerce API | `backend/apps/ecommerce-service` | Shop, orders, inventory, and payments | `3001` |
 | Staff portal | `frontend` | Service advisers and super admins | `3002` |
 | Customer app | `mobile` | Customers only | Expo/Metro `8081`; optional web `8090` |
 
@@ -66,7 +65,7 @@ as open.
 
 - Uses the mobile app, not the staff web portal.
 - Owns and manages personal profile data, addresses, vehicles, bookings, insurance
-  inquiries, rewards, shop activity, and reviewed lifecycle information.
+  inquiries, service-earned rewards, and reviewed lifecycle information.
 - Can only access records authorized for that customer.
 
 ### Service Adviser
@@ -81,7 +80,7 @@ as open.
 - Has all service adviser capabilities.
 - Provisions and deactivates staff accounts.
 - Manages privileged overrides and system-level administration.
-- Owns restricted catalog and user-management surfaces.
+- Owns restricted user-management and system-administration surfaces.
 - Must provide auditable reasons for sensitive assignment or workflow overrides.
 
 ### Technician Profile
@@ -111,22 +110,22 @@ the portal after authentication.
 | Job Orders Board | `/admin/job-orders` | Adviser, admin | Scalable My Work and Team Board views for active, unassigned, blocked, and historical Job Orders. Uses bounded server-side queue pages rather than rendering all work. |
 | Job Workspace | `/admin/job-orders/[id]` | Adviser, admin | Focused workspace for one Job Order: setup, assignments, progress, evidence, QA handoff, finalization, and payment linkage. |
 | QA Audit | `/admin/qa-audit` | Adviser, admin | Independently claim QA work, review findings and evidence, pass or block release, and preserve an audit trail. A blocked verdict returns the job for correction. |
-| Invoices and Orders | `/admin/invoices` | Adviser, admin | Review invoice readiness, order/payment state, aging, and completion after QA. |
+| Service Invoices | `/admin/invoices` | Adviser, admin | Review Job Order invoice readiness, payment state, aging, and completion after QA. |
 | Customers and Vehicles | `/admin/customers`; `/vehicles` redirects | Adviser, admin | Search customer and owned-vehicle records and inspect service context. Customer ownership and privacy rules still apply. |
 | Back Jobs | `/backjobs` | Adviser, admin | Inspect reported return work, approve rework, create linked Job Orders, and preserve lineage to the original completed work. |
 | Insurance | `/insurance` | Adviser, admin | Review insurance inquiries, documents, requirements, and workflow status. |
 | Insurance Collections | `/insurance/collections` | Adviser, admin | Track collection and payment follow-up connected to insurance work. |
 | Insurance Renewals | `/insurance/renewals` | Adviser, admin | Track renewal follow-up and customer notifications. |
 | Loyalty Management | `/loyalty` | Adviser, admin | Review customer balances, ledger activity, rewards, earning, and redemption operations. |
-| Catalog Administration | `/admin/catalog` | Super admin | Manage ecommerce product and category information when the ecommerce feature is enabled. |
-| Inventory | `/admin/inventory` | Adviser, admin | Review stock, reservations, and adjustments when the ecommerce feature is enabled. |
 | Service Management | `/admin/services` | Adviser, admin | Manage the service catalog used by bookings and workshop work. |
 | Staff and Technician Profiles | `/admin/users` | Super admin | Provision/deactivate authenticated staff and maintain non-login technician profiles. |
 | Analytics and Summaries | `/admin/summaries` | Adviser, admin | View operational KPIs and review generated summaries/read models. Analytics must remain rebuildable from source facts. |
 | Settings | `/settings` | Adviser, admin | Staff profile, account security, preferences, and supported system settings. |
-| Shop Handoff | `/shop` | Adviser, admin | Legacy navigation handoff to the active catalog and inventory surfaces. |
 | Customer Timeline Handoff | `/timeline` | Adviser, admin | Explains that the customer-facing vehicle lifecycle is delivered in mobile; staff inspect source records through operational modules. |
 | Notifications and My Work | Global shell | Adviser, admin | Persisted assignment, reassignment, blocker, QA return, overdue, and work-resume signals with direct links to the relevant workspace. |
+| Accessory Catalog | `/admin/accessories/catalog` | Super admin | Manage accessory categories, products, variants, fitment, media, prices, publication, and required lighting review. This is separate from the service catalog. |
+| Accessory Stock | `/admin/accessories/stock` | Super admin | Review balances and immutable inventory movements and perform audited stock adjustments. |
+| Accessory Orders | `/admin/accessories/orders` | Adviser, admin | Claim and fulfill pickup orders. Advisers prepare and collect; super admins additionally control cancellation and full-refund decisions. |
 
 ### Job Order Board Behavior
 
@@ -157,8 +156,8 @@ the portal after authentication.
 
 ## Customer Mobile Modules
 
-The Expo app is the active customer experience. The main shell currently exposes
-Home, Garage, Book, Insurance, Rewards, and Shop destinations.
+The Expo app is the active customer experience. The main shell exposes Home, Garage,
+Book, Insurance, and More. Rewards remains available under More and from Home shortcuts.
 
 | Module | Screens or surfaces | Purpose and important behavior |
 | --- | --- | --- |
@@ -168,19 +167,18 @@ Home, Garage, Book, Insurance, Rewards, and Shop destinations.
 | Password Recovery | Forgot Password Email, OTP, Reset Password | Verified password reset without exposing whether unrelated accounts exist. |
 | Home | Home tab | Customer overview, active service information, useful shortcuts, and recent activity. |
 | Profile | Manage Profile | Personal details and account-owned information. |
-| Addresses | Profile/settings surfaces | Customer address management for supported booking and commerce flows. |
+| Addresses | Profile/settings surfaces | Customer address management for supported service and insurance flows. |
 | Security | Change Password and account controls | Password changes, session-sensitive account actions, and supported account deletion. |
 | Garage | Garage tab | Owned vehicles, primary vehicle, vehicle details, and entry into lifecycle information. |
 | Vehicle Lifecycle | Vehicle Lifecycle screen | Paginated service timeline, inspection-backed condition events, and human-reviewed AI summaries. |
 | Booking | Book tab and Booking screen | Multi-service appointment creation using owned vehicle, date, slot availability, notes, and supported reservation payment. |
 | Booking History and Tracking | Booking detail/history surfaces | View booking status, workshop stages, related Job Order progress, evidence intended for customers, and completion. |
 | Insurance | Insurance tab and inquiry screen | Submit an inquiry, provide supported documentation, and follow requirements and status. |
-| Rewards | Rewards tab | View points/ledger activity, reward offers, eligibility, and supported redemption. |
-| Shop Catalog | Shop tab, Catalog section, Store screen | Browse categories and products, inspect product details, and manage cart intent. |
-| Checkout and Orders | Shop Orders section | Validate inventory, create ecommerce order/invoice checkout, view order history, and track payment state. |
+| Rewards | More and Home shortcuts | View service-earned points, reward offers, eligibility, and supported redemption. |
 | Notifications | Notification surfaces | Receive booking, insurance, invoice, follow-up, and other supported in-app/email updates. |
 | Notification Preferences | Settings subsection | Control email, booking reminders, insurance updates, invoice reminders, and service follow-up preferences. |
 | Chatbot | Chatbot screen | Deterministic FAQ and support routing with escalation paths; it is not an autonomous decision maker. |
+| Accessories | First-class catalog, product, cart, checkout, and order routes reached from More or Home | Browse vehicle accessories, check fitment, place pickup orders, pay through PayMongo or at the shop, and track fulfillment. Shipping and installation are outside scope. |
 | Settings and Saved UI | Menu, settings, gift, saved surfaces | Customer preferences and convenience surfaces. Confirm API backing before planning dependencies on partially implemented gift or saved-item UI. |
 
 Relevant mobile API clients include:
@@ -192,14 +190,11 @@ Relevant mobile API clients include:
 - `insuranceClient`
 - `loyaltyClient`
 - `notificationClient`
-- `catalogClient`
-- `ecommerceCheckoutClient`
 - `jobOrdersClient`
 - `chatbotClient`
 
-A legacy `TechnicianDashboard.js` may still exist in the source tree. It is not an
-active product surface and must not be treated as evidence of technician login
-support.
+The legacy `TechnicianDashboard.js` has been removed. Technicians remain non-login
+profiles and must not be treated as authenticated mobile users.
 
 ## Main API Domains
 
@@ -221,24 +216,16 @@ support.
 | `vehicle-lifecycle` | Unified customer timeline and review-gated summary publication. |
 | `chatbot` | Deterministic support intents, FAQ responses, and routing. |
 | `analytics` | Rebuildable operational read models, summaries, and KPIs. |
+| `accessories` | Isolated accessory catalog, fitment, stock reservations, cart, pickup orders, payments/refunds, fulfillment, and transactional outbox. It must not reuse service catalog, Job Order, QA, or service-invoice tables. |
 | `ai-worker` | Background AI jobs and provider adapters. Outputs requiring business judgment remain human reviewed. |
 | Shared database/queue/events | PostgreSQL access, queue infrastructure, transactional events, health, configuration, and throttling. |
 
-## Ecommerce API Domains
+### Accessories Scope Boundary
 
-| Module | Ownership |
-| --- | --- |
-| `auth` | Ecommerce-side request authentication and identity integration. |
-| `catalog` | Products, categories, pricing facts, visibility, and product metadata. |
-| `inventory` | Stock, reservations, releases, adjustments, and availability checks. |
-| `cart` | Customer cart state and item validation. |
-| `orders` | Order snapshots, lifecycle, totals, and customer order history. |
-| `invoice-payments` | Invoice/payment tracking, aging, paid-state facts, and staff follow-up. |
-| Shared database/queue/events | Persistence, health, queues, and reliable event/outbox boundaries with the main service. |
-
-The ecommerce service must not silently become the owner of customer identity,
-bookings, Job Orders, QA, or loyalty policy. Cross-service effects should use explicit
-contracts and reliable events.
+- The removed generic ecommerce service, port `3001`, old commerce routes, engine-parts catalog, and retired Shop UI remain prohibited.
+- The approved replacement is only the `/api/accessories` namespace inside `main-service`, with customer mobile and staff administration surfaces.
+- Rollout is controlled by `ACCESSORY_COMMERCE_MODE=off|staff_preview|catalog|ordering`; production must set it explicitly.
+- Pickup is single-shop only. Delivery, installation, coupons, reviews, exchanges, partial refunds, warranties, marketplace sellers, and loyalty accrual are deferred.
 
 ## Core Business Workflows
 
@@ -299,17 +286,7 @@ Current Job Order status values that must remain compatible are:
 Do not assume customer self-service initiation exists unless the live route and
 behavior are verified.
 
-### 5. Ecommerce Order
-
-1. Customer browses catalog and builds a cart.
-2. Checkout validates current catalog and inventory facts.
-3. Inventory is reserved through the supported transaction/event boundary.
-4. An order and invoice/payment record are created.
-5. Staff tracks payment and aging.
-6. Fully paid qualifying facts may produce loyalty effects through explicit,
-   idempotent integration.
-
-### 6. Insurance
+### 5. Insurance
 
 1. Customer submits an inquiry and supported documents.
 2. Staff reviews requirements and updates workflow status.
@@ -349,7 +326,7 @@ application UI components. Apps own framework-specific mapping and behavior.
 
 | Path | Purpose |
 | --- | --- |
-| `backend/` | Main and ecommerce NestJS services, schemas, migrations, tests, and Railway configuration. |
+| `backend/` | Main NestJS service, schemas, migrations, tests, and Railway configuration. |
 | `frontend/` | Next.js staff and super-admin portal. |
 | `mobile/` | Expo customer application and mobile tests. |
 | `packages/` | Framework-independent shared contracts and domain utilities. |
@@ -386,7 +363,6 @@ Common local commands:
 ```text
 npm ci
 npm run dev:main
-npm run dev:ecommerce
 npm run dev:web
 npm run dev:mobile
 npm run dev:mobile:web
@@ -397,7 +373,6 @@ Default ports:
 | Service | Port |
 | --- | --- |
 | Main API | `3000` |
-| Ecommerce API | `3001` |
 | Staff web | `3002` |
 | Expo/Metro | `8081` |
 | Expo web | `8090` |
@@ -495,8 +470,8 @@ Before planning or implementing a change:
 1. Identify the owning domain and user role.
 2. Trace the current route, API DTO, persistence schema, generated contract, client
    mapping, and tests.
-3. State whether the change affects staff web, customer mobile, ecommerce, or a
-   cross-service workflow.
+3. State whether the change affects staff web, customer mobile, the main API, or a
+   cross-module workflow.
 4. Preserve current public URLs, statuses, claim headers, and data contracts unless a
    migration is explicitly part of the work.
 5. Define authorization, ownership, audit, idempotency, concurrency, empty, loading,

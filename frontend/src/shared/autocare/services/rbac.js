@@ -19,7 +19,6 @@ export const ACTION = {
   JOB_ORDER_VIEW_ASSIGNED: 'job_order.view.assigned',
   TIMELINE_VIEW: 'timeline.view',
   BOOKING_CREATE: 'booking.create',
-  SHOP_ORDER_CREATE: 'shop.order.create',
 }
 
 const PERMISSION_MATRIX = {
@@ -56,7 +55,6 @@ const PERMISSION_MATRIX = {
   [ROLE.CUSTOMER]: [
     ACTION.BOOKING_CREATE,
     ACTION.TIMELINE_VIEW,
-    ACTION.SHOP_ORDER_CREATE,
   ],
 }
 

@@ -5,6 +5,7 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
@@ -13,7 +14,6 @@ import {
 } from 'class-validator';
 
 import {
-  earningRuleAccrualSourceEnum,
   earningRuleFormulaTypeEnum,
   earningRuleStatusEnum,
 } from '../schemas/loyalty.schema';
@@ -34,11 +34,11 @@ export class CreateEarningRuleDto {
   description?: string;
 
   @ApiProperty({
-    enum: earningRuleAccrualSourceEnum.enumValues,
+    enum: ['service'],
     example: 'service',
   })
-  @IsEnum(earningRuleAccrualSourceEnum.enumValues)
-  accrualSource!: (typeof earningRuleAccrualSourceEnum.enumValues)[number];
+  @IsIn(['service'])
+  accrualSource!: 'service';
 
   @ApiProperty({
     enum: earningRuleFormulaTypeEnum.enumValues,
@@ -104,28 +104,6 @@ export class CreateEarningRuleDto {
   @ArrayMaxSize(20)
   @IsString({ each: true })
   eligibleServiceCategories?: string[];
-
-  @ApiPropertyOptional({
-    type: String,
-    isArray: true,
-    example: ['product-1', 'product-2'],
-  })
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(50)
-  @IsString({ each: true })
-  eligibleProductIds?: string[];
-
-  @ApiPropertyOptional({
-    type: String,
-    isArray: true,
-    example: ['category-1', 'category-2'],
-  })
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(50)
-  @IsString({ each: true })
-  eligibleProductCategoryIds?: string[];
 
   @ApiPropertyOptional({
     example: 'Collision Week Bonus',

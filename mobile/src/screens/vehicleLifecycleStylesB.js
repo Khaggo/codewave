@@ -354,7 +354,7 @@ export default StyleSheet.create({
     paddingVertical: 12,
   },
   modalInputError: {
-    borderColor: colors.error,
+    borderColor: colors.danger,
   },
   modalFieldLabel: {
     color: colors.mutedText,
@@ -362,12 +362,12 @@ export default StyleSheet.create({
     fontWeight: '700',
   },
   modalFieldError: {
-    color: colors.error,
+    color: colors.danger,
     fontSize: 12,
     lineHeight: 17,
   },
   modalErrorText: {
-    color: colors.error,
+    color: colors.danger,
     fontSize: 12,
     fontWeight: '700',
   },

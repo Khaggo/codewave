@@ -1,4 +1,5 @@
 import { ApiError, getApiBaseUrl } from './authClient';
+import { getReadableLoyaltySourceReference } from './loyaltyPresentation.mjs';
 const LOYALTY_REQUEST_TIMEOUT_MS = 8000;
 
 export const customerLoyaltyTiers = [
@@ -23,16 +24,6 @@ const transactionSourceMetadataMap = {
   manual_adjustment: {
     sourceLabel: 'Manual adjustment',
     crossServiceHint: 'This ledger row was added directly inside the loyalty system.',
-  },
-  purchase_payment: {
-    sourceLabel: 'Paid ecommerce order',
-    crossServiceHint:
-      'Ecommerce-earned points appear after the paid order reaches the loyalty ledger.',
-  },
-  purchase_reversal: {
-    sourceLabel: 'Ecommerce reversal',
-    crossServiceHint:
-      'Ecommerce reversals are loyalty-ledger corrections and may post separately from store-order updates.',
   },
   reward_redemption: {
     sourceLabel: 'Reward redemption',
@@ -73,10 +64,6 @@ const trimOrNull = (value) => {
   const normalizedValue = String(value ?? '').trim();
   return normalizedValue ? normalizedValue : null;
 };
-
-const rawUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const readableBusinessReferencePattern =
-  /^(?:INV|ORD|BK|JO|CASE|VEH|OR|CR|POL|CLAIM|PAY)-[A-Z0-9-]+$/i;
 
 const request = async (path, options = {}) => {
   const {
@@ -191,38 +178,6 @@ const toDisplayDate = (value) => {
     day: 'numeric',
     year: 'numeric',
   });
-};
-
-const getReadableLoyaltySourceReference = (transaction) => {
-  const metadata =
-    transaction?.metadata && typeof transaction.metadata === 'object' ? transaction.metadata : {};
-  const pointsInput =
-    metadata.pointsInput && typeof metadata.pointsInput === 'object' ? metadata.pointsInput : {};
-  const invoiceReference = trimOrNull(pointsInput.invoiceReference);
-  const rewardNameSnapshot = trimOrNull(metadata.rewardNameSnapshot);
-  const sourceReference = trimOrNull(transaction?.sourceReference);
-
-  if (invoiceReference) {
-    return invoiceReference;
-  }
-
-  if (transaction?.sourceType === 'reward_redemption') {
-    return rewardNameSnapshot ?? 'Reward redemption';
-  }
-
-  if (sourceReference && readableBusinessReferencePattern.test(sourceReference)) {
-    return sourceReference;
-  }
-
-  if (sourceReference && !rawUuidPattern.test(sourceReference) && /\s/.test(sourceReference)) {
-    return sourceReference;
-  }
-
-  if (transaction?.sourceType === 'manual_adjustment') {
-    return 'Manual adjustment';
-  }
-
-  return null;
 };
 
 const getCustomerLoyaltyTierSummary = (pointsBalance) => {

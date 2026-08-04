@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-26T20:11:07.9356166+08:00",
+  "generatedAt": "2026-08-01T16:52:43.566Z",
   "policy": {
     "orchestratorWriteMode": "proposal-only",
     "validatorMode": "content-strict",
@@ -34,7 +34,7 @@
         "value": "69b7d3e27c7840800bfe015cdbf7edc5f3cc60913c7e98a5b23828332ca28cec"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "agents/domain-worker.md",
@@ -62,7 +62,7 @@
         "value": "189bb789a11e328be8b2f23cca21c6dd7b1e878725aa0ec9ae8e276db31cf684"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "agents/integration-worker.md",
@@ -90,7 +90,7 @@
         "value": "1c6af86c7be0ed9ecbda8257402d619236db406b3349dd661ba2e7f1ce74c2a7"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "agents/operating-rules.md",
@@ -118,7 +118,7 @@
         "value": "e2df092aa077886bfe7a3ae006d1d7e370717ebdc2c34adf1f657fb34601a07d"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-07-26T20:08:29.1749885+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "agents/orchestrator.md",
@@ -146,7 +146,7 @@
         "value": "9ee4987d252a5abe8dbb34478a5991e617c3f5d024c2243a5b402d5f5027227e"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-07-26T20:08:29.1749885+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "agents/refactor-worker.md",
@@ -173,7 +173,7 @@
         "value": "ee696c60bea1b2cf2f9615cabf5afb1bf50fede728c7d73db32d9c771602c94f"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "agents/test-worker.md",
@@ -200,7 +200,7 @@
         "value": "0b0be4b51be7038fee5f2a85479551685c80ad3d6bd05843a7cf667bcfc5b1fb"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "agents/validator.md",
@@ -227,7 +227,7 @@
         "value": "7001eb56f5c3658cfc79e1024bcf2293d4b2aca427409f5a9f0fd6f9a8108444"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "ai-governance.md",
@@ -255,7 +255,7 @@
         "value": "0e02535781167a71ed40d8f6105055b94434ae56156fed20f9600a74db7632f9"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-23T01:29:10.4328930+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "api-strategy.md",
@@ -267,7 +267,6 @@
         "Interaction Model",
         "REST and Swagger Contract",
         "Main-Service REST Surface",
-        "E-Commerce REST Surface",
         "RabbitMQ Event Contract",
         "BullMQ Job Contract",
         "Recommendations and Exclusions"
@@ -286,10 +285,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "881c9eb8637648db30469b9c9d1558a2a10d2e00bce6bbf4422ce882b90ebc0e"
+        "value": "a65109466c47193e17a60713d8d6e107c67555dd68c13c20feb4f371d1b735d0"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-23T02:42:12.3606484+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domain-map.md",
@@ -299,7 +298,6 @@
       "owningRole": "orchestrator",
       "requiredHeadings": [
         "Main Service Domains",
-        "E-Commerce Domains",
         "Shared Concerns",
         "Cross-Domain Hotspots",
         "Build Order"
@@ -317,218 +315,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "04a2e2f2912b8430c4e713f0f8af409369c8fa82391b7f13f7448ceabecc9e4d"
+        "value": "92ea7394f3c374c545d3b024450a01fe997a8769eed6380bf6e79d65500bcb97"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
-    },
-    {
-      "path": "domains/ecommerce/cart.md",
-      "docId": "ecommerce.cart",
-      "docType": "domain",
-      "owningService": "ecommerce",
-      "owningRole": "domain-worker",
-      "requiredHeadings": [
-        "Domain ID",
-        "Agent Summary",
-        "Primary Objective",
-        "Inputs",
-        "Outputs",
-        "Dependencies",
-        "Owned Data / ERD",
-        "Primary Business Logic",
-        "Process Flow",
-        "Use Cases",
-        "API Surface",
-        "Edge Cases",
-        "Writable Sections",
-        "Out of Scope"
-      ],
-      "directDependencies": [
-        "ecommerce.catalog",
-        "ecommerce.inventory"
-      ],
-      "summaryMaxWords": 40,
-      "version": 1,
-      "hash": {
-        "algorithm": "sha256",
-        "value": "f15552f095374ec825d513b147f069d5f0ebfc828a3e3793907e4c35f6cc0801"
-      },
-      "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
-    },
-    {
-      "path": "domains/ecommerce/catalog.md",
-      "docId": "ecommerce.catalog",
-      "docType": "domain",
-      "owningService": "ecommerce",
-      "owningRole": "domain-worker",
-      "requiredHeadings": [
-        "Domain ID",
-        "Agent Summary",
-        "Primary Objective",
-        "Inputs",
-        "Outputs",
-        "Dependencies",
-        "Owned Data / ERD",
-        "Primary Business Logic",
-        "Process Flow",
-        "Use Cases",
-        "API Surface",
-        "Edge Cases",
-        "Writable Sections",
-        "Out of Scope"
-      ],
-      "directDependencies": [],
-      "summaryMaxWords": 40,
-      "version": 1,
-      "hash": {
-        "algorithm": "sha256",
-        "value": "7f783f557b2bedefcc267dd8e9f87d17011cad8b600f84b40bb2d779274908f9"
-      },
-      "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
-    },
-    {
-      "path": "domains/ecommerce/commerce-events.md",
-      "docId": "ecommerce.commerce-events",
-      "docType": "domain",
-      "owningService": "ecommerce",
-      "owningRole": "integration-worker",
-      "requiredHeadings": [
-        "Domain ID",
-        "Agent Summary",
-        "Primary Objective",
-        "Inputs",
-        "Outputs",
-        "Dependencies",
-        "Owned Data / ERD",
-        "Primary Business Logic",
-        "Process Flow",
-        "Use Cases",
-        "API Surface",
-        "Edge Cases",
-        "Writable Sections",
-        "Out of Scope"
-      ],
-      "directDependencies": [
-        "ecommerce.orders",
-        "ecommerce.inventory",
-        "ecommerce.invoice-payments"
-      ],
-      "summaryMaxWords": 40,
-      "version": 1,
-      "hash": {
-        "algorithm": "sha256",
-        "value": "6ac41e89a46b77213959aa7a6ead8ab82f621c32ab1e40fe3ae526d5274d1811"
-      },
-      "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
-    },
-    {
-      "path": "domains/ecommerce/inventory.md",
-      "docId": "ecommerce.inventory",
-      "docType": "domain",
-      "owningService": "ecommerce",
-      "owningRole": "domain-worker",
-      "requiredHeadings": [
-        "Domain ID",
-        "Agent Summary",
-        "Primary Objective",
-        "Inputs",
-        "Outputs",
-        "Dependencies",
-        "Owned Data / ERD",
-        "Primary Business Logic",
-        "Process Flow",
-        "Use Cases",
-        "API Surface",
-        "Edge Cases",
-        "Writable Sections",
-        "Out of Scope"
-      ],
-      "directDependencies": [
-        "ecommerce.catalog",
-        "ecommerce.orders"
-      ],
-      "summaryMaxWords": 40,
-      "version": 1,
-      "hash": {
-        "algorithm": "sha256",
-        "value": "ce8989722cb0445940ec3268c8ecb72c9bfacafcb9b1aa3fe61e7d37c750531f"
-      },
-      "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
-    },
-    {
-      "path": "domains/ecommerce/invoice-payments.md",
-      "docId": "ecommerce.invoice-payments",
-      "docType": "domain",
-      "owningService": "ecommerce",
-      "owningRole": "domain-worker",
-      "requiredHeadings": [
-        "Domain ID",
-        "Agent Summary",
-        "Primary Objective",
-        "Inputs",
-        "Outputs",
-        "Dependencies",
-        "Owned Data / ERD",
-        "Primary Business Logic",
-        "Process Flow",
-        "Use Cases",
-        "API Surface",
-        "Edge Cases",
-        "Writable Sections",
-        "Out of Scope"
-      ],
-      "directDependencies": [
-        "ecommerce.orders"
-      ],
-      "summaryMaxWords": 40,
-      "version": 1,
-      "hash": {
-        "algorithm": "sha256",
-        "value": "3f19ea7b04744c095895b3198851be7091a69a0acd93d59b4ef69da57aab347f"
-      },
-      "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
-    },
-    {
-      "path": "domains/ecommerce/orders.md",
-      "docId": "ecommerce.orders",
-      "docType": "domain",
-      "owningService": "ecommerce",
-      "owningRole": "domain-worker",
-      "requiredHeadings": [
-        "Domain ID",
-        "Agent Summary",
-        "Primary Objective",
-        "Inputs",
-        "Outputs",
-        "Dependencies",
-        "Owned Data / ERD",
-        "Primary Business Logic",
-        "Process Flow",
-        "Use Cases",
-        "API Surface",
-        "Edge Cases",
-        "Writable Sections",
-        "Out of Scope"
-      ],
-      "directDependencies": [
-        "ecommerce.cart",
-        "ecommerce.inventory",
-        "ecommerce.invoice-payments"
-      ],
-      "summaryMaxWords": 40,
-      "version": 1,
-      "hash": {
-        "algorithm": "sha256",
-        "value": "0c84a7f2a218b5276c4d61e293d0c1af86c4e51c7a0094df4f9562e0ed2aba6b"
-      },
-      "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/analytics.md",
@@ -562,7 +352,7 @@
         "value": "a23ab043f675771a4fe33804add19a324e176b0c1df5396796eb9f33f6291a09"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-17T00:00:00+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/auth.md",
@@ -597,7 +387,7 @@
         "value": "7d1359114dd35a024bf385e6e7a469a667792077f43464413dd8591b932e841a"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-21T03:21:42+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/back-jobs.md",
@@ -633,7 +423,7 @@
         "value": "adc07feff135e2e338af9e224337f497403aac1c648496664a8490776c1d6b96"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-21T04:00:30+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/bookings.md",
@@ -668,7 +458,7 @@
         "value": "cc38df202b63d63737eb481cb727dfd662b8ae6748b96951bb204d63fde006af"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-23T02:42:12.3606484+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/chatbot.md",
@@ -703,7 +493,7 @@
         "value": "679a664468b3fbd58cd444fc47d42a9dc1166f44c3278b23546dc8c102b741ed"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-17T00:00:00+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/inspections.md",
@@ -740,7 +530,7 @@
         "value": "a92ca6896137e0abfb7c0c4aea75e5963d899d08288a0f4ac51785417761ac77"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/insurance.md",
@@ -775,7 +565,7 @@
         "value": "e2e851921d49b461d0216a6849c49c3c86e6506c4c015f37cef3400d4b2c0693"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-07-28T18:33:00+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/job-orders.md",
@@ -811,7 +601,7 @@
         "value": "a99326172525c42d82070b110c495fc3d56566d5395a585b429b335a818b4161"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-21T03:36:41+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/loyalty.md",
@@ -837,17 +627,16 @@
       ],
       "directDependencies": [
         "main-service.users",
-        "main-service.job-orders",
-        "ecommerce.commerce-events"
+        "main-service.job-orders"
       ],
       "summaryMaxWords": 40,
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "2e92edbc0bcd6f5da18ebb8f256a871b567bf4f41a806550042785ac7e9999ee"
+        "value": "a26da3948313c797f4c5c3df9e0d819c50397501bb13d8484291f777da4b0c7c"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-18T14:30:37.4177697+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/notifications.md",
@@ -875,17 +664,16 @@
         "main-service.auth",
         "main-service.bookings",
         "main-service.insurance",
-        "main-service.back-jobs",
-        "ecommerce.invoice-payments"
+        "main-service.back-jobs"
       ],
       "summaryMaxWords": 40,
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "4fa2c177c897d15e40bae46cecb591ecebddb1fff9d4592632b8f3cdcb571905"
+        "value": "8703c82953f14dbece417cec1de00b543fc88bb3f000e2d32b37544ab1a63954"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-16T18:04:53.8708379+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/quality-gates.md",
@@ -922,7 +710,7 @@
         "value": "08060b25d194fae53c51c9cc53235baf0e22452982615d05081c031ce2a4985a"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-21T03:47:51+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/users.md",
@@ -951,10 +739,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "60c4e8bab86bbb496fa413408b069a3503ccb89a374c6fc1a6d5ac1a3c1b26e7"
+        "value": "b38f0295c90c0280dd684463e22de40b7bc4cd64cb13e12f81997160f231a527"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/vehicle-lifecycle.md",
@@ -992,7 +780,7 @@
         "value": "c3d1e7121ec39268465ae1d535a8a1785a60199bfef989dd10dd30483d5cbea8"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-07-28T18:33:00+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "domains/main-service/vehicles.md",
@@ -1026,7 +814,7 @@
         "value": "9816c9b5d4f0f8db839c5f2a6045c5a55bdff453cfd1c2ab836aeb1ed1f9b4f7"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "dto-policy.md",
@@ -1057,7 +845,7 @@
         "value": "847f0eb444d60307857bc87f5b115116889825abf938cb7e7c316bd399ab0ffc"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "frontend-backend-sync.md",
@@ -1088,7 +876,7 @@
         "value": "71c889b275952acdc02b80a13cf9f834c8cb1f4e6d7bfcfd7d32c1dc8799258c"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-07-28T18:33:00+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "golden-domain-template.md",
@@ -1120,7 +908,7 @@
         "value": "b5a4370c1e84fe033f3cb511ce72a58213716d4f27a5f7e1a74e00991baec35b"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "markdown-contract.md",
@@ -1147,10 +935,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "bcd9fa55aaeefaec1234b6cc1ac3499b37813456b4219b46627378cdce54ce8a"
+        "value": "8846cda2658dd844d42d95a8f0bbd73f9131aaf782fb2276ecb421e48d4f3737"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "rbac-policy.md",
@@ -1175,10 +963,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "f2a047ac7cfe035502d9dea83cc295ee0d9db589277c34c3bce090ef1669f5dd"
+        "value": "4332b4afa8fe4234ba52c3acd3687a4a9ee5438a874f499a11da7c33fa150ffb"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-04-13T20:49:58.754Z"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "repository-map.md",
@@ -1202,10 +990,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "6cbdc5effd8863bf986a494f70d59ecb6abc15bc4c5f1dcda84aa8a779500bb2"
+        "value": "2168fb92f7a0dcbc1b9bf4a4e20f404446bcb3b1b4a8c5c07fbcf2501204a579"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-07-27T00:00:00+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "database-migrations.md",
@@ -1229,7 +1017,7 @@
         "value": "1634e76b5bf54a7fdb2d7345fe8e8711da147770e05f501538d4434766470774"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-07-27T00:00:00+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "README.md",
@@ -1260,10 +1048,10 @@
       "version": 1,
       "hash": {
         "algorithm": "sha256",
-        "value": "1c02b651a518cbccb05716f436d1d34a182eb9924d58c696ade0e14b2c71a8fd"
+        "value": "b0ec29ac980fd8353f71db969897347fd83ff681d6b8d3f8124ae65b14c93d46"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-07-27T00:00:00+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "system-architecture.md",
@@ -1295,10 +1083,10 @@
       "version": 3,
       "hash": {
         "algorithm": "sha256",
-        "value": "ea16c5820cbde0193592679ceff42a8dcab925e76cc7ca07e59629166e67079f"
+        "value": "b58df8ebbbb70c75b3cfab7bd1065e78e2439c3fe81a93865255c38a4a550a55"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-07-26T20:11:07.9356166+08:00"
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z"
     },
     {
       "path": "auth-security-policy.md",
@@ -1308,7 +1096,7 @@
         "value": "5c32c785a34911eb2a75bfe898a65011b28332d4b8f7e69b674eaca8d30d8fa0"
       },
       "validationStatus": "validated",
-      "lastVerifiedAt": "2026-07-26T10:54:42.7910646+08:00",
+      "lastVerifiedAt": "2026-08-01T16:52:43.566Z",
       "docId": "control.auth-security-policy",
       "docType": "control-plane",
       "owningService": "control-plane",

@@ -20,6 +20,12 @@ import ChangePassword from './src/screens/ChangePassword';
 import InsuranceInquiryScreen from './src/screens/InsuranceInquiryScreen';
 import ChatbotScreen from './src/screens/ChatbotScreen';
 import VehicleLifecycleScreen from './src/screens/VehicleLifecycleScreen';
+import AccessoriesCatalogScreen from './src/screens/accessories/AccessoriesCatalogScreen';
+import AccessoryProductScreen from './src/screens/accessories/AccessoryProductScreen';
+import AccessoryCartScreen from './src/screens/accessories/AccessoryCartScreen';
+import AccessoryCheckoutScreen from './src/screens/accessories/AccessoryCheckoutScreen';
+import AccessoryOrdersScreen from './src/screens/accessories/AccessoryOrdersScreen';
+import AccessoryOrderDetailScreen from './src/screens/accessories/AccessoryOrderDetailScreen';
 import {
   ApiError,
   buildMobileAccountProfile,
@@ -42,8 +48,15 @@ import {
 import {
   assertMobileAppSessionAllowed,
   getMobileAppSessionAccessState,
+  resolveProtectedMobileAccount,
 } from './src/lib/mobileSessionAccess';
+import {
+  MOBILE_SESSION_STORAGE_KEY,
+  parseMobileSessionSnapshot,
+  serializeMobileSessionSnapshot,
+} from './src/lib/mobileSessionStorage.mjs';
 import { cloneDate, formatVehicleDisplayName } from './src/utils/validation';
+import { createPlatformShadow } from './src/utils/platformShadow';
 import { colors } from './src/theme';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 
@@ -53,7 +66,6 @@ const Stack = createStackNavigator();
 const AppSessionContext = createContext(null);
 const navigationRef = createNavigationContainerRef();
 const MOBILE_DEEP_LINK_SCHEME = 'autocarecc';
-const MOBILE_SESSION_STORAGE_KEY = '@autocare/mobile-session-v1';
 const MOBILE_SESSION_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 const normalizePersistedBirthday = (value) => cloneDate(value) ?? null;
@@ -258,11 +270,10 @@ function MenuScreen(props) {
   const {
     activeAccount,
     clearCustomerSession,
-    registeredAccount,
     syncAccount,
     handleStartDeleteAccountOtp,
   } = useAppSessionContext();
-  const currentAccount = activeAccount || registeredAccount;
+  const currentAccount = resolveProtectedMobileAccount({ activeAccount });
   const accessState = getMobileAppSessionAccessState(currentAccount);
 
   if (accessState !== 'customer_session_active') {
@@ -310,9 +321,9 @@ function MenuScreen(props) {
 }
 
 function ManageProfileScreen(props) {
-  const { activeAccount, clearCustomerSession, registeredAccount, syncAccount } =
+  const { activeAccount, clearCustomerSession, syncAccount } =
     useAppSessionContext();
-  const currentAccount = activeAccount || registeredAccount;
+  const currentAccount = resolveProtectedMobileAccount({ activeAccount });
   const accessState = getCustomerMobileSessionAccessState(currentAccount);
 
   if (accessState !== 'customer_session_active') {
@@ -348,9 +359,9 @@ function ManageProfileScreen(props) {
 }
 
 function ChangePasswordScreen(props) {
-  const { activeAccount, clearCustomerSession, registeredAccount, syncAccount } =
+  const { activeAccount, clearCustomerSession, syncAccount } =
     useAppSessionContext();
-  const currentAccount = activeAccount || registeredAccount;
+  const currentAccount = resolveProtectedMobileAccount({ activeAccount });
   const accessState = getCustomerMobileSessionAccessState(currentAccount);
 
   if (accessState !== 'customer_session_active') {
@@ -379,8 +390,8 @@ function ChangePasswordScreen(props) {
 }
 
 function InsuranceInquiryMobileScreen(props) {
-  const { activeAccount, registeredAccount } = useAppSessionContext();
-  const currentAccount = activeAccount || registeredAccount;
+  const { activeAccount } = useAppSessionContext();
+  const currentAccount = resolveProtectedMobileAccount({ activeAccount });
   const accessState = getCustomerMobileSessionAccessState(currentAccount);
 
   if (
@@ -405,8 +416,8 @@ function InsuranceInquiryMobileScreen(props) {
 }
 
 function ChatbotMobileScreen(props) {
-  const { activeAccount, registeredAccount } = useAppSessionContext();
-  const currentAccount = activeAccount || registeredAccount;
+  const { activeAccount } = useAppSessionContext();
+  const currentAccount = resolveProtectedMobileAccount({ activeAccount });
   const accessState = getCustomerMobileSessionAccessState(currentAccount);
 
   if (
@@ -431,8 +442,8 @@ function ChatbotMobileScreen(props) {
 }
 
 function VehicleLifecycleMobileScreen(props) {
-  const { activeAccount, registeredAccount } = useAppSessionContext();
-  const currentAccount = activeAccount || registeredAccount;
+  const { activeAccount } = useAppSessionContext();
+  const currentAccount = resolveProtectedMobileAccount({ activeAccount });
   const accessState = getCustomerMobileSessionAccessState(currentAccount);
 
   if (accessState !== 'customer_session_active') {
@@ -453,8 +464,8 @@ function VehicleLifecycleMobileScreen(props) {
 }
 
 function BookingMobileScreen(props) {
-  const { activeAccount, clearCustomerSession, registeredAccount } = useAppSessionContext();
-  const currentAccount = activeAccount || registeredAccount;
+  const { activeAccount, clearCustomerSession } = useAppSessionContext();
+  const currentAccount = resolveProtectedMobileAccount({ activeAccount });
   const accessState = getCustomerMobileSessionAccessState(currentAccount);
 
   useEffect(() => {
@@ -494,32 +505,17 @@ function BookingMobileScreen(props) {
   return null;
 }
 
-function StoreMobileScreen(props) {
-  const { activeAccount, clearCustomerSession, registeredAccount } = useAppSessionContext();
-  const currentAccount = activeAccount || registeredAccount;
+const createProtectedAccessoryScreen = (Screen) => function ProtectedAccessoryScreen(props) {
+  const { activeAccount, clearCustomerSession } = useAppSessionContext();
+  const currentAccount = resolveProtectedMobileAccount({ activeAccount });
   const accessState = getCustomerMobileSessionAccessState(currentAccount);
-
-  useEffect(() => {
-    if (accessState === 'customer_session_active') {
-      props.navigation.replace('Menu', {
-        supportJump: {
-          id: `store-${Date.now()}`,
-          activeTab: 'store',
-        },
-      });
-    }
-  }, [accessState, props.navigation]);
 
   if (accessState !== 'customer_session_active') {
     return (
       <CustomerSurfaceStateScreen
         navigation={props.navigation}
-        title="Customer session required"
-        message={
-          customerMobileGuardMessages[accessState] ??
-          customerMobileGuardMessages.unauthorized_session
-        }
-        primaryActionLabel="Sign In"
+        title="Sign in to open Accessories"
+        message={customerMobileGuardMessages[accessState] ?? customerMobileGuardMessages.unauthorized_session}
         onPrimaryAction={() => {
           clearCustomerSession();
           props.navigation.replace('Login');
@@ -528,8 +524,15 @@ function StoreMobileScreen(props) {
     );
   }
 
-  return null;
-}
+  return <Screen {...props} account={currentAccount} />;
+};
+
+const AccessoriesCatalogMobileScreen = createProtectedAccessoryScreen(AccessoriesCatalogScreen);
+const AccessoryProductMobileScreen = createProtectedAccessoryScreen(AccessoryProductScreen);
+const AccessoryCartMobileScreen = createProtectedAccessoryScreen(AccessoryCartScreen);
+const AccessoryCheckoutMobileScreen = createProtectedAccessoryScreen(AccessoryCheckoutScreen);
+const AccessoryOrdersMobileScreen = createProtectedAccessoryScreen(AccessoryOrdersScreen);
+const AccessoryOrderDetailMobileScreen = createProtectedAccessoryScreen(AccessoryOrderDetailScreen);
 
 const navigationTheme = {
   ...DefaultTheme,
@@ -610,7 +613,7 @@ export default function App() {
     }
 
     const currentAccount = normalizePersistedAccount(
-      accountOverride ?? activeAccountRef.current ?? registeredAccountRef.current,
+      accountOverride ?? activeAccountRef.current,
     );
 
     if (!currentAccount?.refreshToken) {
@@ -655,8 +658,8 @@ export default function App() {
           return;
         }
 
-        const parsedSnapshot = JSON.parse(serializedSnapshot);
-        if (!parsedSnapshot || typeof parsedSnapshot !== 'object') {
+        const parsedSnapshot = parseMobileSessionSnapshot(serializedSnapshot);
+        if (!parsedSnapshot) {
           return;
         }
 
@@ -746,14 +749,14 @@ export default function App() {
         activeAccount,
         pendingOnboardingCompletion,
       });
-      const hasPersistableState = Object.values(snapshot).some(Boolean);
+      const serializedSnapshot = serializeMobileSessionSnapshot(snapshot);
 
-      if (!hasPersistableState) {
+      if (!serializedSnapshot) {
         await AsyncStorage.removeItem(MOBILE_SESSION_STORAGE_KEY);
         return;
       }
 
-      await AsyncStorage.setItem(MOBILE_SESSION_STORAGE_KEY, JSON.stringify(snapshot));
+      await AsyncStorage.setItem(MOBILE_SESSION_STORAGE_KEY, serializedSnapshot);
     };
 
     void persistMobileSession();
@@ -890,13 +893,33 @@ export default function App() {
 
   useEffect(() => {
     setCustomerSessionExpiredHandler(() => {
-      void refreshCustomerSession().catch(() => {});
+      const interruptedRoute = navigationRef.isReady()
+        ? navigationRef.getCurrentRoute()
+        : null;
+
+      void refreshCustomerSession().catch(() => {
+        if (!navigationRef.isReady()) {
+          return;
+        }
+
+        navigationRef.reset({
+          index: 0,
+          routes: [{
+            name: 'Login',
+            params: {
+              returnTo: interruptedRoute?.name ?? 'Menu',
+              returnParams: interruptedRoute?.params,
+              sessionMessage: 'Your session expired. Sign in to continue where you left off.',
+            },
+          }],
+        });
+      });
     });
 
     return () => {
       setCustomerSessionExpiredHandler(null);
     };
-  }, [registeredAccount, activeAccount]);
+  }, [activeAccount]);
 
   useEffect(() => {
     const buildSupportJumpFromUrl = (url) => {
@@ -907,7 +930,6 @@ export default function App() {
       const { hostname, path, queryParams } = parseMobileDeepLink(url);
       const normalizedPath = String(path ?? '').trim().replace(/^\/+/, '');
       const normalizedHost = String(hostname ?? '').trim().toLowerCase();
-      const normalizedOrderId = String(queryParams?.orderId ?? '').trim() || null;
       const normalizedBookingId = String(queryParams?.bookingId ?? '').trim() || null;
 
       if (
@@ -917,16 +939,6 @@ export default function App() {
       ) {
         const checkoutPath =
           normalizedHost === 'checkout' ? normalizedPath : `checkout/${normalizedPath}`;
-
-        if (checkoutPath.startsWith('checkout/store/')) {
-          return {
-            id: `${Date.now()}-store-${normalizedOrderId ?? 'none'}`,
-            activeTab: 'store',
-            storeSection: 'orders',
-            selectedStoreOrderId: normalizedOrderId,
-            showStoreOrderDetail: Boolean(normalizedOrderId),
-          };
-        }
 
         if (checkoutPath.startsWith('checkout/booking/')) {
           return {
@@ -1040,7 +1052,7 @@ export default function App() {
   };
 
   const handleStartDeleteAccountOtp = async ({ currentPassword }) => {
-    const currentAccount = activeAccount ?? registeredAccount;
+    const currentAccount = activeAccount;
     const accessToken = currentAccount?.accessToken;
 
     if (!accessToken) {
@@ -1054,7 +1066,7 @@ export default function App() {
   };
 
   const handleResendOtp = async (otpParams) => {
-    const currentAccount = activeAccount ?? registeredAccount;
+    const currentAccount = activeAccount;
     const accessToken = currentAccount?.accessToken;
 
     if (otpParams?.otpPurpose === 'passwordChange') {
@@ -1467,7 +1479,7 @@ export default function App() {
 
   const handleOtpVerified = async (otpParams) => {
     if (otpParams?.otpPurpose === 'passwordChange' && otpParams?.pendingPassword) {
-      const currentAccount = activeAccount ?? registeredAccount;
+      const currentAccount = activeAccount;
       const accessToken = currentAccount?.accessToken;
 
       if (!accessToken) {
@@ -1519,7 +1531,7 @@ export default function App() {
     }
 
     if (otpParams?.otpPurpose === 'deleteAccount') {
-      const currentAccount = activeAccount ?? registeredAccount;
+      const currentAccount = activeAccount;
       const accessToken = currentAccount?.accessToken;
 
       if (!accessToken) {
@@ -1593,10 +1605,12 @@ export default function App() {
     handleOtpVerified,
   };
 
-  const initialSessionAccount = activeAccount ?? registeredAccount;
-  const currentMobileSessionAccessState = getMobileAppSessionAccessState(initialSessionAccount);
+  const onboardingAccount = activeAccount ?? registeredAccount;
+  const currentMobileSessionAccessState = getMobileAppSessionAccessState(
+    resolveProtectedMobileAccount({ activeAccount }),
+  );
   const appInitialRouteName =
-    pendingOnboardingCompletion?.draft && initialSessionAccount
+    pendingOnboardingCompletion?.draft && onboardingAccount
       ? 'CompleteOnboarding'
       : currentMobileSessionAccessState === 'customer_session_active'
         ? 'Menu'
@@ -1639,12 +1653,11 @@ export default function App() {
             >
           <Stack.Navigator
             initialRouteName={appInitialRouteName}
-            detachInactiveScreens={false}
+            detachInactiveScreens
             screenOptions={{
               headerStyle: {
                 backgroundColor: colors.primary,
-                shadowColor: 'transparent',
-                elevation: 0,
+                ...createPlatformShadow({ opacity: 0, elevation: 0 }),
               },
               headerTintColor: colors.onPrimary,
               headerTitleAlign: 'center',
@@ -1708,13 +1721,18 @@ export default function App() {
                 subtitle="View your vehicle’s complete service and insurance timeline."
 
             */}
-            <Stack.Screen name="StoreScreen" component={StoreMobileScreen} />
-
             <Stack.Screen
               name="InsuranceInquiryScreen"
               component={InsuranceInquiryMobileScreen}
               options={{ headerShown: false }}
             />
+
+            <Stack.Screen name="AccessoriesCatalog" component={AccessoriesCatalogMobileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AccessoryProduct" component={AccessoryProductMobileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AccessoryCart" component={AccessoryCartMobileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AccessoryCheckout" component={AccessoryCheckoutMobileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AccessoryOrders" component={AccessoryOrdersMobileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AccessoryOrderDetail" component={AccessoryOrderDetailMobileScreen} options={{ headerShown: false }} />
 
             <Stack.Screen
               name="ChatbotScreen"

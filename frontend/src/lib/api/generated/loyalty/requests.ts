@@ -6,11 +6,9 @@ export type LoyaltyTransactionType = 'accrual' | 'redemption' | 'adjustment' | '
 export type LoyaltySourceType =
   | 'service_payment'
   | 'service_invoice'
-  | 'purchase_payment'
   | 'reward_redemption'
   | 'manual_adjustment'
-  | 'service_reversal'
-  | 'purchase_reversal';
+  | 'service_reversal';
 
 export interface CreateRewardRequest {
   name: string;
@@ -36,7 +34,7 @@ export interface UpdateRewardStatusRequest {
   reason: string;
 }
 
-export type EarningRuleAccrualSource = 'service' | 'ecommerce' | 'both';
+export type EarningRuleAccrualSource = 'service';
 export type EarningRuleFormulaType = 'flat_points' | 'amount_ratio';
 export type EarningRuleStatus = 'active' | 'inactive';
 
@@ -51,8 +49,6 @@ export interface CreateEarningRuleRequest {
   minimumAmountCents?: number;
   eligibleServiceTypes?: string[];
   eligibleServiceCategories?: string[];
-  eligibleProductIds?: string[];
-  eligibleProductCategoryIds?: string[];
   promoLabel?: string;
   manualBenefitNote?: string;
   activeFrom?: string;
@@ -72,8 +68,6 @@ export interface UpdateEarningRuleRequest {
   minimumAmountCents?: number | null;
   eligibleServiceTypes?: string[];
   eligibleServiceCategories?: string[];
-  eligibleProductIds?: string[];
-  eligibleProductCategoryIds?: string[];
   promoLabel?: string | null;
   manualBenefitNote?: string | null;
   activeFrom?: string | null;

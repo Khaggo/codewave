@@ -1,4 +1,14 @@
+import { readFileSync } from 'node:fs';
 import pg from 'pg';
+
+import {
+  actualPublicSchemaFromRows,
+  comparePublicSchemas,
+  expectedPublicSchemaFromSnapshot,
+  formatSchemaDrift,
+  hasSchemaDrift,
+} from './migration-schema-drift.mjs';
+import { resolveLatestMigrationSnapshot } from './migration-snapshot.mjs';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -10,11 +20,15 @@ const client = new pg.Client({ connectionString });
 await client.connect();
 
 try {
-  const [{ rows: tableRows }, { rows: migrationRows }] = await Promise.all([
+  const snapshot = JSON.parse(
+    readFileSync(resolveLatestMigrationSnapshot(process.cwd()), 'utf8'),
+  );
+  const [{ rows: columnRows }, { rows: migrationRows }] = await Promise.all([
     client.query(`
-      select count(*)::integer as count
-      from information_schema.tables
+      select table_name, column_name
+      from information_schema.columns
       where table_schema = 'public'
+      order by table_name, ordinal_position
     `),
     client.query(`
       select count(*)::integer as count
@@ -22,14 +36,21 @@ try {
     `),
   ]);
 
-  const tableCount = tableRows[0]?.count ?? 0;
+  const expected = expectedPublicSchemaFromSnapshot(snapshot);
+  const actual = actualPublicSchemaFromRows(columnRows);
+  const drift = comparePublicSchemas(expected, actual);
   const migrationCount = migrationRows[0]?.count ?? 0;
-  if (tableCount < 50 || migrationCount < 1) {
+  if (hasSchemaDrift(drift)) {
     throw new Error(
-      `Migration smoke check expected at least 50 tables and one journal row; got ${tableCount} and ${migrationCount}.`,
+      `Migration smoke check found schema drift: ${formatSchemaDrift(drift)}.`,
     );
   }
-  console.log(`Migration smoke check passed: ${tableCount} tables, ${migrationCount} migration(s).`);
+  if (migrationCount < 1) {
+    throw new Error('Migration smoke check expected at least one journal row.');
+  }
+  console.log(
+    `Migration smoke check passed: ${actual.size} exact tables, ${migrationCount} migration(s).`,
+  );
 } finally {
   await client.end();
 }

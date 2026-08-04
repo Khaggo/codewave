@@ -57,4 +57,4 @@ Make completed job orders the source for invoice generation readiness while pres
 
 ## Out of Scope
 
-- ecommerce payment tracking implementation
+- external payment-gateway settlement implementation

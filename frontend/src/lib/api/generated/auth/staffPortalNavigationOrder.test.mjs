@@ -1,43 +1,38 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
 
-const navigationSourcePath = new URL('./staff-web-session.ts', import.meta.url)
-
-function getKeyPositions(source, keys) {
-  return keys.map((key) => source.indexOf(`key: '${key}'`))
-}
+import {
+  STAFF_PORTAL_NAVIGATION_ORDER,
+  orderStaffPortalNavigationEntries,
+} from '../../../../components/layout/staffPortalNavigationModel.mjs'
 
 test('staff portal navigation rules follow the real service flow order', () => {
-  const source = fs.readFileSync(navigationSourcePath, 'utf8')
-  const orderedKeys = [
-    'dashboard',
-    'bookings',
-    'digital-intake-inspections',
-    'job-orders-admin',
-    'qa-audit',
-    'invoice-order-management',
-    'customer-directory',
-    'back-jobs',
-    'insurance',
-    'loyalty-management',
-    'catalog-admin',
-    'inventory',
-    'service-management',
-    'user-admin',
-    'summary-review',
-    'settings',
+  const shuffledEntries = [...STAFF_PORTAL_NAVIGATION_ORDER]
+    .reverse()
+    .map((key) => ({ key }))
+
+  assert.deepEqual(
+    orderStaffPortalNavigationEntries(shuffledEntries).map((entry) => entry.key),
+    STAFF_PORTAL_NAVIGATION_ORDER,
+  )
+})
+
+test('unknown navigation entries stay stable after the known workflow', () => {
+  const entries = [
+    { key: 'future-one' },
+    { key: 'settings' },
+    { key: 'dashboard' },
+    { key: 'future-two' },
   ]
 
-  const positions = getKeyPositions(source, orderedKeys)
-  positions.forEach((position, index) => {
-    assert.notEqual(position, -1, `Expected to find ${orderedKeys[index]} in navigation rules`)
-  })
-
-  for (let index = 1; index < positions.length; index += 1) {
-    assert.ok(
-      positions[index - 1] < positions[index],
-      `${orderedKeys[index - 1]} should appear before ${orderedKeys[index]}`,
-    )
-  }
+  assert.deepEqual(
+    orderStaffPortalNavigationEntries(entries).map((entry) => entry.key),
+    ['dashboard', 'settings', 'future-one', 'future-two'],
+  )
+  assert.deepEqual(entries.map((entry) => entry.key), [
+    'future-one',
+    'settings',
+    'dashboard',
+    'future-two',
+  ])
 })

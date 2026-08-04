@@ -42,6 +42,6 @@ Each completed task should update:
 
 ## Surface Split
 
-- `mobile`: customer registration, booking, insurance, loyalty, timeline, ecommerce, and support journeys
+- `mobile`: customer registration, booking, insurance, loyalty, timeline, Garage, and support journeys
 - `web`: staff scheduling, job execution, QA, insurance handling, admin analytics, and privileged account management
 - `cross-surface`: any slice that must keep customer and staff state views aligned across one backend truth

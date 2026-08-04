@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import OtpInputGroup from '../components/OtpInputGroup';
 import ScreenShell from '../components/ScreenShell';

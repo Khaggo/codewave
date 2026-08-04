@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 import AuthFrame from '../components/AuthFrame';
 import DatePickerField from '../components/DatePickerField';

@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native'
 import { radius } from '../../theme'
@@ -76,6 +77,7 @@ export default function InsuranceStatusDetailPanel({
   processSteps = [],
   isRefreshing,
   onRefresh,
+  onAction,
   children,
 }) {
   const extraSections = Children.toArray(children).filter(Boolean)
@@ -98,6 +100,16 @@ export default function InsuranceStatusDetailPanel({
           <View style={styles.currentStatusCard}>
             <Text style={styles.statusTitle}>{statusState.title}</Text>
             <Text style={styles.statusSummary}>{statusState.summary}</Text>
+            {statusState.ctaRouteKey !== 'status' && statusState.ctaLabel && onAction ? (
+              <TouchableOpacity
+                style={styles.statusAction}
+                onPress={onAction}
+                accessibilityRole="button"
+                accessibilityLabel={statusState.ctaLabel}
+              >
+                <Text style={styles.statusActionText}>{statusState.ctaLabel}</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </InsuranceSectionDivider>
 
@@ -180,6 +192,21 @@ const styles = StyleSheet.create({
     fontFamily: insuranceFonts.body,
     fontSize: 14,
     lineHeight: 22,
+  },
+  statusAction: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    marginTop: 4,
+    paddingHorizontal: 16,
+    borderRadius: radius.lg,
+    backgroundColor: insurancePalette.amber,
+    justifyContent: 'center',
+  },
+  statusActionText: {
+    color: insurancePalette.onAmber,
+    fontFamily: insuranceFonts.body,
+    fontSize: 14,
+    fontWeight: '800',
   },
   timelineItem: {
     flexDirection: 'row',

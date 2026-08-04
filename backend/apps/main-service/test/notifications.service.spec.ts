@@ -9,7 +9,6 @@ import { NotificationsService } from '@main-modules/notifications/services/notif
 import { MailDeliveryService } from '@main-modules/notifications/services/mail-delivery.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { createNotificationTrigger } from '@shared/events/contracts/notification-triggers';
-import { createCommerceEvent } from '@shared/events/contracts/commerce-events';
 
 describe('NotificationsService', () => {
   it('enqueues insurance updates and tracks queued notifications', async () => {
@@ -588,55 +587,4 @@ describe('NotificationsService', () => {
     expect(result.triggerName).toBe('back_job.status_changed');
   });
 
-  it('cancels invoice-aging reminders when payment facts settle the invoice', async () => {
-    const notificationsRepository = {
-      cancelReminderRulesBySource: jest.fn().mockResolvedValue([{ id: 'rule-1', status: 'cancelled' }]),
-      cancelNotificationsBySource: jest.fn().mockResolvedValue([{ id: 'notification-1', status: 'cancelled' }]),
-    };
-
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        NotificationsService,
-        NotificationTriggerPlannerService,
-        { provide: NotificationsRepository, useValue: notificationsRepository },
-        { provide: UsersService, useValue: { findById: jest.fn() } },
-        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
-        {
-          provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME),
-          useValue: { add: jest.fn() },
-        },
-      ],
-    }).compile();
-
-    const service = moduleRef.get(NotificationsService);
-
-    const result = await service.applyTrigger(
-      createCommerceEvent('invoice.payment_recorded', {
-        invoiceId: 'invoice-1',
-        orderId: 'order-1',
-        customerUserId: 'user-1',
-        invoiceNumber: 'INV-2026-0001',
-        paymentEntryId: 'payment-entry-1',
-        amountCents: 99800,
-        paymentMethod: 'cash',
-        receivedAt: '2026-05-14T06:00:00.000Z',
-        invoiceStatus: 'paid',
-        amountPaidCents: 99800,
-        amountDueCents: 0,
-        currencyCode: 'PHP',
-      }),
-    );
-
-    expect(notificationsRepository.cancelReminderRulesBySource).toHaveBeenCalledWith({
-      sourceType: 'invoice_payment',
-      sourceId: 'invoice-1',
-      reminderType: 'invoice_aging',
-    });
-    expect(notificationsRepository.cancelNotificationsBySource).toHaveBeenCalledWith({
-      sourceType: 'invoice_payment',
-      sourceId: 'invoice-1',
-      category: 'invoice_aging',
-    });
-    expect(result.triggerName).toBe('invoice.payment_recorded');
-  });
 });

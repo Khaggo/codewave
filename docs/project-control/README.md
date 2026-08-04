@@ -14,6 +14,7 @@ Every new chat or agent working on this project should read these files before m
 6. `UX_AUDIT_PRO_HANDOFF.md`
 7. `UX_AUDIT_BACKLOG.md`
 8. `CHAT_HANDOFF_PROMPT.md`
+9. `WORKTREE_INTEGRATION_GUIDE.md` (required before staging or integrating the current large worktree)
 
 ## Operating Rule
 

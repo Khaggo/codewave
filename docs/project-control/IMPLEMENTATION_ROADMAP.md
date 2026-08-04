@@ -1,8 +1,21 @@
 # Implementation Roadmap
 
-Last updated: 2026-05-23
+Last updated: 2026-08-03
 
 This roadmap is ordered for panel recovery. Do not work only on nice-to-have UI polish while objective-critical features remain unproven.
+
+## Active Delivery: Accessories Store
+
+The approved replacement for retired ecommerce is a bounded Accessories domain inside
+`main-service`. Delivery order is: safety/policy gate; forward schema and backend contracts;
+catalog/fitment/media; inventory/cart/checkout/order/fulfillment; PayMongo/refund/outbox;
+customer mobile and staff web; concurrency/security/accessibility QA; then rollout
+`off -> staff_preview -> catalog -> ordering`.
+
+The old ecommerce service, port `3001`, generic commerce routes, engine-parts data, and Shop UI
+remain retired. Release requires zero oversells, duplicate charges, ownership violations, or
+unexplained client/server errors. Booking, Garage, Insurance, Job Orders, QA, Service Invoices,
+and Loyalty are regression boundaries.
 
 ## Sprint 0: Project Control and Evidence
 
@@ -19,7 +32,7 @@ Tasks:
 - Add a repeatable local QA startup checklist so backend, staff web, and mobile web runtimes are all up before Playwright evidence runs.
 - Use the repo-root watchdog-backed runtime commands by default so one named runtime owns each expected dev port and duplicate Node/Expo spawns do not accumulate during recovery work.
 - After each targeted fix, rerun Playwright promptly so patched findings move from "code-fixed" to "QA-closed".
-- Latest full-system QA rerun to inherit: 20 passed / 0 failed on 2026-05-22. The automated Playwright gate is green across admin billing, Back-Jobs, booking-to-cash, multi-service booking, insurance documents/reminders, Objective 2, readable IDs, role retirement, ecommerce rewards, and adviser-owned checklist/PDF proof.
+- The historical 2026-05-22 full-system rerun predates the 2026-08-01 scope retirement. Current verification must use the service-only test inventory.
 - Residual non-blocking findings to polish before demo: invoice lookup specificity, immediate invoice visibility, stale mobile completed-history refresh, completed-state timing before manual payment, non-finalized Back-Jobs negative setup, and approved lifecycle summary setup.
 
 Acceptance:
@@ -52,11 +65,11 @@ Priority tasks:
 - Preserve the now-green insurance/loyalty, booking reference, invoice selector, requested-services visibility, and session-restore checks in the full regression suite.
 - Capture fresh live evidence for the new automated-proof areas: mobile multi-service booking, garage add-second-vehicle + pagination, Objective 5 discrepancy plus customer-summary walkthrough, and panel-ready screenshots/video for the now-passing broad readable-ID sweep.
 - Re-run targeted manual/Playwright review for the redesigned dedicated mobile `Vehicle Timeline & Lifecycle` screen so the new showcase-style layout can count as usability/demo evidence instead of implementation-only polish.
-- Live Shop/ecommerce rewards and Objective 3 admin billing are now green in the full 20/20 rerun. Next work is panel-ready evidence capture and paper alignment.
+- Service-earned rewards and Objective 3 service billing require fresh panel-ready evidence after the scope update.
 - Re-run targeted QA for customer plate-number validation, duplicate-phone rejection, and canonical duplicate-plate rejection so the new validation rules move from code-fixed to live-proven.
 - Live Back-Jobs staff-linked lineage, readable-reference, full rework follow-through, return-inspection label, and unique same-day rework selector QA now pass. The only major Back-Jobs proof gap is customer initiation if the defense claims it.
 - Live Admin CRUD / pricing / billing is green again in the latest targeted rerun.
-- Broad readable-ID QA still passes after the Mobile Rewards and Mobile Shop Orders cleanup with ecommerce-backed staff coverage included, and Objective 2 is green again in its latest targeted rerun.
+- Broad readable-ID QA must be rerun against the current service-only staff and customer surfaces.
 - Remaining high-value non-blocker proof work is timed session-stability evidence, staff/mobile polish findings, and paper/demo packaging.
 
 Acceptance:

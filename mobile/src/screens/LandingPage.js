@@ -7,11 +7,13 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { colors, radius } from '../theme';
+import { createPlatformShadow } from '../utils/platformShadow';
 
 const LANDING_HEADER_HEIGHT = 60;
 const LANDING_WEB_SCROLL_HEIGHT = `calc(100vh - ${LANDING_HEADER_HEIGHT}px)`;
@@ -32,13 +34,6 @@ const modules = [
     route: 'VehicleLifecycleScreen',
   },
   {
-    key: 'store',
-    title: 'E-commerce Store',
-    detail: 'Browse and order genuine automotive parts and products.',
-    icon: 'shopping-bag',
-    route: 'StoreScreen',
-  },
-  {
     key: 'insurance',
     title: 'Insurance Inquiry',
     detail: 'Request quotations and track your insurance application status.',
@@ -56,8 +51,10 @@ const highlights = [
 export default function LandingPage({ navigation }) {
   const isWeb = Platform.OS === 'web';
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const topInset = isWeb ? 0 : insets.top;
   const bottomInset = isWeb ? 0 : insets.bottom;
+  const useInlineChatbotAction = isWeb && width <= 600;
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const contentTranslate = useRef(new Animated.Value(16)).current;
 
@@ -72,16 +69,32 @@ export default function LandingPage({ navigation }) {
         toValue: 1,
         duration: 240,
         easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
       Animated.timing(contentTranslate, {
         toValue: 0,
         duration: 280,
         easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start();
   }, [contentOpacity, contentTranslate]);
+
+  const renderChatbotAction = (inline = false) => (
+    <TouchableOpacity
+      style={[
+        styles.chatbotButton,
+        inline ? styles.chatbotButtonInline : { bottom: 24 + bottomInset },
+      ]}
+      activeOpacity={0.9}
+      onPress={() => navigation.navigate('ChatbotScreen')}
+      accessibilityRole="button"
+      accessibilityLabel="Ask AutoCare"
+    >
+      <Feather name="message-circle" size={16} color={colors.onPrimary} />
+      <Text style={styles.chatbotButtonText}>Ask AutoCare</Text>
+    </TouchableOpacity>
+  );
 
   const landingContent = (
     <>
@@ -98,7 +111,7 @@ export default function LandingPage({ navigation }) {
         <Text style={styles.heroTitle}>Integrated service & insurance lifecycle tracking.</Text>
         <Text style={styles.heroSubtitle}>
           A unified AutoCare experience for bookings, service updates, insurance inquiries,
-          loyalty rewards, and product ordering.
+          loyalty rewards, and vehicle history.
         </Text>
 
         <View style={styles.highlightsRow}>
@@ -126,6 +139,8 @@ export default function LandingPage({ navigation }) {
             style={styles.moduleCard}
             activeOpacity={0.9}
             onPress={() => navigation.navigate(module.route)}
+            accessibilityRole="button"
+            accessibilityLabel={`${module.title}. ${module.detail} Open module`}
           >
             <View style={styles.moduleIcon}>
               <Feather name={module.icon} size={18} color={colors.primary} />
@@ -147,6 +162,8 @@ export default function LandingPage({ navigation }) {
           style={styles.primaryButton}
           activeOpacity={0.9}
           onPress={() => navigation.replace('Register')}
+          accessibilityRole="button"
+          accessibilityLabel="Create account"
         >
           <Text style={styles.primaryButtonText}>Create account</Text>
           <Feather name="arrow-right" size={16} color={colors.onPrimary} />
@@ -156,16 +173,20 @@ export default function LandingPage({ navigation }) {
           style={styles.secondaryButton}
           activeOpacity={0.9}
           onPress={() => navigation.replace('Login')}
+          accessibilityRole="button"
+          accessibilityLabel="Sign in"
         >
           <Text style={styles.secondaryButtonText}>Sign in</Text>
         </TouchableOpacity>
       </View>
+
+      {useInlineChatbotAction ? renderChatbotAction(true) : null}
     </>
   );
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
-      <View style={styles.screen}>
+      <View style={styles.screen} accessibilityRole={isWeb ? 'main' : undefined}>
         <View style={[styles.topBar, { paddingTop: 14 + topInset, minHeight: LANDING_HEADER_HEIGHT + topInset }]}>
           <View style={styles.topBarBrand}>
             <View style={styles.topBarBadge}>
@@ -212,14 +233,7 @@ export default function LandingPage({ navigation }) {
           </ScrollView>
         )}
 
-        <TouchableOpacity
-          style={[styles.chatbotButton, { bottom: 24 + bottomInset }]}
-          activeOpacity={0.9}
-          onPress={() => navigation.navigate('ChatbotScreen')}
-        >
-          <Feather name="message-circle" size={16} color={colors.onPrimary} />
-          <Text style={styles.chatbotButtonText}>Ask AutoCare</Text>
-        </TouchableOpacity>
+        {!useInlineChatbotAction ? renderChatbotAction() : null}
       </View>
     </SafeAreaView>
   );
@@ -356,7 +370,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brandEyebrow: {
-    color: colors.labelText,
+    color: colors.mutedText,
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1.5,
@@ -515,15 +529,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
-    elevation: 6,
     zIndex: 1000,
+    ...createPlatformShadow({ color: colors.primary, height: 6, opacity: 0.4, radius: 18, elevation: 6 }),
     ...Platform.select({
       web: {
         position: 'fixed',
@@ -541,6 +552,13 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
     fontSize: 13,
     fontWeight: '700',
+  },
+  chatbotButtonInline: {
+    position: 'relative',
+    right: 'auto',
+    bottom: 'auto',
+    alignSelf: 'flex-end',
+    marginTop: 16,
   },
 });
 

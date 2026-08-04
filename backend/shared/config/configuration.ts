@@ -1,5 +1,24 @@
 export type AppConfig = {
   env: string;
+  accessories: {
+    mode: 'off' | 'staff_preview' | 'catalog' | 'ordering';
+    media: {
+      driver: 'local' | 's3';
+      localDirectory: string;
+      endpoint?: string;
+      region?: string;
+      bucket?: string;
+      accessKeyId?: string;
+      secretAccessKey?: string;
+    };
+    payments: {
+      paymongoWebhookSecret?: string;
+      paymongoLivemode: boolean;
+      checkoutSuccessUrl?: string;
+      checkoutCancelUrl?: string;
+      webhookToleranceSeconds: number;
+    };
+  };
   staffWorkClaims: {
     enforcementMode: 'observe' | 'strict';
     capacities: {
@@ -12,7 +31,6 @@ export type AppConfig = {
   };
   ports: {
     mainService: number;
-    ecommerceService: number;
   };
   cors: {
     origins: string[];
@@ -60,7 +78,6 @@ export type AppConfig = {
     paymongoWebhookSecret?: string;
     paymongoBookingWebhookSecret?: string;
     paymongoServiceInvoiceWebhookSecret?: string;
-    paymongoEcommerceWebhookSecret?: string;
     paymongoCheckoutSuccessUrl?: string;
     paymongoCheckoutCancelUrl?: string;
   };
@@ -134,6 +151,38 @@ export default (): AppConfig => {
 
   return {
     env,
+    accessories: {
+      mode: (coalesceString(process.env.ACCESSORY_COMMERCE_MODE) ?? 'off') as AppConfig['accessories']['mode'],
+      media: {
+        driver: (coalesceString(process.env.ACCESSORY_MEDIA_DRIVER) ?? 'local') as 'local' | 's3',
+        localDirectory:
+          coalesceString(process.env.ACCESSORY_MEDIA_LOCAL_DIRECTORY) ??
+          '.runtime/accessories-media',
+        endpoint: coalesceString(process.env.ACCESSORY_MEDIA_S3_ENDPOINT),
+        region: coalesceString(process.env.ACCESSORY_MEDIA_S3_REGION),
+        bucket: coalesceString(process.env.ACCESSORY_MEDIA_S3_BUCKET),
+        accessKeyId: coalesceString(process.env.ACCESSORY_MEDIA_S3_ACCESS_KEY_ID),
+        secretAccessKey: coalesceString(process.env.ACCESSORY_MEDIA_S3_SECRET_ACCESS_KEY),
+      },
+      payments: {
+        paymongoWebhookSecret: coalesceString(
+          process.env.ACCESSORY_PAYMONGO_WEBHOOK_SECRET,
+        ),
+        paymongoLivemode:
+          coalesceString(process.env.ACCESSORY_PAYMONGO_LIVEMODE)?.toLowerCase() ===
+          'true',
+        checkoutSuccessUrl: coalesceString(
+          process.env.ACCESSORY_PAYMONGO_CHECKOUT_SUCCESS_URL,
+        ),
+        checkoutCancelUrl: coalesceString(
+          process.env.ACCESSORY_PAYMONGO_CHECKOUT_CANCEL_URL,
+        ),
+        webhookToleranceSeconds: toNumber(
+          coalesceString(process.env.ACCESSORY_PAYMONGO_WEBHOOK_TOLERANCE_SECONDS),
+          300,
+        ),
+      },
+    },
     staffWorkClaims: {
       enforcementMode: staffWorkClaimEnforcementMode,
       capacities: {
@@ -154,7 +203,6 @@ export default (): AppConfig => {
     ports: {
       // Railway injects PORT for each running service, so prefer it when present.
       mainService: toNumber(coalesceString(process.env.PORT, process.env.MAIN_SERVICE_PORT), 3000),
-      ecommerceService: toNumber(coalesceString(process.env.PORT, process.env.ECOMMERCE_SERVICE_PORT), 3001),
     },
     cors: {
       origins: toStringArray(process.env.CORS_ORIGINS, [
@@ -210,9 +258,6 @@ export default (): AppConfig => {
       paymongoBookingWebhookSecret: coalesceString(process.env.PAYMONGO_BOOKING_WEBHOOK_SECRET),
       paymongoServiceInvoiceWebhookSecret: coalesceString(
         process.env.PAYMONGO_SERVICE_INVOICE_WEBHOOK_SECRET,
-      ),
-      paymongoEcommerceWebhookSecret: coalesceString(
-        process.env.PAYMONGO_ECOMMERCE_WEBHOOK_SECRET,
       ),
       paymongoCheckoutSuccessUrl: coalesceString(process.env.PAYMONGO_CHECKOUT_SUCCESS_URL),
       paymongoCheckoutCancelUrl: coalesceString(process.env.PAYMONGO_CHECKOUT_CANCEL_URL),

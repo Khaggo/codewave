@@ -88,6 +88,7 @@ export const buildOwnedVehicleInsuranceLabel = (vehicle) => {
 
 export const createInitialCustomerInsuranceDraft = () => ({
   clientRequestId: createCustomerInsuranceRequestId(),
+  requestStageIndex: 0,
   purpose: 'claim',
   inquiryType: 'comprehensive',
   description: '',
@@ -293,6 +294,7 @@ export const listMyInsuranceInquiries = async ({
   cursor,
   limit = 20,
   accessToken,
+  signal,
 }) => {
   const query = [
     vehicleId ? `vehicleId=${encodeURIComponent(vehicleId)}` : '',
@@ -305,6 +307,7 @@ export const listMyInsuranceInquiries = async ({
   const response = await request(`/api/insurance/inquiries/mine?${query}`, {
     method: 'GET',
     headers: buildAuthHeaders(accessToken),
+    signal,
   });
 
   return {
@@ -343,7 +346,7 @@ export const getInsuranceRequirements = async ({
   };
 };
 
-export const getInsuranceInquiryById = async ({ inquiryId, accessToken }) => {
+export const getInsuranceInquiryById = async ({ inquiryId, accessToken, signal }) => {
   const { ApiError } = await getInsuranceClientRuntime();
 
   if (!inquiryId) {
@@ -356,6 +359,7 @@ export const getInsuranceInquiryById = async ({ inquiryId, accessToken }) => {
     await request(`/api/insurance/inquiries/${inquiryId}`, {
       method: 'GET',
       headers: buildAuthHeaders(accessToken),
+      signal,
     }),
   );
 };
@@ -446,7 +450,16 @@ export const uploadInsuranceInquiryDocumentFile = async ({
   }
 
   const formData = new FormData();
-  formData.append('file', file);
+  const webFile =
+    typeof Blob !== 'undefined' && file?.webFile instanceof Blob
+      ? file.webFile
+      : null;
+
+  if (webFile) {
+    formData.append('file', webFile, String(file?.name ?? 'insurance-document'));
+  } else {
+    formData.append('file', file);
+  }
   formData.append('documentType', normalizedDocumentType);
   if (trimOrNull(notes)) {
     formData.append('notes', trimOrNull(notes));
@@ -461,7 +474,7 @@ export const uploadInsuranceInquiryDocumentFile = async ({
   );
 };
 
-export const listVehicleInsuranceRecords = async ({ vehicleId, accessToken }) => {
+export const listVehicleInsuranceRecords = async ({ vehicleId, accessToken, signal }) => {
   const { ApiError } = await getInsuranceClientRuntime();
 
   if (!vehicleId) {
@@ -478,6 +491,7 @@ export const listVehicleInsuranceRecords = async ({ vehicleId, accessToken }) =>
     await request(`/api/vehicles/${vehicleId}/insurance-records`, {
       method: 'GET',
       headers: buildAuthHeaders(accessToken),
+      signal,
     }),
   )
     .map(normalizeCustomerInsuranceRecord)

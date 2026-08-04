@@ -11,8 +11,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.autocare-cc.com",
-        "EXPO_PUBLIC_ECOMMERCE_API_BASE_URL": "https://ecommerce.autocare-cc.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.autocare-cc.com"
       },
       "android": {
         "buildType": "apk"
@@ -20,8 +19,7 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.autocare-cc.com",
-        "EXPO_PUBLIC_ECOMMERCE_API_BASE_URL": "https://ecommerce.autocare-cc.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.autocare-cc.com"
       },
       "autoIncrement": true,
       "android": {

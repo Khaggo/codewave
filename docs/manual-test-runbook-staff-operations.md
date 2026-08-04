@@ -39,9 +39,7 @@
 2. Create a service category.
 3. Create a booking service under that category.
 4. Verify the new service appears in the live service list.
-5. Open `Catalog Admin`.
 6. Confirm booking-service creation is no longer shown there.
-7. Confirm `Catalog Admin` remains focused on ecommerce catalog management only.
 
 ## Back-Job Flow
 

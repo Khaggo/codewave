@@ -5,6 +5,7 @@
 :root,
 [data-theme='dark'] {
   --brand-orange: 240 124 0;
+  --brand-contrast: 0 0 0;
   --brand-gold: 201 149 26;
   --surface-bg: 9 9 11;
   --surface-card: 17 17 19;
@@ -30,6 +31,7 @@
 
 [data-theme='light'] {
   --brand-orange: 214 97 20;
+  --brand-contrast: 0 0 0;
   --brand-gold: 174 125 31;
   --surface-bg: 244 246 249;
   --surface-card: 255 255 255;
@@ -55,6 +57,7 @@
 
 [data-theme='professional-blue'] {
   --brand-orange: 55 114 231;
+  --brand-contrast: 0 0 0;
   --brand-gold: 64 160 255;
   --surface-bg: 10 20 40;
   --surface-card: 16 31 58;
@@ -80,6 +83,7 @@
 
 [data-theme='automotive-red'] {
   --brand-orange: 214 69 45;
+  --brand-contrast: 0 0 0;
   --brand-gold: 238 122 102;
   --surface-bg: 20 10 10;
   --surface-card: 32 16 16;
@@ -105,6 +109,7 @@
 
 [data-theme='minimal-gray'] {
   --brand-orange: 91 99 110;
+  --brand-contrast: 255 255 255;
   --brand-gold: 128 137 149;
   --surface-bg: 242 244 247;
   --surface-card: 255 255 255;
@@ -130,6 +135,7 @@
 
 [data-theme='premium-black'] {
   --brand-orange: 233 149 34;
+  --brand-contrast: 0 0 0;
   --brand-gold: 205 160 49;
   --surface-bg: 7 8 10;
   --surface-card: 14 16 19;
@@ -290,6 +296,7 @@
   .btn-primary {
     @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all duration-150;
     background-color: rgb(var(--brand-orange));
+    color: rgb(var(--brand-contrast));
     box-shadow: 0 10px 24px rgb(var(--brand-orange) / 0.18);
   }
 
@@ -418,32 +425,37 @@
   }
 
   .page-header-surface {
-    @apply rounded-[28px] border border-surface-border px-5 py-5 shadow-card backdrop-blur sm:px-6 sm:py-6;
-    background-color: rgb(var(--surface-card) / 0.82);
-    box-shadow:
-      0 18px 40px rgb(0 0 0 / 0.16),
-      inset 0 1px 0 rgb(255 255 255 / 0.02);
+    @apply border-b border-surface-border px-0 pb-4 pt-1;
+    background: transparent;
   }
 
   .page-header {
-    @apply min-w-0 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between;
+    @apply flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between;
+  }
+
+  .page-header-content {
+    @apply min-w-0 space-y-1.5;
+  }
+
+  .page-header-copy {
+    @apply space-y-1;
   }
 
   .page-header-eyebrow {
-    @apply text-[11px] font-semibold uppercase tracking-[0.28em] text-ink-muted;
+    @apply text-[11px] font-semibold uppercase tracking-normal text-ink-secondary;
   }
 
   .page-header-title {
-    @apply min-w-0 text-3xl font-semibold tracking-tight text-ink-primary sm:text-4xl;
+    @apply min-w-0 text-2xl font-semibold tracking-normal text-ink-primary;
     overflow-wrap: anywhere;
   }
 
   .page-header-description {
-    @apply max-w-3xl text-sm leading-6 text-ink-secondary sm:text-base;
+    @apply max-w-3xl text-sm leading-5 text-ink-secondary;
   }
 
   .page-header-actions {
-    @apply flex w-full shrink-0 flex-wrap items-center gap-2.5 sm:gap-3 lg:w-auto lg:justify-end;
+    @apply flex w-full shrink-0 flex-wrap items-center gap-2 md:w-auto md:justify-end;
   }
 
   .page-header-actions > * {
@@ -451,15 +463,12 @@
   }
 
   .toolbar-surface {
-    @apply rounded-[26px] border border-surface-border px-4 py-4 shadow-card md:px-5 md:py-5;
-    background-color: rgb(var(--surface-card) / 0.88);
-    box-shadow:
-      0 10px 24px rgb(0 0 0 / 0.14),
-      inset 0 1px 0 rgb(255 255 255 / 0.02);
+    @apply rounded-lg border border-surface-border px-4 py-3;
+    background-color: rgb(var(--surface-card) / 0.94);
   }
 
   .table-surface {
-    @apply overflow-hidden rounded-2xl border border-surface-border bg-surface-card shadow-card;
+    @apply overflow-hidden rounded-lg border border-surface-border bg-surface-card;
   }
 
   .table-scroll {
@@ -471,15 +480,15 @@
   }
 
   .data-table thead tr {
-    @apply border-b border-surface-border bg-surface-raised text-left text-[11px] uppercase tracking-[0.12em] text-ink-muted;
+    @apply border-b border-surface-border bg-surface-raised text-left text-[11px] uppercase tracking-normal text-ink-muted;
   }
 
   .data-table th {
-    @apply px-5 py-3.5 font-semibold;
+    @apply px-4 py-2.5 font-semibold;
   }
 
   .data-table td {
-    @apply px-5 py-4 align-top text-sm text-ink-secondary;
+    @apply px-4 py-3 align-top text-sm text-ink-secondary;
   }
 
   .data-table tbody tr {
@@ -540,7 +549,7 @@
 
   .ops-page-shell,
   .booking-page-shell {
-    @apply space-y-6 md:space-y-7;
+    @apply space-y-4 md:space-y-5;
   }
 
   .ops-page-header,
@@ -580,7 +589,7 @@
   }
 
   .ops-panel-muted {
-    @apply rounded-2xl border border-surface-border bg-surface-raised px-4 py-3;
+    @apply rounded-lg border border-surface-border bg-surface-raised px-4 py-3;
   }
 
   .primitive-checkbox {
@@ -621,7 +630,7 @@
   }
 
   .ops-action-primary {
-    @apply btn-primary min-h-11 justify-center rounded-2xl;
+    @apply btn-primary min-h-11 justify-center rounded-lg;
     box-shadow: 0 14px 30px rgb(var(--brand-orange) / 0.2);
   }
 
@@ -630,7 +639,7 @@
   }
 
   .ops-action-secondary {
-    @apply btn-ghost min-h-11 justify-center rounded-2xl font-semibold;
+    @apply btn-ghost min-h-11 justify-center rounded-lg font-semibold;
   }
 
   .ops-action-secondary:not(:disabled):hover {
@@ -638,7 +647,7 @@
   }
 
   .ops-action-danger {
-    @apply btn-danger min-h-11 justify-center rounded-2xl;
+    @apply btn-danger min-h-11 justify-center rounded-lg;
     box-shadow: 0 14px 30px rgb(185 28 28 / 0.2);
   }
 

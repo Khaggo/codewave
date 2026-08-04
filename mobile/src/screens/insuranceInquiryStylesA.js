@@ -30,64 +30,26 @@ export default StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
-  homeFocusWrap: {
-    marginBottom: 2,
-  },
-  sheetBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(15, 23, 42, 0.38)',
-  },
-  sheetCard: {
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    backgroundColor: colors.surface,
-    padding: 20,
-    gap: 10,
-  },
-  sheetList: {
-    maxHeight: 360,
-  },
-  sheetListContent: {
-    paddingBottom: 4,
-  },
-  sheetTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  sheetRow: {
-    minHeight: 52,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSoft,
-    justifyContent: 'center',
-    paddingVertical: 10,
-  },
-  sheetRowSelected: {
-    backgroundColor: colors.primarySoft,
-  },
-  sheetRowLabel: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  sheetRowMeta: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  sheetAddRow: {
-    minHeight: 52,
+  backButton: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    borderRadius: radius.medium,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceStrong,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
+    gap: 8,
+    paddingHorizontal: 14,
+    marginBottom: 14,
   },
-  sheetAddRowText: {
-    color: colors.primary,
+  backButtonText: {
+    color: colors.text,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
+  },
+  homeFocusWrap: {
+    marginBottom: 2,
   },
   typeRow: {
     flexDirection: 'row',

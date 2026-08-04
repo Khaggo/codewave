@@ -14,8 +14,6 @@ const rewardStatusLabels = {
 
 const earningRuleSourceLabels = {
   service: 'Service',
-  ecommerce: 'E-commerce',
-  both: 'Service + E-commerce',
 }
 
 const earningRuleFormulaLabels = {
@@ -171,8 +169,6 @@ export const normalizeEarningRule = (rule) => {
         : centsToCurrency(rule.minimumAmountCents),
     eligibleServiceTypes: asArray(rule.eligibleServiceTypes),
     eligibleServiceCategories: asArray(rule.eligibleServiceCategories),
-    eligibleProductIds: asArray(rule.eligibleProductIds),
-    eligibleProductCategoryIds: asArray(rule.eligibleProductCategoryIds),
     promoLabel: trimOrNull(rule.promoLabel),
     manualBenefitNote: trimOrNull(rule.manualBenefitNote),
     activeFrom: rule.activeFrom ?? null,

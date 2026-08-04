@@ -1,5 +1,20 @@
-import { listCustomerVehicles } from './authClient';
-import { buildOwnedVehicleLabel } from './bookingDiscoveryClient';
+import {
+  ApiError,
+  buildAuthorizedHeaders,
+  normalizeVehicleRecord,
+  request,
+} from './authClient';
+import {
+  buildDigitalGarageSnapshot,
+  buildDigitalGarageVehicleSummary,
+  createEmptyCustomerDigitalGarageSnapshot,
+} from './digitalGarageModel.mjs';
+
+export {
+  buildDigitalGarageSnapshot,
+  buildDigitalGarageVehicleSummary,
+  createEmptyCustomerDigitalGarageSnapshot,
+} from './digitalGarageModel.mjs';
 
 export const digitalGarageUnsupportedActions = [
   {
@@ -19,7 +34,7 @@ export const digitalGarageUnsupportedActions = [
 export const digitalGarageRoutes = {
   listOwnedVehicles: {
     method: 'GET',
-    path: '/api/users/:id/vehicles',
+    path: '/api/users/:id/vehicles/garage',
     status: 'live',
   },
   vehicleDetail: {
@@ -49,70 +64,52 @@ export const digitalGarageRoutes = {
   },
 };
 
-export const createEmptyCustomerDigitalGarageSnapshot = () => ({
-  status: 'garage_empty',
-  vehicles: [],
-  vehicleCount: 0,
-  primaryVehicleId: null,
-});
-
-const selectPrimaryVehicleId = (vehicles, preferredVehicleId) => {
-  if (preferredVehicleId && vehicles.some((vehicle) => vehicle.id === preferredVehicleId)) {
-    return preferredVehicleId;
+const listCustomerGarageVehicles = async ({
+  userId,
+  accessToken,
+  cursor,
+  limit = 3,
+  search,
+}) => {
+  if (!userId) {
+    throw new ApiError(
+      'You need an active customer session before Garage vehicles can load.',
+      401,
+      {
+        path: '/api/users/:id/vehicles/garage',
+      },
+    );
   }
 
-  return vehicles[0]?.id ?? null;
-};
-
-export const buildDigitalGarageVehicleSummary = ({
-  vehicle,
-  index = 0,
-  primaryVehicleId,
-}) => {
-  const title = buildOwnedVehicleLabel(vehicle);
-  const subtitle = [
-    vehicle?.plateNumber,
-    vehicle?.color,
-    vehicle?.vin ? `VIN ${vehicle.vin}` : null,
+  const query = [
+    `limit=${encodeURIComponent(String(limit))}`,
+    cursor ? `cursor=${encodeURIComponent(cursor)}` : '',
+    search ? `search=${encodeURIComponent(search)}` : '',
   ]
-    .map((part) => String(part ?? '').trim())
     .filter(Boolean)
-    .join(' - ');
+    .join('&');
+  const response = await request(
+    `/api/users/${encodeURIComponent(userId)}/vehicles/garage?${query}`,
+    {
+      method: 'GET',
+      headers: buildAuthorizedHeaders(accessToken),
+    },
+  );
+  const page = response?.page ?? {};
 
   return {
-    id: vehicle?.id ?? null,
-    title,
-    subtitle: subtitle || 'Vehicle metadata is ready for booking, insurance, and timeline use.',
-    plateNumber: vehicle?.plateNumber ?? 'No plate',
-    modelLabel: [vehicle?.year, vehicle?.make, vehicle?.model]
-      .map((part) => String(part ?? '').trim())
-      .filter(Boolean)
-      .join(' '),
-    isPrimary: Boolean(primaryVehicleId && vehicle?.id === primaryVehicleId),
-    ordinalLabel: `Vehicle ${index + 1}`,
-    routeTruth: 'Live owner route',
-  };
-};
-
-export const buildDigitalGarageSnapshot = ({
-  vehicles = [],
-  preferredVehicleId,
-} = {}) => {
-  const normalizedVehicles = Array.isArray(vehicles) ? vehicles.filter(Boolean) : [];
-  const primaryVehicleId = selectPrimaryVehicleId(normalizedVehicles, preferredVehicleId);
-
-  return {
-    status: normalizedVehicles.length ? 'garage_ready' : 'garage_empty',
-    vehicles: normalizedVehicles,
-    vehicleCount: normalizedVehicles.length,
-    primaryVehicleId,
-    vehicleSummaries: normalizedVehicles.map((vehicle, index) =>
-      buildDigitalGarageVehicleSummary({
-        vehicle,
-        index,
-        primaryVehicleId,
-      }),
-    ),
+    items: Array.isArray(response?.items)
+      ? response.items.map(normalizeVehicleRecord).filter(Boolean)
+      : [],
+    page: {
+      limit: Number(page.limit) > 0 ? Number(page.limit) : limit,
+      total: Math.max(0, Number(page.total) || 0),
+      hasNext: Boolean(page.hasNext),
+      nextCursor:
+        typeof page.nextCursor === 'string' && page.nextCursor
+          ? page.nextCursor
+          : null,
+    },
   };
 };
 
@@ -120,15 +117,27 @@ export const loadCustomerDigitalGarageSnapshot = async ({
   userId,
   accessToken,
   preferredVehicleId,
+  cursor,
+  limit = 3,
+  pageIndex = 0,
+  search,
 }) => {
-  const vehicles = await listCustomerVehicles({
+  const response = await listCustomerGarageVehicles({
     userId,
     accessToken,
+    cursor,
+    limit,
+    search,
   });
 
   return buildDigitalGarageSnapshot({
-    vehicles,
+    vehicles: response.items,
     preferredVehicleId,
+    ordinalOffset: pageIndex * response.page.limit,
+    page: {
+      ...response.page,
+      currentPage: pageIndex,
+    },
   });
 };
 

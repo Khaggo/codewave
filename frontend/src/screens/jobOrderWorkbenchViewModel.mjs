@@ -1,4 +1,4 @@
-import { getSuggestedJobOrderWorkspaceStage } from '@/lib/jobOrderWorkspaceStage.mjs'
+import { getSuggestedJobOrderWorkspaceStage } from '../lib/jobOrderWorkspaceStage.mjs'
 
 export const STATUS_META = {
   draft: { label: 'Draft', cls: 'badge-gray' },

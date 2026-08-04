@@ -1,0 +1,520 @@
+import { Platform, StyleSheet } from 'react-native';
+
+import { colors, radius } from '../../../theme';
+import { createPlatformShadow } from '../../../utils/platformShadow';
+import {
+  BOTTOM_NAV_HEIGHT,
+  DASHBOARD_WEB_SCROLL_HEIGHT,
+} from '../dashboardNavigationModel.mjs';
+
+export default StyleSheet.create({
+  garagePlannedRowCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  garagePlannedActionLabel: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  garagePlannedRoute: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 3,
+  },
+  garagePlannedPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255, 197, 0, 0.12)',
+  },
+  garagePlannedPillText: {
+    color: '#FFC500',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  garageRouteText: {
+    color: colors.labelText,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 12,
+    lineHeight: 20,
+  },
+  garageSectionHeader: {
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  timelineSummaryCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 18,
+  },
+  timelineSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  timelineSummaryTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  timelineSummaryBody: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 23,
+    marginBottom: 10,
+  },
+  timelineSummaryHelperText: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  timelineSummaryMeta: {
+    color: colors.labelText,
+    fontSize: 12,
+    marginTop: 10,
+  },
+  timelineSummaryPill: {
+    minHeight: 28,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineSummaryPillVisible: {
+    backgroundColor: colors.successSoft,
+  },
+  timelineSummaryPillPending: {
+    backgroundColor: 'rgba(255, 197, 0, 0.12)',
+  },
+  timelineSummaryPillHidden: {
+    backgroundColor: colors.primarySoft,
+  },
+  timelineSummaryPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  timelineSummaryPillTextVisible: {
+    color: colors.success,
+  },
+  timelineSummaryPillTextPending: {
+    color: '#FFC500',
+  },
+  timelineSummaryPillTextHidden: {
+    color: colors.primary,
+  },
+  timelineStateCard: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  timelineStateIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  timelineStateTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 10,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  timelineStateText: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  timelineStateAction: {
+    minHeight: 44,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    marginTop: 14,
+  },
+  timelineStateActionText: {
+    color: colors.onPrimary,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  timelineStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  timelineStatCard: {
+    width: '31.5%',
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  timelineStatValue: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  timelineStatValueWarm: {
+    color: colors.primary,
+  },
+  timelineStatValueHighlight: {
+    color: '#FFC500',
+  },
+  timelineStatLabel: {
+    color: colors.mutedText,
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  timelineFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  timelineFilterChip: {
+    minHeight: 34,
+    paddingHorizontal: 16,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceStrong,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  timelineFilterChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  timelineFilterChipText: {
+    color: colors.labelText,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  timelineFilterChipTextActive: {
+    color: colors.onPrimary,
+  },
+  timelineEventWrap: {
+    marginBottom: 6,
+  },
+  timelineDateMarker: {
+    color: colors.labelText,
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 40,
+    marginBottom: 10,
+  },
+  timelineEventCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  timelineEventRail: {
+    width: 42,
+    alignItems: 'center',
+  },
+  timelineEventDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#242A40',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  timelineEventLine: {
+    width: 2,
+    flex: 1,
+    minHeight: 92,
+    backgroundColor: '#2B3250',
+    marginTop: 6,
+  },
+  timelineEventContent: {
+    flex: 1,
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 12,
+  },
+  timelineEventHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  timelineEventTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    paddingRight: 12,
+  },
+  timelineStatusPill: {
+    minHeight: 28,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineStatusPillSuccess: {
+    backgroundColor: 'rgba(18, 215, 100, 0.12)',
+  },
+  timelineStatusPillInfo: {
+    backgroundColor: 'rgba(52, 127, 255, 0.12)',
+  },
+  timelineStatusPillDefault: {
+    backgroundColor: 'rgba(255, 122, 0, 0.12)',
+  },
+  timelineStatusText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  timelineStatusTextSuccess: {
+    color: '#12D764',
+  },
+  timelineStatusTextInfo: {
+    color: '#63A5FF',
+  },
+  timelineStatusTextDefault: {
+    color: colors.primary,
+  },
+  timelineEventDate: {
+    color: colors.mutedText,
+    fontSize: 13,
+    marginLeft: 6,
+  },
+  timelineEventSummary: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 8,
+  },
+  timelineEventMechanic: {
+    color: colors.labelText,
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  timelineEventFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+  },
+  timelineEventMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timelineEventPrice: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  timelineTypePill: {
+    alignSelf: 'flex-end',
+    minHeight: 24,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  timelineTypePillAdministrative: {
+    backgroundColor: colors.primarySoft,
+  },
+  timelineTypePillVerified: {
+    backgroundColor: colors.successSoft,
+  },
+  timelineTypePillSummary: {
+    backgroundColor: 'rgba(99, 165, 255, 0.12)',
+  },
+  timelineTypeText: {
+    color: colors.labelText,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  bookingScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: Platform.OS === 'web' ? 104 : BOTTOM_NAV_HEIGHT + 104,
+  },
+  bookingHeader: {
+    marginBottom: 18,
+  },
+  bookingEyebrow: {
+    color: colors.labelText,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.8,
+    marginBottom: 8,
+  },
+  bookingTitle: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  bookingModeWrap: {
+    flexDirection: 'row',
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    padding: 4,
+    marginBottom: 22,
+  },
+  bookingModeTabContainer: {
+    flex: 1,
+  },
+  bookingModeTab: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookingModeTabActive: {
+    backgroundColor: colors.primary,
+    ...createPlatformShadow({
+      color: colors.primary,
+      height: 8,
+      opacity: 0.18,
+      radius: 16,
+      elevation: 3,
+    }),
+  },
+  bookingModeTabText: {
+    color: colors.mutedText,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  bookingModeTabTextActive: {
+    color: colors.onPrimary,
+  },
+  bookingSectionLabel: {
+    color: colors.labelText,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+    marginBottom: 12,
+  },
+  bookingDiscoveryBanner: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    marginBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  bookingDiscoveryBannerCompact: {
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  bookingStepRail: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 4,
+  },
+  bookingStepItem: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    borderRadius: 6,
+  },
+  bookingStepItemActive: {
+    backgroundColor: colors.primarySoft,
+  },
+  bookingStepItemDisabled: {
+    opacity: 0.45,
+  },
+  bookingStepNumber: {
+    color: colors.mutedText,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  bookingStepNumberActive: {
+    color: colors.primary,
+  },
+  bookingStepLabel: {
+    color: colors.mutedText,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  bookingStepLabelActive: {
+    color: colors.text,
+  },
+  bookingStepActions: {
+    minHeight: 52,
+    marginTop: 18,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  bookingStepBackButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+  },
+  bookingStepBackText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  bookingStepContinueButton: {
+    minHeight: 48,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  bookingStepContinueButtonDisabled: {
+    opacity: 0.45,
+  },
+  bookingStepContinueText: {
+    color: colors.onPrimary,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+});

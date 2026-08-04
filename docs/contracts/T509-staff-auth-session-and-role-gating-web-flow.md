@@ -29,7 +29,6 @@
 | `unauthenticated` | no usable staff session exists and the login screen must be shown |
 | `login_submitting` | login request is in flight and duplicate submit must be blocked |
 | `session_restoring` | portal is validating or refreshing a stored session |
-| `technician_session_active` | active technician session may enter technician-visible web navigation |
 | `service_adviser_session_active` | active service adviser session may enter adviser-visible web navigation |
 | `super_admin_session_active` | active super admin session may enter full admin navigation |
 | `customer_blocked` | authenticated customer identity must be removed from the staff portal immediately |
@@ -40,22 +39,22 @@
 
 ## Role-Gated Navigation Surface
 
-| Route | Technician | Service Adviser | Super Admin |
-| --- | --- | --- | --- |
-| `/` | visible | visible | visible |
-| `/vehicles` | visible | visible | visible |
-| `/bookings` | blocked | visible | visible |
-| `/backjobs` | blocked | visible | visible |
-| `/timeline` | blocked | visible | visible |
-| `/insurance` | blocked | visible | visible |
-| `/shop` | blocked | visible | visible |
-| `/loyalty` | blocked | visible | visible |
-| `/admin/qa-audit` | blocked | visible | visible |
-| `/admin/summaries` | blocked | visible | visible |
-| `/admin/catalog` | blocked | blocked | visible |
-| `/admin/inventory` | blocked | blocked | visible |
-| `/admin/appointments` | blocked | visible | visible |
-| `/settings` | visible | visible | visible |
+| Route | Service Adviser | Super Admin |
+| --- | --- | --- |
+| `/` | visible | visible |
+| `/bookings` | visible | visible |
+| `/admin/intake-inspections` | visible | visible |
+| `/admin/job-orders` | visible | visible |
+| `/admin/qa-audit` | visible | visible |
+| `/admin/invoices` | visible | visible |
+| `/admin/customers` | visible | visible |
+| `/backjobs` | visible | visible |
+| `/insurance` | visible | visible |
+| `/loyalty` | visible | visible |
+| `/admin/services` | visible | visible |
+| `/admin/users` | blocked | visible |
+| `/admin/summaries` | visible | visible |
+| `/settings` | visible | visible |
 
 ## Frontend Contract Files
 
@@ -78,7 +77,6 @@
 
 ## Acceptance States
 
-- login with active technician session and show technician-safe navigation only
 - login with active service adviser session and show adviser navigation
 - login with active super admin session and show full admin navigation
 - reject customer session from the staff portal

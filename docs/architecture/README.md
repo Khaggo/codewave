@@ -52,12 +52,6 @@ Use the docs in this directory to build and improve the backend quickly while pr
 - Use [`domains/main-service/notifications.md`](./domains/main-service/notifications.md) for email-only reminders, preferences, and delivery state.
 - Use [`domains/main-service/chatbot.md`](./domains/main-service/chatbot.md) for deterministic inquiry routing and escalations.
 - Use [`domains/main-service/analytics.md`](./domains/main-service/analytics.md) for derived dashboards and audit-friendly read models.
-- Use [`domains/ecommerce/catalog.md`](./domains/ecommerce/catalog.md) for products, categories, and sellable catalog state.
-- Use [`domains/ecommerce/inventory.md`](./domains/ecommerce/inventory.md) for stock, reservations, and adjustments.
-- Use [`domains/ecommerce/cart.md`](./domains/ecommerce/cart.md) for pre-checkout cart behavior.
-- Use [`domains/ecommerce/orders.md`](./domains/ecommerce/orders.md) for invoice-based checkout and order lifecycle.
-- Use [`domains/ecommerce/invoice-payments.md`](./domains/ecommerce/invoice-payments.md) for invoice status, payment entries, and aging behavior.
-- Use [`domains/ecommerce/commerce-events.md`](./domains/ecommerce/commerce-events.md) for outbox, inbox, and downstream event boundaries.
 
 ## Control-Plane Docs
 

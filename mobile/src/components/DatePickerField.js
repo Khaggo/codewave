@@ -3,14 +3,13 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
-import { colors, radius } from '../theme';
 import { cloneDate, formatDate, monthLabels } from '../utils/validation';
+import styles from './datePickerFieldStyles';
 
 const weekdayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
@@ -110,6 +109,11 @@ export default function DatePickerField({
       <Text style={styles.label}>{label}</Text>
 
       <TouchableOpacity
+        accessibilityLabel={`${label}. ${displayValue || placeholder}. ${
+          editable ? trailingLabel : 'Locked'
+        }`}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !editable, expanded: isVisible }}
         activeOpacity={0.85}
         onPress={editable ? handleOpen : undefined}
         disabled={!editable}
@@ -137,13 +141,24 @@ export default function DatePickerField({
         visible={isVisible}
         onRequestClose={() => setIsVisible(false)}
       >
-        <Pressable style={[styles.overlay, isCompactLayout && styles.overlayCompact]} onPress={() => setIsVisible(false)}>
-          <Pressable style={[styles.modalCard, isCompactLayout && styles.modalCardCompact]} onPress={() => null}>
+        <Pressable
+          accessible={false}
+          style={[styles.overlay, isCompactLayout && styles.overlayCompact]}
+          onPress={() => setIsVisible(false)}
+        >
+          <Pressable
+            accessibilityViewIsModal
+            style={[styles.modalCard, isCompactLayout && styles.modalCardCompact]}
+            onPress={() => null}
+          >
             <Text style={styles.modalTitle}>{title}</Text>
             <Text style={styles.modalSubtitle}>{subtitle}</Text>
 
             <View style={[styles.stepRow, isCompactLayout && styles.stepRowCompact]}>
               <TouchableOpacity
+                accessibilityLabel={`Choose year ${visibleMonth.getFullYear()}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: pickerStep === 'year' }}
                 style={[styles.stepChip, pickerStep === 'year' && styles.stepChipActive]}
                 onPress={() => setPickerStep('year')}
               >
@@ -153,6 +168,9 @@ export default function DatePickerField({
               </TouchableOpacity>
 
               <TouchableOpacity
+                accessibilityLabel={`Choose month ${monthLabels[visibleMonth.getMonth()]}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: pickerStep === 'month' }}
                 style={[styles.stepChip, pickerStep === 'month' && styles.stepChipActive]}
                 onPress={() => setPickerStep('month')}
               >
@@ -162,6 +180,9 @@ export default function DatePickerField({
               </TouchableOpacity>
 
               <TouchableOpacity
+                accessibilityLabel="Choose day"
+                accessibilityRole="button"
+                accessibilityState={{ selected: pickerStep === 'day' }}
                 style={[styles.stepChip, pickerStep === 'day' && styles.stepChipActive]}
                 onPress={() => setPickerStep('day')}
               >
@@ -179,6 +200,9 @@ export default function DatePickerField({
 
                     return (
                       <TouchableOpacity
+                        accessibilityLabel={`Choose year ${year}`}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
                         key={year}
                         style={[
                           styles.optionButton,
@@ -203,6 +227,9 @@ export default function DatePickerField({
 
                     return (
                       <TouchableOpacity
+                        accessibilityLabel={`Choose month ${monthLabel}`}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
                         key={monthLabel}
                         style={[
                           styles.optionButton,
@@ -233,22 +260,37 @@ export default function DatePickerField({
 
                 <View style={styles.daysGrid}>
                   {calendarDays.map((dateValue, index) => {
+                    if (!dateValue) {
+                      return (
+                        <View
+                          key={`${visibleMonth.getMonth()}-${index}`}
+                          style={[styles.dayCell, styles.dayCellEmpty]}
+                        />
+                      );
+                    }
+
                     const isBeforeMinimumDate =
-                      dateValue && normalizedMinimumDate ? dateValue < normalizedMinimumDate : false;
+                      normalizedMinimumDate ? dateValue < normalizedMinimumDate : false;
                     const isAfterMaximumDate =
-                      dateValue && normalizedMaximumDate ? dateValue > normalizedMaximumDate : false;
+                      normalizedMaximumDate ? dateValue > normalizedMaximumDate : false;
                     const isDisabled = isBeforeMinimumDate || isAfterMaximumDate;
-                    const isSelected = dateValue ? isSameDay(dateValue, value) : false;
+                    const isSelected = isSameDay(dateValue, value);
 
                     return (
                       <TouchableOpacity
+                        accessibilityLabel={`Choose ${dateValue.toLocaleDateString(undefined, {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}`}
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: isDisabled, selected: isSelected }}
                         key={`${visibleMonth.getMonth()}-${index}`}
                         style={[
                           styles.dayCell,
-                          !dateValue && styles.dayCellEmpty,
                           isSelected && styles.dayCellSelected,
                         ]}
-                        disabled={!dateValue || isDisabled}
+                        disabled={isDisabled}
                         onPress={() => handleSelectDay(dateValue)}
                       >
                         <Text
@@ -267,7 +309,12 @@ export default function DatePickerField({
               </View>
             ) : null}
 
-            <TouchableOpacity style={styles.closeButton} onPress={() => setIsVisible(false)}>
+            <TouchableOpacity
+              accessibilityLabel="Close date picker"
+              accessibilityRole="button"
+              style={styles.closeButton}
+              onPress={() => setIsVisible(false)}
+            >
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>
           </Pressable>
@@ -276,234 +323,3 @@ export default function DatePickerField({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 20,
-  },
-  label: {
-    color: colors.labelText,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.8,
-    marginBottom: 10,
-    textTransform: 'uppercase',
-  },
-  input: {
-    minHeight: 58,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.medium,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: colors.input,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  inputFocused: {
-    borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-  inputReadonly: {
-    backgroundColor: colors.readonly,
-  },
-  inputError: {
-    borderColor: colors.danger,
-  },
-  valueText: {
-    color: colors.text,
-    fontSize: 16,
-    flex: 1,
-    minWidth: 0,
-  },
-  placeholderText: {
-    color: colors.mutedText,
-  },
-  trailingText: {
-    color: colors.primary,
-    fontSize: 13,
-    fontWeight: '700',
-    flexShrink: 0,
-  },
-  trailingTextReadonly: {
-    color: colors.mutedText,
-  },
-  errorText: {
-    color: colors.danger,
-    fontSize: 12,
-    marginTop: 6,
-    lineHeight: 18,
-  },
-  helperText: {
-    color: colors.mutedText,
-    fontSize: 12,
-    marginTop: 6,
-    lineHeight: 18,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  overlayCompact: {
-    paddingHorizontal: 14,
-  },
-  modalCard: {
-    alignSelf: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.large,
-    width: '100%',
-    maxWidth: 430,
-    padding: 20,
-    maxHeight: '82%',
-  },
-  modalCardCompact: {
-    padding: 16,
-  },
-  modalTitle: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  modalSubtitle: {
-    color: colors.mutedText,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 18,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  stepRowCompact: {
-    flexWrap: 'wrap',
-  },
-  stepChip: {
-    flex: 1,
-    minWidth: 82,
-    minHeight: 44,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    backgroundColor: colors.surfaceMuted,
-  },
-  stepChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  stepChipText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  stepChipTextActive: {
-    color: colors.primary,
-  },
-  selectionPanel: {
-    minHeight: 280,
-    maxHeight: 360,
-    marginBottom: 16,
-  },
-  optionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  optionButton: {
-    flexGrow: 1,
-    flexShrink: 1,
-    minHeight: 46,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    backgroundColor: colors.background,
-  },
-  optionButtonRegular: {
-    flexBasis: '30%',
-    minWidth: 82,
-  },
-  optionButtonCompact: {
-    flexBasis: '46%',
-    minWidth: 0,
-  },
-  optionButtonActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  optionText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  optionTextActive: {
-    color: colors.primary,
-  },
-  weekdayRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  weekdayText: {
-    flex: 1,
-    textAlign: 'center',
-    color: colors.mutedText,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  daysGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayCell: {
-    width: '14.2857%',
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.medium,
-    marginBottom: 6,
-  },
-  dayCellEmpty: {
-    opacity: 0,
-  },
-  dayCellSelected: {
-    backgroundColor: colors.primary,
-  },
-  dayText: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  dayTextDisabled: {
-    color: colors.border,
-  },
-  dayTextSelected: {
-    color: colors.onPrimary,
-    fontWeight: '800',
-  },
-  closeButton: {
-    minHeight: 48,
-    borderRadius: radius.medium,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeButtonText: {
-    color: colors.onPrimary,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-});

@@ -17,25 +17,15 @@ This file is the one-page routing and dependency map for backend implementation 
 | `main-service.back-jobs` | `domain-worker` | return and rework handling with service-history validation | `main-service.vehicles`, `main-service.inspections`, `main-service.job-orders` | `vehicles`, `inspections`, `job-orders` |
 | `main-service.job-orders` | `domain-worker` | digital job orders, technician assignments, work execution, and invoice readiness | `main-service.bookings`, `main-service.back-jobs`, `main-service.users` | `bookings`, `back-jobs`, `users` |
 | `main-service.quality-gates` | `integration-worker` | AI-assisted release audits and manual override controls | `main-service.bookings`, `main-service.inspections`, `main-service.job-orders`, `main-service.back-jobs` | `bookings`, `inspections`, `job-orders`, `back-jobs` |
-| `main-service.notifications` | `domain-worker` | email-only reminders, outbound notices, and auth OTP delivery | `main-service.auth`, `main-service.bookings`, `main-service.insurance`, `main-service.back-jobs`, `ecommerce.invoice-payments` | `auth`, `bookings`, `insurance`, `back-jobs`, `invoice-payments` |
-| `main-service.chatbot` | `domain-worker` | rule-based inquiry routing | `main-service.bookings`, `main-service.insurance`, `ecommerce.orders` | `bookings`, `insurance`, `orders` |
+| `main-service.notifications` | `domain-worker` | email-only reminders, outbound notices, and auth OTP delivery | `main-service.auth`, `main-service.bookings`, `main-service.insurance`, `main-service.back-jobs`, `main-service.job-orders` | `auth`, `bookings`, `insurance`, `back-jobs`, `job-orders` |
+| `main-service.chatbot` | `domain-worker` | rule-based inquiry routing | `main-service.bookings`, `main-service.insurance` | `bookings`, `insurance` |
 | `main-service.analytics` | `integration-worker` | reporting read models and KPIs | cross-domain | load only when reporting or audit behavior changes |
+| `main-service.accessories` | `integration-worker` | accessory catalog, vehicle fitment, stock reservations, cart, pickup orders, payments/refunds, fulfillment, and outbox | `main-service.auth`, `main-service.users`, `main-service.vehicles`, `main-service.notifications` | `auth`, `users`, `vehicles`, `notifications` |
 
 Reference-first domains:
 - `main-service.users`: baseline identity and profile domain
 - `main-service.auth`: baseline auth, Swagger, and JWT domain
 - use both with [`golden-domain-template.md`](./golden-domain-template.md) when creating a new domain
-
-## E-Commerce Domains
-
-| Domain ID | Owner Role | Primary Responsibility | Direct Dependencies | Load After |
-| --- | --- | --- | --- | --- |
-| `ecommerce.catalog` | `domain-worker` | products and categories | none | none |
-| `ecommerce.inventory` | `domain-worker` | stock counts, reservations, adjustments | `ecommerce.catalog`, `ecommerce.orders` | `catalog`, `orders` |
-| `ecommerce.cart` | `domain-worker` | customer shopping cart lifecycle | `ecommerce.catalog`, `ecommerce.inventory` | `catalog`, `inventory` |
-| `ecommerce.orders` | `domain-worker` | checkout, order records, item snapshots | `ecommerce.cart`, `ecommerce.inventory`, `ecommerce.invoice-payments` | `cart`, `inventory`, `invoice-payments` |
-| `ecommerce.invoice-payments` | `domain-worker` | invoice records and payment tracking | `ecommerce.orders` | `orders` |
-| `ecommerce.commerce-events` | `integration-worker` | outbox, inbox, and downstream events | `ecommerce.orders`, `ecommerce.inventory`, `ecommerce.invoice-payments` | `orders`, `inventory`, `invoice-payments` |
 
 ## Shared Concerns
 
@@ -56,7 +46,7 @@ Reference-first domains:
 - `loyalty`: depends on paid service facts and admin-configured reward or earning-rule policy
 - `notifications`: consumes operational triggers plus auth OTP email delivery requests
 - `analytics`: must stay derived and rebuildable, not transactional
-- `commerce-events`: owns the asynchronous handoff between e-commerce and main-service
+- `accessories`: owns its own catalog, inventory, order, payment, refund, and fulfillment records; it may reference an owned vehicle but must not write service catalog, Job Order, QA, service invoice, or loyalty records
 - SMS remains non-canonical and backlog-only; current reminder and OTP delivery assumptions are email-based
 
 ## Build Order
@@ -72,12 +62,7 @@ Reference-first domains:
 9. `main-service.insurance`
 10. `main-service.quality-gates`
 11. `main-service.vehicle-lifecycle`
-12. `ecommerce.catalog`
-13. `ecommerce.inventory`
-14. `ecommerce.cart`
-15. `ecommerce.orders`
-16. `ecommerce.invoice-payments`
-17. `ecommerce.commerce-events`
-18. `main-service.loyalty`
-19. `main-service.analytics`
-20. `main-service.chatbot`
+12. `main-service.loyalty`
+13. `main-service.analytics`
+14. `main-service.chatbot`
+15. `main-service.accessories`

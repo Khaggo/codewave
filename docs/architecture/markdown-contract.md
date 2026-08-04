@@ -47,7 +47,6 @@ This file defines the canonical Markdown schema for the AUTOCARE backend SSoT.
 - `Interaction Model`
 - `REST and Swagger Contract`
 - `Main-Service REST Surface`
-- `E-Commerce REST Surface`
 - `RabbitMQ Event Contract`
 - `BullMQ Job Contract`
 - `Recommendations and Exclusions`

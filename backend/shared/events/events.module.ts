@@ -2,15 +2,13 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientProxyFactory, Transport } from '@nestjs/microservices';
 
-import { CommerceEventsModule } from './commerce-events.module';
+import { AutocareEventBusService } from './autocare-event-bus.service';
 import { AUTOCARE_EVENTS_CLIENT } from './events.constants';
 
 @Global()
 @Module({
-  imports: [
-    CommerceEventsModule,
-  ],
   providers: [
+    AutocareEventBusService,
     {
       provide: AUTOCARE_EVENTS_CLIENT,
       inject: [ConfigService],
@@ -34,6 +32,6 @@ import { AUTOCARE_EVENTS_CLIENT } from './events.constants';
       },
     },
   ],
-  exports: [AUTOCARE_EVENTS_CLIENT, CommerceEventsModule],
+  exports: [AUTOCARE_EVENTS_CLIENT, AutocareEventBusService],
 })
 export class EventsModule {}

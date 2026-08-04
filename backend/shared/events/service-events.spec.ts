@@ -1,4 +1,3 @@
-import { createCommerceEvent } from './contracts/commerce-events';
 import { createServiceEvent, isServiceEventEnvelope, serviceEventRegistry } from './contracts/service-events';
 import { LoyaltyAccrualPlannerService } from './loyalty-accrual-planner.service';
 import { ServiceEventReactionPlannerService } from './service-event-reaction-planner.service';
@@ -43,7 +42,7 @@ describe('service event and loyalty accrual contracts', () => {
           consumerDomain: 'main-service.loyalty',
           action: 'evaluate_service_accrual',
           reason:
-            'Loyalty evaluates a paid service fact only after the service invoice is settled, never from booking, ecommerce checkout, or invoice finalization alone.',
+            'Loyalty evaluates a paid service fact only after the service invoice is settled, never from booking or invoice finalization alone.',
         },
         {
           consumerDomain: 'main-service.analytics',
@@ -107,29 +106,13 @@ describe('service event and loyalty accrual contracts', () => {
     expect(resolvedDuplicateServicePlan.idempotencyKey).toBe(resolvedServicePlan.idempotencyKey);
   });
 
-  it('accepts service and settled ecommerce payment triggers only', () => {
+  it('accepts only settled service payment triggers', () => {
     const planner = new LoyaltyAccrualPlannerService();
-    const unsupportedOrderEvent = createCommerceEvent('invoice.payment_recorded', {
-      invoiceId: 'invoice-1',
-      orderId: 'order-1',
-      customerUserId: 'customer-1',
-      invoiceNumber: 'INV-2026-0001',
-      paymentEntryId: 'payment-entry-1',
-      amountCents: 109900,
-      paymentMethod: 'cash',
-      receivedAt: '2026-05-14T08:00:00.000Z',
-      invoiceStatus: 'partially_paid',
-      amountPaidCents: 109900,
-      amountDueCents: 10000,
-      currencyCode: 'PHP',
-    });
 
     expect(planner.supportsEventName('service.payment_recorded')).toBe(true);
-    expect(planner.supportsEventName('invoice.payment_recorded')).toBe(true);
     expect(planner.supportsEventName('service.invoice_finalized')).toBe(false);
     expect(planner.supportsEventName('booking.created')).toBe(false);
     expect(planner.supportsEventName('booking.confirmed')).toBe(false);
     expect(planner.supportsEventName('order.created')).toBe(false);
-    expect(planner.parseAndPlan(unsupportedOrderEvent)).toBeNull();
   });
 });

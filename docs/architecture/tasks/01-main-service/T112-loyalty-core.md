@@ -27,7 +27,6 @@ Implement loyalty points and rewards core.
 ## Source of Truth
 
 - `../../domains/main-service/loyalty.md`
-- `../../domains/ecommerce/commerce-events.md`
 
 ## Depends On
 
@@ -57,7 +56,7 @@ Build the loyalty ledger, reward catalog, and earning-rule configuration that co
 
 - points can be earned and redeemed through stable rules
 - a finalized-but-unpaid service does not award loyalty
-- ecommerce events do not feed the loyalty ledger
+- non-service events do not feed the loyalty ledger
 - admins can manage reward and earning-rule lifecycle without rewriting ledger history
 
 ## Out of Scope

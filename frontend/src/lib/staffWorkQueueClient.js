@@ -23,7 +23,9 @@ async function request(path, { accessToken, body, headers, ...options } = {}) {
   if (!response.ok) {
     const message = typeof data?.message === 'string'
       ? data.message
-      : `Request failed with status ${response.status}`
+      : response.status >= 500
+        ? 'The work queue is temporarily unavailable. Retry in a moment.'
+        : 'The work queue request could not be completed. Refresh and try again.'
     throw new ApiError(message, response.status, data)
   }
 

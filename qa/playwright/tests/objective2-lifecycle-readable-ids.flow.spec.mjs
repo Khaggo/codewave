@@ -179,16 +179,16 @@ function assertTimelineOrdering(timelineEvents) {
   expect(outOfOrderPair, 'Lifecycle API should return events in chronological order.').toBeFalsy();
 }
 
-test('Objective 2 vehicle lifecycle unifies service, insurance, summary, and readable-ID proof', async ({
-  browser,
-  request,
-}, testInfo) => {
-  test.setTimeout(360_000);
-  annotateSeverity(
-    testInfo,
-    'critical',
-    'Objective 2 should show a unified customer-safe vehicle lifecycle and avoid raw UUID/hash-like identifiers on critical surfaces.',
-  );
+test.describe.serial('Objective 2 vehicle lifecycle diagnostics', () => {
+  const state = {};
+
+  test('staff workflow creates a completed service record', async ({ browser, request }, testInfo) => {
+    test.setTimeout(240_000);
+    annotateSeverity(
+      testInfo,
+      'critical',
+      'Booking, workshop, QA, finalization, and payment should complete as one bounded staff workflow.',
+    );
 
   await ensureLocalQaRuntime(request, { requireMobile: true });
 
@@ -211,7 +211,6 @@ test('Objective 2 vehicle lifecycle unifies service, insurance, summary, and rea
     color: 'Silver',
     notes: `${runMarker} temporary lifecycle QA vehicle`,
   });
-  const temporaryVehicleLabel = `${temporaryVehicle.year} ${temporaryVehicle.make} ${temporaryVehicle.model}`;
   const { selectedTimeSlot, selectedDay } = await chooseBookingCandidate(request, customerSession, timeSlots, {
     vehicleId: temporaryVehicle.id,
   });
@@ -301,7 +300,10 @@ test('Objective 2 vehicle lifecycle unifies service, insurance, summary, and rea
     const headTechPage = await headTechContext.newPage();
     await loginStaff(headTechPage, qaAccounts.adviser, '/admin/qa-audit');
     await recordQaVerdict(headTechPage, {
-      jobOrderId,
+      jobOrderReference:
+        createdJobOrder.sourceBookingReference ||
+        createdJobOrder.jobOrderReference ||
+        createdBooking.bookingReference,
       scheduledDate: jobOrderWorkDate,
       note: `Adviser QA release approved for ${runMarker}.`,
       testInfo,
@@ -346,9 +348,29 @@ test('Objective 2 vehicle lifecycle unifies service, insurance, summary, and rea
       ),
       contentType: 'application/json',
     });
+
+    Object.assign(state, {
+      adviserSession,
+      bookingId,
+      createdBooking,
+      customerSession,
+      runMarker,
+      temporaryVehicle,
+      vehicleId,
+    });
+  });
+  await customerContext.close();
   });
 
-  let insuranceInquiry = null;
+  test('customer Insurance inquiry is visible to staff', async ({ browser, request }, testInfo) => {
+    test.setTimeout(90_000);
+    annotateSeverity(
+      testInfo,
+      'critical',
+      'A customer Insurance inquiry should remain tied to its vehicle and appear in the staff queue.',
+    );
+    const { adviserSession, customerSession, runMarker, vehicleId } = state;
+    let insuranceInquiry = null;
   await test.step('Customer creates an insurance request for the same vehicle and staff sees it on web', async () => {
     insuranceInquiry = await createInsuranceRequestForVehicle(request, customerSession, vehicleId, runMarker);
     expect(insuranceInquiry?.vehicleId, 'Insurance inquiry should stay tied to the Objective 2 vehicle.').toBe(vehicleId);
@@ -372,7 +394,17 @@ test('Objective 2 vehicle lifecycle unifies service, insurance, summary, and rea
     await sweepVisibleIdentifiers(staffPage, 'Staff Insurance request surface', testInfo);
     await staffContext.close();
   });
+    state.insuranceInquiry = insuranceInquiry;
+  });
 
+  test('customer timeline contract is ordered and complete', async ({ request }, testInfo) => {
+    test.setTimeout(60_000);
+    annotateSeverity(
+      testInfo,
+      'critical',
+      'The lifecycle API should expose ordered, customer-safe service and Insurance history.',
+    );
+    const { bookingId, customerSession, insuranceInquiry, vehicleId } = state;
   await test.step('Objective 2 lifecycle API exposes one ordered vehicle timeline', async () => {
     const timeline = await apiGet(
       request,
@@ -450,14 +482,21 @@ test('Objective 2 vehicle lifecycle unifies service, insurance, summary, and rea
       contentType: 'application/json',
     });
   });
+  });
 
+  test('mobile Garage renders the completed lifecycle', async ({ browser }, testInfo) => {
+    test.setTimeout(90_000);
+    annotateSeverity(
+      testInfo,
+      'critical',
+      'Garage should render the completed service lifecycle without leaking internal identifiers.',
+    );
+    const { temporaryVehicle } = state;
+    const customerContext = await browser.newContext({ viewport: { width: 430, height: 932 } });
+    await proxyMobileApiTraffic(customerContext);
+    const customerPage = await customerContext.newPage();
+    await loginMobileCustomer(customerPage, qaAccounts.customer);
   await test.step('Customer opens Garage/lifecycle on mobile and sees service history plus reviewed summary', async () => {
-    await customerPage.reload({ waitUntil: 'domcontentloaded' }).catch(() => null);
-    const mobileSignInButton = customerPage.getByText('Sign in', { exact: true }).last();
-    if (await mobileSignInButton.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await loginMobileCustomer(customerPage, qaAccounts.customer);
-    }
-
     const garageEntry = customerPage.getByText('Garage', { exact: true }).last();
     await garageEntry.click();
     await expect(customerPage.getByText('Timeline', { exact: true }).first()).toBeVisible();
@@ -507,4 +546,5 @@ test('Objective 2 vehicle lifecycle unifies service, insurance, summary, and rea
   });
 
   await customerContext.close();
+  });
 });

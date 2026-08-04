@@ -55,4 +55,4 @@ Staff web was restarted through a temporary local job during the Playwright run 
 
 Insurance multi-file same-request storage and staff open/download are QA-closed by the final live Playwright rerun.
 
-Loyalty service-payment accrual timing is QA-passed for the service invoice path. Ecommerce paid-order accrual still needs a separate live proof if the panel asks for ecommerce-specific rewards evidence.
+Loyalty service-payment accrual timing is QA-passed for the service invoice path.

@@ -3,10 +3,16 @@ const philippineMobilePattern = /^09\d{9}$/;
 
 export const normalizeEmail = (value) => String(value ?? '').trim().toLowerCase();
 
-export const normalizePhoneNumber = (value) =>
-  String(value ?? '')
-    .replace(/\D/g, '')
-    .slice(0, 11);
+export const normalizePhoneNumber = (value) => {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('63')) {
+    return `0${digits.slice(2)}`;
+  }
+  if (digits.length === 10 && digits.startsWith('9')) {
+    return `0${digits}`;
+  }
+  return digits.slice(0, 11);
+};
 
 export const validateEmail = (value) => {
   const email = normalizeEmail(value);

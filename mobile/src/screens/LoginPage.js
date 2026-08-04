@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import {
   ActivityIndicator,
   Animated,
@@ -17,6 +17,16 @@ import { colors, radius } from '../theme';
 import { normalizeEmail, validateEmail, validateLoginForm } from '../utils/validation';
 import { ApiError } from '../lib/authClient';
 
+const protectedReturnRoutes = new Set([
+  'Menu',
+  'ManageProfile',
+  'ChangePassword',
+  'BookingScreen',
+  'VehicleLifecycleScreen',
+  'InsuranceInquiryScreen',
+  'ChatbotScreen',
+]);
+
 export default function LoginPage({ navigation, route, onLogin }) {
   const [form, setForm] = useState({
     email: '',
@@ -24,6 +34,8 @@ export default function LoginPage({ navigation, route, onLogin }) {
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   const slideIn = useRef(new Animated.Value(12)).current;
@@ -71,6 +83,11 @@ export default function LoginPage({ navigation, route, onLogin }) {
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
+      if (nextErrors.email) {
+        emailRef.current?.focus?.();
+      } else if (nextErrors.password) {
+        passwordRef.current?.focus?.();
+      }
       return;
     }
 
@@ -82,18 +99,30 @@ export default function LoginPage({ navigation, route, onLogin }) {
           password: form.password,
         });
 
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Menu' }],
-        });
+        const requestedRoute = protectedReturnRoutes.has(route.params?.returnTo)
+          ? route.params.returnTo
+          : 'Menu';
+        const routes = requestedRoute === 'Menu'
+          ? [{ name: 'Menu', params: route.params?.returnParams }]
+          : [
+              { name: 'Menu' },
+              { name: requestedRoute, params: route.params?.returnParams },
+            ];
+
+        navigation.reset({ index: routes.length - 1, routes });
       } catch (error) {
+        const message = error instanceof ApiError
+          ? error.status === 401
+            ? 'The email or password is incorrect.'
+            : error.status >= 500
+              ? 'AutoCare is temporarily unavailable. Try again in a moment.'
+              : error.message
+          : 'Unable to sign in right now. Please try again.';
         setErrors({
           email: '',
-          password:
-            error instanceof ApiError
-              ? error.message
-              : 'Unable to sign in right now. Please try again.',
+          password: message,
         });
+        passwordRef.current?.focus?.();
       } finally {
         setSubmitting(false);
       }
@@ -136,8 +165,19 @@ export default function LoginPage({ navigation, route, onLogin }) {
 
         <Text style={styles.title}>Sign in</Text>
 
+        {route.params?.sessionMessage ? (
+          <Text
+            style={styles.sessionMessage}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+          >
+            {route.params.sessionMessage}
+          </Text>
+        ) : null}
+
         <View style={styles.form}>
           <FormField
+            ref={emailRef}
             label=""
             value={form.email}
             onChangeText={(value) => handleFieldChange('email', value)}
@@ -159,9 +199,13 @@ export default function LoginPage({ navigation, route, onLogin }) {
             autoComplete="off"
             importantForAutofill="no"
             icon="email-outline"
+            nativeID="customer-login-email"
+            name="email"
+            accessibilityLabel="Email"
           />
 
           <PasswordField
+            ref={passwordRef}
             label=""
             value={form.password}
             onChangeText={(value) => handleFieldChange('password', value)}
@@ -170,6 +214,9 @@ export default function LoginPage({ navigation, route, onLogin }) {
             textContentType="password"
             autoComplete="off"
             importantForAutofill="no"
+            nativeID="customer-login-password"
+            name="password"
+            accessibilityLabel="Password"
           />
 
           <TouchableOpacity
@@ -177,6 +224,9 @@ export default function LoginPage({ navigation, route, onLogin }) {
             onPress={() => navigation.replace('ForgotPasswordEmail')}
             disabled={submitting}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Forgot password"
+            accessibilityState={{ disabled: submitting }}
           >
             <Text style={styles.forgotPasswordText}>Forgot password?</Text>
           </TouchableOpacity>
@@ -186,6 +236,9 @@ export default function LoginPage({ navigation, route, onLogin }) {
             onPress={handleLogin}
             activeOpacity={0.9}
             disabled={submitting}
+            accessibilityRole="button"
+            accessibilityLabel={submitting ? 'Signing in' : 'Sign in'}
+            accessibilityState={{ disabled: submitting, busy: submitting }}
           >
             {submitting ? (
               <ActivityIndicator size="small" color={colors.onPrimary} />
@@ -197,13 +250,15 @@ export default function LoginPage({ navigation, route, onLogin }) {
       </Animated.View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Don't have an account? </Text>
-        <Text
-          style={styles.footerLink}
+        <Text style={styles.footerText}>Don't have an account?</Text>
+        <TouchableOpacity
+          style={styles.footerLinkTarget}
           onPress={() => navigation.replace('Register')}
+          accessibilityRole="link"
+          accessibilityLabel="Sign up"
         >
-          Sign up
-        </Text>
+          <Text style={styles.footerLink}>Sign up</Text>
+        </TouchableOpacity>
       </View>
     </ScreenShell>
   );
@@ -222,8 +277,8 @@ const styles = StyleSheet.create({
     height: 44,
   },
   backButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -237,6 +292,12 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     alignSelf: 'center',
+  },
+  sessionMessage: {
+    marginTop: 12,
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 20,
   },
   brandRow: {
     flexDirection: 'row',
@@ -282,7 +343,9 @@ const styles = StyleSheet.create({
   forgotPasswordLink: {
     alignSelf: 'flex-end',
     marginTop: 4,
-    marginBottom: 24,
+    marginBottom: 14,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   forgotPasswordText: {
     color: colors.text,
@@ -321,6 +384,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 12,
+  },
+  footerLinkTarget: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
   },
   footerText: {
     color: colors.mutedText,

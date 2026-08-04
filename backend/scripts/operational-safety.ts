@@ -54,6 +54,36 @@ export function isProductionLikeDatabase(databaseUrl: string | undefined) {
   }
 }
 
+export function normalizeSpawnEnvironment(
+  environment: NodeJS.ProcessEnv = process.env,
+  platform = process.platform,
+) {
+  if (platform !== 'win32') {
+    return { ...environment };
+  }
+
+  const normalized: NodeJS.ProcessEnv = {};
+  const keysByLowercaseName = new Map<string, string>();
+
+  for (const [key, value] of Object.entries(environment)) {
+    if (value === undefined) continue;
+    const lowerKey = key.toLowerCase();
+    const existingKey = keysByLowercaseName.get(lowerKey);
+    if (!existingKey) {
+      const canonicalKey = lowerKey === 'path' ? 'Path' : key;
+      keysByLowercaseName.set(lowerKey, canonicalKey);
+      normalized[canonicalKey] = value;
+      continue;
+    }
+
+    if (key === 'Path' || existingKey !== 'Path') {
+      normalized[existingKey] = value;
+    }
+  }
+
+  return normalized;
+}
+
 export function assertOperationalSafety({
   command,
   args,

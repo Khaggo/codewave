@@ -431,22 +431,23 @@ test('status state keeps completed renewal out of the active blocker model', () 
   )
 })
 
-test('status state keeps the empty default case on the current request fallback', () => {
+test('status state keeps first-run document defaults out of active tracking', () => {
   assert.deepEqual(
     buildCustomerInsuranceStatusState({
       latestInquiry: null,
-      missingRequiredDocuments: [],
+      missingRequiredDocuments: [
+        { type: 'or_cr', label: 'OR/CR' },
+      ],
       latestUpdateLabel: '--',
     }),
     {
-      title: 'Current request status',
-      summary: 'Review the latest customer-safe update and next step.',
-      ctaLabel: 'Review status',
-      ctaRouteKey: 'status',
-      latestUpdateLabel: '--',
+      title: 'No request submitted',
+      summary: 'Start an insurance request before document and status tracking begins.',
+      ctaLabel: 'Start request',
+      ctaRouteKey: 'request',
+      latestUpdateLabel: 'No insurance request is active for this vehicle.',
       timeline: [
-        { key: 'request', label: 'Request submitted', active: true },
-        { key: 'documents', label: 'Documents complete', active: true },
+        { key: 'request', label: 'Start insurance request', active: true },
       ],
     },
   )
@@ -854,6 +855,7 @@ test('createPickedInsuranceDocumentDraft maps a selected asset into upload-ready
       mimeType: 'image/jpeg',
       notes: '',
       fileSizeLabel: '240 KB',
+      webFile: null,
     },
   )
 })
@@ -1097,8 +1099,8 @@ test('uploadInsuranceInquiryDocumentFile posts multipart form data without forci
       this.fields = []
     }
 
-    append(key, value) {
-      this.fields.push([key, value])
+    append(key, value, fileName) {
+      this.fields.push(fileName ? [key, value, fileName] : [key, value])
     }
   }
 

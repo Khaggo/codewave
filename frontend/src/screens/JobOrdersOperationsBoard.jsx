@@ -19,6 +19,7 @@ import PortalLink from '@/components/PortalLink'
 import PageHeader from '@/components/ui/PageHeader'
 import { claimStaffWork, listStaffWorkPresence } from '@/lib/staffWorkQueueClient'
 import { useUser } from '@/lib/userContext'
+import { WORKSPACE_INFORMATION_ARCHITECTURE } from './workspaceInformationArchitecture.mjs'
 
 function formatDateTime(value) {
   if (!value) return 'Not available'
@@ -113,7 +114,7 @@ export default function JobOrdersOperationsBoard() {
       <PageHeader
         eyebrow="Workshop Operations"
         title="Job Orders"
-        description="Claim work, monitor the workshop queue, and open one focused job workspace."
+        description={WORKSPACE_INFORMATION_ARCHITECTURE.jobOrders.description}
         meta={(
           <>
             <span className="badge badge-green">{activeStaff} accepting work</span>
@@ -131,7 +132,7 @@ export default function JobOrdersOperationsBoard() {
       <StaffWorkQueue
         queueType="job_order"
         accessToken={user?.accessToken}
-        title="Workshop queue"
+        title={WORKSPACE_INFORMATION_ARCHITECTURE.jobOrders.sections.queue}
         description="Resume assigned work or claim the next workshop record."
         onSelectWork={setSelectedItem}
         onOpenWork={openWork}

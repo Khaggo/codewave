@@ -18,7 +18,11 @@ async function isReachable(url) {
 }
 
 export default async function globalSetup() {
-  if (process.env.QA_MOBILE_BASE_URL || !fs.existsSync(staticMobileExportIndex)) {
+  if (
+    process.env.QA_MOBILE_BASE_URL ||
+    process.env.QA_USE_STATIC_MOBILE_EXPORT !== 'true' ||
+    !fs.existsSync(staticMobileExportIndex)
+  ) {
     return undefined;
   }
 

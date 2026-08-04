@@ -1,86 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Platform,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import OtpInputGroup from '../components/OtpInputGroup';
 import ScreenShell from '../components/ScreenShell';
-import { colors, radius } from '../theme';
-import { ApiError } from '../lib/authClient';
-
-const RESEND_SECONDS = 17;
-
-const getScreenCopy = (otpPurpose) => {
-  if (otpPurpose === 'passwordChange') {
-    return {
-      title: 'Verify Your Email',
-      icon: 'shield-check-outline',
-      codeLabel: 'Enter 6-digit code',
-      buttonLabel: 'Verify & Change Password',
-      buttonIcon: 'shield-check-outline',
-      successToast: 'Password updated successfully.',
-      successTitle: 'Password Updated',
-      successMessage: 'Your new password has been verified and saved.',
-    };
-  }
-
-  if (otpPurpose === 'register') {
-    return {
-      title: 'Verify Your Email',
-      icon: 'email-outline',
-      codeLabel: 'Enter 6-digit code',
-      buttonLabel: 'Verify & Create Account',
-      buttonIcon: 'account-check-outline',
-      successToast: 'Registration verified successfully.',
-      successTitle: 'Registration Verified',
-      successMessage: 'Your verification code was accepted.',
-    };
-  }
-
-  if (otpPurpose === 'deleteAccount') {
-    return {
-      title: 'Confirm Account Deletion',
-      icon: 'shield-alert-outline',
-      codeLabel: 'Enter 6-digit code',
-      buttonLabel: 'Verify & Delete Account',
-      buttonIcon: 'delete-outline',
-      successToast: 'Account deletion verified.',
-      successTitle: 'Account Deleted',
-      successMessage: 'Your account has been archived and the same email can be used again later.',
-    };
-  }
-
-  return {
-    title: 'Verify Your Email',
-    icon: 'email-outline',
-    codeLabel: 'Enter 6-digit code',
-    buttonLabel: 'Verify & Sign In',
-    buttonIcon: 'login',
-    successToast: 'Login verified successfully.',
-    successTitle: 'Login Successful',
-    successMessage: 'OTP verified. Welcome back to your AutoCare account.',
-  };
-};
+import { colors } from '../theme';
+import {
+  executeOtpVerification,
+  getOtpScreenCopy,
+  OTP_RESEND_SECONDS,
+} from './otpScreenModel.mjs';
+import styles from './otpScreenStyles';
 
 export default function OTPScreen({ navigation, route, onVerified, onVerifyRegistrationOtp, onResend }) {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
-  const [resendCountdown, setResendCountdown] = useState(RESEND_SECONDS);
+  const [resendCountdown, setResendCountdown] = useState(OTP_RESEND_SECONDS);
   const [submitting, setSubmitting] = useState(false);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTranslateY = useRef(new Animated.Value(-8)).current;
   const navigationTimeoutRef = useRef(null);
   const otpPurpose = route.params?.otpPurpose || 'login';
-  const screenCopy = getScreenCopy(otpPurpose);
+  const screenCopy = getOtpScreenCopy(otpPurpose);
   const verificationTarget = route.params?.maskedEmail || route.params?.email || 'your email address';
 
   useEffect(() => {
@@ -170,11 +120,17 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
       const submitVerification = async () => {
         setSubmitting(true);
         try {
-          const verificationResult = await onVerifyRegistrationOtp({
-            enrollmentId: route.params?.enrollmentId,
+          const execution = await executeOtpVerification({
             otp,
-            accountDraft: route.params?.accountDraft,
+            otpPurpose,
+            routeParams: route.params,
+            verifyOtp: onVerified,
+            verifyRegistrationOtp: onVerifyRegistrationOtp,
           });
+          if (!execution.ok) {
+            throw new Error(execution.message);
+          }
+          const verificationResult = execution.result;
 
           showInlineToast(screenCopy.successToast, 'success');
 
@@ -206,7 +162,7 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
           ]);
         } catch (verificationError) {
           const message =
-            verificationError instanceof ApiError
+            verificationError instanceof Error
               ? verificationError.message
               : 'Unable to verify your registration code right now.';
 
@@ -225,10 +181,20 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
     const submitVerification = async () => {
       setSubmitting(true);
       try {
-        const verificationResult = (await onVerified?.({
-          ...route.params,
+        const execution = await executeOtpVerification({
           otp,
-        })) || { status: 'success' };
+          otpPurpose,
+          routeParams: route.params,
+          verifyOtp: onVerified,
+          verifyRegistrationOtp: onVerifyRegistrationOtp,
+        });
+        if (!execution.ok) {
+          setError(execution.message);
+          showInlineToast(execution.message);
+          Alert.alert('Verification Failed', execution.message);
+          return;
+        }
+        const verificationResult = execution.result;
 
         if (verificationResult.status === 'error') {
           setError(verificationResult.message || 'OTP verification failed.');
@@ -265,6 +231,14 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
             onPress: () => navigateAfterVerification(verificationResult),
           },
         ]);
+      } catch (verificationError) {
+        const message =
+          verificationError instanceof Error
+            ? verificationError.message
+            : 'Unable to complete OTP verification right now.';
+        setError(message);
+        showInlineToast(message);
+        Alert.alert('Verification Failed', message);
       } finally {
         setSubmitting(false);
       }
@@ -298,7 +272,7 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
 
         setOtp('');
         setError('');
-        setResendCountdown(RESEND_SECONDS);
+        setResendCountdown(OTP_RESEND_SECONDS);
         showInlineToast('A fresh verification code was sent.', 'success');
       } catch (resendError) {
         const message =
@@ -408,175 +382,3 @@ export default function OTPScreen({ navigation, route, onVerified, onVerifyRegis
     </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: 32,
-  },
-  page: {
-    width: '100%',
-    maxWidth: 520,
-    alignSelf: 'center',
-    paddingTop: 18,
-    paddingBottom: 24,
-  },
-  backLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-  },
-  backLinkText: {
-    color: colors.mutedText,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 22,
-  },
-  headerIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primaryGlow,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  title: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.borderSoft,
-    marginBottom: 18,
-  },
-  toastBanner: {
-    marginHorizontal: 24,
-    marginBottom: 14,
-    borderRadius: radius.medium,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  toastBannerError: {
-    backgroundColor: colors.dangerSoft,
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  toastBannerSuccess: {
-    backgroundColor: colors.successSoft,
-    borderWidth: 1,
-    borderColor: colors.success,
-  },
-  toastText: {
-    color: colors.danger,
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  toastTextSuccess: {
-    color: colors.success,
-  },
-  messageCard: {
-    marginHorizontal: 24,
-    marginTop: 14,
-    marginBottom: 28,
-    backgroundColor: colors.surfaceStrong,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    alignItems: 'center',
-  },
-  messageTitle: {
-    color: colors.labelText,
-    fontSize: 14,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  messageStrong: {
-    color: colors.text,
-    fontWeight: '800',
-  },
-  emailText: {
-    color: colors.primary,
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 22,
-    textAlign: 'center',
-    marginTop: 6,
-  },
-  messageSubtitle: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  codeLabel: {
-    color: colors.labelText,
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 2.2,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    marginBottom: 22,
-  },
-  primaryButton: {
-    marginHorizontal: 24,
-    marginTop: 8,
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    minHeight: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryButtonDisabled: {
-    opacity: 0.7,
-  },
-  primaryButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  primaryButtonText: {
-    color: colors.onPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  resendRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  resendHint: {
-    color: colors.mutedText,
-    fontSize: 15,
-  },
-  resendCountdown: {
-    color: colors.labelText,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  resendAction: {
-    color: colors.primary,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-});

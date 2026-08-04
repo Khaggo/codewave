@@ -10,12 +10,17 @@
     "start:mcp": "node scripts/start-mcp.js",
     "start:lan:mcp": "node scripts/start-mcp.js --lan",
     "start:tunnel:mcp": "node scripts/start-mcp.js --tunnel",
+    "storybook:generate": "sb-rn-get-stories --config-path .rnstorybook --use-js",
+    "storybook": "expo start --lan --clear --port 8085",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"
   },
   "devDependencies": {
-    "expo-mcp": "~0.2.1"
+    "@storybook/addon-ondevice-actions": "10.5.4",
+    "@storybook/react-native": "10.4.0",
+    "expo-mcp": "~0.2.1",
+    "storybook": "10.5.5"
   },
   "dependencies": {
     "@codewave/domain-utils": "0.1.0",
@@ -30,9 +35,12 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "@gorhom/bottom-sheet": "5.2.14",
     "react-native-gesture-handler": "~2.28.0",
+    "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.16.0",
+    "react-native-worklets": "0.5.1",
     "react-native-web": "^0.21.0"
   },
   "overrides": {

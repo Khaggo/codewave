@@ -9,6 +9,14 @@ const violations = [];
 const normalize = (value) => value.split(path.sep).join('/');
 const lineCount = (filePath) => readFileSync(filePath, 'utf8').split(/\r?\n/).length;
 
+for (const relative of Object.keys(baseline.grandfathered)) {
+  if (!existsSync(path.join(root, relative))) {
+    violations.push(
+      `${relative}: stale grandfathered entry; remove it from tools/quality-baseline.json`,
+    );
+  }
+}
+
 const visit = (directory) => {
   for (const entry of readdirSync(directory)) {
     const entryPath = path.join(directory, entry);
@@ -35,6 +43,11 @@ const visit = (directory) => {
 
     const lines = lineCount(entryPath);
     const configured = baseline.grandfathered[relative];
+    if (configured && lines < configured.maxLines) {
+      violations.push(
+        `${relative}: ${lines} lines (ratchet max ${configured.maxLines}); lower maxLines to ${lines}`,
+      );
+    }
     const limit =
       configured?.maxLines ??
       (/\.spec\.|\.test\./.test(entry)

@@ -67,19 +67,16 @@ Identified mobile clients include:
 
 - `authClient`
 - `bookingDiscoveryClient`
-- `catalogClient`
 - `chatbotClient`
 - `digitalGarageClient`
-- `ecommerceCheckoutClient`
 - `insuranceClient`
 - `jobOrdersClient`
 - `loyaltyClient`
 - `notificationClient`
 - `vehicleLifecycleClient`
 - `mobileSessionAccess`
-- `invoiceCheckoutModel`
 
-The mobile app consumes customer views of bookings, garage/vehicle lifecycle, Job Order history/status, invoices/orders, loyalty, insurance, catalog/checkout, chatbot, and notifications. It must not reuse staff claim or QA mutation contracts.
+The mobile app consumes customer views of bookings, garage and vehicle lifecycle, Job Order status, service invoices, loyalty, insurance, chatbot, and notifications. It must not reuse staff claim or QA mutation contracts.
 
 ## Session and Local Storage
 
@@ -168,7 +165,6 @@ Keep current routes while extracting:
 | `features/notifications` | Inbox, unread state, deep-link routing. |
 | `features/profile` | Profile, password, preferences, logout. |
 | `features/insurance` | Inquiry draft, submission, status/history. |
-| `features/store` | Catalog, cart, checkout orchestration. |
 
 `Dashboard.js` should become tab navigation plus shallow orchestration. `App.js` should become providers, session gate, and route configuration.
 

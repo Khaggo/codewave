@@ -39,5 +39,5 @@
 ## Notes
 
 - Finalize uses the authenticated adviser or super-admin actor; no request-body user id should be sent.
-- The generated record is invoice-ready only. Payment tracking remains owned by the later ecommerce invoice-payment slices.
+- The generated record is invoice-ready and payment tracking remains owned by the Job Order service-invoice workflow.
 - Adviser identity and adviser code must remain visible in the generated invoice-ready record for auditability.

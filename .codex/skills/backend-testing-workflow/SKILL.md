@@ -69,9 +69,8 @@ Invoke-WebRequest -Uri 'http://127.0.0.1:3000/api/health' -UseBasicParsing
 ## Repo Hotspots
 
 - Main service modules: `backend/apps/main-service/src/modules/**`
-- Ecommerce service modules: `backend/apps/ecommerce-service/src/modules/**`
 - Shared contracts/events: `backend/shared/events/**`
-- Test files: `backend/apps/main-service/test/**`, `backend/apps/ecommerce-service/test/**`, `backend/shared/events/*.spec.ts`
+- Test files: `backend/apps/main-service/test/**`, `backend/shared/events/*.spec.ts`
 
 ## What to Protect
 
@@ -87,4 +86,3 @@ Invoke-WebRequest -Uri 'http://127.0.0.1:3000/api/health' -UseBasicParsing
 - `db:push` changes more than expected after a small contract edit.
 - A repository or service returns a stale row after an update.
 - An endpoint shape changes without a matching frontend/mobile caller update.
-

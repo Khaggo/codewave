@@ -1,16 +1,14 @@
 import { formatDate } from '../utils/validation';
 import {
+  createEmptyCustomerVehicleLifecycleSnapshot,
+  customerTimelineFilters,
+} from './customerVehicleLifecycleState.mjs';
+import {
   buildAuthHeaders as transportBuildAuthHeaders,
   request as transportRequest,
 } from './vehicleLifecycleTransport';
 
-const customerTimelineFilters = [
-  { label: 'All', sourceType: null },
-  { label: 'Bookings', sourceType: 'booking' },
-  { label: 'Workshop', sourceType: 'job_order' },
-  { label: 'Insurance', sourceType: 'insurance' },
-  { label: 'Summary', sourceType: 'lifecycle_summary' },
-];
+export { createEmptyCustomerVehicleLifecycleSnapshot } from './customerVehicleLifecycleState.mjs';
 
 const buildAuthHeaders = transportBuildAuthHeaders;
 
@@ -272,26 +270,6 @@ export const buildCustomerLifecycleSummaryCard = ({
     source: 'hidden',
   };
 };
-
-export const createEmptyCustomerVehicleLifecycleSnapshot = () => ({
-  timelineState: 'timeline_empty',
-  events: [],
-  stats: {
-    totalEvents: 0,
-    verifiedEvents: 0,
-    administrativeEvents: 0,
-  },
-  filters: customerTimelineFilters,
-  page: {
-    limit: 20,
-    hasNext: false,
-    nextCursor: null,
-  },
-  summaryCard: buildCustomerLifecycleSummaryCard({
-    summary: null,
-    timelineEvents: [],
-  }),
-});
 
 export const listVehicleTimeline = async ({ vehicleId, accessToken }) => {
   if (!vehicleId) {

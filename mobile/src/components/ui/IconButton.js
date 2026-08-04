@@ -1,10 +1,10 @@
-import { Pressable, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
+import Feather from '@expo/vector-icons/Feather';
 import { useTheme } from '../../theme';
 
 const sizeMap = {
-  sm: { box: 32, icon: 16 },
-  md: { box: 40, icon: 18 },
+  sm: { box: 44, icon: 16 },
+  md: { box: 44, icon: 18 },
   lg: { box: 48, icon: 22 },
 };
 
@@ -14,8 +14,11 @@ export default function IconButton({
   variant = 'ghost',
   size = 'md',
   disabled = false,
+  loading = false,
   accessibilityLabel,
+  accessibilityHint,
   style,
+  testID,
 }) {
   const { colors, radius } = useTheme();
   const dim = sizeMap[size] ?? sizeMap.md;
@@ -36,10 +39,13 @@ export default function IconButton({
 
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      onPress={disabled ? undefined : onPress}
-      disabled={disabled}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
+      onPress={disabled || loading ? undefined : onPress}
+      disabled={disabled || loading}
       style={({ pressed }) => [
         styles.base,
         {
@@ -53,7 +59,11 @@ export default function IconButton({
         style,
       ]}
     >
-      <Feather name={icon} size={dim.icon} color={fg} />
+      {loading ? (
+        <ActivityIndicator size="small" color={fg} />
+      ) : (
+        <Feather name={icon} size={dim.icon} color={fg} />
+      )}
     </Pressable>
   );
 }

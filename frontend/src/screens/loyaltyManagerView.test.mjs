@@ -13,11 +13,12 @@ test('filterLoyaltyRewards matches reward name, type, and status labels', () => 
   assert.deepEqual(filterLoyaltyRewards(rewards, 'active'), rewards)
 })
 
-test('filterLoyaltyRules matches rule name, source label, and formula label', () => {
+test('filterLoyaltyRules matches service rule name, source label, and formula label', () => {
   const rules = [
     { name: 'Service Points', sourceLabel: 'Service', formulaLabel: 'Amount Ratio' },
-    { name: 'Shop Bonus', sourceLabel: 'E-commerce', formulaLabel: 'Flat Points' },
   ]
 
-  assert.deepEqual(filterLoyaltyRules(rules, 'flat'), [rules[1]])
+  assert.deepEqual(filterLoyaltyRules(rules, 'service'), rules)
+  assert.deepEqual(filterLoyaltyRules(rules, 'ratio'), rules)
+  assert.deepEqual(filterLoyaltyRules(rules, 'flat'), [])
 })

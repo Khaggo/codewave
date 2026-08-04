@@ -1,9 +1,9 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { useTheme } from '../../theme';
 
 const sizeMap = {
-  sm: { minHeight: 36, paddingHorizontal: 14, fontSize: 13, iconSize: 16, gap: 6 },
+  sm: { minHeight: 44, paddingHorizontal: 14, fontSize: 13, iconSize: 16, gap: 6 },
   md: { minHeight: 44, paddingHorizontal: 18, fontSize: 14, iconSize: 18, gap: 8 },
   lg: { minHeight: 52, paddingHorizontal: 22, fontSize: 15, iconSize: 20, gap: 10 },
 };
@@ -21,6 +21,8 @@ export default function Button({
   style,
   textStyle,
   testID,
+  accessibilityLabel,
+  accessibilityHint,
 }) {
   const { colors, radius, type } = useTheme();
   const dim = sizeMap[size] ?? sizeMap.md;
@@ -52,6 +54,10 @@ export default function Button({
   return (
     <Pressable
       testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: loading || disabled, busy: loading }}
       onPress={loading || disabled ? undefined : onPress}
       disabled={loading || disabled}
       style={({ pressed }) => [
@@ -81,7 +87,6 @@ export default function Button({
                 variant === 'link' && styles.linkText,
                 textStyle,
               ]}
-              numberOfLines={1}
             >
               {label}
             </Text>
@@ -103,6 +108,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 1,
   },
   linkText: {
     textDecorationLine: 'underline',

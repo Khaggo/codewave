@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation'
 import { ArrowRight, Bell, ChevronDown, ClipboardList, LogOut, Menu, Search, X } from 'lucide-react'
 import PortalLink from '@/components/PortalLink'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
-import { isEcommerceEnabled } from '@/lib/runtimeFlags'
 import { getShellRouteMeta } from './layoutShellView.mjs'
 
 const SEARCH_DESTINATIONS = [
@@ -15,17 +14,17 @@ const SEARCH_DESTINATIONS = [
   { label: 'Job Orders', sub: 'My Work, team queue, service progress, and QA handoff', href: '/admin/job-orders' },
   { label: 'Intake Inspections', sub: 'Vehicle-scoped inspection capture and history', href: '/admin/intake-inspections' },
   { label: 'QA Audit', sub: 'Load quality gates and record super-admin overrides', href: '/admin/qa-audit' },
-  { label: 'Invoice & Orders', sub: 'Known job-order invoices and ecommerce order lookup', href: '/admin/invoices' },
+  { label: 'Service Invoices', sub: 'Finalized job-order invoices and payment status', href: '/admin/invoices' },
+  { label: 'Accessory Orders', sub: 'Pickup preparation, collection, cancellations, and refunds', href: '/admin/accessories/orders' },
+  { label: 'Accessory Catalog', sub: 'Products, variants, fitment, lighting review, media, and publication', href: '/admin/accessories/catalog' },
+  { label: 'Accessory Stock', sub: 'Inventory balances and audited stock adjustments', href: '/admin/accessories/stock' },
   { label: 'User Administration', sub: 'Create staff, mechanics, technicians, and admin accounts', href: '/admin/users' },
   { label: 'Service Management', sub: 'Manage booking service categories and customer-bookable services', href: '/admin/services' },
-  { label: 'Catalog Administration', sub: 'Manage ecommerce catalog visibility', href: '/admin/catalog' },
-  { label: 'Inventory', sub: 'Stock visibility and inventory alerts', href: '/admin/inventory' },
   { label: 'Analytics', sub: 'Operational summaries and dashboard metrics', href: '/admin/summaries' },
   { label: 'Settings', sub: 'Session and portal preferences', href: '/settings' },
 ]
 
 function GlobalSearch() {
-  const ecommerceEnabled = isEcommerceEnabled()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
@@ -41,21 +40,13 @@ function GlobalSearch() {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const destinations = useMemo(
-    () =>
-      SEARCH_DESTINATIONS.filter((destination) =>
-        ecommerceEnabled ? true : !['/admin/catalog', '/admin/inventory'].includes(destination.href),
-      ),
-    [ecommerceEnabled],
-  )
-
   const results = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     if (!normalizedQuery) {
       return []
     }
 
-    return destinations
+    return SEARCH_DESTINATIONS
       .filter((destination) =>
         [destination.label, destination.sub, destination.href]
           .join(' ')
@@ -63,7 +54,7 @@ function GlobalSearch() {
           .includes(normalizedQuery),
       )
       .slice(0, 8)
-  }, [destinations, query])
+  }, [query])
 
   function handleNavigate() {
     setOpen(false)

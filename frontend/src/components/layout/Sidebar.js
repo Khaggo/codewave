@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   CalendarCheck,
   ShieldCheck,
-  ShoppingBag,
   Award,
   ChevronLeft,
   ChevronRight,
@@ -16,10 +15,12 @@ import {
   Users,
   ClipboardCheck,
   ClipboardList,
-  Boxes,
   FileSearch,
   ReceiptText,
   CarFront,
+  PackageSearch,
+  PackageCheck,
+  Boxes,
 } from 'lucide-react'
 
 import { useUser } from '@/lib/userContext'
@@ -28,9 +29,9 @@ import {
   getStaffPortalNavigationForRole,
   isStaffPortalRole,
 } from '@/lib/api/generated/auth/staff-web-session'
-import { isEcommerceEnabled } from '@/lib/runtimeFlags'
+import { orderStaffPortalNavigationEntries } from './staffPortalNavigationModel.mjs'
 
-const GROUP_ORDER = ['Overview', 'Front Desk Flow', 'Customer Records', 'Catalog & Stock', 'Admin']
+const GROUP_ORDER = ['Overview', 'Front Desk Flow', 'Customer Records', 'Admin']
 
 const ICON_BY_PATH = {
   '/': LayoutDashboard,
@@ -40,14 +41,14 @@ const ICON_BY_PATH = {
   '/admin/job-orders': ClipboardList,
   '/admin/qa-audit': ClipboardCheck,
   '/admin/invoices': ReceiptText,
+  '/admin/accessories/orders': PackageCheck,
+  '/admin/accessories/catalog': PackageSearch,
+  '/admin/accessories/stock': Boxes,
   '/admin/customers': Users,
   '/backjobs': Wrench,
   '/insurance': ShieldCheck,
   '/loyalty': Award,
-  '/shop': ShoppingBag,
   '/admin/services': Wrench,
-  '/admin/catalog': Boxes,
-  '/admin/inventory': ShoppingBag,
   '/admin/users': Users,
   '/admin/summaries': BarChart3,
   '/settings': Cog,
@@ -58,7 +59,10 @@ const LABEL_BY_KEY = {
   'digital-intake-inspections': 'Intake Inspection',
   'job-orders-admin': 'Job Orders',
   'qa-audit': 'QA Audit',
-  'invoice-order-management': 'Invoices & Orders',
+  'invoice-order-management': 'Service Invoices',
+  'accessory-orders': 'Accessory Orders',
+  'accessory-catalog': 'Accessory Catalog',
+  'accessory-stock': 'Accessory Stock',
   'summary-review': 'Analytics & Summaries',
   'user-admin': 'Staff Accounts',
 }
@@ -66,15 +70,13 @@ const LABEL_BY_KEY = {
 export default function Sidebar({ collapsed, onToggle, jobWorkCount = 0 }) {
   const pathname = usePathname()
   const user = useUser()
-  const ecommerceEnabled = isEcommerceEnabled()
   const visiblePaths = new Set(
     getStaffPortalNavigationForRole(user?.role).map((entry) => entry.href),
   )
-  const ecommerceBlockedPaths = new Set(['/admin/catalog', '/admin/inventory'])
 
   const visibleEntries = isStaffPortalRole(user?.role)
-    ? staffPortalNavigationRules.filter(
-        (entry) => visiblePaths.has(entry.href) && (ecommerceEnabled || !ecommerceBlockedPaths.has(entry.href)),
+    ? orderStaffPortalNavigationEntries(
+        staffPortalNavigationRules.filter((entry) => visiblePaths.has(entry.href)),
       )
     : []
 

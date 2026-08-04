@@ -16,7 +16,7 @@
 
 ## After Deploy
 
-- Main API, ecommerce API, staff web, and customer mobile API discovery are healthy.
+- Main API, staff web, and customer mobile API discovery are healthy.
 - Login, Booking to Job Order, QA, Finalization, Payment, and notification smoke flows pass.
 - Logs show no new authorization, migration, contract, or unhandled request errors.
 - Rollback owner and deployment identifier are recorded in the release note.

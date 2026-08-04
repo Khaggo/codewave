@@ -37,7 +37,6 @@ export type CustomerMobilePublicScreen =
   | 'ResetPassword'
   | 'BookingScreen'
   | 'VehicleLifecycleScreen'
-  | 'StoreScreen'
   | 'ChatbotScreen';
 
 export type CustomerMobileScreen =
@@ -101,7 +100,6 @@ export const customerMobilePublicScreens: CustomerMobilePublicScreen[] = [
   'ResetPassword',
   'BookingScreen',
   'VehicleLifecycleScreen',
-  'StoreScreen',
   'ChatbotScreen',
 ];
 

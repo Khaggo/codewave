@@ -51,7 +51,7 @@ Customer-mobile loyalty balance, transaction history, reward catalog visibility,
 
 - gives customers one place to understand their current loyalty balance and reward eligibility
 - makes redemptions predictable because the mobile surface reflects server-owned reward availability and insufficient-points outcomes
-- reduces support confusion by labeling loyalty history as a ledger instead of mixing it with bookings, ecommerce orders, or invoice truth
+- reduces support confusion by labeling loyalty history as a service-earned ledger instead of mixing it with bookings or invoice truth
 - preserves trust by showing legacy drift honestly when older loyalty rows still exist
 
 ## Login, Registration, And Booking Integration Points

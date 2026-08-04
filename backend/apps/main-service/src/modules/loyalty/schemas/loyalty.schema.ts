@@ -13,11 +13,9 @@ export const loyaltyTransactionTypeEnum = pgEnum('loyalty_transaction_type', [
 export const loyaltySourceTypeEnum = pgEnum('loyalty_source_type', [
   'service_payment',
   'service_invoice',
-  'purchase_payment',
   'reward_redemption',
   'manual_adjustment',
   'service_reversal',
-  'purchase_reversal',
 ]);
 
 export const rewardTypeEnum = pgEnum('reward_type', ['service_voucher', 'discount_coupon']);
@@ -29,11 +27,7 @@ export const earningRuleFormulaTypeEnum = pgEnum('earning_rule_formula_type', [
   'amount_ratio',
 ]);
 
-export const earningRuleAccrualSourceEnum = pgEnum('earning_rule_accrual_source', [
-  'service',
-  'ecommerce',
-  'both',
-]);
+export const earningRuleAccrualSourceEnum = pgEnum('earning_rule_accrual_source', ['service']);
 
 export const earningRuleStatusEnum = pgEnum('earning_rule_status', ['active', 'inactive']);
 
@@ -83,8 +77,6 @@ export type LoyaltyEarningRuleSnapshot = {
   minimumAmountCents: number | null;
   eligibleServiceTypes: string[];
   eligibleServiceCategories: string[];
-  eligibleProductIds: string[];
-  eligibleProductCategoryIds: string[];
   promoLabel: string | null;
   manualBenefitNote: string | null;
   activeFrom: string | null;
@@ -135,11 +127,6 @@ export const loyaltyEarningRules = pgTable('loyalty_earning_rules', {
   minimumAmountCents: integer('minimum_amount_cents'),
   eligibleServiceTypes: jsonb('eligible_service_types').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   eligibleServiceCategories: jsonb('eligible_service_categories')
-    .$type<string[]>()
-    .notNull()
-    .default(sql`'[]'::jsonb`),
-  eligibleProductIds: jsonb('eligible_product_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-  eligibleProductCategoryIds: jsonb('eligible_product_category_ids')
     .$type<string[]>()
     .notNull()
     .default(sql`'[]'::jsonb`),

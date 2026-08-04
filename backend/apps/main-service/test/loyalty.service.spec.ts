@@ -1,7 +1,6 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
-import { createCommerceEvent } from '@shared/events/contracts/commerce-events';
 import { createServiceEvent } from '@shared/events/contracts/service-events';
 import { LoyaltyAccrualPlannerService } from '@shared/events/loyalty-accrual-planner.service';
 import { UsersService } from '@main-modules/users/services/users.service';
@@ -23,12 +22,10 @@ describe('LoyaltyService', () => {
           minimumAmountCents: 100000,
           eligibleServiceTypes: ['collision_repair'],
           eligibleServiceCategories: [],
-          eligibleProductIds: [],
-          eligibleProductCategoryIds: [],
         },
         {
           id: 'rule-2',
-          accrualSource: 'both',
+          accrualSource: 'service',
           formulaType: 'amount_ratio',
           flatPoints: null,
           amountStepCents: 5000,
@@ -36,8 +33,6 @@ describe('LoyaltyService', () => {
           minimumAmountCents: null,
           eligibleServiceTypes: [],
           eligibleServiceCategories: ['repair'],
-          eligibleProductIds: [],
-          eligibleProductCategoryIds: [],
         },
       ]),
       getOrCreateAccount: jest.fn().mockResolvedValue({
@@ -121,8 +116,6 @@ describe('LoyaltyService', () => {
           minimumAmountCents: 100000,
           eligibleServiceTypes: ['insurance_only'],
           eligibleServiceCategories: [],
-          eligibleProductIds: [],
-          eligibleProductCategoryIds: [],
         },
       ]),
       getOrCreateAccount: jest.fn().mockResolvedValue({
@@ -179,114 +172,6 @@ describe('LoyaltyService', () => {
         wasAwarded: false,
         awardedPoints: 0,
         appliedRuleIds: [],
-      }),
-    );
-  });
-
-  it('awards ecommerce loyalty only when the invoice is fully settled', async () => {
-    const loyaltyRepository = {
-      listActiveEarningRules: jest.fn().mockResolvedValue([
-        {
-          id: 'rule-ecom',
-          accrualSource: 'ecommerce',
-          formulaType: 'flat_points',
-          flatPoints: 40,
-          amountStepCents: null,
-          pointsPerStep: null,
-          minimumAmountCents: 100000,
-          eligibleServiceTypes: [],
-          eligibleServiceCategories: [],
-          eligibleProductIds: ['product-1'],
-          eligibleProductCategoryIds: [],
-        },
-      ]),
-      getOrCreateAccount: jest.fn().mockResolvedValue({
-        id: 'account-1',
-        userId: 'customer-1',
-        pointsBalance: 0,
-      }),
-      applyAccrual: jest.fn().mockResolvedValue({
-        account: { id: 'account-1', userId: 'customer-1', pointsBalance: 40 },
-        transaction: { id: 'transaction-1' },
-        wasDuplicate: false,
-      }),
-    };
-
-    const usersService = {
-      findById: jest.fn().mockResolvedValue({
-        id: 'customer-1',
-        isActive: true,
-      }),
-    };
-
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        LoyaltyService,
-        LoyaltyAccrualPlannerService,
-        { provide: LoyaltyRepository, useValue: loyaltyRepository },
-        { provide: UsersService, useValue: usersService },
-      ],
-    }).compile();
-
-    const service = moduleRef.get(LoyaltyService);
-
-    const partialResult = await service.applyLoyaltyAccrual(
-      createCommerceEvent('invoice.payment_recorded', {
-        invoiceId: 'invoice-1',
-        orderId: 'order-1',
-        customerUserId: 'customer-1',
-        invoiceNumber: 'INV-2026-0001',
-        paymentEntryId: 'payment-entry-1',
-        amountCents: 50000,
-        paymentMethod: 'cash',
-        receivedAt: '2026-05-14T10:00:00.000Z',
-        invoiceStatus: 'partially_paid',
-        amountPaidCents: 50000,
-        amountDueCents: 70000,
-        currencyCode: 'PHP',
-        productIds: ['product-1'],
-        productCategoryIds: ['category-1'],
-      }),
-    );
-
-    expect(loyaltyRepository.applyAccrual).not.toHaveBeenCalled();
-    expect(partialResult).toEqual(
-      expect.objectContaining({
-        wasAwarded: false,
-        awardedPoints: 0,
-        appliedRuleIds: [],
-      }),
-    );
-
-    await service.applyLoyaltyAccrual(
-      createCommerceEvent('invoice.payment_recorded', {
-        invoiceId: 'invoice-1',
-        orderId: 'order-1',
-        customerUserId: 'customer-1',
-        invoiceNumber: 'INV-2026-0001',
-        paymentEntryId: 'payment-entry-2',
-        amountCents: 70000,
-        paymentMethod: 'bank_transfer',
-        receivedAt: '2026-05-14T10:30:00.000Z',
-        invoiceStatus: 'paid',
-        amountPaidCents: 120000,
-        amountDueCents: 0,
-        currencyCode: 'PHP',
-        productIds: ['product-1'],
-        productCategoryIds: ['category-1'],
-      }),
-    );
-
-    expect(loyaltyRepository.applyAccrual).toHaveBeenCalledWith(
-      expect.objectContaining({
-        pointsAwarded: 40,
-        metadata: expect.objectContaining({
-          appliedRuleIds: ['rule-ecom'],
-        }),
-        plan: expect.objectContaining({
-          accrualKind: 'purchase_payment',
-          idempotencyKey: 'loyalty:invoice.payment_recorded:invoice-1',
-        }),
       }),
     );
   });

@@ -11,7 +11,6 @@ import type {
   RewardResponse,
   ServicePaymentRecordedEvent,
 } from '../../lib/api/generated/loyalty/responses';
-import type { InvoicePaymentRecordedEvent } from '../../lib/api/generated/commerce-events/responses';
 
 export const servicePaymentRecordedEventMock: ServicePaymentRecordedEvent = {
   eventId: 'event-service-payment-recorded-1',
@@ -29,29 +28,6 @@ export const servicePaymentRecordedEventMock: ServicePaymentRecordedEvent = {
     paidAt: '2026-05-14T08:00:00.000Z',
     serviceTypeCode: 'oil-change',
     serviceCategoryCode: 'preventive-maintenance',
-  },
-};
-
-export const purchasePaymentRecordedEventMock: InvoicePaymentRecordedEvent = {
-  eventId: 'event-invoice-payment-recorded-2',
-  name: 'invoice.payment_recorded',
-  version: 1,
-  producer: 'ecommerce-service',
-  sourceDomain: 'ecommerce.invoice-payments',
-  occurredAt: '2026-05-14T09:00:00.000Z',
-  payload: {
-    invoiceId: 'invoice-2',
-    orderId: 'order-2',
-    customerUserId: 'customer-1',
-    invoiceNumber: 'INV-2026-0002',
-    paymentEntryId: 'payment-entry-2',
-    amountCents: 159900,
-    paymentMethod: 'bank_transfer',
-    receivedAt: '2026-05-14T09:00:00.000Z',
-    invoiceStatus: 'paid',
-    amountPaidCents: 159900,
-    amountDueCents: 0,
-    currencyCode: 'PHP',
   },
 };
 
@@ -76,36 +52,9 @@ export const serviceLoyaltyAccrualPlanMock: LoyaltyAccrualPlan = {
   reversalStrategy: 'manual_adjustment_until_service_refund_event_exists',
 };
 
-export const purchaseLoyaltyAccrualPlanMock: LoyaltyAccrualPlan = {
-  triggerName: 'invoice.payment_recorded',
-  sourceDomain: 'ecommerce.invoice-payments',
-  loyaltyUserId: 'customer-1',
-  accrualKind: 'purchase_payment',
-  idempotencyKey: 'loyalty:invoice.payment_recorded:payment-entry-2',
-  sourceReference: 'payment-entry-2',
-  policyKey: 'loyalty.invoice.payment_recorded.v1',
-  pointsInput: {
-    mode: 'ecommerce_payment',
-    invoiceReference: 'INV-2026-0002',
-    amountCents: 159900,
-    currencyCode: 'PHP',
-    paidAt: '2026-05-14T09:00:00.000Z',
-    productIds: ['product-2'],
-    productCategoryIds: ['category-2'],
-  },
-  duplicateStrategy: 'ignore_same_idempotency_key',
-  reversalStrategy: 'manual_adjustment_until_ecommerce_refund_event_exists',
-};
+export const loyaltyEventMocks = [servicePaymentRecordedEventMock];
 
-export const loyaltyEventMocks = [
-  servicePaymentRecordedEventMock,
-  purchasePaymentRecordedEventMock,
-];
-
-export const loyaltyAccrualPlanMocks = [
-  serviceLoyaltyAccrualPlanMock,
-  purchaseLoyaltyAccrualPlanMock,
-];
+export const loyaltyAccrualPlanMocks = [serviceLoyaltyAccrualPlanMock];
 
 export const loyaltyAccountMock: LoyaltyAccountResponse = {
   id: 'loyalty-account-1',
@@ -113,9 +62,9 @@ export const loyaltyAccountMock: LoyaltyAccountResponse = {
   pointsBalance: 131,
   lifetimePointsEarned: 131,
   lifetimePointsRedeemed: 0,
-  lastAccruedAt: '2026-05-14T09:00:00.000Z',
+  lastAccruedAt: '2026-05-14T08:00:00.000Z',
   createdAt: '2026-05-14T08:00:00.000Z',
-  updatedAt: '2026-05-14T09:00:00.000Z',
+  updatedAt: '2026-05-14T08:00:00.000Z',
 };
 
 export const loyaltyTransactionsMock: LoyaltyTransactionResponse[] = [
@@ -293,31 +242,3 @@ export const customerMobileLoyaltyRuntimeFailureStateMock = {
   message: 'Unable to load loyalty data right now.',
   source: 'runtime',
 } as const;
-
-export const customerMobileLegacyLoyaltyDriftStateMock = {
-  account: {
-    ...loyaltyAccountMock,
-    pointsBalance: 162,
-    lifetimePointsEarned: 162,
-  } satisfies LoyaltyAccountResponse,
-  transactions: [
-    {
-      id: 'loyalty-transaction-legacy-1',
-      loyaltyAccountId: 'loyalty-account-1',
-      transactionType: 'accrual',
-      sourceType: 'purchase_payment',
-      sourceReference: 'payment-entry-legacy-1',
-      idempotencyKey: 'loyalty:invoice.payment_recorded:payment-entry-legacy-1',
-      policyKey: 'loyalty.invoice.payment_recorded.v1',
-      pointsDelta: 31,
-      resultingBalance: 162,
-      metadata: {
-        triggerName: 'invoice.payment_recorded',
-        sourceDomain: 'ecommerce.invoice-payments',
-      },
-      createdAt: '2026-05-14T09:00:00.000Z',
-    },
-  ] satisfies LoyaltyTransactionResponse[],
-  note:
-    'Legacy ecommerce-linked rows may still exist in backend internals or historical data, but customer-facing loyalty meaning remains service-earned first.',
-};

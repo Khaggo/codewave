@@ -324,11 +324,6 @@ export const getCustomerMobileLoyaltyActivityKind = (
   return 'legacy_drift';
 };
 
-export const customerMobileLoyaltyKnownDrift = {
-  legacySourceTypes: ['service_invoice', 'purchase_payment', 'purchase_reversal'] as const,
-  note:
-    'Some backend internals and historical rows may still expose older non-canonical loyalty source types. Customer-facing copy must treat them as legacy drift rather than the current earning policy.',
-} as const;
 
 export const customerMobileLoyaltyContractSources = [
   'docs/architecture/domains/main-service/loyalty.md',

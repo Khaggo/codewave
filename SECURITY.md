@@ -23,6 +23,10 @@ Rotate any credential included in a report immediately.
 - Actions are pinned to immutable commit SHAs.
 - Production database changes use committed migrations.
 - Operational scripts refuse production mutation unless explicitly authorized.
+- Account-seeding scripts require explicit credentials for mutation, reject known placeholder
+  passwords, and never print configured passwords to logs.
+- Account-seeding scripts require explicit credentials for mutation, reject known placeholder
+  passwords, and never print configured passwords to logs.
 
 ## Dependency Response
 

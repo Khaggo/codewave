@@ -1,4 +1,7 @@
-const NOTIFICATION_REQUEST_TIMEOUT_MS = 8000;
+import {
+  createNotificationApiError,
+  requestNotificationApi,
+} from './notificationTransport.js';
 
 const categoryVisualMap = {
   back_job_update: {
@@ -58,9 +61,9 @@ const categorySyncMetadataMap = {
   invoice_aging: {
     consistencyModel: 'event_driven_read_model',
     ownerDomain: 'main-service.notifications',
-    sourceDomain: 'ecommerce.invoice-payments',
+    sourceDomain: 'main-service.job-orders',
     crossServiceHint:
-      'Invoice reminders are downstream from ecommerce invoice events, so visibility can change after invoice tracking updates.',
+      'Invoice reminders follow finalized service work and may appear after the latest job-order payment update is processed.',
   },
   service_follow_up: {
     consistencyModel: 'event_driven_read_model',
@@ -118,130 +121,6 @@ const trimOrNull = (value) => {
   return normalizedValue ? normalizedValue : null;
 };
 
-let authClientModulePromise = null;
-
-const loadAuthClientModule = async () => {
-  if (!authClientModulePromise) {
-    authClientModulePromise = import('./authClient.js');
-  }
-
-  return authClientModulePromise;
-};
-
-const createApiError = async (message, status, details) => {
-  const { ApiError } = await loadAuthClientModule();
-  return new ApiError(message, status, details);
-};
-
-const getNotificationApiBaseUrl = async () => {
-  const { getApiBaseUrl } = await loadAuthClientModule();
-  return getApiBaseUrl();
-};
-
-const request = async (path, options = {}) => {
-  const {
-    body,
-    headers,
-    timeoutMs = NOTIFICATION_REQUEST_TIMEOUT_MS,
-    ...rest
-  } = options;
-  const { ApiError } = await loadAuthClientModule();
-  const API_BASE_URL = await getNotificationApiBaseUrl();
-  const buildApiError = (message, status, details) => new ApiError(message, status, details);
-  const abortController =
-    typeof AbortController === 'function' &&
-    Number.isFinite(timeoutMs) &&
-    timeoutMs > 0
-      ? new AbortController()
-      : null;
-  let timeoutId = null;
-
-  try {
-    const runRequest = async () => {
-      const response = await fetch(`${API_BASE_URL}${path}`, {
-        ...rest,
-        signal: abortController?.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(headers ?? {}),
-        },
-        body: body ? JSON.stringify(body) : undefined,
-      });
-
-      const rawText = await response.text();
-      let data = null;
-
-      if (rawText) {
-        try {
-          data = JSON.parse(rawText);
-        } catch {
-          data = rawText;
-        }
-      }
-
-      if (!response.ok) {
-        const message =
-          data?.message && typeof data.message === 'string'
-            ? data.message
-            : `Request failed with status ${response.status}`;
-
-        throw buildApiError(message, response.status, data);
-      }
-
-      return data;
-    };
-
-    const timeoutPromise =
-      Number.isFinite(timeoutMs) && timeoutMs > 0
-        ? new Promise((_, reject) => {
-            timeoutId = setTimeout(() => {
-              abortController?.abort();
-              reject(
-                buildApiError(
-                  `Timed out reaching ${API_BASE_URL}${path} after ${timeoutMs}ms. Check EXPO_PUBLIC_API_BASE_URL for the current device.`,
-                  0,
-                  {
-                    path,
-                    apiBaseUrl: API_BASE_URL,
-                    timeoutMs,
-                    reason: 'timeout',
-                  },
-                ),
-              );
-            }, timeoutMs);
-          })
-        : null;
-
-    return timeoutPromise
-      ? await Promise.race([runRequest(), timeoutPromise])
-      : await runRequest();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-
-    const errorMessage =
-      error instanceof Error && error.message
-        ? error.message
-        : 'Unable to reach the API server.';
-
-    throw await createApiError(
-      `Unable to reach ${API_BASE_URL}${path}. Check EXPO_PUBLIC_API_BASE_URL for the current device. ${errorMessage}`,
-      0,
-      {
-        path,
-        apiBaseUrl: API_BASE_URL,
-        timeoutMs,
-        reason: 'network',
-      },
-    );
-  } finally {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  }
-};
-
 const formatRelativeTime = (value) => {
   const timestamp = new Date(value).getTime();
 
@@ -270,6 +149,29 @@ const formatRelativeTime = (value) => {
   const elapsedDays = Math.floor(elapsedHours / 24);
 
   return `${elapsedDays}d ago`;
+};
+
+const formatCustomerNotificationMessage = (notification) => {
+  const message =
+    trimOrNull(notification?.message) ?? 'A customer notification was recorded.';
+
+  return message.replace(
+    /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\b/g,
+    (value) => {
+      const timestamp = new Date(value);
+      if (!Number.isFinite(timestamp.getTime())) {
+        return value;
+      }
+
+      return new Intl.DateTimeFormat('en-PH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(timestamp);
+    },
+  );
 };
 
 const pickNotificationTimestamp = (notification) =>
@@ -401,7 +303,7 @@ export const normalizeCustomerNotification = (notification) => {
     sourceType: notification.sourceType ?? null,
     sourceId: notification.sourceId ?? null,
     title: trimOrNull(notification.title) ?? 'Customer notification',
-    message: trimOrNull(notification.message) ?? 'A customer notification was recorded.',
+    message: formatCustomerNotificationMessage(notification),
     status,
     dedupeKey: trimOrNull(notification.dedupeKey),
     createdAt: notification.createdAt ?? null,
@@ -488,7 +390,7 @@ export const createEmptyCustomerNotificationSnapshot = () => ({
 
 export const loadCustomerNotificationSnapshot = async ({ userId, accessToken }) => {
   if (!userId) {
-    throw await createApiError(
+    throw await createNotificationApiError(
       'You need an active customer session before notification state can load.',
       401,
       {
@@ -498,11 +400,11 @@ export const loadCustomerNotificationSnapshot = async ({ userId, accessToken }) 
   }
 
   const [preferencesResponse, notificationsResponse] = await Promise.all([
-    request(`/api/users/${userId}/notification-preferences`, {
+    requestNotificationApi(`/api/users/${userId}/notification-preferences`, {
       method: 'GET',
       headers: buildAuthHeaders(accessToken),
     }),
-    request(`/api/users/${userId}/notifications`, {
+    requestNotificationApi(`/api/users/${userId}/notifications`, {
       method: 'GET',
       headers: buildAuthHeaders(accessToken),
     }),
@@ -522,7 +424,7 @@ export const updateCustomerNotificationPreferences = async ({
   preferences,
 }) => {
   if (!userId) {
-    throw await createApiError(
+    throw await createNotificationApiError(
       'You need an active customer session before notification preferences can update.',
       401,
       {
@@ -532,7 +434,7 @@ export const updateCustomerNotificationPreferences = async ({
   }
 
   return normalizeCustomerNotificationPreferences(
-    await request(`/api/users/${userId}/notification-preferences`, {
+    await requestNotificationApi(`/api/users/${userId}/notification-preferences`, {
       method: 'PATCH',
       headers: buildAuthHeaders(accessToken),
       body: preferences,

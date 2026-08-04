@@ -165,5 +165,5 @@ flowchart TD
 - Use the first diagram when you want a single merged flow for presentation or overview.
 - Use the second diagram when you want to explain what data each major node depends on.
 - Use the third diagram when you need a standalone admin/staff Mermaid flow.
-- Loyalty is earned only from successful paid service work, not from ecommerce checkout.
+- Loyalty is earned only from successful paid service work.
 - If your Mermaid renderer is strict, test this file first before using the more detailed engineering documentation.

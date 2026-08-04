@@ -8,7 +8,6 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
 import { UsersService } from '@main-modules/users/services/users.service';
-import { AnyCommerceEventEnvelope } from '@shared/events/contracts/commerce-events';
 import { AnyNotificationTriggerEnvelope } from '@shared/events/contracts/notification-triggers';
 import { toBullSafeJobId } from '@shared/queue/queue-job-id.util';
 
@@ -256,7 +255,7 @@ export class NotificationsService {
     });
   }
 
-  async applyTrigger(trigger: AnyNotificationTriggerEnvelope | AnyCommerceEventEnvelope) {
+  async applyTrigger(trigger: AnyNotificationTriggerEnvelope) {
     const plan = this.notificationTriggerPlanner.plan(trigger);
     const actionResults: Array<{
       kind: NotificationTriggerPlanAction['kind'];
@@ -467,6 +466,7 @@ export class NotificationsService {
       qa_review: true,
       service_follow_up: payload.preferences.serviceFollowUpEnabled,
       auth_otp: true,
+      accessory_order: true,
     };
 
     if (!categoryEnabledMap[payload.category]) {

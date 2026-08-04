@@ -18,8 +18,7 @@ const mobileTabs = [
   { label: 'Garage', required: true },
   { label: 'Book', required: true },
   { label: 'Insurance', required: true },
-  { label: 'Rewards', required: true },
-  { label: 'Shop', required: true },
+  { label: 'More', required: true },
 ];
 
 const staffRoutes = [
@@ -29,11 +28,8 @@ const staffRoutes = [
   { path: '/admin/invoices', label: 'Staff Invoices & Orders' },
   { path: '/insurance', label: 'Staff Insurance' },
   { path: '/backjobs', label: 'Staff Back-Jobs' },
-  { path: '/admin/catalog', label: 'Staff Catalog Admin', dependsOnEcommerce: true },
-  { path: '/admin/inventory', label: 'Staff Inventory', dependsOnEcommerce: true },
   { path: '/admin/services', label: 'Staff Service Management' },
   { path: '/loyalty', label: 'Staff Loyalty Management' },
-  { path: '/shop', label: 'Staff Shop / Ecommerce Workspace', dependsOnEcommerce: true },
 ];
 
 function uniqueSamples(values, limit = 10) {
@@ -122,7 +118,7 @@ async function waitForSettledUi(page) {
   await page.waitForTimeout(1_000);
 }
 
-async function gotoStaffSurface(page, route, ecommerceReachable, testInfo, coverage) {
+async function gotoStaffSurface(page, route, testInfo, coverage) {
   await page.goto(`${runtimeConfig.staffBaseUrl}${route.path}`);
   await waitForSettledUi(page);
 
@@ -132,14 +128,7 @@ async function gotoStaffSurface(page, route, ecommerceReachable, testInfo, cover
       bodyText,
     );
 
-  if (route.dependsOnEcommerce && !ecommerceReachable) {
-    addFinding(testInfo, {
-      severity: 'medium',
-      surface: route.label,
-      summary:
-        'Ecommerce runtime on 3001 was not reachable, so ecommerce-backed readable-ID coverage for this surface is partial.',
-    });
-  } else if (unavailable) {
+  if (unavailable) {
     addFinding(testInfo, {
       severity: 'medium',
       surface: route.label,
@@ -204,15 +193,6 @@ async function sweepMobileTab(browser, tab, testInfo, coverage) {
 
     await sweepVisibleIdentifiers(page, `Mobile ${tab.label}`, testInfo, coverage);
 
-    if (tab.label === 'Shop') {
-      const shopOrdersTab = page.getByText('Orders', { exact: true }).last();
-      if (await shopOrdersTab.isVisible({ timeout: 2_000 }).catch(() => false)) {
-        await shopOrdersTab.click();
-        await waitForSettledUi(page);
-        await sweepVisibleIdentifiers(page, 'Mobile Shop Orders', testInfo, coverage);
-      }
-    }
-
     if (tab.label === 'Garage') {
       const lifecycleAction = page.getByText('Lifecycle', { exact: true }).first();
       if (await lifecycleAction.isVisible({ timeout: 2_000 }).catch(() => false)) {
@@ -222,22 +202,6 @@ async function sweepMobileTab(browser, tab, testInfo, coverage) {
       }
     }
   });
-}
-
-async function probeEcommerceRuntime(request) {
-  const healthPaths = ['/api/health', '/health'];
-
-  for (const healthPath of healthPaths) {
-    const response = await request.get(`${runtimeConfig.ecommerceApiBaseUrl}${healthPath}`, {
-      timeout: 5_000,
-    }).catch(() => null);
-
-    if (response?.ok()) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 test.describe('AUTOCARE broad readable-ID sweep', () => {
@@ -255,16 +219,6 @@ test.describe('AUTOCARE broad readable-ID sweep', () => {
     const coverage = [];
 
     await ensureLocalQaRuntime(request, { requireMobile: true });
-    const ecommerceReachable = await probeEcommerceRuntime(request);
-
-    if (!ecommerceReachable) {
-      addFinding(testInfo, {
-        severity: 'medium',
-        surface: 'Runtime coverage',
-        summary:
-          'Ecommerce API was not reachable at 3001, so ecommerce-backed readable-ID checks are captured as partial coverage rather than full pass evidence.',
-      });
-    }
 
     await test.step('Customer mobile readable-ID sweep', async () => {
       for (const tab of mobileTabs) {
@@ -278,7 +232,7 @@ test.describe('AUTOCARE broad readable-ID sweep', () => {
       await loginStaff(page, qaAccounts.adviser, '/bookings');
 
       for (const route of staffRoutes) {
-        await gotoStaffSurface(page, route, ecommerceReachable, testInfo, coverage);
+        await gotoStaffSurface(page, route, testInfo, coverage);
       }
 
       await context.close();
@@ -304,7 +258,6 @@ test.describe('AUTOCARE broad readable-ID sweep', () => {
       body: JSON.stringify(
         {
           runtime: runtimeConfig,
-          ecommerceReachable,
           surfaces: coverage,
         },
         null,

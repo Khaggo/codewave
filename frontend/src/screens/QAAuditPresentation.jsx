@@ -1,6 +1,9 @@
 import { ShieldCheck } from 'lucide-react'
 
 import { getFindingRiskContribution } from '@/lib/api/generated/quality-gates/staff-web-qa-review'
+import { getLoadedJobOrderReference } from './qaAuditPresentationModel.mjs'
+
+export { getLoadedJobOrderReference } from './qaAuditPresentationModel.mjs'
 
 export const releaseSummaryByState = {
   release_allowed: { value: 'Allowed', toneClass: 'badge badge-green' },
@@ -8,61 +11,6 @@ export const releaseSummaryByState = {
   release_blocked: { value: 'Blocked', toneClass: 'badge badge-red' },
   release_pending_audit: { value: 'Pending Review', toneClass: 'badge badge-orange' },
   release_unavailable: { value: 'Awaiting Load', toneClass: 'badge badge-gray' },
-}
-
-function normalizeBusinessToken(value, fallback = 'WORK') {
-  const normalizedValue = String(value ?? '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-
-  return normalizedValue || fallback
-}
-
-function formatCompactDateToken(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}${month}${day}`
-}
-
-function formatCompactTimeToken(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  const seconds = String(date.getSeconds()).padStart(2, '0')
-  return `${hours}${minutes}${seconds}`
-}
-
-function formatJobOrderReference(jobOrder) {
-  if (jobOrder?.jobOrderReference) return jobOrder.jobOrderReference
-  if (jobOrder?.sourceBackJobReference) return `JO-RW \u00b7 ${jobOrder.sourceBackJobReference}`
-  if (jobOrder?.sourceBookingReference) return `JO \u00b7 ${jobOrder.sourceBookingReference}`
-
-  const compactDate = formatCompactDateToken(jobOrder?.workDate ?? jobOrder?.createdAt)
-  const timeToken = formatCompactTimeToken(jobOrder?.createdAt ?? jobOrder?.updatedAt)
-  const plateToken = normalizeBusinessToken(
-    jobOrder?.plateNumber ?? jobOrder?.vehicleDisplayName ?? jobOrder?.serviceAdviserCode,
-    'WORK',
-  )
-  const prefix = jobOrder?.jobType === 'back_job' ? 'JO-RW' : 'JO'
-  return compactDate ? `${prefix}-${compactDate}-${timeToken || plateToken}` : `${prefix}-${plateToken}`
-}
-
-export function getLoadedJobOrderReference(jobOrderId, jobOrderOptions, qualityGate = null) {
-  if (qualityGate?.jobOrderReference) return qualityGate.jobOrderReference
-
-  const matchingJobOrder =
-    jobOrderOptions.find((jobOrder) => jobOrder.id === jobOrderId) ??
-    (qualityGate?.jobOrderId ? jobOrderOptions.find((jobOrder) => jobOrder.id === qualityGate.jobOrderId) : null)
-  return matchingJobOrder ? formatJobOrderReference(matchingJobOrder) : 'Selected job order'
 }
 
 export function getPendingReviewGuidance({

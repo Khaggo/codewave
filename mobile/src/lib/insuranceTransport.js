@@ -10,6 +10,13 @@ export const buildAuthHeaders = (accessToken) =>
       }
     : undefined;
 
+export const shouldUseBrowserNoStoreCache = (
+  requestMethod,
+  navigatorLike = globalThis.navigator,
+) =>
+  String(requestMethod ?? 'GET').toUpperCase() === 'GET' &&
+  navigatorLike?.product !== 'ReactNative';
+
 export const getInsuranceClientRuntime = async () => {
   if (globalThis[INSURANCE_CLIENT_RUNTIME_KEY]) {
     return globalThis[INSURANCE_CLIENT_RUNTIME_KEY];
@@ -28,23 +35,35 @@ export const request = async (path, options = {}) => {
   const {
     body,
     headers,
+    signal: externalSignal,
     timeoutMs = INSURANCE_REQUEST_TIMEOUT_MS,
+    cache,
     ...rest
   } = options;
   const abortController =
-    typeof AbortController === 'function' &&
-    Number.isFinite(timeoutMs) &&
-    timeoutMs > 0
-      ? new AbortController()
-      : null;
+    typeof AbortController === 'function' ? new AbortController() : null;
   let timeoutId = null;
+  let externalAbortHandler = null;
+
+  if (externalSignal) {
+    externalAbortHandler = () => {
+      abortController?.abort(externalSignal.reason);
+    };
+
+    if (externalSignal.aborted) {
+      externalAbortHandler();
+    } else {
+      externalSignal.addEventListener('abort', externalAbortHandler, { once: true });
+    }
+  }
 
   try {
     const runRequest = async () => {
       const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
-      const response = await fetch(`${API_BASE_URL}${path}`, {
+      const requestMethod = String(rest.method ?? 'GET').toUpperCase();
+      const fetchOptions = {
         ...rest,
-        signal: abortController?.signal,
+        signal: abortController?.signal ?? externalSignal,
         headers: isFormData
           ? { ...(headers ?? {}) }
           : {
@@ -52,7 +71,15 @@ export const request = async (path, options = {}) => {
               ...(headers ?? {}),
             },
         body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
-      });
+      };
+
+      if (cache !== undefined) {
+        fetchOptions.cache = cache;
+      } else if (shouldUseBrowserNoStoreCache(requestMethod)) {
+        fetchOptions.cache = 'no-store';
+      }
+
+      const response = await fetch(`${API_BASE_URL}${path}`, fetchOptions);
 
       const rawText = await response.text();
       let data = null;
@@ -109,6 +136,12 @@ export const request = async (path, options = {}) => {
       ? await Promise.race([runRequest(), timeoutPromise])
       : await runRequest();
   } catch (error) {
+    if (externalSignal?.aborted) {
+      const abortError = new Error('Request aborted.');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+
     if (error instanceof ApiError) {
       throw error;
     }
@@ -131,6 +164,9 @@ export const request = async (path, options = {}) => {
   } finally {
     if (timeoutId) {
       clearTimeout(timeoutId);
+    }
+    if (externalSignal && externalAbortHandler) {
+      externalSignal.removeEventListener('abort', externalAbortHandler);
     }
   }
 };

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Dimensions, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius } from '../theme';
+import { createPlatformShadow } from '../utils/platformShadow';
 
 export default function OtpInputGroup({
   value,
@@ -118,11 +119,12 @@ const styles = StyleSheet.create({
   },
   inputFocused: {
     borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 2,
+    ...createPlatformShadow({
+      color: colors.primary,
+      opacity: 0.18,
+      radius: 10,
+      elevation: 2,
+    }),
   },
   inputError: {
     borderColor: colors.danger,

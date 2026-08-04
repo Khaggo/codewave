@@ -1,13 +1,12 @@
 import request from 'supertest';
 
-import { createCommerceEvent } from '@shared/events/contracts/commerce-events';
 import { createServiceEvent } from '@shared/events/contracts/service-events';
 
 import { LoyaltyService } from '../src/modules/loyalty/services/loyalty.service';
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
 
 describe('LoyaltyController integration', () => {
-  it('manages reward catalog and earning rules, then accrues loyalty from settled service and ecommerce invoices only', async () => {
+  it('manages reward catalog and earning rules, then accrues loyalty from settled service invoices', async () => {
     const { app, seedAuthUser } = await createMainServiceTestApp();
 
     try {
@@ -75,14 +74,13 @@ describe('LoyaltyController integration', () => {
         .send({
           name: 'Collision repair points',
           description: 'Award points only after paid collision repair jobs.',
-          accrualSource: 'both',
+          accrualSource: 'service',
           formulaType: 'amount_ratio',
           amountStepCents: 5000,
           pointsPerStep: 1,
           minimumAmountCents: 100000,
           eligibleServiceTypes: ['collision_repair'],
           eligibleServiceCategories: ['repair'],
-          eligibleProductIds: ['product-1'],
           promoLabel: 'Collision Week Bonus',
           manualBenefitNote: 'Issue one loyalty sticker manually after payment.',
           status: 'active',
@@ -149,73 +147,6 @@ describe('LoyaltyController integration', () => {
       );
       expect(duplicateServiceAccrual.wasDuplicate).toBe(true);
 
-      const partialEcommerceAccrual = await loyaltyService.applyLoyaltyAccrual(
-        createCommerceEvent('invoice.payment_recorded', {
-          invoiceId: 'invoice-1',
-          orderId: 'order-1',
-          customerUserId: customer.id,
-          invoiceNumber: 'INV-2026-2001',
-          paymentEntryId: 'payment-entry-1',
-          amountCents: 25000,
-          paymentMethod: 'cash',
-          receivedAt: '2026-05-14T12:00:00.000Z',
-          invoiceStatus: 'partially_paid',
-          amountPaidCents: 25000,
-          amountDueCents: 95000,
-          currencyCode: 'PHP',
-          productIds: ['product-1'],
-          productCategoryIds: ['category-1'],
-        }),
-      );
-      expect(partialEcommerceAccrual).toEqual(
-        expect.objectContaining({
-          transaction: null,
-          wasAwarded: false,
-          awardedPoints: 0,
-          appliedRuleIds: [],
-        }),
-      );
-
-      const ecommerceAccrual = await loyaltyService.applyLoyaltyAccrual(
-        createCommerceEvent('invoice.payment_recorded', {
-          invoiceId: 'invoice-1',
-          orderId: 'order-1',
-          customerUserId: customer.id,
-          invoiceNumber: 'INV-2026-2001',
-          paymentEntryId: 'payment-entry-2',
-          amountCents: 95000,
-          paymentMethod: 'bank_transfer',
-          receivedAt: '2026-05-14T12:15:00.000Z',
-          invoiceStatus: 'paid',
-          amountPaidCents: 120000,
-          amountDueCents: 0,
-          currencyCode: 'PHP',
-          productIds: ['product-1'],
-          productCategoryIds: ['category-1'],
-        }),
-      );
-      expect(ecommerceAccrual.wasDuplicate).toBe(false);
-
-      const duplicateEcommerceAccrual = await loyaltyService.applyLoyaltyAccrual(
-        createCommerceEvent('invoice.payment_recorded', {
-          invoiceId: 'invoice-1',
-          orderId: 'order-1',
-          customerUserId: customer.id,
-          invoiceNumber: 'INV-2026-2001',
-          paymentEntryId: 'payment-entry-3',
-          amountCents: 0,
-          paymentMethod: 'bank_transfer',
-          receivedAt: '2026-05-14T12:20:00.000Z',
-          invoiceStatus: 'paid',
-          amountPaidCents: 120000,
-          amountDueCents: 0,
-          currencyCode: 'PHP',
-          productIds: ['product-1'],
-          productCategoryIds: ['category-1'],
-        }),
-      );
-      expect(duplicateEcommerceAccrual.wasDuplicate).toBe(true);
-
       const accountResponse = await request(app.getHttpServer())
         .get(`/api/loyalty/accounts/${customer.id}`)
         .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
@@ -223,8 +154,8 @@ describe('LoyaltyController integration', () => {
       expect(accountResponse.body).toEqual(
         expect.objectContaining({
           userId: customer.id,
-          pointsBalance: 55,
-          lifetimePointsEarned: 55,
+          pointsBalance: 31,
+          lifetimePointsEarned: 31,
         }),
       );
 
@@ -232,18 +163,12 @@ describe('LoyaltyController integration', () => {
         .get(`/api/loyalty/accounts/${customer.id}/transactions`)
         .set('Authorization', `Bearer ${customerLogin.body.accessToken}`);
       expect(transactionsResponse.status).toBe(200);
-      expect(transactionsResponse.body).toHaveLength(2);
-      expect(transactionsResponse.body).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            sourceType: 'service_payment',
-            pointsDelta: 31,
-          }),
-          expect.objectContaining({
-            sourceType: 'purchase_payment',
-            pointsDelta: 24,
-          }),
-        ]),
+      expect(transactionsResponse.body).toHaveLength(1);
+      expect(transactionsResponse.body[0]).toEqual(
+        expect.objectContaining({
+          sourceType: 'service_payment',
+          pointsDelta: 31,
+        }),
       );
 
       const customerRewardsResponse = await request(app.getHttpServer())
@@ -273,7 +198,7 @@ describe('LoyaltyController integration', () => {
           userId: customer.id,
           rewardId,
           pointsCostSnapshot: 30,
-          pointsBalanceAfter: 25,
+          pointsBalanceAfter: 1,
           transaction: expect.objectContaining({
             pointsDelta: -30,
             sourceType: 'reward_redemption',

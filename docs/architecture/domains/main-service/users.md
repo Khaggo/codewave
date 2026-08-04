@@ -42,7 +42,7 @@ Key relations:
 - one user may have many saved addresses
 - staff-capable users carry a stable `staff_code` for audit snapshots and operational ownership
 - customer and staff identities may exist in a pending-activation state until auth completes Google verification and email OTP
-- user IDs are referenced by vehicles, bookings, insurance, loyalty, notifications, and e-commerce identities
+- user IDs are referenced by vehicles, bookings, insurance, loyalty, notifications, Job Orders, and QA records
 
 ## Primary Business Logic
 

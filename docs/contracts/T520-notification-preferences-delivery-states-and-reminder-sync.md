@@ -76,7 +76,7 @@
 | `booking_reminder` | `booking.reminder_requested` | open booking history or detail | `main-service.bookings` |
 | `insurance_update` | `insurance.inquiry_status_changed` | open insurance tracking | `main-service.insurance` |
 | `back_job_update` | `back_job.status_changed` | open vehicle timeline | `main-service.back-jobs` |
-| `invoice_aging` | `order.invoice_issued` / invoice-aging policy | open invoice or order history | `ecommerce.invoice-payments` |
+| `invoice_aging` | service-invoice reminder policy | open service history | `main-service.job-orders` |
 | `service_follow_up` | `job_order.service_follow_up_requested` | open vehicle timeline | `main-service.job-orders` |
 
 ## Frontend Contract Files

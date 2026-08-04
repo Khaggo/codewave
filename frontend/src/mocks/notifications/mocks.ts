@@ -6,7 +6,6 @@ import type {
 import type {
   BackJobStatusChangedTrigger,
   BookingReminderRequestedTrigger,
-  NotificationTriggerPlan,
 } from '../../lib/api/generated/notifications/triggers';
 import {
   customerNotificationDisplayStateRules,
@@ -113,33 +112,6 @@ export const notificationsMock: NotificationResponse[] = [
     attempts: [],
   },
   {
-    id: '6cc55c1f-f057-4d58-9286-ad45ed04e95a',
-    userId: notificationPreferencesMock.userId,
-    category: 'invoice_aging',
-    channel: 'email',
-    sourceType: 'invoice_payment',
-    sourceId: 'invoice-payment-1',
-    title: 'Invoice reminder retry',
-    message: 'We could not deliver the invoice reminder yet. The notification service may retry.',
-    status: 'failed',
-    dedupeKey: 'notification:order.invoice_issued:invoice-payment-1:aging',
-    scheduledFor: '2026-04-20T08:20:00.000Z',
-    deliveredAt: null,
-    createdAt: '2026-04-20T08:20:00.000Z',
-    updatedAt: '2026-04-20T08:25:00.000Z',
-    attempts: [
-      {
-        id: 'cf3f0a31-af75-41cc-b884-daa0866e9d93',
-        notificationId: '6cc55c1f-f057-4d58-9286-ad45ed04e95a',
-        attemptNumber: 1,
-        status: 'failed',
-        providerMessageId: null,
-        errorMessage: 'SMTP provider temporarily unavailable.',
-        attemptedAt: '2026-04-20T08:25:00.000Z',
-      },
-    ],
-  },
-  {
     id: '0f50ad36-7cba-4760-ad53-542a1b18bd0f',
     userId: notificationPreferencesMock.userId,
     category: 'booking_reminder',
@@ -207,23 +179,6 @@ export const backJobStatusTriggerMock: BackJobStatusChangedTrigger = {
     customerUserId: notificationPreferencesMock.userId,
     status: 'resolved',
   },
-};
-
-export const invoicePaymentCancellationPlanMock: NotificationTriggerPlan = {
-  triggerName: 'invoice.payment_recorded',
-  sourceDomain: 'ecommerce.invoice-payments',
-  dedupePolicy: 'stable-source-dedupe-v1',
-  retryPolicy: 'bullmq-deliver-notification-v1',
-  actions: [
-    {
-      kind: 'cancel_reminder_rules',
-      customerVisible: false,
-    },
-    {
-      kind: 'cancel_notifications',
-      customerVisible: false,
-    },
-  ],
 };
 
 export const notificationForbiddenErrorMock: ApiErrorResponse = {

@@ -13,7 +13,7 @@ Build and maintain a correct, modular, self-improving, and implementation-ready 
 - Minimize token usage by loading only the files required for the current task.
 - Prevent uncontrolled edits, heading drift, and partial Markdown updates.
 - Treat prompt routing, documentation clarity, and validation coverage as system behaviors that must improve when evidence shows they are weak.
-- Preserve a stable contract between main-service and ecommerce-service.
+- Preserve stable contracts between the main API, staff web, and customer mobile app.
 - Make every accepted documentation change explainable, validated, and reversible.
 - Ensure the docs remain implementation-oriented for backend engineers and agents.
 
@@ -102,7 +102,6 @@ Build and maintain a correct, modular, self-improving, and implementation-ready 
 ### Service boundaries
 
 - `main-service` owns auth, users, vehicles, bookings, vehicle lifecycle, inspections, insurance, loyalty, back jobs, job orders, quality gates, notifications, chatbot, and analytics.
-- `ecommerce-service` owns catalog, inventory, cart, orders, invoice payments, and commerce events.
 - Immediate user-facing reads may use explicit APIs or an internal gateway.
 - State propagation and side effects should prefer events.
 - Global transport and integration choices live in [`api-strategy.md`](./api-strategy.md); domain docs should document only local endpoints, events, and jobs.
@@ -113,6 +112,7 @@ Build and maintain a correct, modular, self-improving, and implementation-ready 
 - Global AI scope, provider, and human-review policy live in [`ai-governance.md`](./ai-governance.md).
 - Do not model direct cross-service foreign keys.
 - Store external IDs and event metadata instead of assuming write access to another domain's tables.
+- The Accessories bounded context owns accessory catalog, fitment, stock, cart, pickup order, payment/refund, fulfillment, and outbox data inside `main-service`. It may reference owned vehicles and notification delivery, but must not reuse service catalog, Job Order, QA, service invoice, loyalty, or the retired ecommerce runtime.
 - Keep the canonical scope software-only unless a future hardware track is explicitly approved.
 - The canonical role set is `customer | technician | service_adviser | super_admin`.
 - Invoice handling remains invoice-only and tracking-oriented; do not imply payment-gateway settlement.

@@ -32,7 +32,7 @@ Make Booking/Intake to Job Order to QA to Finalization to Payment reliable, conc
 - No WebSocket queue replacement. Existing polling, atomic claims, leases, and heartbeat are sufficient after correctness and test coverage are fixed.
 - No infinite scrolling or client-side loading of the complete queue.
 - No production staffing or SLA decisions based on seeded local timings.
-- No broad redesign of Inventory, Insurance, Ecommerce, Analytics, or unrelated mobile features.
+- No broad redesign of Insurance, Analytics, or unrelated mobile features.
 - No visual redesign before workflow correctness and data contracts are stable.
 
 ### Compatibility constraints
@@ -621,7 +621,6 @@ Release order is mandatory. A later release may begin only after the previous re
 | Business-defined manual priority | Current evidence has risk, overdue, schedule, blocker, and dispatch rank but no authoritative staff-set priority policy. | Priority ownership, allowed values, override rules, and audit expectations. |
 | Inventory optimization | Not on the confirmed critical workflow path. | Stock contention, reservation, adjustment, and slow-query evidence. |
 | Insurance redesign | No comparable source/runtime audit in this package. | Current workflows, contracts, screenshots, failure cases, and user roles. |
-| Ecommerce/store modernization | Separate deployment/domain and no confirmed coupling defect. | Checkout/order contracts, payment idempotency, operational metrics. |
 | Analytics redesign | Production telemetry does not yet exist. | Two or more representative weeks of trusted workflow events and metrics. |
 | Advanced offline mobile sync | Current app is online-first with selective persistence. | Product rules for offline mutations, conflicts, and stale-data tolerance. |
 | Push-notification expansion | Delivery/token lifecycle was not verified. | Provider configuration, token lifecycle, deep-link and delivery evidence. |

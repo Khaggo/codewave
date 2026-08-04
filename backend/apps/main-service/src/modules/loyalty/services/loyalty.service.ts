@@ -7,9 +7,6 @@ import {
 
 import { UsersService } from '@main-modules/users/services/users.service';
 import {
-  AnyCommerceEventEnvelope,
-} from '@shared/events/contracts/commerce-events';
-import {
   AnyServiceEventEnvelope,
   isServiceEventEnvelope,
 } from '@shared/events/contracts/service-events';
@@ -32,9 +29,23 @@ type LoyaltyActor = {
   role: string;
 };
 
+type LoyaltyTransactionRecord = Awaited<
+  ReturnType<LoyaltyRepository['listTransactionsByUserId']>
+>[number];
+type LoyaltyEarningRuleRecord = Awaited<
+  ReturnType<LoyaltyRepository['listEarningRules']>
+>[number];
+
 const DEFAULT_SERVICE_PAYMENT_RULE_PROMO_LABEL = 'SYSTEM_DEFAULT_SERVICE_PAYMENT_V1';
 const DEFAULT_SERVICE_PAYMENT_RULE_REASON =
   'Automatically provisioned default service-payment loyalty rule.';
+const CURRENT_LOYALTY_SOURCE_TYPES = new Set([
+  'service_payment',
+  'service_invoice',
+  'reward_redemption',
+  'manual_adjustment',
+  'service_reversal',
+]);
 
 @Injectable()
 export class LoyaltyService {
@@ -51,7 +62,8 @@ export class LoyaltyService {
 
   async listTransactions(userId: string, actor: LoyaltyActor) {
     await this.assertCanAccessAccount(userId, actor);
-    return this.loyaltyRepository.listTransactionsByUserId(userId);
+    const transactions = await this.loyaltyRepository.listTransactionsByUserId(userId);
+    return transactions.map((transaction) => this.toCurrentTransaction(transaction));
   }
 
   async listRewards(actor: LoyaltyActor) {
@@ -119,24 +131,30 @@ export class LoyaltyService {
 
   async listEarningRules(actor: LoyaltyActor) {
     await this.assertSuperAdminActor(actor.userId);
-    return this.loyaltyRepository.listEarningRules({ includeInactive: true });
+    const rules = await this.loyaltyRepository.listEarningRules({ includeInactive: true });
+    return rules.map((rule) => this.toServiceEarningRule(rule));
   }
 
   async createEarningRule(payload: CreateEarningRuleDto, actor: LoyaltyActor) {
     const resolvedActor = await this.assertSuperAdminActor(actor.userId);
     this.assertValidEarningRuleConfiguration(payload);
-    return this.loyaltyRepository.createEarningRule({
+    const rule = await this.loyaltyRepository.createEarningRule({
       ...payload,
       actorUserId: resolvedActor.id,
     });
+    return this.toServiceEarningRule(rule);
   }
 
   async updateEarningRule(id: string, payload: UpdateEarningRuleDto, actor: LoyaltyActor) {
     const resolvedActor = await this.assertSuperAdminActor(actor.userId);
     const existingRule = await this.loyaltyRepository.findEarningRuleById(id);
+    if (existingRule.accrualSource !== 'service') {
+      throw new NotFoundException('Earning rule not found');
+    }
     this.assertValidEarningRuleConfiguration({
       ...existingRule,
       ...payload,
+      accrualSource: payload.accrualSource ?? 'service',
       activeFrom:
         payload.activeFrom !== undefined
           ? payload.activeFrom
@@ -147,18 +165,20 @@ export class LoyaltyService {
           : existingRule.activeUntil?.toISOString() ?? undefined,
     });
 
-    return this.loyaltyRepository.updateEarningRule(id, {
+    const rule = await this.loyaltyRepository.updateEarningRule(id, {
       ...payload,
       actorUserId: resolvedActor.id,
     });
+    return this.toServiceEarningRule(rule);
   }
 
   async updateEarningRuleStatus(id: string, payload: UpdateEarningRuleStatusDto, actor: LoyaltyActor) {
     const resolvedActor = await this.assertSuperAdminActor(actor.userId);
-    return this.loyaltyRepository.updateEarningRuleStatus(id, {
+    const rule = await this.loyaltyRepository.updateEarningRuleStatus(id, {
       ...payload,
       actorUserId: resolvedActor.id,
     });
+    return this.toServiceEarningRule(rule);
   }
 
   async ensureDefaultServicePaymentRule(actor: LoyaltyActor) {
@@ -178,8 +198,6 @@ export class LoyaltyService {
       minimumAmountCents: undefined,
       eligibleServiceTypes: [] as string[],
       eligibleServiceCategories: [] as string[],
-      eligibleProductIds: [] as string[],
-      eligibleProductCategoryIds: [] as string[],
       promoLabel: DEFAULT_SERVICE_PAYMENT_RULE_PROMO_LABEL,
       activeFrom: undefined,
       activeUntil: undefined,
@@ -188,10 +206,11 @@ export class LoyaltyService {
     };
 
     if (!defaultRule) {
-      return this.loyaltyRepository.createEarningRule({
+      const createdRule = await this.loyaltyRepository.createEarningRule({
         ...defaultPayload,
         actorUserId: resolvedActor.id,
       });
+      return this.toServiceEarningRule(createdRule);
     }
 
     const updatedRule = await this.loyaltyRepository.updateEarningRule(defaultRule.id, {
@@ -200,33 +219,23 @@ export class LoyaltyService {
     });
 
     if (updatedRule.status !== 'active') {
-      return this.loyaltyRepository.updateEarningRuleStatus(defaultRule.id, {
+      const activeRule = await this.loyaltyRepository.updateEarningRuleStatus(defaultRule.id, {
         status: 'active',
         reason: DEFAULT_SERVICE_PAYMENT_RULE_REASON,
         actorUserId: resolvedActor.id,
       });
+      return this.toServiceEarningRule(activeRule);
     }
 
-    return updatedRule;
+    return this.toServiceEarningRule(updatedRule);
   }
 
   async applyLoyaltyAccrual(
-    trigger: AnyServiceEventEnvelope | AnyCommerceEventEnvelope | LoyaltyAccrualPlan,
+    trigger: AnyServiceEventEnvelope | LoyaltyAccrualPlan,
   ) {
     const plan = this.isAccrualPlan(trigger)
       ? trigger
       : this.loyaltyAccrualPlanner.parseAndPlan(trigger);
-
-    if (!plan) {
-      return {
-        account: await this.loyaltyRepository.getOrCreateAccount(this.getLoyaltyUserId(trigger)),
-        transaction: null,
-        wasDuplicate: false,
-        wasAwarded: false,
-        awardedPoints: 0,
-        appliedRuleIds: [],
-      };
-    }
 
     const user = await this.usersService.findById(plan.loyaltyUserId);
     if (!user || !user.isActive) {
@@ -286,7 +295,7 @@ export class LoyaltyService {
   }
 
   private getOccurredAt(
-    trigger: AnyServiceEventEnvelope | AnyCommerceEventEnvelope | LoyaltyAccrualPlan,
+    trigger: AnyServiceEventEnvelope | LoyaltyAccrualPlan,
   ) {
     if (this.isAccrualPlan(trigger)) {
       return new Date(trigger.pointsInput.paidAt);
@@ -294,10 +303,6 @@ export class LoyaltyService {
 
     if (trigger.name === 'service.payment_recorded') {
       return new Date(trigger.payload.paidAt);
-    }
-
-    if (trigger.name === 'invoice.payment_recorded') {
-      return new Date(trigger.payload.receivedAt);
     }
 
     throw new ConflictException(`Unsupported loyalty trigger: ${trigger.name}`);
@@ -312,16 +317,6 @@ export class LoyaltyService {
         'accrualKind' in value &&
         !isServiceEventEnvelope(value),
     );
-  }
-
-  private getLoyaltyUserId(
-    trigger: AnyServiceEventEnvelope | AnyCommerceEventEnvelope | LoyaltyAccrualPlan,
-  ) {
-    if (this.isAccrualPlan(trigger)) {
-      return trigger.loyaltyUserId;
-    }
-
-    return trigger.payload.customerUserId;
   }
 
   private ruleMatchesAccrual(
@@ -340,25 +335,14 @@ export class LoyaltyService {
       return false;
     }
 
-    if (plan.pointsInput.mode === 'service_payment') {
-      return this.ruleMatchesServicePayment(rule, plan);
-    }
-
-    return this.ruleMatchesEcommercePayment(rule, plan);
+    return this.ruleMatchesServicePayment(rule, plan);
   }
 
   private ruleMatchesAccrualSource(
-    accrualSource: 'service' | 'ecommerce' | 'both',
-    mode: LoyaltyAccrualPlan['pointsInput']['mode'],
+    accrualSource: LoyaltyEarningRuleRecord['accrualSource'],
+    _mode: LoyaltyAccrualPlan['pointsInput']['mode'],
   ) {
-    if (accrualSource === 'both') {
-      return true;
-    }
-
-    return (
-      (accrualSource === 'service' && mode === 'service_payment') ||
-      (accrualSource === 'ecommerce' && mode === 'ecommerce_payment')
-    );
+    return accrualSource === 'service';
   }
 
   private ruleMatchesServicePayment(
@@ -388,35 +372,8 @@ export class LoyaltyService {
     return true;
   }
 
-  private ruleMatchesEcommercePayment(
-    rule: Awaited<ReturnType<LoyaltyRepository['findEarningRuleById']>>,
-    plan: LoyaltyAccrualPlan,
-  ) {
-    const pointsInput = plan.pointsInput;
-    if (pointsInput.mode !== 'ecommerce_payment') {
-      throw new ConflictException('Ecommerce loyalty plan is missing ecommerce payment details');
-    }
-
-    if (
-      rule.eligibleProductIds.length > 0 &&
-      !rule.eligibleProductIds.some((productId) => pointsInput.productIds.includes(productId))
-    ) {
-      return false;
-    }
-
-    if (
-      rule.eligibleProductCategoryIds.length > 0 &&
-      !rule.eligibleProductCategoryIds.some((categoryId) =>
-        pointsInput.productCategoryIds.includes(categoryId),
-      )
-    ) {
-      return false;
-    }
-
-    return true;
-  }
-
   private assertValidEarningRuleConfiguration(payload: {
+    accrualSource: 'service';
     formulaType: 'flat_points' | 'amount_ratio';
     flatPoints?: number | null;
     amountStepCents?: number | null;
@@ -424,6 +381,10 @@ export class LoyaltyService {
     activeFrom?: string | null;
     activeUntil?: string | null;
   }) {
+    if (payload.accrualSource !== 'service') {
+      throw new ConflictException('Only service-payment loyalty rules are supported');
+    }
+
     if (payload.formulaType === 'flat_points') {
       if (!payload.flatPoints || payload.flatPoints <= 0) {
         throw new ConflictException('Flat-point earning rules require a positive flatPoints value');
@@ -448,6 +409,70 @@ export class LoyaltyService {
         throw new ConflictException('activeFrom cannot be later than activeUntil');
       }
     }
+  }
+
+  private toCurrentTransaction(transaction: LoyaltyTransactionRecord) {
+    if (CURRENT_LOYALTY_SOURCE_TYPES.has(transaction.sourceType)) {
+      return transaction;
+    }
+
+    return {
+      ...transaction,
+      sourceType: 'manual_adjustment' as const,
+      idempotencyKey: null,
+      policyKey: null,
+      metadata: { migratedLegacyAccrual: true },
+    };
+  }
+
+  private toServiceEarningRule(rule: LoyaltyEarningRuleRecord) {
+    return {
+      id: rule.id,
+      name: rule.name,
+      description: rule.description,
+      accrualSource: 'service' as const,
+      formulaType: rule.formulaType,
+      flatPoints: rule.flatPoints,
+      amountStepCents: rule.amountStepCents,
+      pointsPerStep: rule.pointsPerStep,
+      minimumAmountCents: rule.minimumAmountCents,
+      eligibleServiceTypes: rule.eligibleServiceTypes,
+      eligibleServiceCategories: rule.eligibleServiceCategories,
+      promoLabel: rule.promoLabel,
+      manualBenefitNote: rule.manualBenefitNote,
+      activeFrom: rule.activeFrom,
+      activeUntil: rule.activeUntil,
+      status: rule.status,
+      createdByUserId: rule.createdByUserId,
+      updatedByUserId: rule.updatedByUserId,
+      createdAt: rule.createdAt,
+      updatedAt: rule.updatedAt,
+      audits: (rule.audits ?? []).map((audit) => ({
+        id: audit.id,
+        earningRuleId: audit.earningRuleId,
+        actorUserId: audit.actorUserId,
+        action: audit.action,
+        reason: audit.reason,
+        snapshot: {
+          name: audit.snapshot.name,
+          description: audit.snapshot.description,
+          accrualSource: 'service' as const,
+          formulaType: audit.snapshot.formulaType,
+          flatPoints: audit.snapshot.flatPoints,
+          amountStepCents: audit.snapshot.amountStepCents,
+          pointsPerStep: audit.snapshot.pointsPerStep,
+          minimumAmountCents: audit.snapshot.minimumAmountCents,
+          eligibleServiceTypes: audit.snapshot.eligibleServiceTypes,
+          eligibleServiceCategories: audit.snapshot.eligibleServiceCategories,
+          promoLabel: audit.snapshot.promoLabel,
+          manualBenefitNote: audit.snapshot.manualBenefitNote,
+          activeFrom: audit.snapshot.activeFrom,
+          activeUntil: audit.snapshot.activeUntil,
+          status: audit.snapshot.status,
+        },
+        createdAt: audit.createdAt,
+      })),
+    };
   }
 
   private async assertCanAccessAccount(userId: string, actor: LoyaltyActor) {

@@ -14,7 +14,10 @@ import * as schema from './schema';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const connectionString = configService.getOrThrow<string>('database.url');
-        return new Pool({ connectionString });
+        return new Pool({
+          connectionString,
+          connectionTimeoutMillis: 5_000,
+        });
       },
     },
     {

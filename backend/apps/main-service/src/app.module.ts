@@ -10,6 +10,7 @@ import { EventsModule } from '@shared/events/events.module';
 import { QueueModule } from '@shared/queue/queue.module';
 import { AuthModule } from '@main-modules/auth/auth.module';
 import { AiWorkerModule } from '@main-modules/ai-worker/ai-worker.module';
+import { AccessoriesModule } from '@main-modules/accessories/accessories.module';
 import { AnalyticsModule } from '@main-modules/analytics/analytics.module';
 import { BackJobsModule } from '@main-modules/back-jobs/back-jobs.module';
 import { BookingsModule } from '@main-modules/bookings/bookings.module';
@@ -27,6 +28,7 @@ import { VehicleLifecycleModule } from '@main-modules/vehicle-lifecycle/vehicle-
 import { VehiclesModule } from '@main-modules/vehicles/vehicles.module';
 
 import { HealthController } from './health.controller';
+import { HealthReadinessService } from './health-readiness.service';
 
 const isProduction = process.env.NODE_ENV?.trim().toLowerCase() === 'production';
 const configuredGlobalThrottleLimit = Number.parseInt(process.env.API_GLOBAL_THROTTLE_LIMIT ?? '', 10);
@@ -55,6 +57,7 @@ const globalThrottleLimit =
     DatabaseModule,
     QueueModule,
     EventsModule,
+    AccessoriesModule,
     AiWorkerModule,
     AnalyticsModule,
     UsersModule,
@@ -75,6 +78,7 @@ const globalThrottleLimit =
   ],
   controllers: [HealthController],
   providers: [
+    HealthReadinessService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

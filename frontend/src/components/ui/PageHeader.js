@@ -16,9 +16,9 @@ export default function PageHeader({
       )}
     >
       <div className="page-header">
-        <div className="min-w-0 space-y-3">
+        <div className="page-header-content">
           {eyebrow ? <p className="page-header-eyebrow">{eyebrow}</p> : null}
-          <div className="space-y-2.5">
+          <div className="page-header-copy">
             <h1 className="page-header-title">{title}</h1>
             {description ? <p className="page-header-description">{description}</p> : null}
           </div>

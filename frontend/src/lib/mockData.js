@@ -27,7 +27,6 @@ export const timelineEvents = [
   { id: 't5', vehicleId: 'v2', type: 'admin',      category: 'administrative', description: 'Customer approved repair estimate — ₱4,200.',                            isVerified: false, date: '2026-03-04', technicianName: null,                    jobOrderId: 'JO-2026-002' },
   { id: 't6', vehicleId: 'v3', type: 'alert',      category: 'verified',      description: 'Coolant temp sensor fault detected. Vehicle under repair.',               isVerified: false, date: '2026-04-08', technicianName: 'Engr. Jose Villanueva', jobOrderId: 'JO-2026-003' },
   { id: 't7', vehicleId: 'v4', type: 'service',    category: 'verified',      description: 'Preventive maintenance (PMS 20,000 km) completed.',                       isVerified: true,  date: '2026-01-28', technicianName: 'Engr. Dennis Ocampo',   jobOrderId: 'JO-2026-004' },
-  { id: 't8', vehicleId: 'v2', type: 'purchase',   category: 'administrative', description: 'Purchased 4 pcs Bridgestone Ecopia tires via Shop — Invoice #INV-0032.', isVerified: true,  date: '2026-03-12', technicianName: null,                    jobOrderId: null },
   { id: 't9', vehicleId: 'v5', type: 'admin',      category: 'administrative', description: 'Insurance inquiry submitted for 2026 renewal.',                          isVerified: false, date: '2026-04-01', technicianName: null,                    jobOrderId: null },
 ]
 
@@ -69,17 +68,6 @@ export const loyaltyAccounts = [
   { id: 'lp5', owner: 'Carlos Mendoza',   points: 95,   tier: 'Bronze' },
 ]
 
-export const shopProducts = [
-  { id: 'p1', name: 'Castrol GTX 10W-40 (4L)',              category: 'Lubricants', price: 895,   stock: 48, sku: 'LUB-001' },
-  { id: 'p2', name: 'Bridgestone Ecopia EP300 205/55R16',   category: 'Tires',      price: 5200,  stock: 8,  sku: 'TIR-001' },
-  { id: 'p3', name: 'Bosch Silver Battery NS60',             category: 'Battery',    price: 3850,  stock: 7,  sku: 'BAT-001' },
-  { id: 'p4', name: 'K&N High-Flow Air Filter',              category: 'Filters',    price: 1650,  stock: 23, sku: 'FIL-001' },
-  { id: 'p5', name: "Meguiar's Gold Class Car Wax",          category: 'Detailing',  price: 780,   stock: 31, sku: 'DET-001' },
-  { id: 'p6', name: 'Motul 8100 X-Cess 5W-40 (5L)',         category: 'Lubricants', price: 1450,  stock: 22, sku: 'LUB-002' },
-  { id: 'p7', name: 'Continental PremiumContact 6 225/45R17', category: 'Tires',    price: 6300,  stock: 6,  sku: 'TIR-002' },
-  { id: 'p8', name: 'Philips Ultinon LED H4 Bulb (pair)',    category: 'Electrical', price: 2200,  stock: 14, sku: 'ELE-001' },
-]
-
 export const SHOPS = [
   'CruisersCrib Makati',
   'CruisersCrib BGC',
@@ -107,14 +95,6 @@ export const redemptionLog = [
   { id: 'rd3', customerId: 'lp4', customerName: 'Ana Lim',        rewardId: 'rw3', rewardName: 'PMS Discount 20%',  pointsUsed: 800, date: '2026-03-15', redeemedBy: 'Admin', status: 'pending' },
   { id: 'rd4', customerId: 'lp1', customerName: 'Juan dela Cruz', rewardId: 'rw2', rewardName: 'Car Wash Voucher',  pointsUsed: 200, date: '2026-02-20', redeemedBy: 'Admin', status: 'used'    },
   { id: 'rd5', customerId: 'lp3', customerName: 'Pedro Reyes',    rewardId: 'rw5', rewardName: 'Free Tire Balancing', pointsUsed: 350, date: '2026-01-12', redeemedBy: 'Staff', status: 'used'  },
-]
-
-export const salesInvoices = [
-  { id: 'INV-2026-001', customer: 'Juan dela Cruz', items: ['Castrol GTX 10W-40 (4L) x2', 'K&N High-Flow Air Filter x1'], total: 4990,  status: 'paid',    date: '2026-04-05', method: 'Cash',  createdBy: 'Admin' },
-  { id: 'INV-2026-002', customer: 'Maria Santos',   items: ['Continental PremiumContact 6 x2'],                            total: 12600, status: 'partial', date: '2026-04-03', method: 'GCash', createdBy: 'Staff' },
-  { id: 'INV-2026-003', customer: 'Pedro Reyes',    items: ['Bosch Silver Battery NS60 x1', 'Philips LED H4 x1'],          total: 6050,  status: 'pending', date: '2026-04-07', method: 'Card',  createdBy: 'Admin' },
-  { id: 'INV-2026-004', customer: 'Ana Lim',        items: ["Meguiar's Gold Class Car Wax x2", 'Motul 8100 X-Cess x1'],   total: 3010,  status: 'paid',    date: '2026-03-30', method: 'Cash',  createdBy: 'Staff' },
-  { id: 'INV-2026-005', customer: 'Carlos Mendoza', items: ['Bridgestone Ecopia EP300 x1'],                                total: 5200,  status: 'paid',    date: '2026-03-25', method: 'Bank',  createdBy: 'Admin' },
 ]
 
 export const monthlyRevenue = [

@@ -36,7 +36,7 @@
 - `frontend/src/lib/api/generated/bookings/discovery.ts`
 - `frontend/src/lib/api/generated/bookings/errors.ts`
 - `frontend/src/lib/api/generated/bookings/surface-states.ts`
-- `frontend/src/lib/api/generated/regression/client-regression-pack.ts`
+- `packages/contracts/openapi/main-service.json`
 - `frontend/src/mocks/bookings/mocks.ts`
 
 ## Availability States To Cover

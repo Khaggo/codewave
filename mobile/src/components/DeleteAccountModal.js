@@ -1,7 +1,8 @@
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import PasswordField from './PasswordField';
 import { colors, radius } from '../theme';
+import { createPlatformShadow } from '../utils/platformShadow';
 
 export default function DeleteAccountModal({
   visible,
@@ -98,11 +99,13 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.36,
-    shadowRadius: 22,
-    elevation: 8,
+    ...createPlatformShadow({
+      color: colors.shadow,
+      height: 8,
+      opacity: 0.36,
+      radius: 22,
+      elevation: 8,
+    }),
   },
   iconBadge: {
     alignSelf: 'flex-start',

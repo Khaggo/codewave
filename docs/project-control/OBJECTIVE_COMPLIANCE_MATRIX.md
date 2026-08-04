@@ -14,7 +14,7 @@ Current status: QA Passed / Monitor
 
 Evidence available:
 
-- The latest one-command full-system Playwright rerun on 2026-05-22 passed `20` of `20` tests. It covers booking-to-cash, mobile multi-service booking, Shop/ecommerce rewards, insurance request/document handling, insurance reminder/broadcast, active-tab refresh, active-service booking block, Dashboard Insurance launcher, and service-loyalty paid-invoice timing.
+- The historical 2026-05-22 full-system run predates the 2026-08-01 scope update. Current acceptance uses the service-only Playwright inventory.
 - Earlier 17/20 and targeted-only recovery results are superseded by the latest 20/20 full-system rerun, but remain useful as historical evidence of which blockers were recovered.
 - A targeted recovery verification pass on 2026-05-21 patched customer same-slot availability conflicts and reservation-fee reference persistence, with backend tests and web build passing.
 - Historical panelist QA passed mobile session/access, legacy technician access checks, insurance screen structure, insurance module view tests, and Android export. Current role truth has since changed: technician authenticated portals are retired and replaced by adviser-owned technician-profile workflow proof.
@@ -29,7 +29,6 @@ Evidence available:
 - A human-QA PDF closure rerun on 2026-05-22 now live-proves active `Book` tab re-tap refresh, active `Garage` tab refresh, no forced fallback service auto-selection after clearing chosen services, Dashboard Insurance launch to the request/home surface, and booking rejection when the same vehicle still has an active service job order in `assigned`, `in_progress`, `blocked`, or `ready_for_qa`.
 - Insurance QA on 2026-05-21 proves OR/CR, policy, and police report uploads can remain attached to one insurance request, and staff API can read the same three documents.
 - Loyalty QA on 2026-05-21 proves service rewards do not accrue from reservation-fee payment or unpaid finalization, and accrue after the qualifying paid service invoice event.
-- Shop/ecommerce QA on 2026-05-21 proves customer mobile checkout can create an ecommerce order/invoice, Rewards updates only after the fully paid ecommerce invoice, and reward unlock progress reflects the new balance.
 
 Gaps:
 
@@ -40,9 +39,8 @@ Gaps:
 - The dedicated mobile `Vehicle Timeline & Lifecycle` screen now also has a panel/demo-oriented redesign in the current tree with compact top actions, stronger hero hierarchy, clearer vehicle selection, and more polished empty states; keep fresh screenshots/manual QA alongside the existing functional proof.
 - Customer multiple vehicles and garage pagination have current proof through a focused helper test plus live backend data showing four vehicles for the QA customer; the lifecycle redesign now presents that multi-vehicle context more clearly for demos, but keep this in the repeatable Playwright setup instead of relying on ad hoc data.
 - Multiple services per booking is green in the latest full-suite run.
-- Shop/product purchase and ecommerce reward timing are re-closed live in both targeted evidence and the latest full-system rerun.
 - Customer plate entry and customer/staff PH mobile number validation are now stronger in source: mobile customer forms normalize/validate plate numbers, backend vehicle writes reject malformed/canonical-duplicate plates, and backend user writes reject duplicate active phone numbers. These are implementation-verified, not yet live QA-closed.
-- Ecommerce paid-order rewards and service paid-invoice rewards both pass in the latest full-suite run; written qualification standards still need paper/demo documentation.
+- Service paid-invoice rewards pass the targeted flow; written qualification standards still need paper/demo documentation.
 - Insurance request flow supports multi-file same-request storage and staff open/download now passes live QA; road-accident process requirements still need completion.
 - The new business-process audit confirms the current insurance module is still inquiry/document/workflow tracking, not a full structured insurer-approval and estimate-to-job-order bridge. Do not over-claim insurer approval gating or built-in chat/push scope in Objective 1 paper/demo material.
 
@@ -74,7 +72,7 @@ Gaps:
 
 - The unified timeline now has current live proof in the adviser-owned technician-profile workflow too, but it still needs panel-ready screenshots/video for defense materials.
 - The earlier May 22 negative rerun against `8090` is now known to have been a stale-runtime false signal. Future Objective 2 QA should treat a fresh current-source mobile runtime as the source of truth when `8090` copy/reference behavior drifts from the checked-in code.
-- Explicit invoice/payment milestones and the previous Job Orders/readable-ID leaks are now proven clean on the fresh current-source rerun. The broader all-surface readable-ID sweep is now automated and passes after the Mobile Rewards activity and Mobile Shop Orders cleanup, including ecommerce-backed staff surfaces with `3001` available.
+- Explicit service invoice/payment milestones and the previous Job Orders/readable-ID leaks are proven clean on the tested service workflow. The broader readable-ID sweep must remain green on current staff and customer surfaces.
 - Initial inspection issue notes are supported, and the customer lifecycle screen now renders approved summary text; the dedicated lifecycle screen has a new showcase-style visual treatment, but a fresh panel-ready screenshot/manual capture path is still needed.
 - Insurance-related transactions are only partially aligned with the real business process because the timeline can show inquiry/record events, but the system still lacks structured insurance estimate, insurer-submission, and approval-gated repair linkage.
 
@@ -93,15 +91,13 @@ Current status: QA Passed / Monitor
 Evidence available:
 
 - Staff web supports booking schedule, job orders, QA audit, invoices.
-- Admin CRUD/pricing/billing, booking-to-cash, service paid-invoice loyalty, and Shop/ecommerce rewards all passed in the latest 20/20 full-system rerun on fresh listeners.
-- Earlier focused blocker-closure reruns on 2026-05-22 re-closed booking-to-cash, service paid-invoice loyalty, and customer Shop/ecommerce rewards before they were superseded by the green full-system pass.
+- Service administration, booking-to-cash, and service paid-invoice loyalty require the current service-only regression gate.
+- Earlier focused blocker-closure reruns on 2026-05-22 covered booking-to-cash and service paid-invoice loyalty.
 - Job Orders source-picking and evidence-feedback recovery fixes were applied on 2026-05-21 and passed frontend build verification.
 - The panelist QA audit passed staff web build plus inventory, loyalty, invoice/order, QA audit, insurance, back-job, vehicle records, and booking service helper/view tests.
 - Targeted proof tests now verify readable booking/job-order references across the critical booking, Job Orders, QA Audit, and invoice lookup screens.
 - A human-QA PDF closure rerun on 2026-05-22 live-proves the Job Orders banner `QA Audit` CTA opens `/admin/qa-audit` and selected intake inspection detail shows captured intake snapshot/notes.
 - Insurance/loyalty QA on 2026-05-21 proves backend insurance document storage, staff insurance open/download, and service paid-invoice loyalty accrual timing.
-- Shop/ecommerce rewards QA on 2026-05-21 proves staff catalog visibility for a runtime-created product, customer mobile checkout, staff UI partial/final ecommerce payment recording, ecommerce paid-invoice reward accrual, Reward Config versus Earning Rules separation, deactivated reward behavior, deactivated earning-rule behavior, and adviser lockout from direct earning-rule configuration.
-- Admin CRUD / pricing / billing QA on 2026-05-21 proves staff can create catalog products/categories, create inventory-backed products, adjust inventory quantity, create active/inactive booking services, view Reward Config separately from Earning Rules, and complete ecommerce billing from `Invoices & Orders`.
 - The panelist flow QA on 2026-05-21 found a fresh booking-to-cash blocker: Job Orders handoff references could render as `BK-YYYYMMDD-PENDING` and fail to match the customer-visible booking reference.
 - A targeted recovery patch on 2026-05-21 persists durable booking references through Job Orders handoff candidates, and the latest full rerun confirms the booking-to-cash flow remains green.
 - A follow-up recovery patch on 2026-05-21 removes the current-month blind spot from `Invoices & Orders` service-record loading and makes selector labels prefer unique source booking references; the latest full rerun is green, with residual polish around invoice lookup specificity and immediate visibility.
@@ -110,9 +106,9 @@ Gaps:
 
 - Shop/catalog/runtime-created product visibility, customer checkout/rewards, and admin billing follow-through pass in the latest full-system rerun.
 - Service pricing, inventory threshold persistence, and finalized service invoice proof are now all green in the latest admin rerun; the remaining Objective 3 gaps are paper/demo documentation rather than blocker defects.
-- Loyalty earning logic has both ecommerce paid-invoice proof and service paid-invoice proof in the latest full rerun.
+- Loyalty earning logic has paid-service invoice proof.
 - Staff insurance document review open/download behavior is QA-closed for locally uploaded OR/CR, policy, and police report files.
-- Billing details and quotation/pricing are green for admin, ecommerce, and service booking-to-cash surfaces in the latest full rerun. Residual polish remains around invoice lookup specificity and immediate visibility.
+- Billing details and quotation/pricing are implemented for service administration and booking-to-cash. Residual polish remains around invoice lookup specificity and immediate visibility.
 - Latest live QA confirms the patched booking-reference handoff stays functional through booking-to-cash. Residual UX polish remains because the just-paid invoice reference was not always immediately visible without extra selector interaction.
 
 Required proof:
@@ -191,12 +187,11 @@ Evidence available:
 
 - Playwright QA suite exists, and the latest full-system rerun passes: `20` passed, `0` failed.
 - Role access and validation tests exist.
-- The latest full-system rerun confirms panel-critical areas are green together: adviser-owned Job Orders/QA Audit access, retired-login copy, critical-surface readable-ID sweep, mobile Shop/ecommerce rewards, admin billing, Objective 2, Back-Jobs finalized-origin/follow-through, insurance reminder/broadcast send, checklist-only workshop proof, booking-to-cash, service-loyalty booking setup, and mobile multi-service booking.
+- The service-only gate must confirm adviser-owned Job Orders/QA Audit access, retired-login copy, readable IDs, service billing, Objective 2, Back-Jobs, insurance reminder/broadcast, checklist workshop proof, booking-to-cash, service loyalty, and mobile multi-service booking.
 - Targeted regression verification on 2026-05-21 passed after patching the four residual booking-to-cash QA findings in code.
 - The panelist QA audit added backend, staff web, mobile helper/view, Android export, and objective-level evidence in `docs/project-control/PANELIST_SYSTEM_QA_AUDIT_2026-05-21.md`.
 - Insurance/loyalty QA on 2026-05-21 added targeted backend, helper/view, and live Playwright evidence; the final live rerun passed staff insurance document open/download behavior and service-payment loyalty timing.
-- Shop/ecommerce rewards QA on 2026-05-21 added live Playwright evidence for customer checkout, staff UI ecommerce invoice payment timing, mobile Rewards update, loyalty admin role separation, staff catalog visibility, and no raw mobile product UUID display.
-- Repo-root runtime commands now use a single-instance watchdog for the main backend, ecommerce backend, staff web, and Expo listeners so local QA evidence is less likely to be polluted by duplicate Node or Expo processes on the same ports.
+- Repo-root runtime commands use a single-instance manager for the main backend, staff web, Storybook, and Expo listeners so local QA evidence is less likely to be polluted by duplicate processes.
 - A fresh 2026-07-25 staff usability pass made Booking queue-first, preserved record context through Intake, Job Orders, QA, and Billing, added shared lifecycle/next-action guidance, and replaced long QA/Billing selection dropdowns with searchable queues. The booking-to-cash, role-access, and Objective 2 lifecycle/readable-ID Playwright runs all passed.
 
 Gaps:

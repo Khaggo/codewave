@@ -5,7 +5,22 @@ import { defineConfig, devices } from '@playwright/test';
 
 const headless = process.env.PW_HEADLESS !== 'false';
 const staticMobileExportPath = path.resolve('mobile/.runtime/qa-mobile-web-export/index.html');
-const useStaticMobileExport = !process.env.QA_MOBILE_BASE_URL && fs.existsSync(staticMobileExportPath);
+const staticMobileExportRequested =
+  process.env.QA_USE_STATIC_MOBILE_EXPORT === 'true';
+const useStaticMobileExport =
+  !process.env.QA_MOBILE_BASE_URL &&
+  staticMobileExportRequested &&
+  fs.existsSync(staticMobileExportPath);
+
+if (
+  !process.env.QA_MOBILE_BASE_URL &&
+  staticMobileExportRequested &&
+  !fs.existsSync(staticMobileExportPath)
+) {
+  throw new Error(
+    `QA_USE_STATIC_MOBILE_EXPORT=true, but no export exists at ${staticMobileExportPath}.`,
+  );
+}
 const mobileBaseUrl = process.env.QA_MOBILE_BASE_URL ?? (useStaticMobileExport ? 'http://127.0.0.1:8095' : 'http://127.0.0.1:8090');
 
 export default defineConfig({

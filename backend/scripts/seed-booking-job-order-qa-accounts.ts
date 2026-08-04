@@ -4,6 +4,7 @@ import path from 'path';
 import { Pool } from 'pg';
 
 import { assertOperationalSafety, parseOperationalArgs } from './operational-safety';
+import { requireSeedPassword } from './lib/seed-credential-safety';
 
 type StaffRole = 'technician' | 'head_technician' | 'service_adviser';
 type CustomerSeedAccount = {
@@ -53,8 +54,6 @@ if (!databaseUrl) {
 
 const pool = new Pool({ connectionString: databaseUrl });
 
-const qaPassword = process.env.BOOKING_JOB_ORDER_QA_PASSWORD ?? 'Password1.';
-
 const qaAccounts = {
   customer: {
     email: 'qa.booking.customer@example.com',
@@ -93,8 +92,8 @@ async function upsertCustomerAccount(input: {
   firstName: string;
   lastName: string;
   phone?: string;
-}) {
-  const passwordHash = await bcrypt.hash(qaPassword, 10);
+}, password: string) {
+  const passwordHash = await bcrypt.hash(password, 10);
   const client = await pool.connect();
 
   try {
@@ -182,8 +181,8 @@ async function upsertStaffAccount(input: {
   phone?: string;
   role: StaffRole;
   staffCode: string;
-}) {
-  const passwordHash = await bcrypt.hash(qaPassword, 10);
+}, password: string) {
+  const passwordHash = await bcrypt.hash(password, 10);
   const client = await pool.connect();
 
   try {
@@ -272,17 +271,21 @@ async function main() {
     return;
   }
 
-  const seededCustomer = await upsertCustomerAccount(qaAccounts.customer);
+  const qaPassword = requireSeedPassword(
+    process.env.BOOKING_JOB_ORDER_QA_PASSWORD,
+    'BOOKING_JOB_ORDER_QA_PASSWORD',
+  );
+  const seededCustomer = await upsertCustomerAccount(qaAccounts.customer, qaPassword);
   const seededStaff = await Promise.all([
-    upsertStaffAccount(qaAccounts.adviser),
-    upsertStaffAccount(qaAccounts.technician),
-    upsertStaffAccount(qaAccounts.headTechnician),
+    upsertStaffAccount(qaAccounts.adviser, qaPassword),
+    upsertStaffAccount(qaAccounts.technician, qaPassword),
+    upsertStaffAccount(qaAccounts.headTechnician, qaPassword),
   ]);
 
   console.log(
     JSON.stringify(
       {
-        password: qaPassword,
+        credentialSource: 'BOOKING_JOB_ORDER_QA_PASSWORD',
         customer: seededCustomer,
         staff: seededStaff,
         seededVehiclePlate: 'QAJO1001',

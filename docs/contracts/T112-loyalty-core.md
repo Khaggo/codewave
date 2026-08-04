@@ -8,7 +8,6 @@
 
 - `docs/architecture/domains/main-service/loyalty.md`
 - `docs/architecture/tasks/01-main-service/T112-loyalty-core.md`
-- `docs/architecture/domains/ecommerce/commerce-events.md`
 - internal contract code:
   - `backend/shared/events/loyalty-accrual-planner.service.ts`
   - `backend/apps/main-service/src/modules/loyalty/controllers/loyalty.controller.ts`
@@ -59,7 +58,7 @@
 
 - `T112` turns loyalty from a pure event-planning slice into a live ledger and reward catalog domain.
 - Accrual remains event-driven and idempotent: duplicate paid-service facts do not create a second award.
-- Loyalty no longer consumes ecommerce `invoice.payment_recorded` for point earning.
+- Loyalty consumes only paid-service facts for point earning.
 - Current live implementation evaluates active admin-configured earning rules against `service.payment_recorded`.
 - Reward and earning-rule history is audit-backed; admins can update or deactivate policy entries without mutating historical loyalty transactions.
 - Reward redemption is ledger-backed and creates a debit transaction plus a durable redemption record.

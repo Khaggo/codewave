@@ -37,7 +37,11 @@ if (tests.length === 0) {
 }
 
 console.log(`Running ${tests.length} Node tests.`);
-const result = spawnSync(process.execPath, ['--test', ...tests], {
+const result = spawnSync(process.execPath, [
+  '--experimental-default-type=module',
+  '--test',
+  ...tests,
+], {
   cwd: process.cwd(),
   stdio: 'inherit',
 });

@@ -26,6 +26,10 @@ import {
 } from '@/lib/staffWorkQueueClient'
 import { getStaffWorkQueueCapacityState } from './staffWorkQueueCapacity.mjs'
 import { createStaffWorkDispatchCoordinator } from './staffWorkDispatchCoordinator.mjs'
+import {
+  createEmptyStaffWorkQueueResult,
+  normalizeStaffWorkQueueResult,
+} from './staffWorkQueueResult.mjs'
 import StaffWorkQueueItem from './StaffWorkQueueItem'
 
 const views = [
@@ -53,20 +57,7 @@ export default function StaffWorkQueue({
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [cursor, setCursor] = useState('')
   const [cursorHistory, setCursorHistory] = useState([])
-  const [result, setResult] = useState({
-    items: [],
-    page: { hasNext: false, nextCursor: null },
-    summary: { total: 0, assigned: 0, unassigned: 0, mine: 0, blocked: 0, overdue: 0, oldestWaitSeconds: 0 },
-    session: {
-      available: false,
-      capacity: 1,
-      activeClaimCount: 0,
-      remainingCapacity: 1,
-      activeClaims: [],
-      currentClaimId: null,
-      currentClaim: null,
-    },
-  })
+  const [result, setResult] = useState(createEmptyStaffWorkQueueResult)
   const [status, setStatus] = useState('idle')
   const [message, setMessage] = useState('')
   const [dispatchPending, setDispatchPending] = useState(false)
@@ -99,7 +90,7 @@ export default function StaffWorkQueue({
     if (!quiet) setStatus('loading')
 
     try {
-      const next = await listStaffWorkQueue({
+      const response = await listStaffWorkQueue({
         queueType,
         accessToken,
         view: viewOverride,
@@ -108,9 +99,12 @@ export default function StaffWorkQueue({
         limit: 25,
       })
       if (requestId !== requestIdRef.current) return
+      const next = normalizeStaffWorkQueueResult(response)
       setResult(next)
-      setStatus('ready')
-      setMessage('')
+      if (!quiet) {
+        setStatus('ready')
+        setMessage('')
+      }
       return next
     } catch (error) {
       if (requestId !== requestIdRef.current) return
@@ -294,7 +288,7 @@ export default function StaffWorkQueue({
 
   return (
     <section className="overflow-hidden rounded-lg border border-surface-border bg-surface-card">
-      <header className="flex flex-col gap-4 border-b border-surface-border px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+      <header className="flex flex-col gap-3 border-b border-surface-border px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-semibold text-ink-primary">{title}</h2>
@@ -347,7 +341,7 @@ export default function StaffWorkQueue({
         </div>
       </header>
 
-      <div className="border-b border-surface-border px-4 py-3">
+      <div className="border-b border-surface-border px-4 py-2.5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="grid w-full grid-cols-3 gap-1 rounded-lg border border-surface-border bg-surface-muted p-1 sm:grid-cols-5 lg:w-auto">
             {views.map(({ id, label, shortLabel, icon: Icon }) => (
@@ -384,7 +378,14 @@ export default function StaffWorkQueue({
         </div>
       </div>
 
-      {message ? <p className="mx-4 mt-4 rounded-md border border-red-800/50 bg-red-950/30 p-3 text-sm text-red-200">{message}</p> : null}
+      {message ? (
+        <div className="mx-4 mt-3 flex flex-col gap-2 rounded-md border border-red-800/50 bg-red-950/30 p-3 text-sm text-red-200 sm:flex-row sm:items-center sm:justify-between">
+          <span>{/failed to fetch|network/i.test(message) ? 'The queue could not reach the server. Check the connection and retry.' : message}</span>
+          <button type="button" onClick={() => void load()} className="ops-action-secondary shrink-0 !px-3">
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       <div className="divide-y divide-surface-border" aria-live="polite">
         {items.map((item) => (

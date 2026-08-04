@@ -258,7 +258,6 @@ test('customer booking reaches completed history only after workshop, QA, and pa
     const qaTargetJobOrder = await getJobOrderById(request, adviserSession, jobOrderId);
     await loginStaff(headTechPage, qaAccounts.adviser, '/admin/qa-audit');
     await recordQaVerdict(headTechPage, {
-      jobOrderId,
       jobOrderReference:
         qaTargetJobOrder.sourceBookingReference || qaTargetJobOrder.jobOrderReference,
       scheduledDate: jobOrderWorkDate,

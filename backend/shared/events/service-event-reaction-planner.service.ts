@@ -58,7 +58,7 @@ export class ServiceEventReactionPlannerService {
 
   private getReason(eventName: ServiceEventName, consumerDomain: ServiceEventConsumerDomain) {
     if (eventName === 'service.payment_recorded' && consumerDomain === 'main-service.loyalty') {
-      return 'Loyalty evaluates a paid service fact only after the service invoice is settled, never from booking, ecommerce checkout, or invoice finalization alone.';
+      return 'Loyalty evaluates a paid service fact only after the service invoice is settled, never from booking or invoice finalization alone.';
     }
 
     if (eventName === 'service.payment_recorded') {

@@ -1,5 +1,6 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius } from '../theme';
+import { createPlatformShadow } from '../utils/platformShadow';
 
 export default function ConfirmationModal({
   visible,
@@ -62,11 +63,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: 24,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.36,
-    shadowRadius: 24,
-    elevation: 8,
+    ...createPlatformShadow({
+      color: colors.shadow,
+      height: 8,
+      opacity: 0.36,
+      radius: 24,
+      elevation: 8,
+    }),
   },
   title: {
     color: colors.text,

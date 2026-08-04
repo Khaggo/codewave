@@ -13,6 +13,12 @@ const insecureSecretValues = new Set([
   'secret',
   'password',
 ]);
+const accessoryCommerceModes = new Set([
+  'off',
+  'staff_preview',
+  'catalog',
+  'ordering',
+]);
 
 export const validateEnv = (config: EnvRecord): EnvRecord => {
   for (const key of requiredKeys) {
@@ -22,6 +28,69 @@ export const validateEnv = (config: EnvRecord): EnvRecord => {
   }
 
   const isProduction = config.NODE_ENV?.trim().toLowerCase() === 'production';
+  const accessoryCommerceMode = config.ACCESSORY_COMMERCE_MODE?.trim().toLowerCase();
+  if (!accessoryCommerceMode) {
+    if (isProduction) {
+      throw new Error(
+        'Missing required environment variable: ACCESSORY_COMMERCE_MODE',
+      );
+    }
+    config.ACCESSORY_COMMERCE_MODE = 'off';
+  } else if (!accessoryCommerceModes.has(accessoryCommerceMode)) {
+    throw new Error(
+      'ACCESSORY_COMMERCE_MODE must be off, staff_preview, catalog, or ordering',
+    );
+  } else {
+    config.ACCESSORY_COMMERCE_MODE = accessoryCommerceMode;
+  }
+
+  const accessoryMediaDriver =
+    config.ACCESSORY_MEDIA_DRIVER?.trim().toLowerCase() || 'local';
+  if (!['local', 's3'].includes(accessoryMediaDriver)) {
+    throw new Error('ACCESSORY_MEDIA_DRIVER must be local or s3');
+  }
+  config.ACCESSORY_MEDIA_DRIVER = accessoryMediaDriver;
+
+  if (
+    isProduction &&
+    ['catalog', 'ordering'].includes(config.ACCESSORY_COMMERCE_MODE) &&
+    accessoryMediaDriver !== 's3'
+  ) {
+    throw new Error(
+      'Production Accessories catalog or ordering mode requires ACCESSORY_MEDIA_DRIVER=s3',
+    );
+  }
+
+  if (isProduction && accessoryMediaDriver === 's3') {
+    for (const key of [
+      'ACCESSORY_MEDIA_S3_ENDPOINT',
+      'ACCESSORY_MEDIA_S3_REGION',
+      'ACCESSORY_MEDIA_S3_BUCKET',
+      'ACCESSORY_MEDIA_S3_ACCESS_KEY_ID',
+      'ACCESSORY_MEDIA_S3_SECRET_ACCESS_KEY',
+    ] as const) {
+      if (!config[key]?.trim()) {
+        throw new Error(`Missing required environment variable: ${key}`);
+      }
+    }
+  }
+
+  if (isProduction && config.ACCESSORY_COMMERCE_MODE === 'ordering') {
+    for (const key of [
+      'ACCESSORY_PAYMONGO_WEBHOOK_SECRET',
+      'ACCESSORY_PAYMONGO_CHECKOUT_SUCCESS_URL',
+      'ACCESSORY_PAYMONGO_CHECKOUT_CANCEL_URL',
+      'ACCESSORY_PAYMONGO_LIVEMODE',
+    ] as const) {
+      if (!config[key]?.trim()) {
+        throw new Error(`Missing required environment variable: ${key}`);
+      }
+    }
+    if (!['true', 'false'].includes(config.ACCESSORY_PAYMONGO_LIVEMODE!.trim().toLowerCase())) {
+      throw new Error('ACCESSORY_PAYMONGO_LIVEMODE must be true or false');
+    }
+  }
+
   for (const key of ['STAFF_WORK_JOB_ORDER_CAPACITY', 'STAFF_WORK_QA_CAPACITY'] as const) {
     const rawValue = config[key]?.trim();
     if (!rawValue) continue;
@@ -89,7 +158,6 @@ export const validateEnv = (config: EnvRecord): EnvRecord => {
     'PAYMONGO_WEBHOOK_SECRET',
     'PAYMONGO_BOOKING_WEBHOOK_SECRET',
     'PAYMONGO_SERVICE_INVOICE_WEBHOOK_SECRET',
-    'PAYMONGO_ECOMMERCE_WEBHOOK_SECRET',
     'PAYMONGO_CHECKOUT_SUCCESS_URL',
     'PAYMONGO_CHECKOUT_CANCEL_URL',
   ] as const;
@@ -114,7 +182,6 @@ export const validateEnv = (config: EnvRecord): EnvRecord => {
     'PAYMONGO_WEBHOOK_SECRET',
     'PAYMONGO_BOOKING_WEBHOOK_SECRET',
     'PAYMONGO_SERVICE_INVOICE_WEBHOOK_SECRET',
-    'PAYMONGO_ECOMMERCE_WEBHOOK_SECRET',
   ] as const;
 
   const hasAnyPaymongoWebhookSecret = paymongoWebhookKeys.some((key) => Boolean(config[key]));

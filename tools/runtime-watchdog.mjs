@@ -3,21 +3,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { spawn, execSync } from 'node:child_process';
-import http from 'node:http';
-import https from 'node:https';
+import { execFileSync, spawn } from 'node:child_process';
 import { format } from 'node:util';
 
 import { normalizeSpawnEnvironment } from './runtime-definitions.mjs';
+import {
+  getRuntimeLogPolicy,
+  rotateLogFile,
+  writeJsonAtomic,
+} from './runtime-file-utils.mjs';
+import { getListeningPid } from './runtime-port-listener.mjs';
+import { probeHealth } from './runtime-probe.mjs';
 
 let runtimeDirectory = path.join(process.cwd(), '.runtime');
 let watchdogDirectory = path.join(runtimeDirectory, 'watchdogs');
 const RESTART_DELAY_MS = 1500;
-const HEALTH_TIMEOUT_MS = 2500;
+const DEFAULT_LISTENER_TIMEOUT_MS = 30_000;
+const OS_COMMAND_TIMEOUT_MS = 3_000;
 
 function printUsage() {
   console.log(`Usage:
-  node tools/runtime-watchdog.mjs --name <runtime-name> --port <port> --cwd <dir> [--health-url <url>] -- <command> [args...]
+  node tools/runtime-watchdog.mjs --name <runtime-name> --port <port> --cwd <dir> [--health-url <url>] [--listener-timeout-ms <ms>] -- <command> [args...]
 
 Example:
   node tools/runtime-watchdog.mjs --name staff-web --port 3002 --cwd frontend --health-url http://127.0.0.1:3002/bookings -- npm run dev -- --port 3002
@@ -44,6 +50,7 @@ function parseArgs(argv) {
     healthUrl: '',
     instanceId: '',
     runtimeDir: '.runtime',
+    listenerTimeoutMs: DEFAULT_LISTENER_TIMEOUT_MS,
   };
 
   for (let index = 0; index < flags.length; index += 1) {
@@ -79,6 +86,11 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (flag === '--listener-timeout-ms') {
+      options.listenerTimeoutMs = Number.parseInt(value ?? '', 10);
+      index += 1;
+      continue;
+    }
     throw new Error(`Unknown flag: ${flag}`);
   }
 
@@ -90,6 +102,12 @@ function parseArgs(argv) {
   }
   if (!options.cwd) {
     throw new Error('Missing required --cwd value.');
+  }
+  if (
+    !Number.isInteger(options.listenerTimeoutMs) ||
+    options.listenerTimeoutMs <= 0
+  ) {
+    throw new Error('Missing valid --listener-timeout-ms value.');
   }
   if (command.length === 0) {
     throw new Error('Missing child command after `--`.');
@@ -107,6 +125,7 @@ function installDetachedLogger(name) {
   const baseDirectory = path.join(runtimeDirectory, 'managed', name);
   ensureDirectory(baseDirectory);
   const managerLog = path.join(baseDirectory, 'manager.log');
+  rotateLogFile(managerLog, getRuntimeLogPolicy());
   const append = (level, args) => {
     const message = format(...args);
     fs.appendFileSync(
@@ -152,10 +171,7 @@ function readLock(name) {
 
 function writeLock(name, data) {
   ensureDirectory(watchdogDirectory);
-  const filePath = lockFilePath(name);
-  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(temporaryPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
-  fs.renameSync(temporaryPath, filePath);
+  writeJsonAtomic(lockFilePath(name), data);
 }
 
 function removeLock(name) {
@@ -172,52 +188,22 @@ function removeOwnedLock(name, instanceId) {
   }
 }
 
-function getPortListeners(port) {
-  try {
-    const output = execSync(`netstat -ano -p tcp | findstr :${port}`, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-
-    return output
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const parts = line.split(/\s+/);
-        if (parts.length < 5) {
-          return null;
-        }
-        return {
-          protocol: parts[0],
-          localAddress: parts[1],
-          foreignAddress: parts[2],
-          state: parts[3],
-          pid: Number.parseInt(parts[4], 10),
-        };
-      })
-      .filter(Boolean)
-      .filter((entry) => entry.localAddress.endsWith(`:${port}`));
-  } catch {
-    return [];
-  }
-}
-
-function getListeningPid(port) {
-  const listeningEntry = getPortListeners(port).find((entry) => entry.state === 'LISTENING');
-  return listeningEntry?.pid ?? null;
-}
-
 function getProcessName(pid) {
   if (!pid) {
     return 'unknown';
   }
 
   try {
-    const output = execSync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    const output = execFileSync(
+      'tasklist',
+      ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: OS_COMMAND_TIMEOUT_MS,
+        windowsHide: true,
+      },
+    ).trim();
 
     if (!output || output.startsWith('INFO:')) {
       return 'unknown';
@@ -230,27 +216,6 @@ function getProcessName(pid) {
   }
 }
 
-function probeHealth(url) {
-  if (!url) {
-    return Promise.resolve(false);
-  }
-
-  return new Promise((resolve) => {
-    const client = url.startsWith('https://') ? https : http;
-    const request = client.get(url, { timeout: HEALTH_TIMEOUT_MS }, (response) => {
-      response.resume();
-      resolve(response.statusCode >= 200 && response.statusCode < 500);
-    });
-
-    request.on('timeout', () => {
-      request.destroy();
-      resolve(false);
-    });
-
-    request.on('error', () => resolve(false));
-  });
-}
-
 function createLogPaths(name) {
   const baseDir = path.join(runtimeDirectory, 'managed', name);
   ensureDirectory(baseDir);
@@ -260,7 +225,8 @@ function createLogPaths(name) {
   };
 }
 
-function openLogStream(filePath) {
+function openLogStream(filePath, forceRotate = false) {
+  rotateLogFile(filePath, getRuntimeLogPolicy(), { force: forceRotate });
   return fs.createWriteStream(filePath, { flags: 'a' });
 }
 
@@ -320,6 +286,8 @@ async function main() {
 
   let shuttingDown = false;
   let child = null;
+  let childGeneration = 0;
+  let firstChildStart = true;
 
   const shutdown = (signalName) => {
     shuttingDown = true;
@@ -342,8 +310,9 @@ async function main() {
       return;
     }
 
-    const stdoutStream = openLogStream(logs.stdout);
-    const stderrStream = openLogStream(logs.stderr);
+    const stdoutStream = openLogStream(logs.stdout, firstChildStart);
+    const stderrStream = openLogStream(logs.stderr, firstChildStart);
+    firstChildStart = false;
 
     console.log(`[watchdog:${options.name}] starting child command on port ${options.port}: ${command.join(' ')}`);
 
@@ -359,6 +328,7 @@ async function main() {
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    const generation = ++childGeneration;
 
     writeLock(options.name, {
       version: 1,
@@ -373,11 +343,12 @@ async function main() {
       startedAt: new Date().toISOString(),
       command,
       status: 'starting',
+      startupTimeoutMs: options.listenerTimeoutMs,
     });
 
-    const listenerDeadline = Date.now() + 30_000;
+    const listenerDeadline = Date.now() + options.listenerTimeoutMs;
     const recordListener = () => {
-      if (shuttingDown || child?.killed) return;
+      if (shuttingDown || child?.killed || generation !== childGeneration) return;
       const listenerPid = getListeningPid(options.port);
       if (listenerPid) {
         const current = readLock(options.name);
@@ -391,9 +362,8 @@ async function main() {
         }
         return;
       }
-      if (Date.now() < listenerDeadline) {
-        setTimeout(recordListener, 200);
-      }
+      const retryDelay = Date.now() < listenerDeadline ? 200 : 2_000;
+      setTimeout(recordListener, retryDelay);
     };
     setTimeout(recordListener, 100);
 
@@ -441,6 +411,7 @@ async function main() {
     startedAt: new Date().toISOString(),
     command,
     status: 'starting',
+    startupTimeoutMs: options.listenerTimeoutMs,
   });
 
   startChild();

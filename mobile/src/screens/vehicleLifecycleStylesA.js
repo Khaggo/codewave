@@ -1,5 +1,6 @@
 import { StyleSheet } from 'react-native';
 import { colors, radius } from '../theme';
+import { createPlatformShadow } from '../utils/platformShadow';
 
 export default StyleSheet.create({
   root: {
@@ -10,21 +11,16 @@ export default StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 34,
-    gap: 18,
+    gap: 14,
   },
   heroShell: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    overflow: 'hidden',
+    gap: 10,
   },
   heroTopRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 0,
   },
   heroActions: {
     flexDirection: 'row',
@@ -68,10 +64,7 @@ export default StyleSheet.create({
     color: colors.text,
   },
   heroPanel: {
-    gap: 16,
-    paddingHorizontal: 16,
-    paddingBottom: 18,
-    paddingTop: 18,
+    gap: 8,
   },
   headerCopy: {
     flex: 1,
@@ -80,20 +73,20 @@ export default StyleSheet.create({
     color: colors.primary,
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 1.5,
+    letterSpacing: 0,
   },
   title: {
     color: colors.text,
-    fontSize: 27,
+    fontSize: 24,
     fontWeight: '900',
-    lineHeight: 33,
-    marginTop: 5,
+    lineHeight: 29,
+    marginTop: 3,
   },
   subtitle: {
     color: colors.mutedText,
     fontSize: 14,
     lineHeight: 21,
-    marginTop: 8,
+    marginTop: 4,
   },
   heroBadgeRow: {
     flexDirection: 'row',
@@ -157,10 +150,125 @@ export default StyleSheet.create({
   selectorSection: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radius.xl,
+    borderRadius: 8,
     borderWidth: 1,
-    gap: 14,
-    padding: 18,
+    gap: 8,
+    padding: 12,
+  },
+  selectorLabel: {
+    color: colors.mutedText,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+  },
+  vehiclePickerButton: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceStrong,
+    paddingHorizontal: 12,
+  },
+  vehiclePickerRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+    paddingVertical: 10,
+  },
+  vehiclePickerRowActive: {
+    backgroundColor: colors.primarySoft,
+  },
+  vehiclePickerRowIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vehiclePickerRowCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  vehiclePickerRowTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  vehiclePickerRowMeta: {
+    color: colors.mutedText,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  vehiclePickerSheet: {
+    maxHeight: '82%',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  vehiclePickerSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  vehiclePickerSheetCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  vehiclePickerSheetTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  vehiclePickerSheetSubtitle: {
+    color: colors.mutedText,
+    fontSize: 13,
+    marginTop: 3,
+  },
+  vehiclePickerCloseButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vehiclePickerList: {
+    maxHeight: 330,
+    marginTop: 10,
+  },
+  vehiclePickerPager: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 12,
+  },
+  vehicleSearchField: {
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    minHeight: 48,
+    paddingLeft: 14,
+  },
+  vehicleSearchInput: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 15,
+    minHeight: 48,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  vehicleSearchClearButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 44,
   },
   sectionHeading: {
     gap: 6,
@@ -191,10 +299,13 @@ export default StyleSheet.create({
     gap: 8,
   },
   vehiclePagerButton: {
+    minHeight: 44,
     backgroundColor: colors.surfaceStrong,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -219,11 +330,13 @@ export default StyleSheet.create({
   vehicleChipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.22,
-    shadowRadius: 20,
-    elevation: 4,
+    ...createPlatformShadow({
+      color: colors.primary,
+      height: 12,
+      opacity: 0.22,
+      radius: 20,
+      elevation: 4,
+    }),
   },
   vehicleChipEyebrow: {
     color: colors.accent,
@@ -259,7 +372,7 @@ export default StyleSheet.create({
   },
   vehicleHero: {
     backgroundColor: colors.surfaceStrong,
-    borderRadius: radius.xl,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 18,
@@ -314,7 +427,7 @@ export default StyleSheet.create({
   metricCard: {
     backgroundColor: colors.surfaceStrong,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: 8,
     borderWidth: 1,
     flex: 1,
     gap: 8,

@@ -1,6 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-import { loyaltySourceTypeEnum, loyaltyTransactionTypeEnum } from '../schemas/loyalty.schema';
+import { loyaltyTransactionTypeEnum } from '../schemas/loyalty.schema';
+
+const currentLoyaltySourceTypes = [
+  'service_payment',
+  'service_invoice',
+  'reward_redemption',
+  'manual_adjustment',
+  'service_reversal',
+] as const;
 
 export class LoyaltyTransactionResponseDto {
   @ApiProperty({
@@ -20,10 +28,10 @@ export class LoyaltyTransactionResponseDto {
   transactionType!: (typeof loyaltyTransactionTypeEnum.enumValues)[number];
 
   @ApiProperty({
-    enum: loyaltySourceTypeEnum.enumValues,
+    enum: currentLoyaltySourceTypes,
     example: 'service_payment',
   })
-  sourceType!: (typeof loyaltySourceTypeEnum.enumValues)[number];
+  sourceType!: (typeof currentLoyaltySourceTypes)[number];
 
   @ApiProperty({
     example: 'service-payment-record-1',

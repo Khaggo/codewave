@@ -4,7 +4,25 @@ import assert from 'node:assert/strict';
 import {
   assertMobileAppSessionAllowed,
   getMobileAppSessionAccessState,
+  resolveProtectedMobileAccount,
 } from './mobileSessionAccess.js';
+
+test('remembered registration data never becomes a protected mobile session', () => {
+  const registeredAccount = {
+    accessToken: 'stale-registration-token',
+    userId: 'remembered-customer',
+    role: 'customer',
+  };
+
+  assert.equal(
+    resolveProtectedMobileAccount({
+      activeAccount: null,
+      registeredAccount,
+    }),
+    null,
+  );
+  assert.equal(getMobileAppSessionAccessState(null), 'unauthorized_session');
+});
 
 test('mobile app access state allows active customer sessions', () => {
   assert.equal(
@@ -30,15 +48,31 @@ test('mobile app access guard accepts customer sessions', () => {
   );
 });
 
-test('mobile app access guard blocks staff portal roles', () => {
-  assert.throws(
-    () =>
-      assertMobileAppSessionAllowed({
-        accessToken: 'token-adviser',
-        userId: 'adviser-1',
-        role: 'service_adviser',
+test('mobile app access guard blocks every authenticated staff role', () => {
+  for (const role of [
+    'service_adviser',
+    'super_admin',
+    'technician',
+    'head_technician',
+  ]) {
+    assert.equal(
+      getMobileAppSessionAccessState({
+        accessToken: `token-${role}`,
+        userId: `${role}-1`,
+        role,
         isActive: true,
       }),
-    /supports customer and workshop sessions/i,
-  );
+      'staff_session_blocked',
+    );
+    assert.throws(
+      () =>
+        assertMobileAppSessionAllowed({
+          accessToken: `token-${role}`,
+          userId: `${role}-1`,
+          role,
+          isActive: true,
+        }),
+      /mobile app is for customer accounts/i,
+    );
+  }
 });

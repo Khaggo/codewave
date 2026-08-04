@@ -10,7 +10,6 @@
 - `docs/architecture/frontend-backend-sync.md`
 - `docs/architecture/tasks/05-client-integration/T521-loyalty-balance-history-rewards-and-redemption-mobile-flow.md`
 - `docs/contracts/T112-loyalty-core.md`
-- `docs/contracts/T528-commerce-and-main-service-derived-state-sync.md`
 - `docs/team-flow-customer-mobile-lifecycle.md`
 - mobile helper: `mobile/src/lib/loyaltyClient.js`
 - mobile surface: `mobile/src/screens/Dashboard.js`
@@ -74,7 +73,7 @@
 | `reward_redemption` | `Reward redemption` | customer spent loyalty points on a reward |
 | `manual_adjustment` | `Manual adjustment` | loyalty ledger was corrected directly by an authorized process |
 | `service_reversal` | `Service reversal` | paid-service loyalty was explicitly corrected later |
-| `service_invoice`, `purchase_payment`, `purchase_reversal` | `Legacy drift` | older or internal rows that should not be presented as the current earning policy |
+| non-current source values | `Historical adjustment` | older rows are normalized and must not be presented as the current earning policy |
 
 ## Frontend Contract Files
 
@@ -89,14 +88,14 @@
 ## Contract Rules
 
 - customer mobile remains the only customer-facing loyalty surface in this slice
-- present loyalty as service-earned points from paid service work, not from booking creation, booking confirmation, invoice-finalized-only events, or ecommerce checkout
+- present loyalty as service-earned points from paid service work, not from booking creation, booking confirmation, or invoice-finalized-only events
 - reward eligibility remains server-owned even when the mobile UI shows a locally derived lock or redeemable state
 - if legacy source types appear in the ledger, label them as historical drift instead of implying they are the current earning policy
 - redemption success updates loyalty balance and history, but it must not imply hidden order, invoice, or booking mutation outside the backend contract
 
 ## Known Drift To Track
 
-- some backend internals still recognize ecommerce-linked loyalty inputs and older loyalty source types
+- historical database enum values may remain until a separately verified data migration removes them
 - customer-facing wording must stay service-earned first until backend policy and historical data fully converge
 
 ## Notes

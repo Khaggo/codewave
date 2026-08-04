@@ -256,7 +256,7 @@ Mobile tests run through the root/mobile test command and cover 73 current cases
 - vehicle and customer service-history routes
 - technician checklist PDF and invoice PDF routes
 
-The exact methods, parameters, request bodies, and responses are preserved in `contracts/openapi-job-orders.json`.
+The exact methods, parameters, request bodies, and responses are preserved in `packages/contracts/openapi/main-service.json`.
 
 ### Quality Gates: 3 paths
 
@@ -275,4 +275,4 @@ The exact methods, parameters, request bodies, and responses are preserved in `c
 - release current claim
 - super-admin reassignment
 
-The full route forms are preserved in `contracts/openapi-staff-work-queues.json`.
+The full route forms are preserved in `packages/contracts/openapi/main-service.json`.

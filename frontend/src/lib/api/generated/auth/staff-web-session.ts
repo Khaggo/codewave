@@ -31,7 +31,7 @@ export interface StaffPortalNavigationRule {
   href: string;
   label: string;
   visibleTo: StaffPortalRole[];
-  group: 'Overview' | 'Front Desk Flow' | 'Customer Records' | 'Catalog & Stock' | 'Admin';
+  group: 'Overview' | 'Front Desk Flow' | 'Customer Records' | 'Admin';
   notes: string;
 }
 
@@ -89,11 +89,19 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
   {
     key: 'invoice-order-management',
     href: '/admin/invoices',
-    label: 'Invoices & Orders',
+    label: 'Service Invoices',
     visibleTo: ['service_adviser', 'super_admin'],
     group: 'Front Desk Flow',
     notes:
-      'Service invoice lookup, ecommerce known-order lookup, and invoice-aging visibility remain adviser/admin finance surfaces.',
+      'Finalized service invoice lookup and invoice-aging visibility remain adviser/admin finance surfaces.',
+  },
+  {
+    key: 'accessory-orders',
+    href: '/admin/accessories/orders',
+    label: 'Accessory Orders',
+    visibleTo: ['service_adviser', 'super_admin'],
+    group: 'Front Desk Flow',
+    notes: 'Advisers fulfill pickup-only accessory orders; super admins retain exception authority.',
   },
   {
     key: 'customer-directory',
@@ -128,28 +136,28 @@ export const staffPortalNavigationRules: StaffPortalNavigationRule[] = [
     notes: 'Customer loyalty administration remains adviser/admin visible.',
   },
   {
-    key: 'catalog-admin',
-    href: '/admin/catalog',
-    label: 'Catalog Admin',
-    visibleTo: ['super_admin'],
-    group: 'Catalog & Stock',
-    notes: 'Catalog administration is a super-admin-only web surface in the current phase.',
-  },
-  {
-    key: 'inventory',
-    href: '/admin/inventory',
-    label: 'Inventory',
-    visibleTo: ['service_adviser', 'super_admin'],
-    group: 'Catalog & Stock',
-    notes: 'Track stock levels, restock attention, and item availability from the inventory workspace.',
-  },
-  {
     key: 'service-management',
     href: '/admin/services',
     label: 'Service Management',
     visibleTo: ['service_adviser', 'super_admin'],
-    group: 'Catalog & Stock',
+    group: 'Admin',
     notes: 'Booking service categories and customer-bookable service offerings are managed here.',
+  },
+  {
+    key: 'accessory-catalog',
+    href: '/admin/accessories/catalog',
+    label: 'Accessory Catalog',
+    visibleTo: ['super_admin'],
+    group: 'Admin',
+    notes: 'Super admins control accessory publication, fitment, lighting review, media, and prices.',
+  },
+  {
+    key: 'accessory-stock',
+    href: '/admin/accessories/stock',
+    label: 'Accessory Stock',
+    visibleTo: ['super_admin'],
+    group: 'Admin',
+    notes: 'Super admins perform audited, idempotent accessory stock adjustments.',
   },
   {
     key: 'user-admin',
@@ -194,7 +202,7 @@ export const staffPortalRoleCapabilities: Record<StaffPortalRole, string[]> = {
     'update adviser-owned workshop stage tracking',
     'record the final QA release verdict',
     'coordinate insurance, back-job, and lifecycle review flows',
-    'review service invoice, known ecommerce order, and invoice-aging visibility',
+    'review service invoices and invoice-aging visibility',
     'prepare operational release readiness',
   ],
   super_admin: [

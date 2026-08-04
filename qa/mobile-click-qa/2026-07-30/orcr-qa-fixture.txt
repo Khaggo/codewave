@@ -1,0 +1,3 @@
+AUTOCARE mobile QA fixture
+Document type: OR/CR
+Date: 2026-07-30

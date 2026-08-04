@@ -5,8 +5,8 @@ import { getShellRouteMeta, getSidebarWidth } from './layoutShellView.mjs'
 
 test('getShellRouteMeta returns configured route copy and fallback metadata', () => {
   assert.deepEqual(getShellRouteMeta('/admin/invoices'), {
-    title: 'Invoices & Orders',
-    subtitle: 'Invoice readiness and order record lookup',
+    title: 'Service Invoices',
+    subtitle: 'Finalized job-order invoices and payment status',
   })
 
   assert.deepEqual(getShellRouteMeta('/missing-route'), {

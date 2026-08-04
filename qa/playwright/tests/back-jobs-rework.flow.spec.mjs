@@ -704,7 +704,7 @@ test.describe('AUTOCARE Back-Jobs / rework QA', () => {
     await test.step('Service adviser QA-releases the rework job order', async () => {
       await loginStaff(headTechPage, qaAccounts.adviser, '/admin/qa-audit');
       await recordQaVerdict(headTechPage, {
-        jobOrderId,
+        jobOrderReference: formatReadableJobOrderReference(reworkJobOrder, jobOrderId),
         scheduledDate: jobOrderWorkDate,
         note: `Adviser QA release approved rework for ${runMarker}.`,
         testInfo,

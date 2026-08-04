@@ -1,6 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { radius } from '../../theme'
+import { createPlatformShadow } from '../../utils/platformShadow'
 import {
   insuranceFonts,
   insurancePalette,
@@ -36,7 +37,7 @@ export default function InsuranceHomePanel({
         <View style={styles.vehiclePanel}>
           <Text style={styles.primaryValue}>{selectedVehicleLabel || 'No vehicle selected'}</Text>
           <Text style={styles.vehicleMeta}>
-            {currentRequestSummary?.purposeLabel ?? 'Request'} •{' '}
+            {currentRequestSummary?.purposeLabel ?? 'Request'} -{' '}
             {currentRequestSummary?.inquiryTypeLabel ?? 'Insurance'}
           </Text>
         </View>
@@ -52,6 +53,8 @@ export default function InsuranceHomePanel({
             style={styles.primaryButton}
             onPress={() => onOpenSection(overviewState.routeKey)}
             activeOpacity={0.9}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${overviewState.title}`}
           >
             <Text style={styles.primaryButtonText}>Open request</Text>
           </TouchableOpacity>
@@ -73,6 +76,8 @@ export default function InsuranceHomePanel({
               style={styles.quickAccessCard}
               onPress={() => onOpenSection(item.key)}
               activeOpacity={0.9}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${item.label}. ${item.description}`}
             >
               <View style={styles.quickAccessIconWrap}>
                 <MaterialCommunityIcons
@@ -109,11 +114,13 @@ const styles = StyleSheet.create({
     backgroundColor: insurancePalette.card,
     padding: 18,
     gap: 8,
-    shadowColor: insurancePalette.shadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    elevation: 3,
+    ...createPlatformShadow({
+      color: insurancePalette.shadow,
+      height: 10,
+      opacity: 0.14,
+      radius: 18,
+      elevation: 3,
+    }),
   },
   primaryValue: {
     color: insurancePalette.text,

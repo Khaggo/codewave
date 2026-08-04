@@ -5,7 +5,6 @@ import {
   ArrowRight,
   CalendarCheck,
   ClipboardCheck,
-  ClipboardList,
   ReceiptText,
   RefreshCcw,
   Users,
@@ -33,18 +32,6 @@ const adminShortcuts = [
     label: 'Service Management',
     description: 'Maintain bookable service offerings.',
     icon: Wrench,
-  },
-  {
-    href: '/admin/catalog',
-    label: 'Catalog Admin',
-    description: 'Manage visible product listings.',
-    icon: ClipboardList,
-  },
-  {
-    href: '/admin/inventory',
-    label: 'Inventory Admin',
-    description: 'Review stock health and inventory records.',
-    icon: ClipboardCheck,
   },
   {
     href: '/admin/summaries',

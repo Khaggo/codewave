@@ -1,6 +1,101 @@
 {
   "components": {
     "schemas": {
+      "AccessoryCartItemDto": {
+        "properties": {
+          "quantity": {
+            "maximum": 99,
+            "minimum": 1,
+            "type": "number"
+          },
+          "variantId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "variantId",
+          "quantity"
+        ],
+        "type": "object"
+      },
+      "AccessoryCheckoutAcknowledgementDto": {
+        "properties": {
+          "acknowledgedUnverified": {
+            "type": "boolean"
+          },
+          "variantId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "variantId",
+          "acknowledgedUnverified"
+        ],
+        "type": "object"
+      },
+      "AccessoryCheckoutContactDto": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "phone",
+          "email"
+        ],
+        "type": "object"
+      },
+      "AccessoryCheckoutDto": {
+        "properties": {
+          "contact": {
+            "$ref": "#/components/schemas/AccessoryCheckoutContactDto"
+          },
+          "fitmentAcknowledgements": {
+            "items": {
+              "$ref": "#/components/schemas/AccessoryCheckoutAcknowledgementDto"
+            },
+            "type": "array"
+          },
+          "paymentMethod": {
+            "enum": [
+              "paymongo",
+              "pay_at_shop"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "paymentMethod",
+          "contact"
+        ],
+        "type": "object"
+      },
+      "AccessoryMediaMetadataDto": {
+        "properties": {
+          "altText": {
+            "type": "string"
+          },
+          "displayOrder": {
+            "type": "number"
+          },
+          "productId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "productId",
+          "altText",
+          "displayOrder"
+        ],
+        "type": "object"
+      },
       "AddInsuranceDocumentDto": {
         "properties": {
           "documentType": {
@@ -183,6 +278,26 @@
           "isDefault",
           "createdAt",
           "updatedAt"
+        ],
+        "type": "object"
+      },
+      "AdjustAccessoryStockDto": {
+        "properties": {
+          "quantityDelta": {
+            "description": "Signed on-hand adjustment.",
+            "type": "number"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "variantId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "variantId",
+          "quantityDelta",
+          "reason"
         ],
         "type": "object"
       },
@@ -1398,6 +1513,17 @@
         ],
         "type": "object"
       },
+      "CancelAccessoryOrderDto": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
       "ChatbotEscalationResponseDto": {
         "properties": {
           "createdAt": {
@@ -1687,6 +1813,123 @@
         ],
         "type": "object"
       },
+      "CreateAccessoryCategoryDto": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name"
+        ],
+        "type": "object"
+      },
+      "CreateAccessoryFitmentDto": {
+        "properties": {
+          "make": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "universal",
+              "compatible",
+              "incompatible",
+              "unverified"
+            ],
+            "type": "string"
+          },
+          "variantId": {
+            "type": "string"
+          },
+          "yearFrom": {
+            "type": "number"
+          },
+          "yearTo": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "variantId",
+          "status"
+        ],
+        "type": "object"
+      },
+      "CreateAccessoryProductDto": {
+        "properties": {
+          "categoryId": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "isLighting": {
+            "default": false,
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "categoryId",
+          "slug",
+          "name"
+        ],
+        "type": "object"
+      },
+      "CreateAccessoryRefundDto": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "CreateAccessoryVariantDto": {
+        "properties": {
+          "attributes": {
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priceCents": {
+            "type": "number"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "productId",
+          "sku",
+          "name",
+          "priceCents"
+        ],
+        "type": "object"
+      },
       "CreateBackJobDto": {
         "properties": {
           "complaint": {
@@ -1889,9 +2132,7 @@
         "properties": {
           "accrualSource": {
             "enum": [
-              "service",
-              "ecommerce",
-              "both"
+              "service"
             ],
             "example": "service",
             "type": "string"
@@ -1914,26 +2155,6 @@
           "description": {
             "example": "Earn points after paid collision repair orders are settled.",
             "type": "string"
-          },
-          "eligibleProductCategoryIds": {
-            "example": [
-              "category-1",
-              "category-2"
-            ],
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "eligibleProductIds": {
-            "example": [
-              "product-1",
-              "product-2"
-            ],
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           },
           "eligibleServiceCategories": {
             "example": [
@@ -2663,6 +2884,30 @@
         ],
         "type": "object"
       },
+      "CustomerGaragePageResponseDto": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerGarageVehicleResponseDto"
+            },
+            "type": "array"
+          },
+          "page": {
+            "example": {
+              "hasNext": true,
+              "limit": 3,
+              "nextCursor": "eyJ2IjoxLCJjcmVhdGVkQXQiOiIuLi4iLCJpZCI6Ii4uLiIsInNlYXJjaCI6IiJ9",
+              "total": 132
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object"
+      },
       "CustomerGarageSummaryResponseDto": {
         "properties": {
           "activeBooking": {
@@ -2704,6 +2949,48 @@
             "type": "string"
           },
           "year": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "plateNumber",
+          "make",
+          "model",
+          "year"
+        ],
+        "type": "object"
+      },
+      "CustomerGarageVehicleResponseDto": {
+        "properties": {
+          "color": {
+            "example": "Blue",
+            "nullable": true,
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "make": {
+            "example": "Toyota",
+            "type": "string"
+          },
+          "model": {
+            "example": "Vios",
+            "type": "string"
+          },
+          "plateNumber": {
+            "example": "ABC 1234",
+            "type": "string"
+          },
+          "vin": {
+            "example": "JTDBR32E720123456",
+            "nullable": true,
+            "type": "object"
+          },
+          "year": {
+            "example": 2020,
             "type": "number"
           }
         },
@@ -3593,11 +3880,9 @@
         "properties": {
           "accrualSource": {
             "enum": [
-              "service",
-              "ecommerce",
-              "both"
+              "service"
             ],
-            "example": "both",
+            "example": "service",
             "type": "string"
           },
           "activeFrom": {
@@ -3635,18 +3920,6 @@
           "description": {
             "example": "Earn points after paid collision repair orders are settled.",
             "type": "object"
-          },
-          "eligibleProductCategoryIds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "eligibleProductIds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           },
           "eligibleServiceCategories": {
             "items": {
@@ -3726,8 +3999,6 @@
           "formulaType",
           "eligibleServiceTypes",
           "eligibleServiceCategories",
-          "eligibleProductIds",
-          "eligibleProductCategoryIds",
           "status",
           "createdByUserId",
           "createdAt",
@@ -3739,9 +4010,7 @@
         "properties": {
           "accrualSource": {
             "enum": [
-              "service",
-              "ecommerce",
-              "both"
+              "service"
             ],
             "example": "service",
             "type": "string"
@@ -3766,18 +4035,6 @@
           "description": {
             "example": "Earn points after paid collision repair orders are settled.",
             "type": "object"
-          },
-          "eligibleProductCategoryIds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "eligibleProductIds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           },
           "eligibleServiceCategories": {
             "items": {
@@ -3843,8 +4100,6 @@
           "formulaType",
           "eligibleServiceTypes",
           "eligibleServiceCategories",
-          "eligibleProductIds",
-          "eligibleProductCategoryIds",
           "status"
         ],
         "type": "object"
@@ -5985,11 +6240,9 @@
             "enum": [
               "service_payment",
               "service_invoice",
-              "purchase_payment",
               "reward_redemption",
               "manual_adjustment",
-              "service_reversal",
-              "purchase_reversal"
+              "service_reversal"
             ],
             "example": "service_payment",
             "type": "string"
@@ -6136,7 +6389,8 @@
               "invoice_document",
               "qa_review",
               "service_follow_up",
-              "auth_otp"
+              "auth_otp",
+              "accessory_order"
             ],
             "example": "booking_reminder",
             "type": "string"
@@ -6190,7 +6444,8 @@
               "invoice_document",
               "job_order",
               "service_follow_up",
-              "auth"
+              "auth",
+              "accessory_order"
             ],
             "example": "booking",
             "type": "string"
@@ -6297,6 +6552,43 @@
           }
         },
         "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "PatchAccessoryCartDto": {
+        "properties": {
+          "quantity": {
+            "maximum": 99,
+            "minimum": 1,
+            "type": "number"
+          },
+          "variantId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "variantId",
+          "quantity"
+        ],
+        "type": "object"
+      },
+      "PublishAccessoryProductDto": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "active",
+              "archived"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
           "reason"
         ],
         "type": "object"
@@ -6612,6 +6904,21 @@
         ],
         "type": "object"
       },
+      "ReassignAccessoryOrderDto": {
+        "properties": {
+          "assigneeUserId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "assigneeUserId",
+          "reason"
+        ],
+        "type": "object"
+      },
       "RecordJobOrderInvoicePaymentDto": {
         "properties": {
           "amountPaidCents": {
@@ -6736,6 +7043,24 @@
         ],
         "type": "object"
       },
+      "ReplaceAccessoryCartDto": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccessoryCartItemDto"
+            },
+            "type": "array"
+          },
+          "selectedVehicleId": {
+            "nullable": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "ReplaceJobOrderAssignmentsDto": {
         "properties": {
           "assignedTechnicianIds": {
@@ -6855,6 +7180,25 @@
           "enrollmentId",
           "otp",
           "newPassword"
+        ],
+        "type": "object"
+      },
+      "ReviewAccessoryLightingDto": {
+        "properties": {
+          "compatibilityApproved": {
+            "type": "boolean"
+          },
+          "complianceApproved": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "compatibilityApproved",
+          "complianceApproved",
+          "reason"
         ],
         "type": "object"
       },
@@ -7487,6 +7831,53 @@
         ],
         "type": "object"
       },
+      "TransitionAccessoryOrderDto": {
+        "properties": {
+          "orderReference": {
+            "type": "string"
+          },
+          "pickupCode": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "preparing",
+              "ready_for_pickup",
+              "collected"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "UpdateAccessoryVariantDto": {
+        "properties": {
+          "attributes": {
+            "type": "object"
+          },
+          "isActive": {
+            "default": true,
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priceCents": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "priceCents"
+        ],
+        "type": "object"
+      },
       "UpdateAddressDto": {
         "properties": {
           "addressLine1": {
@@ -7631,11 +8022,9 @@
         "properties": {
           "accrualSource": {
             "enum": [
-              "service",
-              "ecommerce",
-              "both"
+              "service"
             ],
-            "example": "ecommerce",
+            "example": "service",
             "type": "string"
           },
           "activeFrom": {
@@ -7655,24 +8044,6 @@
           "description": {
             "example": "Earn points after paid collision repair orders are settled.",
             "type": "string"
-          },
-          "eligibleProductCategoryIds": {
-            "example": [
-              "category-1"
-            ],
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "eligibleProductIds": {
-            "example": [
-              "product-1"
-            ],
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           },
           "eligibleServiceCategories": {
             "example": [
@@ -8781,6 +9152,1375 @@
   },
   "openapi": "3.0.0",
   "paths": {
+    "/api/accessories/capabilities": {
+      "get": {
+        "operationId": "CustomerAccessoriesController_capabilities",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Read the current Accessories rollout capabilities.",
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/cart": {
+      "delete": {
+        "operationId": "CustomerAccessoriesController_deleteCart",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "variantId",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current integer resource version used for optimistic concurrency control.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      },
+      "get": {
+        "operationId": "CustomerAccessoriesController_getCart",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      },
+      "patch": {
+        "operationId": "CustomerAccessoriesController_patchCart",
+        "parameters": [
+          {
+            "description": "Current integer resource version used for optimistic concurrency control.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAccessoryCartDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      },
+      "put": {
+        "operationId": "CustomerAccessoriesController_replaceCart",
+        "parameters": [
+          {
+            "description": "Current integer resource version used for optimistic concurrency control.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceAccessoryCartDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/categories": {
+      "get": {
+        "operationId": "CustomerAccessoriesController_listCategories",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/checkouts": {
+      "post": {
+        "operationId": "CustomerAccessoriesController_checkout",
+        "parameters": [
+          {
+            "description": "Stable retry key. Reusing it with a different payload returns 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessoryCheckoutDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/checkouts/preview": {
+      "post": {
+        "operationId": "CustomerAccessoriesController_previewCheckout",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessoryCheckoutDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/media/{id}": {
+      "get": {
+        "operationId": "CustomerAccessoriesController_readMedia",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/orders/{id}": {
+      "get": {
+        "operationId": "CustomerAccessoriesController_getOrder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/orders/{id}/cancel": {
+      "post": {
+        "operationId": "CustomerAccessoriesController_cancelOrder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stable retry key. Reusing it with a different payload returns 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelAccessoryOrderDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/orders/{id}/payment/retry": {
+      "post": {
+        "operationId": "CustomerAccessoriesController_retryPayment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stable retry key. Reusing it with a different payload returns 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/orders/{id}/pickup-code/regenerate": {
+      "post": {
+        "operationId": "CustomerAccessoriesController_regeneratePickupCode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/orders/mine": {
+      "get": {
+        "operationId": "CustomerAccessoriesController_listOrders",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/payments/paymongo/webhook": {
+      "post": {
+        "operationId": "AccessoriesWebhookController_webhook",
+        "parameters": [
+          {
+            "description": "PayMongo webhook signature over the unmodified raw request body.",
+            "in": "header",
+            "name": "Paymongo-Signature",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "accessories-payments"
+        ]
+      }
+    },
+    "/api/accessories/products": {
+      "get": {
+        "operationId": "CustomerAccessoriesController_listProducts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "categoryId",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/products/{slug}": {
+      "get": {
+        "operationId": "CustomerAccessoriesController_getProduct",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/accessories/variants/{id}/fitment": {
+      "get": {
+        "operationId": "CustomerAccessoriesController_getFitment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "vehicleId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/catalog/categories": {
+      "get": {
+        "operationId": "StaffAccessoriesController_listCategories",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      },
+      "post": {
+        "operationId": "StaffAccessoriesController_createCategory",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccessoryCategoryDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/catalog/products": {
+      "get": {
+        "operationId": "StaffAccessoriesController_listProducts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "categoryId",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      },
+      "post": {
+        "operationId": "StaffAccessoriesController_createProduct",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccessoryProductDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/catalog/products/{id}/lighting-review": {
+      "post": {
+        "operationId": "StaffAccessoriesController_reviewLighting",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewAccessoryLightingDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/catalog/products/{id}/status": {
+      "patch": {
+        "operationId": "StaffAccessoriesController_publishProduct",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current integer resource version used for optimistic concurrency control.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishAccessoryProductDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/catalog/products/{slug}": {
+      "get": {
+        "operationId": "StaffAccessoriesController_getProduct",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/catalog/variants": {
+      "post": {
+        "operationId": "StaffAccessoriesController_createVariant",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccessoryVariantDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/catalog/variants/{id}": {
+      "patch": {
+        "operationId": "StaffAccessoriesController_updateVariant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current integer resource version used for optimistic concurrency control.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAccessoryVariantDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/fitments": {
+      "post": {
+        "operationId": "StaffAccessoriesController_createFitment",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccessoryFitmentDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/media": {
+      "post": {
+        "operationId": "StaffAccessoriesController_uploadMedia",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessoryMediaMetadataDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/orders": {
+      "get": {
+        "operationId": "StaffAccessoriesController_listOrders",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/orders/{id}": {
+      "get": {
+        "operationId": "StaffAccessoriesController_getOrder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/orders/{id}/cancel": {
+      "post": {
+        "operationId": "StaffAccessoriesController_cancelOrder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stable retry key. Reusing it with a different payload returns 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelAccessoryOrderDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/orders/{id}/reassign": {
+      "post": {
+        "operationId": "StaffAccessoriesController_reassignOrder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current integer resource version used for optimistic concurrency control.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReassignAccessoryOrderDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/orders/{id}/status": {
+      "patch": {
+        "operationId": "StaffAccessoriesController_transitionOrder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current integer resource version used for optimistic concurrency control.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionAccessoryOrderDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/orders/{id}/take": {
+      "post": {
+        "operationId": "StaffAccessoriesController_takeOrder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current integer resource version used for optimistic concurrency control.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/refunds": {
+      "get": {
+        "operationId": "StaffAccessoriesController_listRefunds",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/refunds/{id}/approve": {
+      "post": {
+        "operationId": "StaffAccessoriesController_approveRefund",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stable retry key. Reusing it with a different payload returns 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccessoryRefundDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/stock": {
+      "get": {
+        "operationId": "StaffAccessoriesController_listStock",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
+    "/api/admin/accessories/stock/adjustments": {
+      "post": {
+        "operationId": "StaffAccessoriesController_adjustStock",
+        "parameters": [
+          {
+            "description": "Stable retry key. Reusing it with a different payload returns 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjustAccessoryStockDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-accessories"
+        ]
+      }
+    },
     "/api/admin/booking-date-closures": {
       "get": {
         "operationId": "BookingsController_listDateClosures",
@@ -11358,11 +13098,152 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "service": "main-service",
+                    "status": "ok"
+                  }
+                }
+              }
+            },
+            "description": "The main-service process is accepting HTTP requests."
           }
         },
+        "summary": "Check main-service process liveness.",
         "tags": [
-          "Health"
+          "health"
+        ]
+      }
+    },
+    "/api/health/ready": {
+      "get": {
+        "operationId": "HealthController_getReadiness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "dependencies": {
+                      "properties": {
+                        "database": {
+                          "enum": [
+                            "ready",
+                            "unavailable"
+                          ],
+                          "type": "string"
+                        },
+                        "schema": {
+                          "enum": [
+                            "ready",
+                            "outdated",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "database",
+                        "schema"
+                      ],
+                      "type": "object"
+                    },
+                    "service": {
+                      "enum": [
+                        "main-service"
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "ready",
+                        "not_ready"
+                      ],
+                      "type": "string"
+                    },
+                    "version": {
+                      "example": "development",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "service",
+                    "version",
+                    "status",
+                    "dependencies"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The main-service dependencies are ready."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "dependencies": {
+                      "properties": {
+                        "database": {
+                          "enum": [
+                            "ready",
+                            "unavailable"
+                          ],
+                          "type": "string"
+                        },
+                        "schema": {
+                          "enum": [
+                            "ready",
+                            "outdated",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "database",
+                        "schema"
+                      ],
+                      "type": "object"
+                    },
+                    "service": {
+                      "enum": [
+                        "main-service"
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "ready",
+                        "not_ready"
+                      ],
+                      "type": "string"
+                    },
+                    "version": {
+                      "example": "development",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "service",
+                    "version",
+                    "status",
+                    "dependencies"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The database is unavailable or its schema is outdated."
+          }
+        },
+        "summary": "Check main-service database and schema readiness.",
+        "tags": [
+          "health"
         ]
       }
     },
@@ -14888,6 +16769,68 @@
             "description": ""
           }
         },
+        "tags": [
+          "Vehicles"
+        ]
+      }
+    },
+    "/api/users/{userId}/vehicles/garage": {
+      "get": {
+        "operationId": "VehiclesController_findGaragePage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "example": 3,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Opaque versioned keyset cursor returned by the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Case-insensitive plate, make, or model search.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerGaragePageResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "List a bounded customer-safe Garage vehicle page",
         "tags": [
           "Vehicles"
         ]

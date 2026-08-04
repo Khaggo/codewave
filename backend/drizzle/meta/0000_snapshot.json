@@ -1,5 +1,5 @@
 {
-  "id": "83b27fcc-0248-441e-acc5-d2f474ed3bc8",
+  "id": "b5fb1911-7e21-442e-b4e3-ac198d4d1460",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1044,7 +1044,35 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "vehicles_user_created_id_idx": {
+          "name": "vehicles_user_created_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "vehicles_user_id_users_id_fk": {
           "name": "vehicles_user_id_users_id_fk",
@@ -4016,6 +4044,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "client_request_id": {
+          "name": "client_request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "inquiry_type": {
           "name": "inquiry_type",
           "type": "insurance_inquiry_type",
@@ -4052,6 +4086,18 @@
         "policy_number": {
           "name": "policy_number",
           "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "incident_occurred_at": {
+          "name": "incident_occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "incident_location": {
+          "name": "incident_location",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false
         },
@@ -4156,7 +4202,29 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "insurance_inquiries_user_client_request_idx": {
+          "name": "insurance_inquiries_user_client_request_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "client_request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "insurance_inquiries_user_id_users_id_fk": {
           "name": "insurance_inquiries_user_id_users_id_fk",
@@ -4402,6 +4470,12 @@
         },
         "notes": {
           "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "customer_message": {
+          "name": "customer_message",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -5123,20 +5197,6 @@
         },
         "eligible_service_categories": {
           "name": "eligible_service_categories",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "eligible_product_ids": {
-          "name": "eligible_product_ids",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "eligible_product_category_ids": {
-          "name": "eligible_product_category_ids",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
@@ -6666,10 +6726,15 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
-          "isUnique": true,
-          "where": "\"staff_work_claims\".\"status\" = 'active'",
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -6746,180 +6811,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.product_categories": {
-      "name": "product_categories",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(120)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slug": {
-          "name": "slug",
-          "type": "varchar(120)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_active": {
-          "name": "is_active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "product_categories_slug_unique": {
-          "name": "product_categories_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.products": {
-      "name": "products",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "category_id": {
-          "name": "category_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(160)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slug": {
-          "name": "slug",
-          "type": "varchar(160)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sku": {
-          "name": "sku",
-          "type": "varchar(80)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "price_cents": {
-          "name": "price_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "is_active": {
-          "name": "is_active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "products_category_id_product_categories_id_fk": {
-          "name": "products_category_id_product_categories_id_fk",
-          "tableFrom": "products",
-          "tableTo": "product_categories",
-          "columnsFrom": [
-            "category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "products_slug_unique": {
-          "name": "products_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
-        },
-        "products_sku_unique": {
-          "name": "products_sku_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "sku"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -7388,9 +7279,7 @@
       "name": "earning_rule_accrual_source",
       "schema": "public",
       "values": [
-        "service",
-        "ecommerce",
-        "both"
+        "service"
       ]
     },
     "public.earning_rule_audit_action": {
@@ -7425,11 +7314,9 @@
       "values": [
         "service_payment",
         "service_invoice",
-        "purchase_payment",
         "reward_redemption",
         "manual_adjustment",
-        "service_reversal",
-        "purchase_reversal"
+        "service_reversal"
       ]
     },
     "public.loyalty_transaction_type": {

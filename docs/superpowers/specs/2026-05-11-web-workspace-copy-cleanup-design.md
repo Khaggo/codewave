@@ -28,11 +28,9 @@ The initial pass covers the main web workspaces currently surfaced in `frontend/
 - `frontend/src/screens/DigitalIntakeInspectionWorkspace.js`
 - `frontend/src/screens/QAAuditWorkspace.js`
 - `frontend/src/screens/AdminAnalyticsWorkspace.js`
-- `frontend/src/screens/ShopProductAdmin.js`
 - `frontend/src/screens/SettingsWorkspace.js`
 - `frontend/src/screens/LoyaltyManager.js`
 - `frontend/src/screens/InvoiceOrderManagementWorkspace.js`
-- `frontend/src/screens/InventoryWorkspace.js`
 - `frontend/src/components/BookingServiceAdmin.js`
 
 If another workspace file clearly matches the same pattern during implementation, it can be included as long as it stays within the same copy-only cleanup.

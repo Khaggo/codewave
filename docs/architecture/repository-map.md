@@ -9,10 +9,9 @@ verification route for changes that cross the backend, staff web, and customer m
 
 | Directory | Responsibility | Runtime |
 | --- | --- | --- |
-| `backend/apps/main-service` | identity, bookings, workshop, QA, customer records | NestJS `3000` |
-| `backend/apps/ecommerce-service` | catalog and commerce operations | NestJS `3001` |
+| `backend/apps/main-service` | identity, bookings, workshop, QA, customer records, bounded Accessories domain | NestJS `3000` |
 | `frontend` | authenticated staff and administrator web | Next.js `3002` |
-| `mobile` | customer registration, booking, profile, and orders | Expo `8081` |
+| `mobile` | customer registration, booking, garage, insurance, rewards, and profile | Expo `8081` |
 | `qa/playwright` | cross-surface acceptance flows | Playwright |
 
 ## Contract Authority
@@ -36,11 +35,17 @@ Database repair and seed commands default to dry-run. Production execution requi
 authorization and an audit reason. Generated output, caches, runtime logs, and local screenshots
 are excluded from dependency graphs and source control.
 
+The retired ecommerce service and port `3001` remain prohibited. New accessory commerce is
+isolated under `backend/apps/main-service/src/modules/accessories`, customer mobile
+`screens/accessories` and `lib/accessories`, staff `/admin/accessories` routes, and
+`/api/accessories` contracts. These paths form the `02-accessories-store` worktree partition.
+
 ## Performance Budgets
 
 - `npm run performance:web` checks the built Job Orders board, focused workspace, and QA Audit
   route against a committed 5% raw JavaScript growth budget.
 - The route report is written to `frontend/.next/web-bundle-report.json` and uploaded by the
   staff web CI job.
-- The current mobile Android export baseline is 3.74 MiB. Expo upgrades and dashboard extractions
-  must record and review changes above 5%.
+- The current mobile Android runtime-bytecode baseline is 2.93 MiB. The export emits its source
+  map separately so debug metadata is not counted as shipped runtime code; changes above 5% must
+  still be recorded and reviewed.

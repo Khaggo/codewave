@@ -1,106 +1,154 @@
-import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import test from 'node:test'
 
-const TEST_DIR = dirname(fileURLToPath(import.meta.url))
-const read = (relativePath) => readFileSync(resolve(TEST_DIR, relativePath), 'utf8')
+import {
+  MOBILE_SESSION_STORAGE_KEY,
+  parseMobileSessionSnapshot,
+  serializeMobileSessionSnapshot,
+} from '../lib/mobileSessionStorage.mjs'
+import {
+  getBookingReference,
+  getBookingRequestedServiceNames,
+  getSelectedBookingServices,
+  toggleBookingServiceId,
+} from './dashboard/bookingSelectionModel.mjs'
+import {
+  GARAGE_PAGE_SIZE,
+  getGaragePageCount,
+  getGaragePageModel,
+} from './garagePaginationModel.mjs'
 
-test('mobile booking supports selecting multiple services and submits the live serviceIds payload', () => {
-  const source = read('./Dashboard.js')
-
-  const requiredFragments = [
-    'const [selectedBookingServiceIds, setSelectedBookingServiceIds] = useState([]);',
-    'const toggleBookingServiceSelection = (serviceId) => {',
-    'Step 1: Choose Services',
-    'Choose one or more services for the same appointment. Your selections stay highlighted while you move through the flow.',
-    'Step 2: Select Vehicle',
-    'Step 3: Pick a Schedule',
-    'Step 4: Review Booking',
-    'label="Choose Services"',
-    'label="Active Services"',
-    'serviceIds: selectedServices.map((service) => service.id),',
-    '<Text style={styles.bookingSummaryLabel}>Services</Text>',
-    "selectedServices.map((service) => service.name).join(', ')",
-    'const getBookingRequestedServiceNames = (booking) => {',
-    '<BookingRequestedServiceChips booking={booking} compact />',
-    '<Text style={styles.bookingSectionLabel}>Requested services</Text>',
-    '<BookingRequestedServiceChips booking={selectedBookingDetail} />',
-    'Choose one or more services',
-    'Complete all steps to book',
+test('booking selection supports multiple active services and stable deselection', () => {
+  const services = [
+    { id: 'oil-change', name: 'Oil change', isActive: true },
+    { id: 'alignment', name: 'Wheel alignment', isActive: true },
+    { id: 'retired', name: 'Retired service', isActive: false },
   ]
 
-  for (const fragment of requiredFragments) {
-    assert.ok(source.includes(fragment), `Expected multi-service booking fragment: ${fragment}`)
-  }
+  const firstSelection = toggleBookingServiceId([], 'oil-change')
+  const secondSelection = toggleBookingServiceId(firstSelection, 'alignment')
+  const withInactiveSelection = toggleBookingServiceId(secondSelection, 'retired')
 
-  assert.doesNotMatch(source, /serviceId:\s*selectedService/i)
-  assert.doesNotMatch(source, /Choose one service/i)
+  assert.deepEqual(secondSelection, ['oil-change', 'alignment'])
+  assert.deepEqual(
+    getSelectedBookingServices(services, withInactiveSelection).map(
+      (service) => service.id,
+    ),
+    ['oil-change', 'alignment'],
+  )
+  assert.deepEqual(toggleBookingServiceId(secondSelection, 'oil-change'), [
+    'alignment',
+  ])
+  assert.deepEqual(toggleBookingServiceId(secondSelection, ''), secondSelection)
+  assert.notStrictEqual(toggleBookingServiceId(secondSelection, ''), secondSelection)
 })
 
-test('mobile app persists and restores the active session across refreshes', () => {
-  const source = read('../../App.js')
-
-  const requiredFragments = [
-    "const MOBILE_SESSION_STORAGE_KEY = '@autocare/mobile-session-v1';",
-    "const [isSessionHydrated, setIsSessionHydrated] = useState(false);",
-    'const hydratePersistedMobileSession = async () => {',
-    'await AsyncStorage.getItem(MOBILE_SESSION_STORAGE_KEY);',
-    'await AsyncStorage.setItem(MOBILE_SESSION_STORAGE_KEY, JSON.stringify(snapshot));',
-    'await AsyncStorage.removeItem(MOBILE_SESSION_STORAGE_KEY);',
-    "currentMobileSessionAccessState === 'customer_session_active'",
-    "initialRouteName={appInitialRouteName}",
-    "Checking your saved customer session before the app loads.",
-  ]
-
-  for (const fragment of requiredFragments) {
-    assert.ok(source.includes(fragment), `Expected session restore fragment: ${fragment}`)
-  }
+test('booking presentation deduplicates service names and never derives references from UUID slices', () => {
+  assert.deepEqual(
+    getBookingRequestedServiceNames({
+      requestedServices: [
+        { service: { name: 'Oil change' } },
+        { service: { name: 'Wheel alignment' } },
+        { service: { name: 'Oil change' } },
+        { service: null },
+      ],
+    }),
+    ['Oil change', 'Wheel alignment'],
+  )
+  assert.equal(
+    getBookingReference({
+      bookingReference: 'BK-20260729-0042',
+      id: '18e50ca4-cf27-4f31-a9b7-635dca0aba02',
+    }),
+    'BK-20260729-0042',
+  )
+  assert.equal(
+    getBookingReference({
+      scheduledDate: '2026-07-29',
+      plateNumber: 'ABC 1234',
+      id: '18e50ca4-cf27-4f31-a9b7-635dca0aba02',
+    }),
+    'BK-20260729-ABC1234',
+  )
 })
 
-test('mobile garage supports vehicle creation, bounded timeline paging, and customer-safe summaries', () => {
-  const source = read('./VehicleLifecycleScreen.js')
-
-  const requiredFragments = [
-    'const GARAGE_PAGE_SIZE = 3;',
-    'createCustomerVehicle({',
-    'setVehiclePage(Math.max(0, Math.ceil(nextVehicles.length / GARAGE_PAGE_SIZE) - 1));',
-    'Showing {Math.min(vehiclePage * GARAGE_PAGE_SIZE + 1, vehicles.length)}-',
-    '{Math.min((vehiclePage + 1) * GARAGE_PAGE_SIZE, vehicles.length)} of {vehicles.length} vehicles',
-    '<Text style={styles.vehiclePagerButtonText}>Prev</Text>',
-    '<Text style={styles.vehiclePagerButtonText}>Next</Text>',
-    'getCustomerGarageSummary({',
-    'listCustomerVehicleTimelinePage({',
-    'limit: 20,',
-    'cursor: snapshot.page.nextCursor,',
-    'setIsLoadingMore(true);',
-    'Load more',
-    '<Text style={styles.summaryProofTitle}>Service summary</Text>',
-    '<Text style={styles.modalTitle}>Add vehicle</Text>',
-    'accessibilityLiveRegion="assertive"',
-  ]
-
-  for (const fragment of requiredFragments) {
-    assert.ok(source.includes(fragment), `Expected garage proof fragment: ${fragment}`)
+test('mobile session snapshots round-trip and empty or corrupt state is discarded', () => {
+  const snapshot = {
+    activeAccount: {
+      userId: 'customer-1',
+      role: 'customer',
+      accessToken: 'access-token',
+    },
+    registeredAccount: null,
+    pendingAccount: null,
+    pendingOnboardingCompletion: null,
   }
+  const serialized = serializeMobileSessionSnapshot(snapshot)
+
+  assert.equal(MOBILE_SESSION_STORAGE_KEY, '@autocare/mobile-session-v1')
+  assert.deepEqual(parseMobileSessionSnapshot(serialized), snapshot)
+  assert.equal(
+    serializeMobileSessionSnapshot({
+      activeAccount: null,
+      registeredAccount: null,
+    }),
+    null,
+  )
+  assert.equal(parseMobileSessionSnapshot('{invalid json'), null)
+  assert.equal(parseMobileSessionSnapshot('null'), null)
 })
 
-test('mobile customer and technician surfaces prefer business-readable references over raw UUID snippets', () => {
-  const dashboardSource = read('./Dashboard.js')
-  const technicianSource = read('./TechnicianDashboard.js')
+test('garage pagination stays bounded and clamps after vehicle counts change', () => {
+  const vehicles = Array.from({ length: 8 }, (_, index) => ({
+    id: `vehicle-${index + 1}`,
+  }))
 
-  assert.match(dashboardSource, /if \(booking\?\.bookingReference\) \{/)
-  assert.match(dashboardSource, /return booking\.bookingReference;/)
-  assert.match(dashboardSource, /BK-\$\{compactDate\}-\$\{plateToken\}/)
-  assert.doesNotMatch(dashboardSource, /slice\(0,\s*8\)/)
+  const middlePage = getGaragePageModel({ vehicles, page: 1 })
+  const finalPage = getGaragePageModel({ vehicles, page: 99 })
+  const emptyPage = getGaragePageModel({ vehicles: [], page: 3 })
 
-  assert.match(technicianSource, /const getJobOrderReference = \(jobOrder\) => \{/)
-  assert.match(technicianSource, /if \(jobOrder\?\.jobOrderReference\) \{/)
-  assert.match(technicianSource, /const prefix = jobOrder\?\.jobType === 'back_job' \? 'JO-RW' : 'JO';/)
-  assert.match(technicianSource, /return compactDate \? `\$\{prefix\}-\$\{compactDate\}-\$\{timeToken \|\| plateToken\}` : `\$\{prefix\}-\$\{plateToken\}`;/)
-  assert.match(technicianSource, /<Text style=\{styles\.jobOrderId\}>\{getJobOrderReference\(jobOrder\)\}<\/Text>/)
-  assert.match(technicianSource, /<Text style=\{styles\.modalTitle\}>\{getJobOrderReference\(jobOrder\)\}<\/Text>/)
-  assert.doesNotMatch(technicianSource, /slice\(0,\s*8\)/)
+  assert.equal(GARAGE_PAGE_SIZE, 3)
+  assert.equal(getGaragePageCount(vehicles.length), 3)
+  assert.deepEqual(
+    middlePage.visibleVehicles.map((vehicle) => vehicle.id),
+    ['vehicle-4', 'vehicle-5', 'vehicle-6'],
+  )
+  assert.deepEqual(
+    {
+      first: middlePage.firstVisibleNumber,
+      last: middlePage.lastVisibleNumber,
+      previous: middlePage.canGoPrevious,
+      next: middlePage.canGoNext,
+    },
+    {
+      first: 4,
+      last: 6,
+      previous: true,
+      next: true,
+    },
+  )
+  assert.equal(finalPage.currentPage, 2)
+  assert.deepEqual(
+    finalPage.visibleVehicles.map((vehicle) => vehicle.id),
+    ['vehicle-7', 'vehicle-8'],
+  )
+  assert.equal(finalPage.canGoNext, false)
+  assert.equal(emptyPage.currentPage, 0)
+  assert.equal(emptyPage.firstVisibleNumber, 0)
+  assert.deepEqual(emptyPage.visibleVehicles, [])
+})
+
+test('garage pagination mounts only one small page for large vehicle accounts', () => {
+  const vehicles = Array.from({ length: 132 }, (_, index) => ({
+    id: `vehicle-${index + 1}`,
+  }))
+  const page = getGaragePageModel({ vehicles, page: 0 })
+
+  assert.equal(page.totalPages, 44)
+  assert.equal(page.totalVehicles, 132)
+  assert.equal(page.visibleVehicles.length, GARAGE_PAGE_SIZE)
+  assert.deepEqual(
+    page.visibleVehicles.map((vehicle) => vehicle.id),
+    ['vehicle-1', 'vehicle-2', 'vehicle-3'],
+  )
 })

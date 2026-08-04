@@ -2,13 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { radius } from '../../theme'
 import { insuranceFonts, insurancePalette } from './InsurancePanelPrimitives'
-
-const TAB_ITEMS = [
-  { key: 'home', label: 'Home' },
-  { key: 'request', label: 'Request' },
-  { key: 'documents', label: 'Documents' },
-  { key: 'status', label: 'Status' },
-]
+import { INSURANCE_MODE_TABS } from './insuranceModeModel.mjs'
 
 export default function InsuranceModeShell({
   activeSection,
@@ -31,8 +25,12 @@ export default function InsuranceModeShell({
           onPress={onOpenVehiclePicker}
           disabled={!isVehiclePickerAvailable}
           activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel={`Choose insurance vehicle. ${selectedVehicleLabel || 'No vehicle selected'}`}
+          accessibilityState={{ disabled: !isVehiclePickerAvailable }}
         >
           <Text
+            numberOfLines={2}
             style={[
               styles.vehicleTriggerText,
               !isVehiclePickerAvailable && styles.vehicleTriggerTextDisabled,
@@ -43,7 +41,7 @@ export default function InsuranceModeShell({
         </TouchableOpacity>
       </View>
 
-      {summaryChips.length ? (
+      {activeSection === 'home' && summaryChips.length ? (
         <View style={styles.summaryRow}>
           {summaryChips.map((item) => (
             <View
@@ -79,7 +77,7 @@ export default function InsuranceModeShell({
 
       <View style={styles.tabRow}>
         <View style={styles.tabRowInner}>
-          {TAB_ITEMS.map((item) => {
+          {INSURANCE_MODE_TABS.map((item) => {
             const active = item.key === activeSection
 
             return (
@@ -88,6 +86,9 @@ export default function InsuranceModeShell({
                 style={[styles.tabButton, active && styles.tabButtonActive]}
                 onPress={() => onChangeSection(item.key)}
                 activeOpacity={0.88}
+                accessibilityRole="tab"
+                accessibilityLabel={item.label}
+                accessibilityState={{ selected: active }}
               >
                 <Text style={[styles.tabText, active && styles.tabTextActive]}>{item.label}</Text>
               </TouchableOpacity>
@@ -104,7 +105,7 @@ export default function InsuranceModeShell({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap: 18,
+    gap: 12,
     minHeight: 0,
   },
   header: {
@@ -116,16 +117,16 @@ const styles = StyleSheet.create({
   title: {
     color: insurancePalette.text,
     fontFamily: insuranceFonts.heading,
-    fontSize: 40,
-    lineHeight: 42,
+    fontSize: 26,
+    lineHeight: 32,
     fontWeight: '700',
   },
   vehicleTrigger: {
-    maxWidth: '62%',
-    minHeight: 48,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: radius.pill,
+    maxWidth: '66%',
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: insurancePalette.border,
     backgroundColor: insurancePalette.cardSoft,
@@ -154,7 +155,7 @@ const styles = StyleSheet.create({
     minHeight: 62,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: insurancePalette.border,
     backgroundColor: insurancePalette.card,
@@ -170,7 +171,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
   },
   summaryChipValueRow: {
     flexDirection: 'row',
@@ -190,26 +191,21 @@ const styles = StyleSheet.create({
     color: insurancePalette.amber,
   },
   tabRow: {
-    borderRadius: 28,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: insurancePalette.border,
     backgroundColor: insurancePalette.card,
-    padding: 6,
-    shadowColor: insurancePalette.shadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.16,
-    shadowRadius: 20,
-    elevation: 4,
+    padding: 4,
   },
   tabRowInner: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 4,
     width: '100%',
   },
   tabButton: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: radius.pill,
+    minHeight: 44,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },

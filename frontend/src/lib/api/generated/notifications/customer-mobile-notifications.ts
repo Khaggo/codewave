@@ -246,10 +246,10 @@ export const customerNotificationReminderMapping = {
     stateOwner: 'main-service.back-jobs',
   },
   invoice_aging: {
-    sourceDomain: 'ecommerce.invoice-payments',
-    sourceTrigger: 'order.invoice_issued',
-    customerAction: 'open-invoice-or-order-history',
-    stateOwner: 'ecommerce.invoice-payments',
+    sourceDomain: 'main-service.job-orders',
+    sourceTrigger: 'service.invoice_finalized',
+    customerAction: 'open-service-history',
+    stateOwner: 'main-service.job-orders',
   },
   service_follow_up: {
     sourceDomain: 'main-service.job-orders',

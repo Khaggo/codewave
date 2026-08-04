@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import AuthFrame from '../components/AuthFrame';
 import FormField from '../components/FormField';
 import { ApiError, requestForgotPasswordOtp } from '../lib/authClient';

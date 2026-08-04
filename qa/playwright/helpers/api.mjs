@@ -8,7 +8,6 @@ const privateIpv4HostPattern = String.raw`(?:localhost|127\.0\.0\.1|10\.\d{1,3}\
 const mobileMainApiPattern = new RegExp(
   String.raw`^(?:https://api\.autocare-cc\.com|http://${privateIpv4HostPattern}:3000)/api/`,
 );
-const mobileEcommerceApiPattern = new RegExp(String.raw`^http://${privateIpv4HostPattern}:3001/`);
 
 function buildApiUrl(path) {
   return `${runtimeConfig.apiBaseUrl}${path}`;
@@ -56,10 +55,7 @@ async function fulfillMobileProxyRoute(route, targetBaseUrl) {
       status: 502,
       headers: buildMobileProxyCorsHeaders(request, { 'content-type': 'application/json; charset=utf-8' }),
       body: JSON.stringify({
-        message:
-          targetBaseUrl === runtimeConfig.ecommerceApiBaseUrl
-            ? 'Mobile ecommerce proxy could not reach the ecommerce service.'
-            : 'Mobile API proxy could not reach the backend service.',
+        message: 'Mobile API proxy could not reach the backend service.',
         error: error instanceof Error ? error.message : String(error),
       }),
     });
@@ -68,9 +64,6 @@ async function fulfillMobileProxyRoute(route, targetBaseUrl) {
 
 export async function proxyMobileApiTraffic(context) {
   await context.route(mobileMainApiPattern, (route) => fulfillMobileProxyRoute(route, runtimeConfig.apiBaseUrl));
-  await context.route(mobileEcommerceApiPattern, (route) =>
-    fulfillMobileProxyRoute(route, runtimeConfig.ecommerceApiBaseUrl),
-  );
 }
 
 async function expectJson(response, contextLabel) {
@@ -108,7 +101,7 @@ export async function ensureLocalQaRuntime(request, { requireMobile } = {}) {
         [
           `Mobile web runtime is not reachable at ${runtimeConfig.mobileBaseUrl}.`,
           'Start Expo Web with `cd mobile && npx expo start --web --port 8090 --clear`,',
-          'or regenerate the static export at `mobile/.runtime/qa-mobile-web-export` so Playwright can auto-serve it.',
+          'or regenerate `mobile/.runtime/qa-mobile-web-export` and set `QA_USE_STATIC_MOBILE_EXPORT=true`.',
           'If mobile auth suddenly fails after an IP change, update `mobile/.env.local` and restart Expo.',
         ].join(' '),
       ).toBeTruthy();

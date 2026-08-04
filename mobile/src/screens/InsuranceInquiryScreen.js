@@ -1,13 +1,10 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Modal,
   Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   Text,
@@ -16,41 +13,37 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ApiError, listCustomerVehicles } from '../lib/authClient';
+import { ApiError } from '../lib/authClient';
 import {
-  buildOwnedVehicleInsuranceLabel,
   createEmptyCustomerInsuranceSnapshot,
-  canAttachCustomerInsuranceDocument,
-  createInitialCustomerInsuranceDraft,
   createInsuranceInquiry,
   customerInsuranceDocumentTypeOptions,
-  getInsuranceRequirements,
-  getInsuranceInquiryById,
-  getCustomerInsuranceTrackingState,
-  listMyInsuranceInquiries,
-  listVehicleInsuranceRecords,
   uploadInsuranceInquiryDocumentFile,
 } from '../lib/insuranceClient';
 import {
-  REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY,
-  buildCustomerInsuranceOverviewState,
-  buildCustomerInsuranceStatusState,
-  buildRequirementsChecklist,
-  clearRememberedInquiryForVehicle,
   createPickedInsuranceDocumentDraft,
-  doesCustomerInsuranceInquiryMatchVehicle,
-  getCustomerInsurancePaymentSummary,
-  getVehicleScopedCustomerInquiryId,
-  getRememberedInquiryForVehicle,
-  hydrateRememberedInquiryMappings,
-  isTerminalCustomerInquiryStatus,
-  rememberInquiryForVehicle,
-  serializeRememberedInquiryMappings,
-  shouldDeferCustomerInsuranceTrackingRefresh,
 } from './insuranceModuleView.mjs';
+import {
+  buildHistoryRecordSummary,
+  buildHistoryRecordTitle,
+  buildInitialDocumentUploadDraft,
+  buildInsuranceInquirySubject,
+  buildRenewalPrompt,
+  formatMissingRequiredDocumentSummary,
+  formatTimestampLabel,
+  getPurposeLabel,
+  inferMimeType,
+  inquiryTypeOptions,
+  purposeOptions,
+} from './insuranceInquiryPresentationModel.mjs';
 import InsuranceDocumentsPanel from './insurance/InsuranceDocumentsPanel';
 import InsuranceHomePanel from './insurance/InsuranceHomePanel';
 import InsuranceModeShell from './insurance/InsuranceModeShell';
+import {
+  buildInsuranceContentInsets,
+  insuranceModeUsesPanelScroll as shouldInsuranceModeUsePanelScroll,
+  resolveInsuranceModeTab,
+} from './insurance/insuranceModeModel.mjs';
 import {
   insuranceFonts,
   insurancePalette,
@@ -58,231 +51,17 @@ import {
 } from './insurance/InsurancePanelPrimitives';
 import InsuranceRequestPanel from './insurance/InsuranceRequestPanel';
 import InsuranceStatusDetailPanel from './insurance/InsuranceStatusDetailPanel';
+import InsuranceVehiclePicker from './insurance/InsuranceVehiclePicker';
 import {
-  buildAuthoritativeRequirementsChecklist,
-  getInsuranceRequestDraftStorageKey,
-  hydrateInsuranceRequestDraft,
-  serializeInsuranceRequestDraft,
+  shouldRetainDocumentAfterUploadFailure,
 } from './insurance/insuranceRequestFlow.mjs';
+import { buildInsuranceWorkspaceViewModel } from './insurance/insuranceWorkspaceViewModel.mjs';
+import useInsuranceRequestDraft from './insurance/useInsuranceRequestDraft';
+import useInsuranceRequirements from './insurance/useInsuranceRequirements';
+import useInsuranceTrackingController from './insurance/useInsuranceTrackingController';
+import useInsuranceVehicleController from './insurance/useInsuranceVehicleController';
 import styles from './insuranceInquiryStyles';
 import { colors, radius } from '../theme';
-
-const inquiryTypeOptions = [
-  { value: 'comprehensive', label: 'Comprehensive' },
-  { value: 'ctpl', label: 'CTPL' },
-];
-
-const purposeOptions = [
-  { value: 'new_application', label: 'New' },
-  { value: 'renewal', label: 'Renewal' },
-  { value: 'claim', label: 'Claim' },
-  { value: 'quotation', label: 'Quotation' },
-];
-
-const getRememberedInquiryStorageKey = (userId) => {
-  const normalizedUserId = String(userId ?? '').trim();
-  return normalizedUserId
-    ? `${REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY}:${normalizedUserId}`
-    : REMEMBERED_INSURANCE_INQUIRY_STORAGE_KEY;
-};
-
-const getPurposeLabel = (value) =>
-  purposeOptions.find((option) => option.value === value)?.label ?? 'Request';
-
-const getRequestGuidance = ({ purpose = 'claim' } = {}) => {
-  switch (purpose) {
-    case 'new_application':
-      return {
-        sectionHelper: 'Start a fresh application for this vehicle.',
-        processLine: 'Staff review the intake first, then prepare the estimate and insurer follow-up.',
-        descriptionPlaceholder: 'Share the vehicle use, coverage need, or concern.',
-        notesPlaceholder: 'Optional application detail',
-        providerPlaceholder: 'Preferred insurer or broker',
-        policyPlaceholder: 'Leave blank if no old policy',
-      };
-    case 'renewal':
-      return {
-        sectionHelper: 'Prepare the next renewal quote and confirm the current policy details.',
-        processLine: 'Staff review the intake first, then prepare the renewal quote and follow-up updates.',
-        descriptionPlaceholder: 'Share the renewal request, timing, or concern.',
-        notesPlaceholder: 'Optional renewal detail',
-        providerPlaceholder: 'Current insurer or broker',
-        policyPlaceholder: 'Current or replacement policy number',
-      };
-    case 'quotation':
-      return {
-        sectionHelper: 'Ask for coverage pricing or a policy estimate.',
-        processLine: 'Staff review the intake first, then prepare the quotation or estimate.',
-        descriptionPlaceholder: 'Tell staff what coverage or pricing you need.',
-        notesPlaceholder: 'Optional quotation detail',
-        providerPlaceholder: 'Preferred insurer or broker',
-        policyPlaceholder: 'Policy reference if available',
-      };
-    case 'claim':
-    default:
-      return {
-        sectionHelper: 'Start the claim intake and capture the incident clearly.',
-        processLine: 'Staff review the intake first, then prepare the estimate and insurer approval steps.',
-        descriptionPlaceholder: 'Describe the incident, damage, or claim concern.',
-        notesPlaceholder: 'Optional claim detail',
-        providerPlaceholder: 'Insurer or broker',
-        policyPlaceholder: 'Policy number',
-      };
-  }
-};
-
-const buildInsuranceInquirySubject = ({ purpose = 'claim', vehicleLabel = '' } = {}) => {
-  const purposeLabel = getPurposeLabel(purpose);
-  const trimmedVehicleLabel = String(vehicleLabel ?? '').trim();
-
-  return trimmedVehicleLabel
-    ? `${purposeLabel} - ${trimmedVehicleLabel}`
-    : `${purposeLabel} insurance request`;
-};
-
-const formatMissingRequiredDocumentSummary = (missingRequiredDocuments = []) =>
-  (Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments : [])
-    .map((item) => String(item?.label ?? '').trim())
-    .filter(Boolean)
-    .join(', ');
-
-const buildProcessStepState = ({ active, done }) => ({
-  active: Boolean(active || done),
-  done: Boolean(done),
-});
-
-const getInsuranceProcessSteps = ({
-  latestInquiry = null,
-  missingRequiredDocuments = [],
-} = {}) => {
-  const purpose = latestInquiry?.purpose ?? 'claim';
-  const status = latestInquiry?.status ?? 'submitted';
-  const paymentStatus = latestInquiry?.paymentStatus ?? 'not_required';
-  const renewalStatus = latestInquiry?.renewalStatus ?? 'not_applicable';
-  const missingCount = Array.isArray(missingRequiredDocuments) ? missingRequiredDocuments.length : 0;
-  const reviewReached = ['under_review', 'for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status);
-  const approvalReached = ['for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status);
-  const paymentRelevant =
-    status === 'payment_pending' ||
-    ['proof_submitted', 'verifying', 'paid', 'overdue', 'unpaid', 'awaiting_payment'].includes(paymentStatus);
-  const renewalRelevant =
-    purpose === 'renewal' ||
-    status === 'for_renewal' ||
-    ['upcoming', 'quoted', 'awaiting_customer', 'renewed', 'expired'].includes(renewalStatus);
-  const steps = [
-    {
-      key: 'intake',
-      label: 'Inquiry received',
-      ...buildProcessStepState({ active: true, done: Boolean(latestInquiry?.id) }),
-    },
-    {
-      key: 'documents',
-      label: missingCount > 0 ? 'Documents needed' : 'Documents ready',
-      ...buildProcessStepState({
-        active: Boolean(latestInquiry?.id),
-        done: Boolean(latestInquiry?.id) && missingCount === 0,
-      }),
-    },
-    {
-      key: 'review',
-      label: 'Estimate and review',
-      ...buildProcessStepState({
-        active: reviewReached,
-        done: ['for_approval', 'approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status),
-      }),
-    },
-    {
-      key: 'approval',
-      label: 'Approval',
-      ...buildProcessStepState({
-        active: approvalReached,
-        done: ['approved', 'payment_pending', 'active', 'for_renewal', 'closed'].includes(status),
-      }),
-    },
-  ];
-
-  if (paymentRelevant) {
-    steps.push({
-      key: 'payment',
-      label: 'Payment follow-up',
-      ...buildProcessStepState({
-        active: paymentRelevant,
-        done: paymentStatus === 'paid',
-      }),
-    });
-  }
-
-  if (renewalRelevant) {
-    steps.push({
-      key: 'renewal',
-      label: 'Renewal',
-      ...buildProcessStepState({
-        active: renewalRelevant,
-        done: renewalStatus === 'renewed',
-      }),
-    });
-  }
-
-  if (status === 'active') {
-    steps.push({
-      key: 'active',
-      label: 'Active',
-      ...buildProcessStepState({
-        active: true,
-        done: true,
-      }),
-    });
-  } else if (status === 'closed') {
-    steps.push({
-      key: 'closed',
-      label: 'Completed',
-      ...buildProcessStepState({
-        active: true,
-        done: true,
-      }),
-    });
-  } else if (status === 'cancelled') {
-    steps.push({
-      key: 'cancelled',
-      label: 'Cancelled',
-      ...buildProcessStepState({
-        active: true,
-        done: false,
-      }),
-    });
-  } else if (status === 'rejected') {
-    steps.push({
-      key: 'rejected',
-      label: 'Stopped',
-      ...buildProcessStepState({
-        active: true,
-        done: false,
-      }),
-    });
-  }
-
-  return steps;
-};
-
-const formatTimestampLabel = (value) => {
-  if (!value) {
-    return '--';
-  }
-
-  const parsedDate = new Date(value);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return '--';
-  }
-
-  return parsedDate.toLocaleString('en-PH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-};
 
 const buildCustomerErrorMessage = (error, fallbackMessage) =>
   error instanceof ApiError && error.message ? error.message : fallbackMessage;
@@ -290,119 +69,6 @@ const buildCustomerErrorMessage = (error, fallbackMessage) =>
 const normalizeRouteId = (value) => {
   const normalizedValue = typeof value === 'string' ? value.trim() : '';
   return normalizedValue.length ? normalizedValue : null;
-};
-
-const formatWorkflowLabel = (value) =>
-  String(value ?? '')
-    .split('_')
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(' ') || '--';
-
-const buildInitialDocumentUploadDraft = () => ({
-  documentType: 'photo',
-  fileName: '',
-  fileUri: '',
-  mimeType: 'application/pdf',
-  notes: '',
-  fileSizeLabel: null,
-});
-
-const inferMimeType = (fileName, fallbackType = 'application/pdf') => {
-  const normalizedFileName = String(fileName ?? '').trim().toLowerCase();
-
-  if (normalizedFileName.endsWith('.pdf')) {
-    return 'application/pdf';
-  }
-
-  if (normalizedFileName.endsWith('.png')) {
-    return 'image/png';
-  }
-
-  if (normalizedFileName.endsWith('.webp')) {
-    return 'image/webp';
-  }
-
-  if (normalizedFileName.endsWith('.heic')) {
-    return 'image/heic';
-  }
-
-  if (normalizedFileName.endsWith('.jpg') || normalizedFileName.endsWith('.jpeg')) {
-    return 'image/jpeg';
-  }
-
-  return String(fallbackType ?? '').trim() || 'application/pdf';
-};
-
-const buildRenewalPrompt = (inquiry) => {
-  switch (inquiry?.renewalStatus) {
-    case 'upcoming':
-      return {
-        title: 'Renewal reminder',
-        message: 'Your renewal window is coming up. Keep an eye on this request for the next quote or follow-up step.',
-        tone: 'default',
-      };
-    case 'quoted':
-      return {
-        title: 'Renewal quote ready',
-        message: 'A renewal quote is already being prepared or has been shared. Refresh for the latest customer-safe status.',
-        tone: 'default',
-      };
-    case 'awaiting_customer':
-      return {
-        title: 'Renewal waiting on you',
-        message: 'Staff are waiting for your next renewal decision or supporting documents.',
-        tone: 'default',
-      };
-    case 'renewed':
-      return {
-        title: 'Renewal completed',
-        message: 'This renewal is already tagged as completed.',
-        tone: 'success',
-      };
-    case 'expired':
-      return {
-        title: 'Renewal overdue',
-        message: 'This insurance record is past its renewal window. Contact staff if you still need coverage support.',
-        tone: 'danger',
-      };
-    default:
-      return {
-        title: 'Renewal visibility',
-        message: 'Renewal reminders will appear here once staff tag the request for follow-up.',
-        tone: 'default',
-      };
-  }
-};
-
-const getLatestInsuranceRecord = (records) =>
-  (Array.isArray(records) ? records : []).reduce((currentLatest, record) => {
-    const currentValue = new Date(record?.updatedAt ?? record?.createdAt ?? 0).getTime();
-    const latestValue = new Date(
-      currentLatest?.updatedAt ?? currentLatest?.createdAt ?? 0,
-    ).getTime();
-
-    return currentValue > latestValue ? record : currentLatest;
-  }, null);
-
-const buildHistoryRecordTitle = (record) => {
-  const statusLabel = formatWorkflowLabel(record?.status);
-
-  return record?.inquiryTypeLabel
-    ? `${record.inquiryTypeLabel} - ${statusLabel}`
-    : statusLabel;
-};
-
-const buildHistoryRecordSummary = (record) => {
-  const latestUpdateLabel = formatTimestampLabel(record?.updatedAt ?? record?.createdAt);
-  const summaryParts = [
-    record?.statusHint,
-    latestUpdateLabel !== '--' ? `Latest update: ${latestUpdateLabel}` : null,
-    record?.providerName ? `Provider: ${record.providerName}` : null,
-    record?.policyNumber ? `Policy no.: ${record.policyNumber}` : null,
-  ].filter(Boolean);
-
-  return summaryParts.join(' ') || 'Completed insurance record.';
 };
 
 function InsuranceStatePanel({
@@ -438,7 +104,13 @@ function InsuranceStatePanel({
       </View>
 
       {actionLabel && onAction ? (
-        <TouchableOpacity style={styles.statePanelButton} onPress={onAction} activeOpacity={0.88}>
+        <TouchableOpacity
+          style={styles.statePanelButton}
+          onPress={onAction}
+          activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+        >
           <Text style={styles.statePanelButtonText}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
@@ -455,14 +127,35 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     [account?.ownedVehicles],
   );
   const hasSession = Boolean(accessToken && userId);
-  const [liveOwnedVehicles, setLiveOwnedVehicles] = useState(accountOwnedVehicles);
-  const [vehicleLoadState, setVehicleLoadState] = useState(hasSession ? 'loading' : 'idle');
-  const [vehicleLoadMessage, setVehicleLoadMessage] = useState('');
-  const [vehicleReloadKey, setVehicleReloadKey] = useState(0);
-  const ownedVehicles = useMemo(
-    () => (liveOwnedVehicles.length ? liveOwnedVehicles : accountOwnedVehicles),
-    [accountOwnedVehicles, liveOwnedVehicles],
+  const routeVehicleId = normalizeRouteId(route?.params?.vehicleId);
+  const routeInquiryId = normalizeRouteId(route?.params?.inquiryId);
+  const resumeDraftFromVehicleId = normalizeRouteId(
+    route?.params?.resumeDraftFromVehicleId,
   );
+  const resumeInsuranceTab = route?.params?.resumeInsuranceTab
+    ? resolveInsuranceModeTab(route.params.resumeInsuranceTab)
+    : null;
+  const {
+    closeVehiclePicker,
+    fallbackVehicleId,
+    isVehiclePickerAvailable,
+    isVehiclePickerOpen,
+    openVehiclePicker,
+    ownedVehicles,
+    retryVehicleLoad,
+    selectedVehicle,
+    selectedVehicleId,
+    setSelectedVehicleId,
+    vehicleLoadMessage,
+    vehicleLoadState,
+  } = useInsuranceVehicleController({
+    accessToken,
+    accountOwnedVehicles,
+    hasSession,
+    primaryVehicleId: account?.primaryVehicleId,
+    routeVehicleId,
+    userId,
+  });
   const initialSnapshot = useMemo(
     () =>
       createEmptyCustomerInsuranceSnapshot({
@@ -471,288 +164,122 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }),
     [hasSession, ownedVehicles],
   );
-  const routeVehicleId = normalizeRouteId(route?.params?.vehicleId);
-  const routeInquiryId = normalizeRouteId(route?.params?.inquiryId);
-  const fallbackVehicleId =
-    normalizeRouteId(account?.primaryVehicleId) ?? normalizeRouteId(ownedVehicles[0]?.id);
-  const initialVehicleId = routeVehicleId ?? fallbackVehicleId;
-  const [selectedVehicleId, setSelectedVehicleId] = useState(initialVehicleId);
-  const [activePanel, setActivePanel] = useState('home');
-  const [activeInsuranceTab, setActiveInsuranceTab] = useState('home');
-  const [isVehiclePickerOpen, setIsVehiclePickerOpen] = useState(false);
-  const [draft, setDraft] = useState(createInitialCustomerInsuranceDraft());
-  const [stagedDocuments, setStagedDocuments] = useState([]);
-  const [isDraftDirty, setIsDraftDirty] = useState(false);
-  const [requirementsByKey, setRequirementsByKey] = useState({});
+  const {
+    clearPersistedDraft,
+    draft,
+    isDraftDirty,
+    persistDraftNow,
+    resetDraftContent,
+    restoredDraftStorageKey,
+    setDraft,
+    setIsDraftDirty,
+    setStagedDocuments,
+    stagedDocuments,
+  } = useInsuranceRequestDraft({
+    hasSession,
+    resumeFromVehicleId: resumeDraftFromVehicleId,
+    userId,
+    vehicleId: selectedVehicleId,
+  });
+  const [activePanel, setActivePanel] = useState(resumeInsuranceTab ?? 'home');
+  const [activeInsuranceTab, setActiveInsuranceTab] = useState(
+    resumeInsuranceTab ?? 'home',
+  );
+  const presentedVehicleIdRef = useRef(selectedVehicleId);
   const [documentDraft, setDocumentDraft] = useState(buildInitialDocumentUploadDraft());
   const [intakeState, setIntakeState] = useState(initialSnapshot.intakeState);
   const [intakeMessage, setIntakeMessage] = useState('');
   const [documentUploadState, setDocumentUploadState] = useState('document_idle');
   const [documentUploadMessage, setDocumentUploadMessage] = useState('');
-  const [trackingState, setTrackingState] = useState(initialSnapshot.trackingState);
-  const [trackingMessage, setTrackingMessage] = useState('');
-  const [latestInquiry, setLatestInquiry] = useState(null);
-  const [latestInquiryId, setLatestInquiryId] = useState(
-    routeInquiryId ?? getRememberedInquiryForVehicle(initialVehicleId),
-  );
-  const [claimStatusUpdates, setClaimStatusUpdates] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [hasHydratedRememberedInquiryMappings, setHasHydratedRememberedInquiryMappings] =
-    useState(false);
-  const latestInquiryVehicleIdRef = useRef(routeVehicleId ?? initialVehicleId ?? null);
-  const rememberedInquiryLookupByVehicleRef = useRef({
-    vehicleId: null,
-    inquiryId: routeInquiryId ?? undefined,
+  const {
+    adoptInquiry,
+    claimStatusUpdates,
+    isRefreshing,
+    latestInquiry,
+    prepareForVehicleChange,
+    refreshTracking,
+    trackingMessage,
+    trackingState,
+  } = useInsuranceTrackingController({
+    accessToken,
+    hasSession,
+    initialTrackingState: initialSnapshot.trackingState,
+    routeInquiryId,
+    selectedVehicleId,
+    userId,
   });
-  const hydratedDraftStorageKeyRef = useRef(null);
+  const requirementsByKey = useInsuranceRequirements({
+    accessToken,
+    draft,
+    hasSession,
+    latestInquiry,
+  });
 
   useEffect(() => {
-    setActivePanel('home');
-    setActiveInsuranceTab('home');
-  }, [selectedVehicleId]);
-
-  useEffect(() => {
-    if (!hasSession || !ownedVehicles.length) {
-      setIsVehiclePickerOpen(false);
+    if (restoredDraftStorageKey) {
+      setIntakeState('draft_ready');
+      setIntakeMessage('Your unfinished insurance request was restored.');
     }
-  }, [hasSession, ownedVehicles.length]);
+  }, [restoredDraftStorageKey]);
 
-  const selectedVehicle =
-    ownedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
-  const isVehiclePickerAvailable = hasSession && ownedVehicles.length > 0;
-  const selectedVehicleLabel = selectedVehicle
-    ? buildOwnedVehicleInsuranceLabel(selectedVehicle)
-    : '';
-  const latestInquiryCanAcceptDocuments = canAttachCustomerInsuranceDocument(latestInquiry);
-  const canSubmitNewInquiry =
-    !latestInquiry || isTerminalCustomerInquiryStatus(latestInquiry.status);
-  const canReuseOnFileDocuments =
-    Boolean(latestInquiry?.id) && !isTerminalCustomerInquiryStatus(latestInquiry.status);
-  const activePurpose =
-    latestInquiry && !canSubmitNewInquiry ? latestInquiry.purpose : draft.purpose;
-  const requestPurpose = draft.purpose;
-  const requestOnFileDocuments = useMemo(
-    () => (canReuseOnFileDocuments ? latestInquiry?.documents ?? [] : []),
-    [canReuseOnFileDocuments, latestInquiry?.documents],
-  );
-  const requestOnFileDocumentsByType = useMemo(
-    () => new Map(requestOnFileDocuments.map((document) => [document.documentType, document])),
-    [requestOnFileDocuments],
-  );
-  const hasOnFileRenewalPolicy = Boolean(requestOnFileDocumentsByType.get('policy'));
-  const requestChecklistUploadedTypes = useMemo(() => {
-    const mergedTypes = new Set(stagedDocuments.map((document) => document.documentType));
+  useEffect(() => {
+    const vehicleChanged = presentedVehicleIdRef.current !== selectedVehicleId;
 
-    requestOnFileDocuments.forEach((document) => {
-      if (
-        requestPurpose === 'renewal' &&
-        document.documentType === 'policy' &&
-        draft.renewalPolicyMode === 'replace'
-      ) {
-        return;
-      }
+    if (resumeInsuranceTab) {
+      setActivePanel(resumeInsuranceTab);
+      setActiveInsuranceTab(resumeInsuranceTab);
+    } else if (vehicleChanged) {
+      setActivePanel('home');
+      setActiveInsuranceTab('home');
+    }
 
-      mergedTypes.add(document.documentType);
-    });
-
-    return [...mergedTypes];
-  }, [draft.renewalPolicyMode, requestOnFileDocuments, requestPurpose, stagedDocuments]);
-  const requestGuidance = useMemo(
-    () => getRequestGuidance({ purpose: activePurpose }),
-    [activePurpose],
-  );
-  const requestRequirementsChecklist = useMemo(
-    () => {
-      const requirementKey = `${requestPurpose}:${draft.inquiryType}`;
-      const authoritativeRequirements = requirementsByKey[requirementKey];
-
-      return authoritativeRequirements
-        ? buildAuthoritativeRequirementsChecklist({
-            requirements: authoritativeRequirements,
-            uploadedTypes: requestChecklistUploadedTypes,
-            documentTypeOptions: customerInsuranceDocumentTypeOptions,
-          })
-        : buildRequirementsChecklist({
-        purpose: requestPurpose,
-        uploadedTypes: requestChecklistUploadedTypes,
-          });
-    },
+    presentedVehicleIdRef.current = selectedVehicleId;
+  }, [resumeInsuranceTab, selectedVehicleId]);
+  const {
+    activePurpose,
+    canSubmitNewInquiry,
+    currentRequestSummary,
+    hasOnFileRenewalPolicy,
+    historyStatusState,
+    latestInquiryCanAcceptDocuments,
+    missingRequiredDocuments,
+    overviewState,
+    paymentSummary,
+    processSteps,
+    requestGuidance,
+    requestOnFileDocuments,
+    requestRequirementsChecklist,
+    requirementsChecklist,
+    selectedVehicleLabel,
+    shellSummaryChips,
+    sortedHistoryRecords,
+    statusState,
+  } = useMemo(
+    () =>
+      buildInsuranceWorkspaceViewModel({
+        claimStatusUpdates,
+        draft,
+        latestInquiry,
+        requirementsByKey,
+        selectedVehicle,
+        stagedDocuments,
+        trackingState,
+      }),
     [
-      draft.inquiryType,
-      requestChecklistUploadedTypes,
-      requestPurpose,
+      claimStatusUpdates,
+      draft,
+      latestInquiry,
       requirementsByKey,
+      selectedVehicle,
+      stagedDocuments,
+      trackingState,
     ],
-  );
-  const requirementsChecklist = useMemo(
-    () => {
-      const activeInquiryType = latestInquiry?.inquiryType ?? draft.inquiryType;
-      const requirementKey = `${activePurpose}:${activeInquiryType}`;
-      const authoritativeRequirements = requirementsByKey[requirementKey];
-      const uploadedTypes =
-        latestInquiry?.documents?.map((document) => document.documentType) ?? [];
-
-      return authoritativeRequirements
-        ? buildAuthoritativeRequirementsChecklist({
-            requirements: authoritativeRequirements,
-            uploadedTypes,
-            documentTypeOptions: customerInsuranceDocumentTypeOptions,
-          })
-        : buildRequirementsChecklist({
-        purpose: activePurpose,
-        status: latestInquiry?.status,
-            uploadedTypes,
-          });
-    },
-    [activePurpose, draft.inquiryType, latestInquiry, requirementsByKey],
-  );
-  const missingRequiredDocuments = useMemo(
-    () => requirementsChecklist.required.filter((item) => !item.complete),
-    [requirementsChecklist],
-  );
-  const paymentSummary = useMemo(
-    () =>
-      getCustomerInsurancePaymentSummary({
-        status: latestInquiry?.status,
-        paymentStatus: latestInquiry?.paymentStatus,
-        paymentDueAt: latestInquiry?.paymentDueAt,
-      }),
-    [latestInquiry?.paymentDueAt, latestInquiry?.paymentStatus, latestInquiry?.status],
-  );
-  const overviewState = useMemo(
-    () =>
-      buildCustomerInsuranceOverviewState({
-        selectedVehicleLabel,
-        latestInquiry,
-        missingRequiredDocuments,
-        historyCount: claimStatusUpdates.length,
-    }),
-    [claimStatusUpdates.length, latestInquiry, missingRequiredDocuments, selectedVehicleLabel],
-  );
-  const latestStatusUpdateLabel = useMemo(() => {
-    if (latestInquiry?.statusHint) {
-      return latestInquiry.statusHint;
-    }
-
-    const latestRecord = getLatestInsuranceRecord(claimStatusUpdates);
-
-    if (latestRecord?.statusHint) {
-      return latestRecord.statusHint;
-    }
-
-    return formatTimestampLabel(latestRecord?.updatedAt ?? latestRecord?.createdAt);
-  }, [claimStatusUpdates, latestInquiry?.statusHint]);
-  const isTrackingStale = trackingState === 'tracking_load_failed' && Boolean(latestInquiry?.id || claimStatusUpdates.length);
-  const statusState = useMemo(
-    () =>
-      buildCustomerInsuranceStatusState({
-        latestInquiry,
-        missingRequiredDocuments,
-        latestUpdateLabel: latestStatusUpdateLabel,
-        isStale: isTrackingStale,
-      }),
-    [isTrackingStale, latestInquiry, latestStatusUpdateLabel, missingRequiredDocuments],
-  );
-  const processSteps = useMemo(
-    () =>
-      getInsuranceProcessSteps({
-        latestInquiry,
-        missingRequiredDocuments,
-      }),
-    [latestInquiry, missingRequiredDocuments],
-  );
-  const currentRequestSummary = useMemo(() => {
-    if (!latestInquiry?.id) {
-      return {
-        purposeLabel: getPurposeLabel(activePurpose),
-        inquiryTypeLabel:
-          inquiryTypeOptions.find((option) => option.value === draft.inquiryType)?.label ??
-          'Insurance',
-        stageLabel: 'Not submitted',
-        statusHint: requestGuidance.sectionHelper,
-      };
-    }
-
-    return {
-      purposeLabel: getPurposeLabel(latestInquiry.purpose),
-      inquiryTypeLabel: latestInquiry.inquiryTypeLabel ?? 'Insurance',
-      stageLabel: formatWorkflowLabel(latestInquiry.status),
-      statusHint: latestInquiry.statusHint ?? requestGuidance.sectionHelper,
-    };
-  }, [activePurpose, draft.inquiryType, latestInquiry, requestGuidance.sectionHelper]);
-  const shellSummaryChips = useMemo(() => {
-    const missingCount = missingRequiredDocuments.length;
-    const missingLabelSummary = formatMissingRequiredDocumentSummary(missingRequiredDocuments);
-    return [
-      {
-        label: 'Purpose',
-        value: currentRequestSummary.purposeLabel,
-      },
-      {
-        label: 'Stage',
-        value: currentRequestSummary.stageLabel,
-      },
-      {
-        label: 'Docs',
-        value: missingCount > 0 ? missingLabelSummary || `${missingCount} missing` : 'Ready',
-        icon: missingCount > 0 ? 'alert-circle-outline' : 'check-circle-outline',
-        emphasis: missingCount > 0,
-      },
-    ];
-  }, [currentRequestSummary.purposeLabel, currentRequestSummary.stageLabel, missingRequiredDocuments]);
-  const sortedHistoryRecords = useMemo(() => {
-    return [...claimStatusUpdates].sort((left, right) => {
-      const leftTimestamp = new Date(left?.updatedAt ?? left?.createdAt ?? 0).getTime();
-      const rightTimestamp = new Date(right?.updatedAt ?? right?.createdAt ?? 0).getTime();
-
-      return rightTimestamp - leftTimestamp;
-    });
-  }, [claimStatusUpdates]);
-  const historySummary = sortedHistoryRecords.length
-    ? `${sortedHistoryRecords.length} recorded insurance update${sortedHistoryRecords.length === 1 ? '' : 's'} ${sortedHistoryRecords.length === 1 ? 'is' : 'are'} already available for this vehicle.`
-    : 'Vehicle-level insurance records will appear here after staff close and record a customer-safe case.';
-  const latestHistoryRecord = sortedHistoryRecords[0] ?? null;
-  const historyLatestUpdateLabel =
-    latestHistoryRecord?.statusHint ??
-    formatTimestampLabel(latestHistoryRecord?.updatedAt ?? latestHistoryRecord?.createdAt);
-  const historyStatusState = useMemo(
-    () => ({
-      title: sortedHistoryRecords.length ? 'Completed records' : 'No history yet',
-      summary: historySummary,
-      latestUpdateLabel: historyLatestUpdateLabel,
-      timeline: [],
-    }),
-    [historyLatestUpdateLabel, historySummary, sortedHistoryRecords.length],
   );
   const homeTitle = 'Home';
   const statusTitle = 'Status';
   const statusSubtitle = 'Track review, approval, and next action';
-  const getSettledRememberedInquiryIdForSelectedVehicle = () => {
-    if (!selectedVehicleId) {
-      return undefined;
-    }
-
-    return rememberedInquiryLookupByVehicleRef.current.vehicleId === selectedVehicleId
-      ? rememberedInquiryLookupByVehicleRef.current.inquiryId
-      : undefined;
-  };
-  const getVehicleScopedLatestInquiryId = ({
-    inquiryIdOverride = null,
-    vehicleIdOverride = selectedVehicleId,
-  } = {}) =>
-    String(inquiryIdOverride ?? '').trim() ||
-    getVehicleScopedCustomerInquiryId({
-      selectedVehicleId: vehicleIdOverride,
-      routeInquiryId,
-      latestInquiryId,
-      latestInquiryVehicleId: latestInquiryVehicleIdRef.current,
-      rememberedInquiryId:
-        rememberedInquiryLookupByVehicleRef.current.vehicleId === vehicleIdOverride
-          ? rememberedInquiryLookupByVehicleRef.current.inquiryId
-          : undefined,
-    });
 
   useEffect(() => {
     const hasInvalidVehicleParam = route?.params?.vehicleId && !routeVehicleId;
@@ -773,297 +300,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   ]);
 
   useEffect(() => {
-    if (accountOwnedVehicles.length) {
-      setLiveOwnedVehicles(accountOwnedVehicles);
-    }
-  }, [accountOwnedVehicles]);
-  const rememberedInquiryStorageKey = getRememberedInquiryStorageKey(account?.userId);
-  const insuranceDraftStorageKey = getInsuranceRequestDraftStorageKey({
-    userId,
-    vehicleId: selectedVehicleId,
-  });
-
-  useEffect(() => {
-    let isMounted = true;
-    hydratedDraftStorageKeyRef.current = null;
-
-    if (!hasSession || !selectedVehicleId) {
-      setDraft(createInitialCustomerInsuranceDraft());
-      setStagedDocuments([]);
-      setIsDraftDirty(false);
-      return undefined;
-    }
-
-    AsyncStorage.getItem(insuranceDraftStorageKey)
-      .then(async (serializedDraft) => {
-        if (!isMounted) {
-          return;
-        }
-
-        const restoredDraft = hydrateInsuranceRequestDraft({
-          serializedDraft,
-          createInitialDraft: createInitialCustomerInsuranceDraft,
-        });
-
-        setDraft(restoredDraft.draft);
-        setStagedDocuments(restoredDraft.stagedDocuments);
-        setIsDraftDirty(restoredDraft.restored);
-        hydratedDraftStorageKeyRef.current = insuranceDraftStorageKey;
-
-        if (restoredDraft.expired) {
-          await AsyncStorage.removeItem(insuranceDraftStorageKey);
-        } else if (restoredDraft.restored) {
-          setIntakeState('draft_ready');
-          setIntakeMessage('Your unfinished insurance request was restored.');
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          hydratedDraftStorageKeyRef.current = insuranceDraftStorageKey;
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [hasSession, insuranceDraftStorageKey, selectedVehicleId]);
-
-  useEffect(() => {
-    if (
-      hydratedDraftStorageKeyRef.current !== insuranceDraftStorageKey ||
-      (!isDraftDirty && !stagedDocuments.length)
-    ) {
-      return undefined;
-    }
-
-    const saveTimer = setTimeout(() => {
-      AsyncStorage.setItem(
-        insuranceDraftStorageKey,
-        serializeInsuranceRequestDraft({
-          draft,
-          stagedDocuments,
-        }),
-      ).catch(() => {
-        // Draft persistence is best effort and must never block the customer.
-      });
-    }, 250);
-
-    return () => clearTimeout(saveTimer);
-  }, [draft, insuranceDraftStorageKey, isDraftDirty, stagedDocuments]);
-
-  useEffect(() => {
-    if (!hasSession) {
-      return undefined;
-    }
-
-    let isMounted = true;
-    const requirementSpecs = [
-      {
-        purpose: draft.purpose,
-        inquiryType: draft.inquiryType,
-      },
-      latestInquiry
-        ? {
-            purpose: latestInquiry.purpose,
-            inquiryType: latestInquiry.inquiryType,
-          }
-        : null,
-    ].filter(Boolean);
-    const uniqueSpecs = [
-      ...new Map(
-        requirementSpecs.map((spec) => [
-          `${spec.purpose}:${spec.inquiryType}`,
-          spec,
-        ]),
-      ).entries(),
-    ].filter(([key]) => !requirementsByKey[key]);
-
-    if (!uniqueSpecs.length) {
-      return undefined;
-    }
-
-    Promise.all(
-      uniqueSpecs.map(async ([key, spec]) => [
-        key,
-        await getInsuranceRequirements({
-          ...spec,
-          accessToken,
-        }),
-      ]),
-    )
-      .then((entries) => {
-        if (isMounted) {
-          setRequirementsByKey((current) => ({
-            ...current,
-            ...Object.fromEntries(entries),
-          }));
-        }
-      })
-      .catch(() => {
-        // The existing local requirement matrix remains a temporary offline fallback.
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    accessToken,
-    draft.inquiryType,
-    draft.purpose,
-    hasSession,
-    latestInquiry,
-    requirementsByKey,
-  ]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    setHasHydratedRememberedInquiryMappings(false);
-
-    loadPersistedRememberedInquiryMappings().then(() => {
-      if (!isMounted) {
-        return;
-      }
-
-      if (!routeInquiryId) {
-        const resumedInquiryId = getRememberedInquiryForVehicle(
-          routeVehicleId ?? selectedVehicleId ?? fallbackVehicleId,
-        );
-
-        if (resumedInquiryId) {
-          latestInquiryVehicleIdRef.current = routeVehicleId ?? selectedVehicleId ?? fallbackVehicleId;
-          setLatestInquiryId((currentInquiryId) => currentInquiryId ?? resumedInquiryId);
-        }
-      }
-
-      setHasHydratedRememberedInquiryMappings(true);
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [fallbackVehicleId, rememberedInquiryStorageKey, routeInquiryId, routeVehicleId]);
-
-  useEffect(() => {
-    if (!routeVehicleId) {
-      return;
-    }
-
-    const rememberedInquiryId = hasHydratedRememberedInquiryMappings
-      ? getRememberedInquiryForVehicle(routeVehicleId)
-      : null;
-    rememberedInquiryLookupByVehicleRef.current = {
-      vehicleId: routeVehicleId,
-      inquiryId: routeInquiryId ?? (hasHydratedRememberedInquiryMappings ? rememberedInquiryId : undefined),
-    };
-    setSelectedVehicleId(routeVehicleId);
-    latestInquiryVehicleIdRef.current = routeVehicleId;
-    setLatestInquiryId(
-      routeInquiryId ?? (hasHydratedRememberedInquiryMappings ? rememberedInquiryId : null),
-    );
-  }, [hasHydratedRememberedInquiryMappings, routeInquiryId, routeVehicleId]);
-
-  useEffect(() => {
-    if (!selectedVehicleId) {
-      rememberedInquiryLookupByVehicleRef.current = {
-        vehicleId: null,
-        inquiryId: undefined,
-      };
-      latestInquiryVehicleIdRef.current = null;
-      setLatestInquiry(null);
-      setLatestInquiryId(null);
-      return;
-    }
-
-    if (!routeInquiryId) {
-      if (!hasHydratedRememberedInquiryMappings) {
-        rememberedInquiryLookupByVehicleRef.current = {
-          vehicleId: selectedVehicleId,
-          inquiryId: undefined,
-        };
-        return;
-      }
-
-      const rememberedInquiryId = getRememberedInquiryForVehicle(selectedVehicleId);
-      rememberedInquiryLookupByVehicleRef.current = {
-        vehicleId: selectedVehicleId,
-        inquiryId: rememberedInquiryId ?? null,
-      };
-      if (
-        !doesCustomerInsuranceInquiryMatchVehicle({
-          inquiry: latestInquiry,
-          vehicleId: selectedVehicleId,
-        })
-      ) {
-        setLatestInquiry(null);
-      }
-      latestInquiryVehicleIdRef.current = rememberedInquiryId ? selectedVehicleId : null;
-      setLatestInquiryId(rememberedInquiryId ?? null);
-    }
-  }, [
-    hasHydratedRememberedInquiryMappings,
-    latestInquiry,
-    routeInquiryId,
-    selectedVehicleId,
-  ]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    if (!hasSession) {
-      setVehicleLoadState('idle');
-      setVehicleLoadMessage('');
-      return undefined;
-    }
-
-    setVehicleLoadState(accountOwnedVehicles.length ? 'refreshing' : 'loading');
-    setVehicleLoadMessage('');
-
-    listCustomerVehicles({ userId, accessToken })
-      .then((vehicles) => {
-        if (!isMounted) {
-          return;
-        }
-
-        const preferredVehicleId =
-          routeVehicleId ??
-          normalizeRouteId(account?.primaryVehicleId) ??
-          normalizeRouteId(vehicles[0]?.id);
-        const nextSelectedVehicle =
-          vehicles.find((vehicle) => vehicle.id === preferredVehicleId) ?? vehicles[0] ?? null;
-
-        setLiveOwnedVehicles(vehicles);
-        setSelectedVehicleId(nextSelectedVehicle?.id ?? null);
-        setVehicleLoadState('ready');
-      })
-      .catch((error) => {
-        if (!isMounted) {
-          return;
-        }
-
-        setVehicleLoadState('failed');
-        setVehicleLoadMessage(
-          buildCustomerErrorMessage(error, 'We could not load your owned vehicles right now.'),
-        );
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    accessToken,
-    account?.primaryVehicleId,
-    accountOwnedVehicles.length,
-    hasSession,
-    routeVehicleId,
-    userId,
-    vehicleReloadKey,
-  ]);
-
-  useEffect(() => {
     if (!hasSession) {
       setIntakeState('unauthorized_session');
-      setTrackingState('tracking_unauthorized_session');
       return;
     }
 
@@ -1073,10 +311,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       }
 
       setSelectedVehicleId(null);
-      setLatestInquiry(null);
-      setClaimStatusUpdates([]);
       setIntakeState('no_vehicle');
-      setTrackingState('tracking_empty');
       return;
     }
 
@@ -1099,189 +334,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     vehicleLoadState,
   ]);
 
-  const resetDraftState = () => {
-    setDraft(createInitialCustomerInsuranceDraft());
-    setStagedDocuments([]);
-    setIsDraftDirty(false);
-  };
-
   const resetDocumentDraftState = () => {
     setDocumentDraft(buildInitialDocumentUploadDraft());
   };
-
-  const loadPersistedRememberedInquiryMappings = async () => {
-    try {
-      const serializedMappings = await AsyncStorage.getItem(rememberedInquiryStorageKey);
-      hydrateRememberedInquiryMappings(serializedMappings);
-    } catch {
-      // Ignore resume-cache failures and keep the screen functional.
-    }
-  };
-
-  const persistRememberedInquiryMappings = async () => {
-    try {
-      await AsyncStorage.setItem(rememberedInquiryStorageKey, serializeRememberedInquiryMappings());
-    } catch {
-      // Ignore persistence failures so resume storage never blocks the customer flow.
-    }
-  };
-
-  const syncRememberedInquiry = async (vehicleId, inquiry) => {
-    if (!vehicleId) {
-      return;
-    }
-
-    if (inquiry?.id && !isTerminalCustomerInquiryStatus(inquiry.status)) {
-      rememberInquiryForVehicle({
-        vehicleId,
-        inquiryId: inquiry.id,
-      });
-      await persistRememberedInquiryMappings();
-      return;
-    }
-
-    clearRememberedInquiryForVehicle(vehicleId);
-    await persistRememberedInquiryMappings();
-  };
-
-  const refreshTracking = async ({ inquiryIdOverride } = {}) => {
-    if (!hasSession) {
-      setTrackingState('tracking_unauthorized_session');
-      setTrackingMessage('Sign in first so the app can load your claim-status updates.');
-      return;
-    }
-
-    if (!selectedVehicleId) {
-      setTrackingState('tracking_empty');
-      setTrackingMessage('Select an owned vehicle before loading insurance tracking updates.');
-      return;
-    }
-
-    const knownInquiryId = getVehicleScopedLatestInquiryId({
-      inquiryIdOverride,
-    });
-
-    if (
-      shouldDeferCustomerInsuranceTrackingRefresh({
-        hasHydratedRememberedInquiryMappings,
-        knownInquiryId,
-        settledRememberedInquiryIdForSelectedVehicle:
-          getSettledRememberedInquiryIdForSelectedVehicle(),
-      })
-    ) {
-      return;
-    }
-
-    setIsRefreshing(true);
-    setTrackingState('tracking_loading');
-    setTrackingMessage('');
-
-    try {
-      const recoveredInquiries = await listMyInsuranceInquiries({
-        vehicleId: selectedVehicleId,
-        limit: 50,
-        accessToken,
-      });
-      let nextInquiry =
-        recoveredInquiries.items.find((inquiry) => inquiry.id === knownInquiryId) ??
-        recoveredInquiries.items.find(
-          (inquiry) => !isTerminalCustomerInquiryStatus(inquiry.status),
-        ) ??
-        recoveredInquiries.items[0] ??
-        null;
-      let inquiryNotFound = false;
-
-      if (knownInquiryId && nextInquiry?.id !== knownInquiryId) {
-        const recoveredFallbackInquiry = nextInquiry;
-        try {
-          nextInquiry = await getInsuranceInquiryById({
-            inquiryId: knownInquiryId,
-            accessToken,
-          });
-          if (
-            !doesCustomerInsuranceInquiryMatchVehicle({
-              inquiry: nextInquiry,
-              vehicleId: selectedVehicleId,
-            })
-          ) {
-            inquiryNotFound = true;
-            nextInquiry = recoveredFallbackInquiry;
-          }
-        } catch (error) {
-          if (error instanceof ApiError && error.status === 404) {
-            inquiryNotFound = true;
-            nextInquiry = recoveredFallbackInquiry;
-          } else {
-            throw error;
-          }
-        }
-      }
-
-      const nextRecords = await listVehicleInsuranceRecords({
-        vehicleId: selectedVehicleId,
-        accessToken,
-      });
-
-      await syncRememberedInquiry(selectedVehicleId, nextInquiry ?? null);
-      latestInquiryVehicleIdRef.current = nextInquiry?.vehicleId ?? null;
-      setLatestInquiry(nextInquiry ?? null);
-      setClaimStatusUpdates(nextRecords);
-      setLatestInquiryId(
-        nextInquiry?.id && !isTerminalCustomerInquiryStatus(nextInquiry.status)
-          ? nextInquiry.id
-          : null,
-      );
-      setTrackingState(
-        inquiryNotFound && !nextRecords.length
-          ? 'tracking_not_found'
-          : getCustomerInsuranceTrackingState({
-              latestInquiry: nextInquiry ?? null,
-              claimStatusUpdates: nextRecords,
-            }),
-      );
-      setTrackingMessage(
-        inquiryNotFound && !nextRecords.length
-          ? 'The known inquiry could not be found anymore, but you can still track vehicle insurance records here when they exist.'
-          : '',
-      );
-    } catch (error) {
-      setTrackingState('tracking_load_failed');
-      setTrackingMessage(
-        buildCustomerErrorMessage(
-          error,
-          'We could not load insurance tracking updates right now.',
-        ),
-      );
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!hasSession || !selectedVehicleId) {
-      return;
-    }
-
-    if (
-      shouldDeferCustomerInsuranceTrackingRefresh({
-        hasHydratedRememberedInquiryMappings,
-        knownInquiryId: getVehicleScopedLatestInquiryId(),
-        settledRememberedInquiryIdForSelectedVehicle:
-          getSettledRememberedInquiryIdForSelectedVehicle(),
-      })
-    ) {
-      return;
-    }
-
-    refreshTracking();
-    // The screen should refresh when the selected vehicle changes or the session becomes valid.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    hasHydratedRememberedInquiryMappings,
-    hasSession,
-    latestInquiryId,
-    selectedVehicleId,
-  ]);
 
   useEffect(() => {
     if (activePanel !== 'documents') {
@@ -1317,21 +372,37 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   };
 
   const handleOpenVehiclePicker = () => {
-    if (!hasSession || !ownedVehicles.length) {
-      setIsVehiclePickerOpen(false);
+    openVehiclePicker();
+  };
+
+  const handleAddVehicle = async () => {
+    closeVehiclePicker();
+    const draftSaved = await persistDraftNow();
+
+    if (!draftSaved) {
+      setIntakeState('validation_error');
+      setIntakeMessage(
+        'We could not save your unfinished request. Try Add vehicle again.',
+      );
       return;
     }
 
-    setIsVehiclePickerOpen(true);
+    navigation.navigate('VehicleLifecycleScreen', {
+      openAddVehicle: true,
+      returnTo: 'InsuranceInquiryScreen',
+      returnInsuranceSourceVehicleId: selectedVehicleId,
+      returnInsuranceTab: activeInsuranceTab,
+    });
   };
 
   const handleSelectVehicle = (vehicleId) => {
+    prepareForVehicleChange(vehicleId);
+    navigation.setParams({
+      vehicleId,
+      resumeDraftFromVehicleId: undefined,
+      resumeInsuranceTab: undefined,
+    });
     setSelectedVehicleId(vehicleId);
-    setTrackingMessage('');
-    latestInquiryVehicleIdRef.current = vehicleId;
-    setLatestInquiry(null);
-    setLatestInquiryId(getRememberedInquiryForVehicle(vehicleId));
-    setClaimStatusUpdates([]);
     setIntakeMessage('');
     setDocumentUploadState('document_idle');
     setDocumentUploadMessage('');
@@ -1531,6 +602,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
               uri: String(stagedDocument.fileUri ?? '').trim(),
               name: String(stagedDocument.fileName ?? '').trim(),
               type: inferMimeType(stagedDocument.fileName, stagedDocument.mimeType),
+              webFile: stagedDocument.webFile ?? null,
             },
             notes: stagedDocument.notes,
             accessToken,
@@ -1543,11 +615,11 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         }
       }
 
-      setLatestInquiry(latestCreatedInquiry);
-      latestInquiryVehicleIdRef.current = latestCreatedInquiry?.vehicleId ?? selectedVehicle.id;
-      setLatestInquiryId(latestCreatedInquiry?.id ?? null);
-      await syncRememberedInquiry(selectedVehicle.id, latestCreatedInquiry);
-      setDraft(createInitialCustomerInsuranceDraft());
+      const adoptedCreatedInquiry = await adoptInquiry({
+        inquiry: latestCreatedInquiry,
+        vehicleId: selectedVehicle.id,
+      });
+      resetDraftContent();
 
       if (failedUploads.length) {
         const firstFailedDocument = failedUploads[0]?.document ?? null;
@@ -1580,25 +652,27 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             failedUploads.length === 1 ? '' : 's'
           } still need upload before staff have the full intake package.`,
         );
-        await refreshTracking({
-          inquiryIdOverride: latestCreatedInquiry?.id ?? null,
-        });
+        if (adoptedCreatedInquiry) {
+          await refreshTracking({
+            inquiryIdOverride: latestCreatedInquiry?.id ?? null,
+          });
+        }
         return;
       }
 
       setStagedDocuments([]);
-      setIsDraftDirty(false);
-      hydratedDraftStorageKeyRef.current = null;
-      await AsyncStorage.removeItem(insuranceDraftStorageKey).catch(() => {});
+      await clearPersistedDraft();
       setDocumentUploadState('document_idle');
       setDocumentUploadMessage('');
       setIntakeState('submitted_inquiry');
       setIntakeMessage(
         `Request submitted successfully with backend status ${latestCreatedInquiry?.status ?? 'submitted'}.`,
       );
-      await refreshTracking({
-        inquiryIdOverride: latestCreatedInquiry?.id ?? null,
-      });
+      if (adoptedCreatedInquiry) {
+        await refreshTracking({
+          inquiryIdOverride: latestCreatedInquiry?.id ?? null,
+        });
+      }
     } catch (error) {
       if (error instanceof ApiError && error.status === 400) {
         setIntakeState('validation_error');
@@ -1628,15 +702,22 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
 
     setDocumentDraft({
       documentType: stagedDocument.documentType,
-      fileName: stagedDocument.fileName,
-      fileUri: stagedDocument.fileUri,
-      mimeType: stagedDocument.mimeType,
+      fileName: stagedDocument.requiresFileReselection ? '' : stagedDocument.fileName,
+      fileUri: stagedDocument.requiresFileReselection ? '' : stagedDocument.fileUri,
+      mimeType: stagedDocument.requiresFileReselection ? '' : stagedDocument.mimeType,
       notes: stagedDocument.notes,
-      fileSizeLabel: stagedDocument.fileSizeLabel,
+      fileSizeLabel: stagedDocument.requiresFileReselection
+        ? ''
+        : stagedDocument.fileSizeLabel,
+      webFile: stagedDocument.requiresFileReselection
+        ? null
+        : stagedDocument.webFile ?? null,
     });
     setDocumentUploadState('document_ready');
     setDocumentUploadMessage(
-      `${stagedDocument.fileName} is ready to upload to this request.`,
+      stagedDocument.requiresFileReselection
+        ? `Select ${stagedDocument.fileName} again before upload. The app restored its details but does not retain access to files after restart.`
+        : `${stagedDocument.fileName} is ready to upload to this request.`,
     );
   };
 
@@ -1648,9 +729,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
       currentDocuments.filter((document) => document.documentType !== documentType),
     );
     if (stagedDocuments.length <= 1) {
-      setIsDraftDirty(false);
-      hydratedDraftStorageKeyRef.current = null;
-      AsyncStorage.removeItem(insuranceDraftStorageKey).catch(() => {});
+      void clearPersistedDraft();
     }
     setDocumentUploadState('document_ready');
     setDocumentUploadMessage(
@@ -1699,21 +778,16 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
           uri: String(documentDraft.fileUri ?? '').trim(),
           name: String(documentDraft.fileName ?? '').trim(),
           type: inferMimeType(documentDraft.fileName, documentDraft.mimeType),
+          webFile: documentDraft.webFile ?? null,
         },
         notes: documentDraft.notes,
         accessToken,
       });
 
-      setLatestInquiry(updatedInquiry);
-      latestInquiryVehicleIdRef.current = updatedInquiry?.vehicleId ?? selectedVehicleId;
-      setLatestInquiryId(updatedInquiry?.id ?? null);
-      await syncRememberedInquiry(selectedVehicleId, updatedInquiry);
-      setTrackingState(
-        getCustomerInsuranceTrackingState({
-          latestInquiry: updatedInquiry,
-          claimStatusUpdates,
-        }),
-      );
+      await adoptInquiry({
+        inquiry: updatedInquiry,
+        vehicleId: selectedVehicleId,
+      });
       setDocumentUploadState('document_uploaded');
       setDocumentUploadMessage(
         `Document attached. This inquiry now has ${updatedInquiry?.documentCount ?? 0} supporting document${updatedInquiry?.documentCount === 1 ? '' : 's'}.`,
@@ -1728,12 +802,12 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
           (document) => document.documentType !== documentDraft.documentType,
         ).length === 0
       ) {
-        setIsDraftDirty(false);
-        hydratedDraftStorageKeyRef.current = null;
-        await AsyncStorage.removeItem(insuranceDraftStorageKey).catch(() => {});
+        await clearPersistedDraft();
       }
       resetDocumentDraftState();
     } catch (error) {
+      const errorStatus = error instanceof ApiError ? error.status : null;
+
       if (error instanceof ApiError && error.status === 400) {
         setDocumentUploadState('document_validation_error');
       } else if (error instanceof ApiError && error.status === 401) {
@@ -1746,6 +820,23 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         setDocumentUploadState('document_closed');
       } else {
         setDocumentUploadState('document_failed');
+      }
+
+      if (shouldRetainDocumentAfterUploadFailure(errorStatus)) {
+        setStagedDocuments((currentDocuments) => {
+          const nextDocuments = currentDocuments.filter(
+            (document) => document.documentType !== documentDraft.documentType,
+          );
+
+          return [
+            ...nextDocuments,
+            {
+              ...documentDraft,
+              requiresFileReselection: false,
+            },
+          ];
+        });
+        setIsDraftDirty(true);
       }
 
       setDocumentUploadMessage(
@@ -1791,18 +882,32 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
     setActivePanel(panelKey);
   };
   const handleChangeInsuranceTab = (section) => {
-    if (section === 'documents') {
-      handleOpenPanel(section);
-      setActiveInsuranceTab(section);
+    const nextSection = resolveInsuranceModeTab(section);
+
+    navigation.setParams({
+      resumeInsuranceTab: nextSection,
+      vehicleId: selectedVehicleId ?? undefined,
+    });
+
+    if (nextSection === 'documents') {
+      handleOpenPanel(nextSection);
+      setActiveInsuranceTab(nextSection);
       return;
     }
 
-    setActiveInsuranceTab(section);
-    setActivePanel(section === 'home' ? 'home' : section);
+    setActiveInsuranceTab(nextSection);
+    setActivePanel(nextSection);
   };
 
   const handleOpenInsuranceHomeSection = (section) => {
     handleChangeInsuranceTab(section);
+  };
+  const handleBack = () => {
+    if (navigation?.canGoBack?.()) {
+      navigation.goBack();
+      return;
+    }
+    navigation?.navigate?.('Menu');
   };
 
   const historyStatusSection = (
@@ -1837,13 +942,8 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
   );
 
   const insuranceModeUsesPanelScroll =
-    activeInsuranceTab === 'request' ||
-    activeInsuranceTab === 'documents' ||
-    activeInsuranceTab === 'status';
-  const contentInsetStyle = {
-    paddingTop: Math.max(insets.top, 18),
-    paddingBottom: Math.max(insets.bottom, 24),
-  };
+    shouldInsuranceModeUsePanelScroll(activeInsuranceTab);
+  const contentInsetStyle = buildInsuranceContentInsets(insets);
   const screenContent = (
     <View
       style={[
@@ -1852,6 +952,21 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         insuranceModeUsesPanelScroll && styles.fixedModeContent,
       ]}
     >
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={handleBack}
+        activeOpacity={0.88}
+        accessibilityRole="button"
+        accessibilityLabel="Back to mobile home"
+      >
+        <MaterialCommunityIcons
+          name="arrow-left"
+          size={20}
+          color={colors.text}
+        />
+        <Text style={styles.backButtonText}>Back</Text>
+      </TouchableOpacity>
+
       {!hasSession ? (
         <InsuranceStatePanel
           icon="lock-outline"
@@ -1878,7 +993,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
           title="Vehicle lookup failed"
           message={vehicleLoadMessage || 'We could not load your owned vehicles right now.'}
           actionLabel="Retry"
-          onAction={() => setVehicleReloadKey((currentKey) => currentKey + 1)}
+          onAction={retryVehicleLoad}
           tone="danger"
         />
       ) : null}
@@ -1892,67 +1007,19 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
           title="No owned vehicle on file"
           message="Add a vehicle, then return to this insurance request."
           actionLabel="Add vehicle"
-          onAction={() =>
-            navigation.navigate('VehicleLifecycleScreen', {
-              openAddVehicle: true,
-              returnTo: 'InsuranceInquiryScreen',
-            })
-          }
+          onAction={handleAddVehicle}
         />
       ) : null}
 
       {hasSession && ownedVehicles.length ? (
-        <Modal
-          animationType="slide"
-          transparent
+        <InsuranceVehiclePicker
+          onAddVehicle={handleAddVehicle}
+          onClose={closeVehiclePicker}
+          onSelectVehicle={handleSelectVehicle}
+          selectedVehicleId={selectedVehicleId}
+          vehicles={ownedVehicles}
           visible={isVehiclePickerOpen}
-          onRequestClose={() => setIsVehiclePickerOpen(false)}
-        >
-          <Pressable
-            style={styles.sheetBackdrop}
-            onPress={() => setIsVehiclePickerOpen(false)}
-          >
-            <Pressable style={styles.sheetCard}>
-              <Text style={styles.sheetTitle}>Choose vehicle</Text>
-              <ScrollView style={styles.sheetList} contentContainerStyle={styles.sheetListContent}>
-                {ownedVehicles.map((vehicle) => {
-                  const vehicleLabel = buildOwnedVehicleInsuranceLabel(vehicle);
-                  const selected = vehicle.id === selectedVehicleId;
-
-                  return (
-                    <TouchableOpacity
-                      key={vehicle.id}
-                      style={[styles.sheetRow, selected && styles.sheetRowSelected]}
-                      onPress={() => {
-                        handleSelectVehicle(vehicle.id);
-                        setIsVehiclePickerOpen(false);
-                      }}
-                      activeOpacity={0.88}
-                    >
-                      <Text style={styles.sheetRowLabel}>{vehicleLabel}</Text>
-                      {selected ? <Text style={styles.sheetRowMeta}>Current</Text> : null}
-                    </TouchableOpacity>
-                  );
-                })}
-                <TouchableOpacity
-                  style={styles.sheetAddRow}
-                  onPress={() => {
-                    setIsVehiclePickerOpen(false);
-                    navigation.navigate('VehicleLifecycleScreen', {
-                      openAddVehicle: true,
-                      returnTo: 'InsuranceInquiryScreen',
-                    });
-                  }}
-                  activeOpacity={0.88}
-                  accessibilityRole="button"
-                >
-                  <MaterialCommunityIcons name="plus" size={20} color={colors.primary} />
-                  <Text style={styles.sheetAddRowText}>Add vehicle</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </Modal>
+        />
       ) : null}
 
       {trackingMessage ? (
@@ -1967,7 +1034,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
         activeSection={activeInsuranceTab}
         onChangeSection={handleChangeInsuranceTab}
         selectedVehicleLabel={selectedVehicleLabel}
-        isVehiclePickerAvailable={isVehiclePickerAvailable}
+        isVehiclePickerAvailable={
+          isVehiclePickerAvailable && !isSubmitting && !isUploadingDocument
+        }
         onOpenVehiclePicker={handleOpenVehiclePicker}
         summaryChips={shellSummaryChips}
       >
@@ -2005,6 +1074,11 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             onFileDocuments={requestOnFileDocuments}
             hasOnFileRenewalPolicy={hasOnFileRenewalPolicy}
             canSubmitRequest={canSubmitNewInquiry}
+            initialStageIndex={draft.requestStageIndex}
+            onStageChange={(requestStageIndex) => {
+              setDraft((current) => ({ ...current, requestStageIndex }));
+              handleDraftPatch();
+            }}
             onStageDocument={handleStageDocument}
             onRemoveStagedDocument={handleRemoveStagedDocument}
           />
@@ -2034,6 +1108,7 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             pendingUploads={stagedDocuments}
             onUsePendingUpload={handleUsePendingUpload}
             onDiscardPendingUpload={handleDiscardPendingUpload}
+            onStartRequest={() => handleChangeInsuranceTab('request')}
           />
         ) : null}
 
@@ -2043,13 +1118,14 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             title={statusTitle}
             subtitle={statusSubtitle}
             statusState={statusState}
-            processSteps={processSteps}
+            processSteps={latestInquiry?.id ? processSteps : []}
             isRefreshing={isRefreshing}
             onRefresh={refreshTracking}
+            onAction={() => handleChangeInsuranceTab(statusState.ctaRouteKey)}
           >
             <InsuranceSectionDivider title="Request path">
               <Text style={styles.statusSectionMeta}>
-                {currentRequestSummary.purposeLabel} • {currentRequestSummary.inquiryTypeLabel}
+                {currentRequestSummary.purposeLabel} - {currentRequestSummary.inquiryTypeLabel}
               </Text>
               <Text style={styles.statusSectionSubtitle}>{currentRequestSummary.statusHint}</Text>
             </InsuranceSectionDivider>

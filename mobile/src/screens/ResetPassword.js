@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AuthFrame from '../components/AuthFrame';
 import PasswordChecklist from '../components/PasswordChecklist';

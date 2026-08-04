@@ -1,6 +1,7 @@
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { radius } from '../../theme'
+import { createPlatformShadow } from '../../utils/platformShadow'
 
 export const insurancePalette = {
   base: '#0D0F14',
@@ -126,11 +127,13 @@ const styles = StyleSheet.create({
     backgroundColor: insurancePalette.card,
     padding: 18,
     gap: 10,
-    shadowColor: insurancePalette.shadow,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 4,
+    ...createPlatformShadow({
+      color: insurancePalette.shadow,
+      height: 12,
+      opacity: 0.18,
+      radius: 24,
+      elevation: 4,
+    }),
   },
   actionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   iconWrap: {
@@ -166,11 +169,13 @@ const styles = StyleSheet.create({
     backgroundColor: insurancePalette.card,
     padding: 18,
     gap: 8,
-    shadowColor: insurancePalette.shadow,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
-    elevation: 3,
+    ...createPlatformShadow({
+      color: insurancePalette.shadow,
+      height: 12,
+      opacity: 0.16,
+      radius: 24,
+      elevation: 3,
+    }),
   },
   sectionCardTitle: {
     color: insurancePalette.text,

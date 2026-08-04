@@ -175,13 +175,22 @@ const request = async (path, options = {}) => {
       throw new ApiError('Authentication request timed out. Please try again.', 408, null);
     }
 
-    throw error;
+    throw new ApiError(
+      'Unable to reach AutoCare. Check your connection and try again.',
+      0,
+      null,
+    );
   } finally {
     clearTimeout(timeoutId);
   }
 
   const rawText = await response.text();
-  const data = rawText ? JSON.parse(rawText) : null;
+  let data = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = null;
+  }
 
   if (!response.ok) {
     if (response.status === 401 && headers?.Authorization) {

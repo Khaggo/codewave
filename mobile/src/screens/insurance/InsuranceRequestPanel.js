@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import DateTimePicker from '@react-native-community/datetimepicker'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Platform,
@@ -20,9 +20,10 @@ import {
 } from './InsurancePanelPrimitives'
 import {
   INSURANCE_REQUEST_STAGES,
+  normalizeInsuranceRequestStageIndex,
   validateInsuranceRequestStage,
 } from './insuranceRequestFlow.mjs'
-import { InlineNotice, REQUEST_TITLES, StagedDocumentRow } from './InsuranceRequestParts'
+import { InlineNotice, StagedDocumentRow } from './InsuranceRequestParts'
 import styles from './insuranceRequestPanelStyles'
 
 export default function InsuranceRequestPanel({
@@ -44,15 +45,18 @@ export default function InsuranceRequestPanel({
   onFileDocuments = [],
   hasOnFileRenewalPolicy = false,
   canSubmitRequest = true,
+  initialStageIndex = 0,
+  onStageChange,
   onStageDocument,
   onRemoveStagedDocument,
 }) {
   const scrollRef = useRef(null)
   const descriptionRef = useRef(null)
-  const [stageIndex, setStageIndex] = useState(0)
+  const [stageIndex, setStageIndex] = useState(() =>
+    normalizeInsuranceRequestStageIndex(initialStageIndex),
+  )
   const [fieldError, setFieldError] = useState(null)
   const [incidentPickerMode, setIncidentPickerMode] = useState(null)
-  const requestTitle = REQUEST_TITLES[draft.purpose] ?? 'Claim request'
   const stagedDocumentsByType = new Map(stagedDocuments.map((item) => [item.documentType, item]))
   const onFileDocumentsByType = new Map((onFileDocuments ?? []).map((item) => [item.documentType, item]))
   const footerPaddingBottom = Math.max(bottomInset, 14)
@@ -91,9 +95,16 @@ export default function InsuranceRequestPanel({
     : 'Choose time'
   const showPolicyFields = ['claim', 'renewal'].includes(draft.purpose)
 
+  useEffect(() => {
+    setStageIndex(normalizeInsuranceRequestStageIndex(initialStageIndex))
+  }, [initialStageIndex])
+
   const moveToStage = (nextStageIndex) => {
+    const normalizedStageIndex =
+      normalizeInsuranceRequestStageIndex(nextStageIndex)
     setFieldError(null)
-    setStageIndex(Math.max(0, Math.min(INSURANCE_REQUEST_STAGES.length - 1, nextStageIndex)))
+    setStageIndex(normalizedStageIndex)
+    onStageChange?.(normalizedStageIndex)
     scrollRef.current?.scrollTo({ y: 0, animated: true })
   }
 
@@ -169,12 +180,7 @@ export default function InsuranceRequestPanel({
           />
         }
       >
-        <InsurancePanelShell eyebrow="Request" title="Request">
-          <View style={styles.heroCard}>
-            <Text style={styles.heroTitle}>{requestTitle}</Text>
-            <Text style={styles.heroSubtitle}>{selectedVehicleLabel || 'Choose a vehicle first'}</Text>
-          </View>
-
+        <InsurancePanelShell eyebrow="Request" title="New insurance request">
           <View style={styles.stageRail} accessibilityRole="tablist">
             {INSURANCE_REQUEST_STAGES.map((stage, index) => (
               <TouchableOpacity
@@ -225,7 +231,7 @@ export default function InsuranceRequestPanel({
                         }}
                         activeOpacity={0.88}
                         accessibilityRole="radio"
-                        accessibilityState={{ selected: isSelected }}
+                        accessibilityState={{ checked: isSelected, selected: isSelected }}
                       >
                         <Text
                           style={[
@@ -256,7 +262,7 @@ export default function InsuranceRequestPanel({
                         }}
                         activeOpacity={0.88}
                         accessibilityRole="radio"
-                        accessibilityState={{ selected: isSelected }}
+                        accessibilityState={{ checked: isSelected, selected: isSelected }}
                       >
                         <Text
                           style={[
@@ -281,6 +287,7 @@ export default function InsuranceRequestPanel({
                   <Text style={styles.fieldLabel}>What happened or what do you need?</Text>
                   <TextInput
                     ref={descriptionRef}
+                    nativeID="insurance-request-description"
                     value={draft.description}
                     onChangeText={(value) => {
                       onChangeDraft({ description: value })
@@ -362,6 +369,7 @@ export default function InsuranceRequestPanel({
                     <View style={styles.fieldBlock}>
                       <Text style={styles.fieldLabel}>Incident location</Text>
                       <TextInput
+                        nativeID="insurance-incident-location"
                         value={draft.incidentLocation}
                         onChangeText={(value) => onChangeDraft({ incidentLocation: value })}
                         placeholder="Street, city, or nearby landmark"
@@ -378,6 +386,7 @@ export default function InsuranceRequestPanel({
                     <View style={styles.fieldBlock}>
                       <Text style={styles.fieldLabel}>Insurance provider</Text>
                       <TextInput
+                        nativeID="insurance-provider-name"
                         value={draft.providerName}
                         onChangeText={(value) => onChangeDraft({ providerName: value })}
                         placeholder={
@@ -391,6 +400,7 @@ export default function InsuranceRequestPanel({
                     <View style={styles.fieldBlock}>
                       <Text style={styles.fieldLabel}>Policy number</Text>
                       <TextInput
+                        nativeID="insurance-policy-number"
                         value={draft.policyNumber}
                         onChangeText={(value) => onChangeDraft({ policyNumber: value })}
                         placeholder={
@@ -408,6 +418,7 @@ export default function InsuranceRequestPanel({
                 <View style={styles.fieldBlock}>
                   <Text style={styles.fieldLabel}>Additional details</Text>
                   <TextInput
+                    nativeID="insurance-additional-details"
                     value={draft.notes}
                     onChangeText={(value) => onChangeDraft({ notes: value })}
                     placeholder={requestGuidance?.notesPlaceholder ?? 'Optional notes'}
@@ -437,7 +448,10 @@ export default function InsuranceRequestPanel({
                         activeOpacity={0.88}
                         disabled={isSubmitting}
                         accessibilityRole="radio"
-                        accessibilityState={{ selected: useOnFileRenewalPolicy }}
+                        accessibilityState={{
+                          checked: useOnFileRenewalPolicy,
+                          selected: useOnFileRenewalPolicy,
+                        }}
                       >
                         <Text
                           style={[
@@ -457,7 +471,10 @@ export default function InsuranceRequestPanel({
                         activeOpacity={0.88}
                         disabled={isSubmitting}
                         accessibilityRole="radio"
-                        accessibilityState={{ selected: !useOnFileRenewalPolicy }}
+                        accessibilityState={{
+                          checked: !useOnFileRenewalPolicy,
+                          selected: !useOnFileRenewalPolicy,
+                        }}
                       >
                         <Text
                           style={[

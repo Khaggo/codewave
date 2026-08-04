@@ -18,12 +18,25 @@ import {
   InMemoryStaffWorkQueuesService,
   type SeededWorkClaim,
 } from './in-memory-staff-work-queues';
+import {
+  InMemoryVehiclesRepository,
+  type VehicleRecord,
+} from './in-memory-vehicles-repository';
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { LoyaltyAccrualPlannerService } from '@shared/events/loyalty-accrual-planner.service';
 import { HealthController } from '../../src/health.controller';
+import { HealthReadinessService } from '../../src/health-readiness.service';
 import { AnalyticsController } from '../../src/modules/analytics/controllers/analytics.controller';
 import { AnalyticsRepository } from '../../src/modules/analytics/repositories/analytics.repository';
 import { AnalyticsService } from '../../src/modules/analytics/services/analytics.service';
+import {
+  AccessoriesWebhookController,
+  CustomerAccessoriesController,
+  StaffAccessoriesController,
+} from '../../src/modules/accessories/controllers/accessories.controller';
+import { AccessoriesMediaService } from '../../src/modules/accessories/services/accessories-media.service';
+import { AccessoriesPaymentService } from '../../src/modules/accessories/services/accessories-payment.service';
+import { AccessoriesService } from '../../src/modules/accessories/services/accessories.service';
 import { AuthController } from '../../src/modules/auth/controllers/auth.controller';
 import { JwtAuthGuard } from '../../src/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../src/modules/auth/guards/roles.guard';
@@ -161,8 +174,6 @@ import { UpsertAddressDto } from '../../src/modules/users/dto/upsert-address.dto
 import { UsersRepository } from '../../src/modules/users/repositories/users.repository';
 import { UsersService } from '../../src/modules/users/services/users.service';
 import { VehiclesController } from '../../src/modules/vehicles/controllers/vehicles.controller';
-import { CreateVehicleDto } from '../../src/modules/vehicles/dto/create-vehicle.dto';
-import { UpdateVehicleDto } from '../../src/modules/vehicles/dto/update-vehicle.dto';
 import { VehiclesRepository } from '../../src/modules/vehicles/repositories/vehicles.repository';
 import { VehiclesService } from '../../src/modules/vehicles/services/vehicles.service';
 import {
@@ -262,19 +273,7 @@ type RefreshTokenRecord = {
   updatedAt: Date;
 };
 
-export type VehicleRecord = {
-  id: string;
-  userId: string;
-  plateNumber: string;
-  make: string;
-  model: string;
-  year: number;
-  color: string | null;
-  vin: string | null;
-  notes: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
+export type { VehicleRecord } from './in-memory-vehicles-repository';
 
 type BookingStatus = (typeof bookingStatusEnum.enumValues)[number];
 type UpdateBookingStatusCommand = UpdateBookingStatusDto & {
@@ -703,8 +702,6 @@ type EarningRuleRecord = {
   minimumAmountCents: number | null;
   eligibleServiceTypes: string[];
   eligibleServiceCategories: string[];
-  eligibleProductIds: string[];
-  eligibleProductCategoryIds: string[];
   promoLabel: string | null;
   manualBenefitNote: string | null;
   activeFrom: Date | null;
@@ -1371,81 +1368,6 @@ class InMemoryAuthRepository {
         this.googleIdentities.delete(id);
       }
     });
-  }
-}
-
-class InMemoryVehiclesRepository {
-  private readonly vehicles = new Map<string, VehicleRecord>();
-
-  peekById(id: string) {
-    return this.vehicles.get(id) ?? null;
-  }
-
-  async create(createVehicleDto: CreateVehicleDto) {
-    const now = new Date();
-    const vehicle: VehicleRecord = {
-      id: randomUUID(),
-      userId: createVehicleDto.userId,
-      plateNumber: createVehicleDto.plateNumber,
-      make: createVehicleDto.make,
-      model: createVehicleDto.model,
-      year: createVehicleDto.year,
-      color: createVehicleDto.color ?? null,
-      vin: createVehicleDto.vin ?? null,
-      notes: createVehicleDto.notes ?? null,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    this.vehicles.set(vehicle.id, vehicle);
-    return { ...vehicle };
-  }
-
-  async findById(id: string) {
-    const vehicle = this.vehicles.get(id);
-    return vehicle ? { ...vehicle } : null;
-  }
-
-  async findByPlateNumber(plateNumber: string) {
-    const vehicle = Array.from(this.vehicles.values()).find((entry) => entry.plateNumber === plateNumber);
-    return vehicle ? { ...vehicle } : null;
-  }
-
-  async findByPlateSignature(plateSignature: string) {
-    const vehicle = Array.from(this.vehicles.values()).find(
-      (entry) => entry.plateNumber.replace(/[^a-z0-9]/gi, '').toUpperCase() === plateSignature,
-    );
-    return vehicle ? { ...vehicle } : null;
-  }
-
-  async findByUserId(userId: string) {
-    return Array.from(this.vehicles.values())
-      .filter((vehicle) => vehicle.userId === userId)
-      .map((vehicle) => ({ ...vehicle }));
-  }
-
-  async findOwnedByUser(vehicleId: string, userId: string) {
-    const vehicle = Array.from(this.vehicles.values()).find(
-      (entry) => entry.id === vehicleId && entry.userId === userId,
-    );
-
-    return vehicle ? { ...vehicle } : null;
-  }
-
-  async update(id: string, updateVehicleDto: UpdateVehicleDto) {
-    const vehicle = this.vehicles.get(id);
-    if (!vehicle) {
-      throw new NotFoundException('Vehicle not found');
-    }
-
-    const updatedVehicle: VehicleRecord = {
-      ...vehicle,
-      ...updateVehicleDto,
-      updatedAt: new Date(),
-    };
-
-    this.vehicles.set(id, updatedVehicle);
-    return { ...updatedVehicle };
   }
 }
 
@@ -3933,8 +3855,6 @@ class InMemoryLoyaltyRepository {
       minimumAmountCents: payload.minimumAmountCents ?? null,
       eligibleServiceTypes: [...(payload.eligibleServiceTypes ?? [])],
       eligibleServiceCategories: [...(payload.eligibleServiceCategories ?? [])],
-      eligibleProductIds: [...(payload.eligibleProductIds ?? [])],
-      eligibleProductCategoryIds: [...(payload.eligibleProductCategoryIds ?? [])],
       promoLabel: payload.promoLabel ?? null,
       manualBenefitNote: payload.manualBenefitNote ?? null,
       activeFrom: payload.activeFrom ? new Date(payload.activeFrom) : null,
@@ -4024,14 +3944,6 @@ class InMemoryLoyaltyRepository {
         payload.eligibleServiceCategories !== undefined
           ? [...payload.eligibleServiceCategories]
           : [...existingRule.eligibleServiceCategories],
-      eligibleProductIds:
-        payload.eligibleProductIds !== undefined
-          ? [...payload.eligibleProductIds]
-          : [...existingRule.eligibleProductIds],
-      eligibleProductCategoryIds:
-        payload.eligibleProductCategoryIds !== undefined
-          ? [...payload.eligibleProductCategoryIds]
-          : [...existingRule.eligibleProductCategoryIds],
       promoLabel: payload.promoLabel !== undefined ? payload.promoLabel : existingRule.promoLabel,
       manualBenefitNote:
         payload.manualBenefitNote !== undefined
@@ -4321,8 +4233,6 @@ class InMemoryLoyaltyRepository {
       ...rule,
       eligibleServiceTypes: [...rule.eligibleServiceTypes],
       eligibleServiceCategories: [...rule.eligibleServiceCategories],
-      eligibleProductIds: [...rule.eligibleProductIds],
-      eligibleProductCategoryIds: [...rule.eligibleProductCategoryIds],
       audits,
     };
   }
@@ -4351,8 +4261,6 @@ class InMemoryLoyaltyRepository {
       minimumAmountCents: rule.minimumAmountCents ?? null,
       eligibleServiceTypes: [...rule.eligibleServiceTypes],
       eligibleServiceCategories: [...rule.eligibleServiceCategories],
-      eligibleProductIds: [...rule.eligibleProductIds],
-      eligibleProductCategoryIds: [...rule.eligibleProductCategoryIds],
       promoLabel: rule.promoLabel ?? null,
       manualBenefitNote: rule.manualBenefitNote ?? null,
       activeFrom: rule.activeFrom ? rule.activeFrom.toISOString() : null,
@@ -4902,6 +4810,9 @@ export async function createMainServiceTestApp(options: {
     imports: [PassportModule.register({ defaultStrategy: 'jwt' }), JwtModule.register({})],
     controllers: [
       HealthController,
+      CustomerAccessoriesController,
+      StaffAccessoriesController,
+      AccessoriesWebhookController,
       AnalyticsController,
       AuthController,
       UsersController,
@@ -4918,6 +4829,23 @@ export async function createMainServiceTestApp(options: {
       VehicleLifecycleController,
     ],
     providers: [
+      {
+        provide: HealthReadinessService,
+        useValue: {
+          checkReadiness: async () => ({
+            service: 'main-service',
+            version: 'test',
+            status: 'ready',
+            dependencies: {
+              database: 'ready',
+              schema: 'ready',
+            },
+          }),
+        },
+      },
+      { provide: AccessoriesService, useValue: {} },
+      { provide: AccessoriesPaymentService, useValue: {} },
+      { provide: AccessoriesMediaService, useValue: {} },
       AnalyticsService,
       AuthService,
       JwtStrategy,

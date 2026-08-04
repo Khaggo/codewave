@@ -1,4 +1,3 @@
-import type { InvoicePaymentRecordedEvent } from '../commerce-events/responses';
 import type {
   EarningRuleAccrualSource,
   EarningRuleFormulaType,
@@ -30,9 +29,7 @@ export interface ServicePaymentRecordedEvent {
   payload: ServicePaymentRecordedEventPayload;
 }
 
-export type LoyaltyTriggerEvent =
-  | ServicePaymentRecordedEvent
-  | InvoicePaymentRecordedEvent;
+export type LoyaltyTriggerEvent = ServicePaymentRecordedEvent;
 
 export interface ServicePaymentPointsInput {
   mode: 'service_payment';
@@ -44,36 +41,20 @@ export interface ServicePaymentPointsInput {
   serviceCategoryCode?: string | null;
 }
 
-export interface PurchasePaymentPointsInput {
-  mode: 'ecommerce_payment';
-  invoiceReference: string;
-  amountCents: number;
-  currencyCode: 'PHP';
-  paidAt: string;
-  productIds: string[];
-  productCategoryIds: string[];
-}
+export type LoyaltyPointsInput = ServicePaymentPointsInput;
 
-export type LoyaltyPointsInput =
-  | ServicePaymentPointsInput
-  | PurchasePaymentPointsInput;
-
-export type LoyaltyAccrualKind = 'service_payment' | 'purchase_payment';
+export type LoyaltyAccrualKind = 'service_payment';
 export type LoyaltyDuplicateStrategy = 'ignore_same_idempotency_key';
-export type LoyaltyReversalStrategy =
-  | 'manual_adjustment_until_service_refund_event_exists'
-  | 'manual_adjustment_until_ecommerce_refund_event_exists';
+export type LoyaltyReversalStrategy = 'manual_adjustment_until_service_refund_event_exists';
 
 export interface LoyaltyAccrualPlan {
-  triggerName: 'service.payment_recorded' | 'invoice.payment_recorded';
-  sourceDomain: 'main-service.job-orders' | 'ecommerce.invoice-payments';
+  triggerName: 'service.payment_recorded';
+  sourceDomain: 'main-service.job-orders';
   loyaltyUserId: string;
   accrualKind: LoyaltyAccrualKind;
   idempotencyKey: string;
   sourceReference: string;
-  policyKey:
-    | 'loyalty.service.payment_recorded.v1'
-    | 'loyalty.invoice.payment_recorded.v1';
+  policyKey: 'loyalty.service.payment_recorded.v1';
   pointsInput: LoyaltyPointsInput;
   duplicateStrategy: LoyaltyDuplicateStrategy;
   reversalStrategy: LoyaltyReversalStrategy;
@@ -163,8 +144,6 @@ export interface EarningRuleCatalogSnapshotResponse {
   minimumAmountCents?: number | null;
   eligibleServiceTypes: string[];
   eligibleServiceCategories: string[];
-  eligibleProductIds: string[];
-  eligibleProductCategoryIds: string[];
   promoLabel?: string | null;
   manualBenefitNote?: string | null;
   activeFrom?: string | null;
@@ -194,8 +173,6 @@ export interface EarningRuleResponse {
   minimumAmountCents?: number | null;
   eligibleServiceTypes: string[];
   eligibleServiceCategories: string[];
-  eligibleProductIds: string[];
-  eligibleProductCategoryIds: string[];
   promoLabel?: string | null;
   manualBenefitNote?: string | null;
   activeFrom?: string | null;

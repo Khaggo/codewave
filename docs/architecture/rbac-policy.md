@@ -2,14 +2,14 @@
 
 This file defines the canonical role model and permission guardrails for customer-facing, staff-facing, and admin-facing behavior across AUTOCARE.
 
-Last updated: 2026-05-23
+Last updated: 2026-08-03
 
 Status: Active. This file reflects the adviser-owned workshop model extracted from the implementation chat and the latest QA/source-of-truth updates.
 
 ## Role Model
 
 - Canonical authenticated roles are `customer`, `service_adviser`, and `super_admin`.
-- `customer` is the default external role for booking, vehicle ownership, inquiry, and purchase history behavior.
+- `customer` is the default external role for booking, vehicle ownership, inquiry, and service-history behavior.
 - `service_adviser` is the staff operating role for bookings, customer communication, job-order creation, technician-profile assignment, adviser-owned workshop stages, QA release, and invoice handoff.
 - `super_admin` is the high-trust administrative role for staff provisioning, deactivation, override approval, and system-wide reporting.
 - Technician web logins are intentionally retired in the active product model.
@@ -25,9 +25,12 @@ Status: Active. This file reflects the adviser-owned workshop model extracted fr
 
 ## Permission Boundaries
 
-- `customer` may create and review only their own bookings, vehicles, addresses, inquiries, order history, and reviewed lifecycle summaries.
+- `customer` may create and review only their own bookings, vehicles, addresses, inquiries, service history, and reviewed lifecycle summaries.
 - `service_adviser` may confirm, decline, or reschedule bookings, create and manage job orders, assign technician profiles, advance workshop stages, record checklist/progress/evidence, perform QA release in the active flow, coordinate customer communication, and prepare invoices from completed job orders.
 - `super_admin` may create and deactivate staff accounts, assign or revoke staff roles, approve or reject privileged manual overrides, manage technician profile directory data, and review sensitive audit trails.
+- `customer` may browse published accessories, manage only their cart, checkout against only their owned vehicle, read only their orders, cancel eligible orders, retry payment, and regenerate their pickup code.
+- `service_adviser` may claim, prepare, mark ready, and collect accessory orders, but may not publish products, change prices, adjust stock, or approve refunds.
+- `super_admin` controls accessory catalog publication, prices, fitment/compliance review, stock adjustment, reassignment, cancellation exceptions, and full refunds.
 - Cross-domain actions must check both the authenticated actor role and record ownership, customer ownership, adviser responsibility, or technician-profile assignment context.
 
 | Action | customer | service_adviser | super_admin |
@@ -46,6 +49,14 @@ Status: Active. This file reflects the adviser-owned workshop model extracted fr
 | Manage technician profile directory | no | allowed | allowed |
 | Approve privileged manual override decisions | no | no | allowed |
 | Review system-wide audit data | no | limited | allowed |
+| Browse and order published accessories for own account | allowed | no | no |
+| Prepare and collect accessory pickup orders | no | allowed | allowed |
+| Publish accessory products or change prices/stock | no | no | allowed |
+| Approve accessory cancellation exceptions or full refunds | no | no | allowed |
+
+Accessory pickup-code verification requires both the readable order reference and six-digit code.
+Raw pickup codes are never stored. Every catalog publication, price or stock change, reassignment,
+cancellation exception, refund, and fulfillment transition must be audit-visible.
 
 ## Administrative Provisioning
 

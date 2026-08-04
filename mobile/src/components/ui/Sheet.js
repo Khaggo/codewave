@@ -34,6 +34,7 @@ export default function Sheet({
           onPress={closeOnBackdrop ? onClose : undefined}
         />
         <View
+          accessibilityViewIsModal
           style={[
             styles.card,
             isBottom

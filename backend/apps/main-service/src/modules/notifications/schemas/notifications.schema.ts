@@ -25,6 +25,7 @@ export const notificationCategoryEnum = pgEnum('notification_category', [
   'qa_review',
   'service_follow_up',
   'auth_otp',
+  'accessory_order',
 ]);
 
 export const notificationStatusEnum = pgEnum('notification_status', [
@@ -45,6 +46,7 @@ export const notificationSourceTypeEnum = pgEnum('notification_source_type', [
   'job_order',
   'service_follow_up',
   'auth',
+  'accessory_order',
 ]);
 
 export const reminderRuleStatusEnum = pgEnum('reminder_rule_status', ['scheduled', 'cancelled', 'processed']);

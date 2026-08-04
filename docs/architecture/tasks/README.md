@@ -23,8 +23,7 @@ This folder is the execution layer derived from the canonical SSoT in `docs/arch
 
 - `00-foundation/`: workspace, infra, DB, validation, and shared tooling tasks
 - `01-main-service/`: main-service domain delivery tasks
-- `02-ecommerce-service/`: ecommerce-service delivery tasks
-- `03-integration/`: cross-service events, contracts, and orchestration tasks
+- `03-integration/`: cross-module events, contracts, and orchestration tasks
 - `04-quality-and-ops/`: validation, regression, CI, and observability tasks
 - `05-client-integration/`: web/mobile-facing slice coordination, client contracts, mocks, and acceptance tasks
 - `_archive/`: completed or superseded task files
@@ -67,14 +66,7 @@ This folder is the execution layer derived from the canonical SSoT in `docs/arch
   - `T117-quality-gate1-semantic-resolution-auditor`
   - `T118-quality-gate2-discrepancy-risk-engine`
   - `T119-quality-gate-manual-override`
-  - `T201-ecommerce-bootstrap`
-  - `T202-catalog-v1`
-  - `T203-cart-and-invoice-checkout`
-  - `T204-order-tracking-and-purchase-history`
-  - `T205-invoice-only-payment-tracking`
-  - `T301-main-ecommerce-event-contracts`
   - `T302-lifecycle-event-expansion`
-  - `T303-loyalty-from-service-and-purchase-events`
   - `T304-notification-trigger-integration`
   - `T305-ai-worker-jobs-with-bullmq`
   - `T405-rbac-regression-matrix`
@@ -115,13 +107,8 @@ Use this order when the user asks to continue implementation, activate the agent
 8. `T519-back-jobs-review-and-rework-web-flow` - done; staff back-job create, review, validation, vehicle history, and linked rework job-order actions are live-route backed.
 9. `T523-admin-analytics-dashboard-web-flow` - done; the shared `/admin/summaries` hub now loads live analytics read models for overview, operations, back-jobs, loyalty, invoice aging, and audit trail while preserving summary review as a lazy secondary tab.
 10. `T522-faq-chatbot-customer-support-mobile-flow` - done; customer mobile now has a live FAQ support screen with deterministic prompts, lookup-aware deep links, and explicit escalation handling after the core operational chain.
-11. `T524-catalog-and-product-discovery-mobile-flow` - done; customer mobile shop browsing now uses ecommerce-service catalog/category reads, explicit empty and service-unavailable states, and fresh product-detail lookups that surface hidden products honestly.
-12. `T525-cart-and-invoice-checkout-mobile-flow` - done; customer mobile now supports live ecommerce cart mutation, immutable invoice preview, billing-address capture, and invoice-backed order creation without implying payment settlement.
-13. `T526-order-history-and-invoice-tracking-mobile-flow` - done; customer mobile now exposes live ecommerce order history, immutable order snapshots, invoice aging states, and manual payment-entry tracking without implying gateway settlement.
-14. `T527-inventory-and-stock-visibility-web-flow` - done; staff web inventory now shows live ecommerce product visibility and refreshed product detail while quantity, reservation, and adjustment routes stay explicitly labeled as planned inventory work.
-15. `T528-commerce-and-main-service-derived-state-sync` - done; customer mobile now labels ecommerce order truth, notification read-model sync, and loyalty read-model sync separately, backed by a shared derived-state glossary and scenario mocks.
 16. `T529-client-rbac-navigation-and-surface-guardrails` - done; staff web session restore now revalidates live auth identity before privileged navigation renders, and customer mobile explicitly blocks unauthorized, staff, and deactivated sessions from customer-owned protected screens.
-17. `T530-openapi-contract-mock-and-client-regression-pack` - done; the completed client queue now has one regression registry for traceability, live-vs-planned route drift, mock coverage families, and honest OpenAPI fallback behavior when live Swagger is unavailable.
+17. `T530-openapi-contract-mock-and-client-regression-pack` - done and superseded; its generated registry was retired during workspace consolidation, while deterministic OpenAPI drift checks and behavioral suites now provide the maintained regression boundary.
 18. `T123-booking-availability-window-and-slot-definition-governance` - done; bookings now own bounded availability-window reads, staff slot-definition governance, and shared create/reschedule date validation.
 19. `T531-customer-booking-availability-calendar-mobile-flow` - done; customer mobile now pages backend-owned availability windows, surfaces day and selected-slot capacity states, and refreshes live availability after booking conflicts instead of inventing local date windows.
 
@@ -130,12 +117,11 @@ Active implementation should prioritize pending tasks only. The client-integrati
 ## Progress Report Verification Follow-Ups
 
 - `T532-job-order-qa-release-runtime-regression` - done; covers Technician Workflow, Quality Assurance & Release Control, and the service-invoice side of Invoice & Order Management with a repeatable live smoke script.
-- `T533-web-admin-inventory-analytics-route-crash-verification` - done; Inventory & Stock Visibility and Operational Analytics now have build evidence plus headless Chrome route/reload/unauthorized smoke verification after the ToastProvider crash fix.
 - `T534-customer-insurance-document-upload-mobile-flow` - done; mobile customers can attach JSON document metadata and file references to live insurance inquiries, document counts update immediately, closed/rejected uploads are blocked, and staff web detail shows attached document metadata.
 - `T535-notifications-reminders-live-delivery-feed-verification` - done; booking confirmation/reschedule, insurance review, and back-job status workflows now invoke live notification triggers, customer feed integration proves queued and skipped states, and `npm run smoke:notifications` provides a repeatable live backend smoke path.
-- `T536-mobile-cross-device-responsive-regression-pass` - done; dashboard, booking availability, date picker, shop catalog, cart/order cards, and bottom navigation now have compact/baseline/large phone layout hardening with Expo export evidence.
+- `T536-mobile-cross-device-responsive-regression-pass` - done; dashboard, booking availability, date picker, insurance, Garage, rewards, and bottom navigation have compact/baseline/large phone layout hardening with Expo export evidence.
 - `T537-digital-intake-inspection-web-navigation-surface` - done; `/admin/intake-inspections` is now a first-class staff web surface with role-aware navigation, live vehicle-scoped inspection create/history controls, and explicit QA/job-order boundary copy.
-- `T538-web-invoice-order-management-navigation-surface` - done; `/admin/invoices` is now a first-class adviser/admin surface for service invoice lookup, known ecommerce order/invoice lookup, invoice-aging analytics, and explicit staff ecommerce queue API gaps.
+- `T538-web-invoice-order-management-navigation-surface` - done; `/admin/invoices` is a first-class adviser/admin surface for finalized Job Order invoice lookup, payment state, and aging reminders.
 - `T539-customer-digital-garage-mobile-surface` - done; the customer mobile Garage tab, dashboard quick action, profile entry, owned-vehicle cards, and booking/lifecycle/insurance handoffs now make the Digital Garage Module discoverable without opening booking first.
 
 ## Operating Rules

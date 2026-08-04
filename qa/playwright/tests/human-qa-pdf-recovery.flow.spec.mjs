@@ -280,7 +280,7 @@ test.describe('Human QA PDF recovery verification', () => {
 
     await loadJobOrderById(staffPage, {
       jobOrderId: data.jobOrder.id,
-      scheduledDate: data.scheduledDate,
+      expectedStage: 'qa',
     });
     await staffPage.getByText('Step 6 of 8', { exact: false }).first().waitFor();
     await staffPage.getByRole('button', { name: 'Open QA Audit' }).first().click();

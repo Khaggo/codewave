@@ -756,7 +756,28 @@ export async function createJobOrderFromHandoff(
   return handoff;
 }
 
-export async function loadJobOrderById(page, { jobOrderId, technicianView = false, scheduledDate, testInfo }) {
+async function claimJobOrderWorkspaceIfAvailable(page) {
+  const takeThisJobButton = page.getByRole('button', { name: 'Take this job' });
+  if (!(await takeThisJobButton.isVisible({ timeout: 1_000 }).catch(() => false))) {
+    return false;
+  }
+
+  const claimResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST'
+      && response.url().includes('/api/staff-work-queues/job_order/claims'),
+    { timeout: 30_000 },
+  );
+  await takeThisJobButton.click();
+  const claimResponse = await claimResponsePromise;
+  expect(claimResponse.ok(), `Job Order claim failed with ${claimResponse.status()}`).toBeTruthy();
+  return true;
+}
+
+export async function loadJobOrderById(
+  page,
+  { jobOrderId, expectedStage = 'progress', claimIfAvailable = false },
+) {
   const detailResponsePromise = page
     .waitForResponse(
       (response) => response.request().method() === 'GET' && response.url().includes(`/api/job-orders/${jobOrderId}`),
@@ -771,7 +792,19 @@ export async function loadJobOrderById(page, { jobOrderId, technicianView = fals
   await expect(page).toHaveURL(
     new RegExp(`/admin/job-orders/${escapeRegExp(jobOrderId)}(?:[/?#]|$)`),
   );
-  await expect(page.getByText('Service Progress', { exact: true }).first()).toBeVisible();
+  const stageMatchers = {
+    finalize: /^Finalize$/,
+    progress: /^Service Progress$/,
+    qa: /QA handoff|Awaiting independent review/i,
+  };
+  const stageMatcher = stageMatchers[expectedStage];
+  if (!stageMatcher) {
+    throw new Error(`Unsupported Job Order workspace stage "${expectedStage}".`);
+  }
+  await expect(page.getByText(stageMatcher).first()).toBeVisible();
+  if (claimIfAvailable) {
+    await claimJobOrderWorkspaceIfAvailable(page);
+  }
 }
 
 async function submitServiceProgressAction(page, buttonName) {
@@ -877,12 +910,15 @@ export async function progressJobOrderForQa(page, { evidencePath, progressMessag
 
 export async function recordQaVerdict(
   page,
-  { jobOrderId, jobOrderReference, scheduledDate, note, testInfo },
+  { jobOrderReference, scheduledDate, note, testInfo },
 ) {
+  if (!jobOrderReference) {
+    throw new Error('recordQaVerdict requires the customer-safe Job Order or source Booking reference.');
+  }
   await page.goto(`${runtimeConfig.staffBaseUrl}/admin/qa-audit`);
   await page.getByRole('heading', { name: 'QA Audit' }).waitFor();
   await page.getByRole('button', { name: 'Unassigned' }).click();
-  const queueSearchTerm = jobOrderReference || jobOrderId;
+  const queueSearchTerm = jobOrderReference;
   await page.getByPlaceholder('Search reference, customer, vehicle').fill(queueSearchTerm);
   const targetReference = page.getByText(queueSearchTerm, { exact: true }).first();
   await expect(targetReference).toBeVisible({
@@ -905,7 +941,11 @@ export async function recordQaVerdict(
 }
 
 export async function finalizeAndRecordPayment(page, { jobOrderId, scheduledDate, summary, amount, reference, testInfo }) {
-  await loadJobOrderById(page, { jobOrderId, scheduledDate, testInfo });
+  await loadJobOrderById(page, {
+    jobOrderId,
+    expectedStage: 'finalize',
+    claimIfAvailable: true,
+  });
   await page.getByRole('textbox', { name: 'Finalization summary' }).fill(summary);
   await page.getByRole('spinbutton', { name: 'Amount received (PHP)' }).fill(String(amount));
   await page.getByRole('textbox', { name: 'Payment reference' }).fill(reference);

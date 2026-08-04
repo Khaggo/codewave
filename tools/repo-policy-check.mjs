@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import { findRetiredScopeViolations } from './retired-scope-policy.mjs';
+
 const root = process.cwd();
 const errors = [];
 const required = [
@@ -83,6 +85,18 @@ const findLockfiles = (directory) => {
 findLockfiles(root);
 if (lockfiles.length !== 1 || lockfiles[0] !== 'package-lock.json') {
   errors.push(`Expected one root package-lock.json; found: ${lockfiles.join(', ') || 'none'}`);
+}
+
+const retiredScopeViolations = findRetiredScopeViolations(root);
+if (retiredScopeViolations.length > 0) {
+  errors.push(
+    [
+      'Retired ecommerce references remain in active repository surfaces:',
+      ...retiredScopeViolations.map(
+        ({ file, line, rule }) => `${file}:${line} (${rule})`,
+      ),
+    ].join('\n'),
+  );
 }
 
 if (errors.length > 0) {

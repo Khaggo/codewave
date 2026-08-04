@@ -67,32 +67,6 @@ export {
   hasPermission,
 } from './services/rbac.js';
 
-// Operations Store
-export {
-  LOW_STOCK_THRESHOLD,
-  getInventoryStockState,
-  subscribeOperations,
-  getInventoryProductsSnapshot,
-  getCatalogCategoriesSnapshot,
-  getPublishedCatalogProductsSnapshot,
-  getAppointmentsSnapshot,
-  getOperationsActivitySnapshot,
-  getInventoryAdjustmentHistorySnapshot,
-  getLowStockProducts,
-  sanitizeProductInput,
-  addCatalogCategory,
-  addInventoryProduct,
-  addInventoryAdjustment,
-  updateInventoryProduct,
-  updateInventoryProductThreshold,
-  archiveInventoryProduct,
-  checkoutCart,
-  createAppointment,
-  convertAppointmentToJobOrder,
-  updateAppointmentStage,
-  resetOperationsState,
-} from './services/operationsStore.js';
-
 // API Client
 export { auth, setBaseUrl } from './services/api.js';
 
@@ -104,7 +78,6 @@ export {
   jobOrders,
   servicesCatalog,
   loyaltyAccounts,
-  shopProducts,
   SHOPS,
   TECHNICIANS,
   rewardCatalog,
@@ -113,7 +86,6 @@ export {
   qaAuditCases,
   serviceSummaries,
   insuranceInquiries,
-  salesInvoices,
   monthlyRevenue,
   bookingVolume,
   peakHourData,

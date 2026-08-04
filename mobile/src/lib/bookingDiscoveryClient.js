@@ -117,22 +117,6 @@ const request = async (path, options = {}) => {
   }
 };
 
-const formatClockLabel = (value) => {
-  const normalizedValue = String(value ?? '').trim();
-  const match = /^(\d{2}):(\d{2})$/.exec(normalizedValue);
-
-  if (!match) {
-    return normalizedValue || '--';
-  }
-
-  const hours = Number(match[1]);
-  const minutes = match[2];
-  const meridiem = hours >= 12 ? 'PM' : 'AM';
-  const displayHour = hours % 12 === 0 ? 12 : hours % 12;
-
-  return `${displayHour}:${minutes} ${meridiem}`;
-};
-
 export const formatBookingServiceCurrency = (priceCents) => {
   const normalizedAmount = Number(priceCents);
 
@@ -147,12 +131,6 @@ export const formatBookingServiceCurrency = (priceCents) => {
     maximumFractionDigits: 2,
   }).format(normalizedAmount / 100);
 };
-
-const buildVehicleLabel = (vehicle) =>
-  [vehicle?.year, vehicle?.make, vehicle?.model]
-    .map((part) => String(part ?? '').trim())
-    .filter(Boolean)
-    .join(' ');
 
 const BOOKING_AVAILABILITY_DAY_STATUSES = new Set([
   'bookable',
@@ -583,16 +561,10 @@ export const formatBookingServiceDuration = (durationMinutes) => {
   return `${hours} hr ${minutes} min`;
 };
 
-export const formatBookingTimeSlotWindow = (timeSlot) => {
-  if (!timeSlot) {
-    return 'Time unavailable';
-  }
-
-  return `${formatClockLabel(timeSlot.startTime)} - ${formatClockLabel(timeSlot.endTime)}`;
-};
-
-export const buildOwnedVehicleLabel = (vehicle) =>
-  buildVehicleLabel(vehicle) || String(vehicle?.plateNumber ?? '').trim() || 'Owned vehicle';
+export {
+  buildOwnedVehicleLabel,
+  formatBookingTimeSlotWindow,
+} from './bookingDisplayModel.mjs';
 
 export const toBookingDateString = (value) => {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) {

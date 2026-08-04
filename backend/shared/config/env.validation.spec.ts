@@ -7,11 +7,96 @@ const productionConfig = {
   JWT_REFRESH_SECRET: 'refresh-secret-that-is-longer-than-thirty-two-characters',
   CORS_ORIGINS: 'https://staff.autocare.example',
   STAFF_WORK_CLAIM_ENFORCEMENT: 'observe',
+  ACCESSORY_COMMERCE_MODE: 'off',
+  ACCESSORY_MEDIA_DRIVER: 'local',
 };
 
 describe('validateEnv production security', () => {
   it('accepts explicit non-placeholder production configuration', () => {
     expect(validateEnv({ ...productionConfig })).toEqual(productionConfig);
+  });
+
+  it('accepts accessory commerce modes and defaults local/test to off', () => {
+    for (const mode of ['off', 'staff_preview', 'catalog', 'ordering']) {
+      expect(() =>
+        validateEnv({
+          ...productionConfig,
+          NODE_ENV: 'development',
+          ACCESSORY_COMMERCE_MODE: mode,
+        }),
+      ).not.toThrow();
+    }
+
+    expect(
+      validateEnv({
+        ...productionConfig,
+        NODE_ENV: 'development',
+        ACCESSORY_COMMERCE_MODE: undefined,
+      }).ACCESSORY_COMMERCE_MODE,
+    ).toBe('off');
+    expect(
+      validateEnv({
+        ...productionConfig,
+        NODE_ENV: 'test',
+        ACCESSORY_COMMERCE_MODE: undefined,
+      }).ACCESSORY_COMMERCE_MODE,
+    ).toBe('off');
+  });
+
+  it('rejects invalid accessory commerce modes and missing production mode', () => {
+    expect(() =>
+      validateEnv({
+        ...productionConfig,
+        ACCESSORY_COMMERCE_MODE: 'preview',
+      }),
+    ).toThrow('ACCESSORY_COMMERCE_MODE must be off, staff_preview, catalog, or ordering');
+
+    expect(() =>
+      validateEnv({
+        ...productionConfig,
+        ACCESSORY_COMMERCE_MODE: undefined,
+      }),
+    ).toThrow('Missing required environment variable: ACCESSORY_COMMERCE_MODE');
+  });
+
+  it('requires durable media for production catalog and payment settings for ordering', () => {
+    expect(() =>
+      validateEnv({
+        ...productionConfig,
+        ACCESSORY_COMMERCE_MODE: 'catalog',
+        ACCESSORY_MEDIA_DRIVER: 'local',
+      }),
+    ).toThrow('requires ACCESSORY_MEDIA_DRIVER=s3');
+
+    expect(() =>
+      validateEnv({
+        ...productionConfig,
+        ACCESSORY_COMMERCE_MODE: 'ordering',
+        ACCESSORY_MEDIA_DRIVER: 's3',
+        ACCESSORY_MEDIA_S3_ENDPOINT: 'https://objects.example',
+        ACCESSORY_MEDIA_S3_REGION: 'auto',
+        ACCESSORY_MEDIA_S3_BUCKET: 'autocare-accessories',
+        ACCESSORY_MEDIA_S3_ACCESS_KEY_ID: 'key',
+        ACCESSORY_MEDIA_S3_SECRET_ACCESS_KEY: 'secret',
+      }),
+    ).toThrow('ACCESSORY_PAYMONGO_WEBHOOK_SECRET');
+
+    expect(() =>
+      validateEnv({
+        ...productionConfig,
+        ACCESSORY_COMMERCE_MODE: 'ordering',
+        ACCESSORY_MEDIA_DRIVER: 's3',
+        ACCESSORY_MEDIA_S3_ENDPOINT: 'https://objects.example',
+        ACCESSORY_MEDIA_S3_REGION: 'auto',
+        ACCESSORY_MEDIA_S3_BUCKET: 'autocare-accessories',
+        ACCESSORY_MEDIA_S3_ACCESS_KEY_ID: 'key',
+        ACCESSORY_MEDIA_S3_SECRET_ACCESS_KEY: 'secret',
+        ACCESSORY_PAYMONGO_WEBHOOK_SECRET: 'whsec_accessories',
+        ACCESSORY_PAYMONGO_CHECKOUT_SUCCESS_URL: 'https://mobile.example/accessories/success',
+        ACCESSORY_PAYMONGO_CHECKOUT_CANCEL_URL: 'https://mobile.example/accessories/cancel',
+        ACCESSORY_PAYMONGO_LIVEMODE: 'false',
+      }),
+    ).not.toThrow();
   });
 
   it('rejects placeholder JWT secrets in production', () => {

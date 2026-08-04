@@ -140,7 +140,12 @@ export class LoyaltyRepository extends BaseRepository {
 
   async listEarningRules(options?: { includeInactive?: boolean }) {
     return this.db.query.loyaltyEarningRules.findMany({
-      where: options?.includeInactive ? undefined : eq(loyaltyEarningRules.status, 'active'),
+      where: options?.includeInactive
+        ? eq(loyaltyEarningRules.accrualSource, 'service')
+        : and(
+            eq(loyaltyEarningRules.accrualSource, 'service'),
+            eq(loyaltyEarningRules.status, 'active'),
+          ),
       orderBy: [desc(loyaltyEarningRules.updatedAt), desc(loyaltyEarningRules.id)],
       with: {
         audits: {
@@ -153,6 +158,7 @@ export class LoyaltyRepository extends BaseRepository {
   async listActiveEarningRules(at: Date = new Date()) {
     return this.db.query.loyaltyEarningRules.findMany({
       where: and(
+        eq(loyaltyEarningRules.accrualSource, 'service'),
         eq(loyaltyEarningRules.status, 'active'),
         or(
           isNull(loyaltyEarningRules.activeFrom),
@@ -187,7 +193,10 @@ export class LoyaltyRepository extends BaseRepository {
 
   async findEarningRuleById(id: string, db: AppDatabase = this.db) {
     const earningRule = await db.query.loyaltyEarningRules.findFirst({
-      where: eq(loyaltyEarningRules.id, id),
+      where: and(
+        eq(loyaltyEarningRules.id, id),
+        eq(loyaltyEarningRules.accrualSource, 'service'),
+      ),
       with: {
         audits: {
           orderBy: [desc(loyaltyEarningRuleAudits.createdAt), desc(loyaltyEarningRuleAudits.id)],
@@ -306,8 +315,6 @@ export class LoyaltyRepository extends BaseRepository {
           minimumAmountCents: payload.minimumAmountCents ?? null,
           eligibleServiceTypes: payload.eligibleServiceTypes ?? [],
           eligibleServiceCategories: payload.eligibleServiceCategories ?? [],
-          eligibleProductIds: payload.eligibleProductIds ?? [],
-          eligibleProductCategoryIds: payload.eligibleProductCategoryIds ?? [],
           promoLabel: payload.promoLabel ?? null,
           manualBenefitNote: payload.manualBenefitNote ?? null,
           activeFrom: payload.activeFrom ? new Date(payload.activeFrom) : null,
@@ -364,14 +371,6 @@ export class LoyaltyRepository extends BaseRepository {
             payload.eligibleServiceCategories !== undefined
               ? payload.eligibleServiceCategories
               : existingRule.eligibleServiceCategories,
-          eligibleProductIds:
-            payload.eligibleProductIds !== undefined
-              ? payload.eligibleProductIds
-              : existingRule.eligibleProductIds,
-          eligibleProductCategoryIds:
-            payload.eligibleProductCategoryIds !== undefined
-              ? payload.eligibleProductCategoryIds
-              : existingRule.eligibleProductCategoryIds,
           promoLabel: payload.promoLabel !== undefined ? payload.promoLabel : existingRule.promoLabel ?? null,
           manualBenefitNote:
             payload.manualBenefitNote !== undefined
@@ -632,8 +631,6 @@ export class LoyaltyRepository extends BaseRepository {
       minimumAmountCents: earningRule.minimumAmountCents ?? null,
       eligibleServiceTypes: earningRule.eligibleServiceTypes ?? [],
       eligibleServiceCategories: earningRule.eligibleServiceCategories ?? [],
-      eligibleProductIds: earningRule.eligibleProductIds ?? [],
-      eligibleProductCategoryIds: earningRule.eligibleProductCategoryIds ?? [],
       promoLabel: earningRule.promoLabel ?? null,
       manualBenefitNote: earningRule.manualBenefitNote ?? null,
       activeFrom: earningRule.activeFrom ? earningRule.activeFrom.toISOString() : null,

@@ -12,15 +12,14 @@ Before doing any work, read these project-control files:
 3. docs/project-control/OBJECTIVE_COMPLIANCE_MATRIX.md
 4. docs/project-control/QA_LEDGER.md
 5. docs/project-control/IMPLEMENTATION_ROADMAP.md
-6. docs/project-control/PANELIST_FULL_SYSTEM_QA_2026-05-22.md
-7. docs/project-control/UX_AUDIT_PRO_HANDOFF.md
-8. docs/project-control/UX_AUDIT_BACKLOG.md
+6. docs/project-control/UX_AUDIT_PRO_HANDOFF.md
+7. docs/project-control/UX_AUDIT_BACKLOG.md
 
 If the task may benefit from the repo's self-improving agent system, also read:
 
-9. docs/architecture/README.md
-10. docs/architecture/system-architecture.md
-11. docs/architecture/agents/orchestrator.md
+8. docs/architecture/README.md
+9. docs/architecture/system-architecture.md
+10. docs/architecture/agents/orchestrator.md
 12. docs/architecture/agent-manifest.json
 
 Treat these files as the source of truth for what is done, what failed panel review, what passed QA, and what still needs work.
@@ -62,11 +61,10 @@ Make the system and documentation comply with the panel feedback and Objectives 
 Latest full-system QA truth:
 
 - The latest 2026-05-22 whole-system panel/objectives Playwright rerun is green: 20 passed, 0 failed, 0 timed out, 0 skipped.
-- The green gate covers booking-to-cash, mobile multi-service booking, Shop/ecommerce rewards, insurance documents, insurance manual reminder/broadcast, admin CRUD/pricing/billing, Back-Jobs, Objective 2 lifecycle/readable IDs, broad readable-ID sweep, human-QA PDF recovery, adviser-owned role access, and adviser-owned checklist/PDF workshop proof.
+- The green gate covers booking-to-cash, mobile multi-service booking, service-earned rewards, insurance documents, insurance manual reminder/broadcast, service administration, Back-Jobs, Objective 2 lifecycle/readable IDs, broad readable-ID sweep, human-QA PDF recovery, adviser-owned role access, and adviser-owned checklist/PDF workshop proof.
 - Residual polish items remain: invoice lookup specificity, immediate invoice visibility, stale mobile completed-history refresh, completed-state timing before manual payment, non-finalized Back-Jobs negative dataset coverage, deterministic approved lifecycle summary data for panel capture, timed session-stability proof, Objective 5 guided demo capture, UX polish, and paper/diagram updates.
 - Technician web logins are intentionally retired. Do not treat retired-login failures as product regressions; rewrite QA around adviser/admin-managed technician profiles, selected specialties, checklist/task controls, evidence upload, and adviser-owned workshop stages.
 - `docs/architecture/rbac-policy.md` is updated to the current canonical authenticated roles: `customer`, `service_adviser`, and `super_admin`; technicians are non-auth operational profiles with specialties.
-- Do not rely on the older `PANELIST_FULL_SYSTEM_QA_2026-05-22.md` 7/11 failed report as current truth without checking `CURRENT_STATE.md` and `QA_LEDGER.md`; it is historical context now superseded by the later 20/20 run.
 
 For UX work, use the combined workflow:
 

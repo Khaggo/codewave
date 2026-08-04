@@ -58,6 +58,7 @@ import {
   SectionFrame,
   StatusMessage,
 } from './QAAuditPresentation'
+import { WORKSPACE_INFORMATION_ARCHITECTURE } from './workspaceInformationArchitecture.mjs'
 
 const initialQaState = {
   status: 'qa_ready',
@@ -582,7 +583,7 @@ export default function QAAuditWorkspace() {
       <PageHeader
         eyebrow="Quality Governance"
         title="QA Audit"
-        description="Review release checks, record verdicts, and keep overrides auditable."
+        description={WORKSPACE_INFORMATION_ARCHITECTURE.qaAudit.description}
         actions={(
           <button
             type="button"
@@ -635,7 +636,7 @@ export default function QAAuditWorkspace() {
         <StaffWorkQueue
           queueType="qa"
           accessToken={user?.accessToken}
-          title="QA Queue"
+          title={WORKSPACE_INFORMATION_ARCHITECTURE.qaAudit.sections.queue}
           description="Complete your current review, then take next; teammates can review other records in parallel."
           onOpenWork={openQueueItem}
           onReleaseWork={clearQueueSelection}
@@ -647,7 +648,7 @@ export default function QAAuditWorkspace() {
 
         <SectionFrame
           id="selected-qa-audit"
-          title="Selected Audit"
+          title={WORKSPACE_INFORMATION_ARCHITECTURE.qaAudit.sections.selectedAudit}
           copy="Review the loaded release decision."
           badge={<span className={releaseSummary.toneClass}>{releaseSummary.value}</span>}
         >
@@ -736,7 +737,7 @@ export default function QAAuditWorkspace() {
         </SectionFrame>
 
         <SectionFrame
-          title="Blocking Findings"
+          title={WORKSPACE_INFORMATION_ARCHITECTURE.qaAudit.sections.blockingFindings}
           copy="Clear these before release."
           badge={<span className="badge badge-red">{blockingFindings.length} blocking</span>}
         >
@@ -784,7 +785,7 @@ export default function QAAuditWorkspace() {
         </SectionFrame>
 
         <SectionFrame
-          title="Verdict / Override"
+          title={WORKSPACE_INFORMATION_ARCHITECTURE.qaAudit.sections.verdict}
           copy="Record the release decision and keep overrides auditable."
           badge={<span className={releaseSummary.toneClass}>{releaseSummary.value}</span>}
         >
