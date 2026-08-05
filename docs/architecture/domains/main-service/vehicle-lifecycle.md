@@ -1,5 +1,7 @@
 # vehicle-lifecycle
 
+Last updated: 2026-08-05
+
 ## Domain ID
 
 `main-service.vehicle-lifecycle`
@@ -57,11 +59,15 @@ Key relations:
 - keep current lifecycle projection honest: until source domains publish richer status history, do not pretend to reconstruct every transient job-order or QA transition
 - queue layman-friendly AI summary generation on the shared `ai-worker-jobs` BullMQ lane and expose `generationJob` metadata on the lifecycle summary record
 - hide AI summaries from customers until a reviewer approves them
+- use the optional OpenAI-compatible provider only when explicitly enabled; disabled or failed
+  generation remains unavailable/failed and never becomes customer-visible text
 - expose an ordered timeline view for vehicle history consumers
 - expose a customer-only timeline projection with stable keyset pagination, a default 20-item page, and source filters
 - exclude raw source identifiers, staff notes, and unsupported manual events from customer timeline responses
 - expose a customer-safe Garage summary for current booking, workshop, and insurance state
 - bound projection refresh work with a short refresh window so repeated reads do not rebuild the entire timeline
+- expose only customer-safe display references and return `Reference unavailable` when a legacy
+  persisted reference is absent; never expose source UUIDs or UUID-derived labels
 - prevent duplicate timeline entries during retries or replays
 
 ## Process Flow
@@ -99,7 +105,7 @@ Key relations:
 - duplicate events from retries or outbox replay
 - verified flag set without a valid inspection reference
 - current lifecycle projection must not claim full job-order status history when the source domain only exposes the latest stable milestone
-- customer-facing timeline accidentally includes internal notes
+- customer-facing timeline accidentally includes internal notes or raw source identifiers
 - a 500-event vehicle causes an unbounded response or hundreds of initial mobile rows
 - new timeline events arrive between page requests and destabilize pagination
 - AI summary is published before human review

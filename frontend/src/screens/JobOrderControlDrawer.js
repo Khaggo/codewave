@@ -63,7 +63,7 @@ export default function JobOrderControlDrawer({
         aria-label="Close control drawer"
         onClick={onClose}
       />
-      <aside
+      <div
         className="fixed inset-x-0 bottom-0 top-16 z-50 flex flex-col border border-surface-border bg-surface-card shadow-2xl md:left-auto md:w-[min(520px,calc(100vw-2rem))]"
         aria-labelledby="job-order-control-drawer-title"
         aria-modal="true"
@@ -204,7 +204,7 @@ export default function JobOrderControlDrawer({
             </div>
           ) : null}
         </div>
-      </aside>
+      </div>
     </>
   )
 }

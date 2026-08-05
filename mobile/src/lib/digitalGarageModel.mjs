@@ -1,4 +1,5 @@
 import { buildOwnedVehicleLabel } from './bookingDisplayModel.mjs'
+import { getCustomerVehicleReference } from './vehicleReference.mjs'
 
 export const createEmptyCustomerDigitalGarageSnapshot = () => ({
   status: 'garage_empty',
@@ -32,7 +33,9 @@ export const buildDigitalGarageVehicleSummary = ({
   primaryVehicleId,
 }) => {
   const title = buildOwnedVehicleLabel(vehicle)
+  const publicReference = getCustomerVehicleReference(vehicle)
   const subtitle = [
+    `Reference ${publicReference}`,
     vehicle?.plateNumber,
     vehicle?.color,
     vehicle?.vin ? `VIN ${vehicle.vin}` : null,
@@ -43,6 +46,8 @@ export const buildDigitalGarageVehicleSummary = ({
 
   return {
     id: vehicle?.id ?? null,
+    publicReference: vehicle?.publicReference ?? null,
+    referenceLabel: publicReference,
     title,
     subtitle:
       subtitle ||

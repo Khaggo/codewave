@@ -25,14 +25,16 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  webServer: {
-    command: 'npm run dev:storybook:raw',
-    url: 'http://127.0.0.1:6006/',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  },
+  webServer: process.env.STORYBOOK_QA_EXTERNAL_SERVER
+    ? undefined
+    : {
+        command: 'node qa/playwright/support/serve-static.mjs frontend/storybook-static 6006',
+        url: 'http://127.0.0.1:6006/',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
   projects: [
     {
       name: 'chromium',

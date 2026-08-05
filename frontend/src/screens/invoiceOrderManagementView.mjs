@@ -1,8 +1,3 @@
-export const shortId = (value) => {
-  const normalizedValue = String(value ?? '').trim()
-  return normalizedValue ? normalizedValue.slice(0, 8).toUpperCase() : 'NONE'
-}
-
 export const getInvoicePdfStateLabel = (serviceInvoice) => {
   if (!serviceInvoice) {
     return 'Awaiting invoice'

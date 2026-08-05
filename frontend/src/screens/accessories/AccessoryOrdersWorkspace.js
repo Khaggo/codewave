@@ -15,6 +15,8 @@ import {
   takeAccessoryOrder,
   transitionAccessoryOrder,
 } from '@/lib/accessories/accessoriesAdminClient'
+import PortalSelect from '@/components/ui/PortalSelect'
+import { listStaffAccounts } from '@/lib/authClient'
 import {
   getAccessoryOrderNextAction,
   normalizeAccessoryStaffOrderDetail,
@@ -39,6 +41,7 @@ export default function AccessoryOrdersWorkspace() {
   const [action, setAction] = useState({ busy: '', error: '', message: '' })
   const [collection, setCollection] = useState({ reference: '', code: '' })
   const [admin, setAdmin] = useState({ reassignTo: '', reason: '', cancelReason: '' })
+  const [staffOptions, setStaffOptions] = useState([])
   const actionLockRef = useRef(false)
   const drawerRef = useRef(null)
   const returnFocusRef = useRef(null)
@@ -69,6 +72,26 @@ export default function AccessoryOrdersWorkspace() {
   }, [user?.accessToken, user?.role, canUse])
 
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    if (!user?.accessToken || user.role !== 'super_admin') {
+      setStaffOptions([])
+      return undefined
+    }
+
+    let active = true
+    void listStaffAccounts(user.accessToken)
+      .then((accounts) => {
+        if (active) setStaffOptions(Array.isArray(accounts) ? accounts : [])
+      })
+      .catch(() => {
+        if (active) setStaffOptions([])
+      })
+
+    return () => {
+      active = false
+    }
+  }, [user?.accessToken, user?.role])
 
   const closeDrawer = useCallback(() => {
     setSelected(null)
@@ -214,7 +237,7 @@ export default function AccessoryOrdersWorkspace() {
           {currentAction?.key === 'take' ? <button type="button" className="btn-primary min-h-11" disabled={interactionBusy} onClick={() => void run('take', () => takeAccessoryOrder({ accessToken: user.accessToken, orderId: selected.order.id, version: selected.order.version }), 'Order assigned to you.')}>Take this order</button> : null}
           {currentAction && !['take', 'collected'].includes(currentAction.key) ? <button type="button" className="btn-primary min-h-11" disabled={interactionBusy} onClick={() => void run(currentAction.key, () => transitionAccessoryOrder({ accessToken: user.accessToken, orderId: selected.order.id, version: selected.order.version, payload: { status: currentAction.key, reason: currentAction.label } }), `${currentAction.label} completed.`)}><PackageCheck size={15} /> {currentAction.label}</button> : null}
           {currentAction?.key === 'collected' ? <form className="space-y-3 border-y border-surface-border py-4" onSubmit={(event) => { event.preventDefault(); void run('collected', () => transitionAccessoryOrder({ accessToken: user.accessToken, orderId: selected.order.id, version: selected.order.version, payload: { status: 'collected', orderReference: collection.reference, pickupCode: collection.code, reason: 'Pickup identity verified at collection.' } }), 'Order collected and stock consumed.') }}><h3 className="font-semibold text-ink-primary">Verify collection</h3><input className="input-field" aria-label="Order reference for collection" disabled={interactionBusy} value={collection.reference} onChange={(event) => setCollection((current) => ({ ...current, reference: event.target.value }))} required /><input className="input-field" aria-label="Six-digit pickup code" disabled={interactionBusy} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={collection.code} onChange={(event) => setCollection((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6) }))} required /><button className="btn-primary min-h-11" disabled={interactionBusy || collection.code.length !== 6}>Verify and collect</button></form> : null}
-          {user.role === 'super_admin' ? <section className="space-y-3 border-y border-surface-border py-4"><h3 className="font-semibold text-ink-primary">Super-admin controls</h3><input className="input-field" aria-label="Reassign staff user ID" disabled={interactionBusy} placeholder="Target staff user UUID" value={admin.reassignTo} onChange={(event) => setAdmin((current) => ({ ...current, reassignTo: event.target.value }))} /><input className="input-field" aria-label="Reassignment reason" disabled={interactionBusy} placeholder="Required reassignment reason" value={admin.reason} onChange={(event) => setAdmin((current) => ({ ...current, reason: event.target.value }))} /><button type="button" className="btn-ghost min-h-11" disabled={interactionBusy || !admin.reassignTo || admin.reason.length < 3} onClick={() => void run('reassign', () => reassignAccessoryOrder({ accessToken: user.accessToken, orderId: selected.order.id, version: selected.order.version, payload: { assigneeUserId: admin.reassignTo, reason: admin.reason } }), 'Order reassigned.')}>Reassign</button><input className="input-field" aria-label="Cancellation exception reason" disabled={interactionBusy} placeholder="Cancellation exception reason" value={admin.cancelReason} onChange={(event) => setAdmin((current) => ({ ...current, cancelReason: event.target.value }))} /><button type="button" className="btn-ghost min-h-11 text-status-danger" disabled={interactionBusy || admin.cancelReason.length < 3 || ['collected', 'refunded'].includes(selected.order.status)} onClick={() => void run('cancel', () => cancelAccessoryStaffOrder({ accessToken: user.accessToken, orderId: selected.order.id, reason: admin.cancelReason, idempotencyKey: createAccessoryAdminRequestKey() }), 'Order cancellation recorded.')}>Cancel with audit reason</button></section> : null}
+          {user.role === 'super_admin' ? <section className="space-y-3 border-y border-surface-border py-4"><h3 className="font-semibold text-ink-primary">Super-admin controls</h3><PortalSelect value={admin.reassignTo} onValueChange={(value) => setAdmin((current) => ({ ...current, reassignTo: value }))} placeholder="Choose staff owner" emptyOptionLabel="Unassigned" items={staffOptions.map((account) => ({ value: account.id, label: account.displayName || account.fullName || account.email || account.staffCode || 'Staff member', helper: account.roleLabel || account.staffCode || 'Staff account' }))} disabled={interactionBusy} triggerClassName="min-h-11" /><input className="input-field" aria-label="Reassignment reason" disabled={interactionBusy} placeholder="Required reassignment reason" value={admin.reason} onChange={(event) => setAdmin((current) => ({ ...current, reason: event.target.value }))} /><button type="button" className="btn-ghost min-h-11" disabled={interactionBusy || !admin.reassignTo || admin.reason.length < 3} onClick={() => void run('reassign', () => reassignAccessoryOrder({ accessToken: user.accessToken, orderId: selected.order.id, version: selected.order.version, payload: { assigneeUserId: admin.reassignTo, reason: admin.reason } }), 'Order reassigned.')}>Reassign</button><input className="input-field" aria-label="Cancellation exception reason" disabled={interactionBusy} placeholder="Cancellation exception reason" value={admin.cancelReason} onChange={(event) => setAdmin((current) => ({ ...current, cancelReason: event.target.value }))} /><button type="button" className="btn-ghost min-h-11 text-status-danger" disabled={interactionBusy || admin.cancelReason.length < 3 || ['collected', 'refunded'].includes(selected.order.status)} onClick={() => void run('cancel', () => cancelAccessoryStaffOrder({ accessToken: user.accessToken, orderId: selected.order.id, reason: admin.cancelReason, idempotencyKey: createAccessoryAdminRequestKey() }), 'Order cancellation recorded.')}>Cancel with audit reason</button></section> : null}
           <section><h3 className="font-semibold text-ink-primary">Audit timeline</h3><div className="mt-2 divide-y divide-surface-border border-y border-surface-border">{selected.history.length ? selected.history.map((entry) => <div key={entry.id} className="py-3"><StatusBadge value={entry.nextStatus} /><p className="mt-1 text-sm text-ink-secondary">{entry.reason || 'Status updated'}</p><p className="mt-1 text-xs text-ink-muted">{new Date(entry.createdAt).toLocaleString()}</p></div>) : <p className="py-3 text-sm text-ink-secondary">No audit entries are available.</p>}</div></section>
         </div>
       </div> : null}

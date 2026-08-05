@@ -1,5 +1,4 @@
 'use client'
-
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
@@ -13,6 +12,7 @@ import {
 import PageHeader from '@/components/ui/PageHeader'
 import { ApiError } from '@/lib/authClient'
 import { useUser } from '@/lib/userContext'
+import { getInsuranceInquiryReference } from '@/lib/businessReferenceDisplay.mjs'
 import {
   getInsuranceInquiryById,
   listInsuranceInquiries,
@@ -425,7 +425,7 @@ export default function CollectionsContent() {
                 value={filters.search}
                 onChange={handleFilterChange('search')}
                 className="input pl-9"
-                placeholder="Customer, vehicle, policy, or case id"
+                placeholder="Customer, vehicle, policy, or case reference"
               />
             </div>
           </label>
@@ -485,7 +485,7 @@ export default function CollectionsContent() {
                 {filteredItems.length} visible case{filteredItems.length === 1 ? '' : 's'}
               </span>
               <span className="badge badge-gray">
-                {selectedInquiry ? `Selected ${selectedInquiry.customerDisplayName || selectedInquiry.id}` : 'No active selection'}
+                {selectedInquiry ? `Selected ${getInsuranceInquiryReference(selectedInquiry)}` : 'No active selection'}
               </span>
             </div>
           </div>
@@ -520,7 +520,7 @@ export default function CollectionsContent() {
                         <td>
                           <div className="space-y-1">
                             <p className="font-semibold text-ink-primary">{row.customer}</p>
-                            <p className="text-xs text-ink-muted">{inquiry.subject || inquiry.id}</p>
+                            <p className="text-xs text-ink-muted">{inquiry.subject || getInsuranceInquiryReference(inquiry)}</p>
                           </div>
                         </td>
                         <td>{row.vehicle}</td>

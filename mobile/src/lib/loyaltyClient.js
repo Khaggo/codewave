@@ -1,5 +1,6 @@
 import { ApiError, getApiBaseUrl } from './authClient';
 import { getReadableLoyaltySourceReference } from './loyaltyPresentation.mjs';
+import { normalizeCustomerLoyaltyEarningPolicy } from './loyaltyEarningPolicy.mjs';
 const LOYALTY_REQUEST_TIMEOUT_MS = 8000;
 
 export const customerLoyaltyTiers = [
@@ -315,6 +316,8 @@ export const normalizeCustomerReward = ({ reward, pointsBalance }) => {
   };
 };
 
+export { normalizeCustomerLoyaltyEarningPolicy } from './loyaltyEarningPolicy.mjs';
+
 export const createEmptyCustomerLoyaltySnapshot = () => ({
   account: normalizeCustomerLoyaltyAccount({
     pointsBalance: 0,
@@ -325,6 +328,8 @@ export const createEmptyCustomerLoyaltySnapshot = () => ({
   rewards: [],
   transactions: [],
   featuredReward: null,
+  earningPolicy: null,
+  earningPolicyError: '',
 });
 
 export const loadCustomerLoyaltySnapshot = async ({ userId, accessToken }) => {
@@ -334,20 +339,45 @@ export const loadCustomerLoyaltySnapshot = async ({ userId, accessToken }) => {
     });
   }
 
-  const [accountResponse, rewardsResponse, transactionsResponse] = await Promise.all([
-    request(`/api/loyalty/accounts/${userId}`, {
-      method: 'GET',
-      headers: buildAuthHeaders(accessToken),
-    }),
-    request('/api/loyalty/rewards', {
-      method: 'GET',
-      headers: buildAuthHeaders(accessToken),
-    }),
-    request(`/api/loyalty/accounts/${userId}/transactions`, {
-      method: 'GET',
-      headers: buildAuthHeaders(accessToken),
-    }),
-  ]);
+  const [accountResult, rewardsResult, transactionsResult, earningPolicyResult] =
+    await Promise.allSettled([
+      request(`/api/loyalty/accounts/${userId}`, {
+        method: 'GET',
+        headers: buildAuthHeaders(accessToken),
+      }),
+      request('/api/loyalty/rewards', {
+        method: 'GET',
+        headers: buildAuthHeaders(accessToken),
+      }),
+      request(`/api/loyalty/accounts/${userId}/transactions`, {
+        method: 'GET',
+        headers: buildAuthHeaders(accessToken),
+      }),
+      request('/api/loyalty/earning-policy', {
+        method: 'GET',
+        headers: buildAuthHeaders(accessToken),
+      }),
+    ]);
+
+  const requiredResults = [accountResult, rewardsResult, transactionsResult];
+  const failedRequiredResult = requiredResults.find(
+    (result) => result.status === 'rejected',
+  );
+  if (failedRequiredResult) {
+    throw failedRequiredResult.reason;
+  }
+
+  const accountResponse = accountResult.value;
+  const rewardsResponse = rewardsResult.value;
+  const transactionsResponse = transactionsResult.value;
+  const earningPolicy =
+    earningPolicyResult.status === 'fulfilled'
+      ? normalizeCustomerLoyaltyEarningPolicy(earningPolicyResult.value)
+      : null;
+  const earningPolicyError =
+    earningPolicyResult.status === 'rejected'
+      ? earningPolicyResult.reason?.message ?? 'Earning guidance is unavailable right now.'
+      : '';
 
   const account = normalizeCustomerLoyaltyAccount(accountResponse);
   const pointsBalance = account?.pointsBalance ?? 0;
@@ -377,6 +407,8 @@ export const loadCustomerLoyaltySnapshot = async ({ userId, accessToken }) => {
     rewards,
     transactions,
     featuredReward: rewards.find((reward) => reward.status === 'active') ?? null,
+    earningPolicy,
+    earningPolicyError,
   };
 };
 

@@ -37,6 +37,9 @@ import {
   sendBookingToWorkshop,
 } from '../helpers/flows.mjs';
 
+const rawUuidPattern =
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
+
 test('customer booking reaches completed history only after workshop, QA, and payment flow', async ({
   browser,
   request,
@@ -317,6 +320,21 @@ test('customer booking reaches completed history only after workshop, QA, and pa
     expect(invoiceLookup?.invoiceRecord?.invoiceReference, 'Invoice lookup should return a readable service invoice reference.').toBeTruthy();
     expect(settledJobOrder?.invoiceRecord?.paymentStatus, 'Recorded service invoice should be marked paid after settlement.').toBe('paid');
     expect(invoiceLookup?.invoiceRecord?.paymentStatus, 'Invoice lookup should reflect the paid service invoice state.').toBe('paid');
+
+    const invoicePdfResponse = await request.get(
+      `${process.env.QA_API_BASE_URL ?? 'http://127.0.0.1:3000'}/api/job-orders/${jobOrderId}/invoice/pdf`,
+      {
+        headers: {
+          Authorization: `Bearer ${adviserSession.accessToken}`,
+        },
+      },
+    );
+    expect(invoicePdfResponse.ok(), 'Finalized invoice PDF should be downloadable by the owning staff workflow.').toBe(true);
+    expect((invoicePdfResponse.headers()['content-type'] ?? '').toLowerCase()).toContain('application/pdf');
+    const invoicePdfText = Buffer.from(await invoicePdfResponse.body()).toString('latin1');
+    expect(invoicePdfText).toContain(invoiceLookup.invoiceRecord.invoiceReference);
+    expect(invoicePdfText).not.toContain(jobOrderId);
+    expect(invoicePdfText).not.toMatch(rawUuidPattern);
 
     if (!invoiceLookup?.invoiceRecord?.officialReceiptReference) {
       addFinding(testInfo, {

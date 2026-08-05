@@ -4,6 +4,13 @@ const meta = {
   title: 'Components/PageHeader',
   component: PageHeader,
   tags: ['autodocs'],
+  decorators: [
+    (Story) => (
+      <main aria-label="Staff workspace preview">
+        <Story />
+      </main>
+    ),
+  ],
   parameters: {
     docs: {
       description: {

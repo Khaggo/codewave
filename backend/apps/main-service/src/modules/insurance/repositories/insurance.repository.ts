@@ -87,30 +87,30 @@ export class InsuranceRepository extends BaseRepository {
   }
 
   async create(payload: CreateInsuranceInquiryPersistenceInput) {
-    const values = {
-      userId: payload.userId,
-      vehicleId: payload.vehicleId,
-      clientRequestId: payload.clientRequestId ?? null,
-      inquiryType: payload.inquiryType,
-      ...(payload.purpose ? { purpose: payload.purpose } : {}),
-      subject: payload.subject,
-      description: payload.description,
-      providerName: payload.providerName ?? null,
-      policyNumber: payload.policyNumber ?? null,
-      incidentOccurredAt: payload.incidentOccurredAt ? new Date(payload.incidentOccurredAt) : null,
-      incidentLocation: payload.incidentLocation ?? null,
-      notes: payload.notes ?? null,
-      status: 'submitted' as const,
-      createdByUserId: payload.createdByUserId,
-    };
-
     try {
-      const [createdInquiry] = await this.db
-        .insert(insuranceInquiries)
-        .values(values)
-        .returning();
+      return await this.db.transaction(async (tx) => {
+        const [createdInquiry] = await tx
+          .insert(insuranceInquiries)
+          .values({
+            userId: payload.userId,
+            vehicleId: payload.vehicleId,
+            clientRequestId: payload.clientRequestId ?? null,
+            inquiryType: payload.inquiryType,
+            ...(payload.purpose ? { purpose: payload.purpose } : {}),
+            subject: payload.subject,
+            description: payload.description,
+            providerName: payload.providerName ?? null,
+            policyNumber: payload.policyNumber ?? null,
+            incidentOccurredAt: payload.incidentOccurredAt ? new Date(payload.incidentOccurredAt) : null,
+            incidentLocation: payload.incidentLocation ?? null,
+            notes: payload.notes ?? null,
+            status: 'submitted' as const,
+            createdByUserId: payload.createdByUserId,
+          })
+          .returning();
 
-      return this.findById(createdInquiry.id);
+        return this.findById(createdInquiry.id, tx);
+      });
     } catch (error) {
       if (payload.clientRequestId && this.isUniqueViolation(error)) {
         const existingInquiry = await this.findByClientRequestId(payload.userId, payload.clientRequestId);
@@ -690,4 +690,5 @@ export class InsuranceRepository extends BaseRepository {
         (error as { code?: unknown }).code === '23505',
     );
   }
+
 }

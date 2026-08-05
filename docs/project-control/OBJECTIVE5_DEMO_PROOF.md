@@ -1,6 +1,6 @@
 # Objective 5 Demo Proof
 
-Last updated: 2026-05-21
+Last updated: 2026-08-05
 
 ## Goal
 
@@ -10,6 +10,18 @@ Objective 5 requires visible proof that AUTOCARE:
 2. blocks or warns the release flow based on that evidence,
 3. records an auditable service-adviser/super-admin decision, and
 4. exposes a customer-facing reviewed summary after reviewer approval.
+
+## Current AI Boundary
+
+- Deterministic QA risk, semantic, and blocking rules remain the source of release decisions.
+- Lifecycle-summary generation is optional and uses an OpenAI-compatible provider only when
+  `AI_SUMMARY_PROVIDER=openai_compatible` is configured.
+- The default is `disabled`; unavailable, timed-out, malformed, or failed generation does not
+  create customer-visible AI text.
+- Provider/model/prompt/evidence provenance is retained, customer-safe evidence is filtered, and
+  adviser or super-admin review is required before publication.
+- The current focused remediation evidence reports backend AI/reference/loyalty `21/21` and the
+  web/mobile suites `230/230` and `213/213`. This is not a new live Playwright claim.
 
 ## Proof Chain
 
@@ -99,4 +111,6 @@ What this proves:
 
 ## Current Limitation
 
-This document proves the chain in implementation and automated evidence. A fresh guided screenshot/video capture of the full discrepancy path is still the best final panel-defense artifact.
+This document proves the chain in implementation and automated evidence. A fresh guided
+screenshot/video capture of the full discrepancy path is still the final panel-defense artifact;
+live Playwright output and actual survey results remain pending.

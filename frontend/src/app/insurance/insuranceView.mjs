@@ -238,7 +238,7 @@ export function getInsuranceSummaryCards(input = {}) {
     {
       label: 'Selected Inquiry',
       value: activeInquiry ? formatStatusLabel(activeInquiry.status) : 'None',
-      sub: activeInquiry ? activeInquiry.subject : 'Pick a queue item or enter an inquiry id',
+      sub: activeInquiry ? activeInquiry.subject : 'Pick a case from the queue',
     },
     {
       label: 'Editable Fields',

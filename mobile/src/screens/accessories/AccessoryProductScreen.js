@@ -11,6 +11,7 @@ import {
   patchAccessoryCartItem,
   replaceAccessoryCart,
 } from '../../lib/accessoriesClient';
+import { getCustomerVehicleReference } from '../../lib/vehicleReference.mjs';
 import { colors } from '../../theme';
 import { AccessoryPrimaryButton, AccessoryScreenHeader, AccessoryState, AccessoryStatusPill, accessoryStyles } from './AccessoriesComponents';
 import { isAccessoryOrderingEnabled, normalizeAccessoryProductDetail } from './accessoriesViewModel.mjs';
@@ -50,7 +51,7 @@ export function AccessoryProductView({ productDetail, orderingEnabled = true, se
             {vehicles.map((vehicle) => {
               const selected = vehicle.id === selectedVehicleId;
               const label = vehicle.displayName || [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ');
-              return <Pressable key={vehicle.id} accessibilityRole="radio" accessibilityState={{ selected }} onPress={() => onSelectVehicle(vehicle.id)} style={[accessoryStyles.card, selected && styles.selectedCard]}><Text style={accessoryStyles.value}>{label || 'Vehicle'}</Text><Text style={accessoryStyles.body}>{vehicle.plateNumber || 'No plate recorded'}</Text></Pressable>;
+              return <Pressable key={vehicle.id} accessibilityRole="radio" accessibilityLabel={`Select ${label || 'vehicle'}, reference ${getCustomerVehicleReference(vehicle)}`} accessibilityState={{ selected }} onPress={() => onSelectVehicle(vehicle.id)} style={[accessoryStyles.card, selected && styles.selectedCard]}><Text style={accessoryStyles.value}>{label || 'Vehicle'}</Text><Text style={accessoryStyles.body}>{getCustomerVehicleReference(vehicle)} - {vehicle.plateNumber || 'No plate recorded'}</Text></Pressable>;
             })}
             {fitment ? <View style={styles.fitment}><AccessoryStatusPill status={fitment.status} /><Text style={accessoryStyles.body}>{fitment.status === 'incompatible' ? 'This verified combination cannot be ordered.' : fitment.status === 'unverified' ? 'Fitment is not verified. You will acknowledge this before checkout.' : 'This accessory can be ordered for the selected vehicle.'}</Text></View> : null}
             {fitmentLoading ? <Text accessibilityLiveRegion="polite" style={accessoryStyles.body}>Checking compatibility...</Text> : null}

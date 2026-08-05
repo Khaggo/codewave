@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { ArrowRight, Bell, ChevronDown, ClipboardList, LogOut, Menu, Search, X } from 'lucide-react'
 import PortalLink from '@/components/PortalLink'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
+import { safeBusinessReference } from '@/lib/businessReferenceDisplay.mjs'
 import { getShellRouteMeta } from './layoutShellView.mjs'
 
 const SEARCH_DESTINATIONS = [
@@ -151,7 +152,10 @@ export default function Topbar({ onMenuToggle, user, onLogout, workState }) {
   const [profileOpen, setProfileOpen] = useState(false)
   const workItem = workState?.item ?? null
   const workClaim = workItem?.claim ?? workState?.session?.currentClaim ?? null
-  const workReference = workItem?.reference || (workClaim?.entityId ? `JO-${workClaim.entityId.slice(0, 8)}` : '')
+  const workReference = safeBusinessReference(
+    workItem?.reference || workItem?.jobOrderReference || workItem?.inquiryReference || workItem?.backJobReference,
+    'My Work',
+  )
   const workHref = workItem?.jobOrderId
     ? `/admin/job-orders/${encodeURIComponent(workItem.jobOrderId)}`
     : '/admin/job-orders'

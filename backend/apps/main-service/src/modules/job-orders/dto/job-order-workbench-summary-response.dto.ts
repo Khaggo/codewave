@@ -9,7 +9,7 @@ export class JobOrderWorkbenchSummaryResponseDto {
   id!: string;
 
   @ApiProperty({
-    example: 'JO · BK-20260603-0003',
+    example: 'JO-2026-000001',
     description: 'Readable selector reference for staff workbench and QA queue surfaces.',
   })
   jobOrderReference!: string;
@@ -34,7 +34,7 @@ export class JobOrderWorkbenchSummaryResponseDto {
   sourceBookingReference!: string | null;
 
   @ApiProperty({
-    example: 'BJ-20260603-091500 · BK-20260601-0001',
+    example: 'BJ-2026-000001 · BK-20260601-0001',
     required: false,
     nullable: true,
   })

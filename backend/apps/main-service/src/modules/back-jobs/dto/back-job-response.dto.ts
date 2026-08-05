@@ -11,6 +11,11 @@ export class BackJobResponseDto {
   id!: string;
 
   @ApiProperty({
+    example: 'BJ-2026-000001',
+  })
+  backJobReference!: string;
+
+  @ApiProperty({
     example: 'a3cce1f2-a6eb-4fdd-bf11-8b17d3ddfc17',
   })
   customerUserId!: string;

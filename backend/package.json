@@ -35,9 +35,11 @@
     "smoke:job-order-qa": "node -r ts-node/register scripts/smoke-job-order-qa-release.ts",
     "smoke:notifications": "node -r ts-node/register scripts/smoke-notifications-feed.ts",
     "smoke:accessories-concurrency": "node -r dotenv/config -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/smoke-accessories-concurrency.ts dotenv_config_path=.env",
+    "smoke:panelist-references": "node -r dotenv/config -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/smoke-panelist-business-references.ts dotenv_config_path=.env",
     "seed:booking-catalog": "node -r ts-node/register scripts/seed-booking-catalog.ts",
     "seed:booking-job-order-qa-accounts": "node -r ts-node/register scripts/seed-booking-job-order-qa-accounts.ts",
-    "seed:insurance-demo": "node -r ts-node/register scripts/seed-insurance-demo.ts"
+    "seed:insurance-demo": "node -r ts-node/register scripts/seed-insurance-demo.ts",
+    "seed:super-admin": "node -r ts-node/register scripts/seed-super-admin.ts"
   },
   "keywords": [],
   "author": "",

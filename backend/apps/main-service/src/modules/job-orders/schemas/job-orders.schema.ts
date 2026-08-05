@@ -80,6 +80,11 @@ export const jobOrderPhotoLinkTypeEnum = pgEnum('job_order_photo_link_type', [
 
 export const jobOrders = pgTable('job_orders', {
   id: uuid('id').defaultRandom().primaryKey(),
+  jobOrderReference: varchar('job_order_reference', { length: 24 })
+    .notNull()
+    .default(
+      sql`('JO-' || to_char(CURRENT_TIMESTAMP, 'YYYY') || '-' || lpad(nextval('job_orders_reference_seq')::text, 6, '0'))`,
+    ),
   sourceType: jobOrderSourceTypeEnum('source_type').notNull(),
   sourceId: uuid('source_id').notNull(),
   jobType: jobOrderTypeEnum('job_type').notNull().default('normal'),
@@ -102,6 +107,7 @@ export const jobOrders = pgTable('job_orders', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   sourceUnique: uniqueIndex('job_orders_source_type_source_id_idx').on(table.sourceType, table.sourceId),
+  jobOrderReferenceUnique: uniqueIndex('job_orders_job_order_reference_idx').on(table.jobOrderReference),
   parentJobOrderForeignKey: foreignKey({
     columns: [table.parentJobOrderId],
     foreignColumns: [table.id],

@@ -4,6 +4,9 @@ export class CustomerGarageVehicleResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
+  @ApiProperty({ example: 'VEH-2026-000001' })
+  publicReference!: string;
+
   @ApiProperty({ example: 'ABC 1234' })
   plateNumber!: string;
 

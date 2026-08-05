@@ -1,8 +1,9 @@
 import { NativeModules, Platform } from 'react-native';
+import { REFERENCE_UNAVAILABLE } from './vehicleReference.mjs';
 
 const LOCAL_API_BASE_URL =
   Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://127.0.0.1:3000';
-const PRODUCTION_API_BASE_URL = 'https://api.autocare-cc.com';
+const PRODUCTION_API_BASE_URL = 'https://backend-main-production-d592.up.railway.app';
 const defaultApiBaseUrl = __DEV__ ? LOCAL_API_BASE_URL : PRODUCTION_API_BASE_URL;
 const REQUEST_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? 20000);
 const CUSTOMER_SESSION_EXPIRED_HANDLER_KEY = '__codewaveCustomerSessionExpiredHandler';
@@ -228,28 +229,6 @@ const buildVehicleDisplayName = ({ vehicleMake, vehicleModel, vehicleYear }) =>
     .filter(Boolean)
     .join(' ');
 
-const buildVehicleDisplayId = ({ displayId, plateNumber, vehicleMake, vehicleModel, vehicleYear }) => {
-  const normalizedDisplayId = trimOrUndefined(displayId);
-  if (normalizedDisplayId) {
-    return normalizedDisplayId;
-  }
-
-  const plateToken = String(plateNumber ?? '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '');
-  if (plateToken) {
-    return `VEH-${plateToken}`;
-  }
-
-  const modelToken = [vehicleYear, vehicleMake, vehicleModel]
-    .map((part) => String(part ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, ''))
-    .filter(Boolean)
-    .join('-');
-
-  return modelToken ? `VEH-${modelToken}` : 'VEH-UNLISTED';
-};
-
 const normalizeVehiclePayload = (payload = {}) => {
   const normalizedPayload = {};
 
@@ -297,6 +276,7 @@ export const normalizeVehicleRecord = (vehicle) => {
   const make = trimOrUndefined(vehicle.make) ?? '';
   const model = trimOrUndefined(vehicle.model) ?? '';
   const year = normalizeVehicleYear(vehicle.year);
+  const publicReference = trimOrUndefined(vehicle.publicReference);
 
   if (!vehicle.id && !plateNumber && !make && !model && year === null) {
     return null;
@@ -305,13 +285,8 @@ export const normalizeVehicleRecord = (vehicle) => {
   return {
     id: vehicle.id ?? null,
     userId: vehicle.userId ?? null,
-    displayId: buildVehicleDisplayId({
-      displayId: vehicle.displayId,
-      plateNumber,
-      vehicleMake: make,
-      vehicleModel: model,
-      vehicleYear: year,
-    }),
+    publicReference: publicReference ?? null,
+    displayId: publicReference ?? REFERENCE_UNAVAILABLE,
     plateNumber,
     make,
     model,

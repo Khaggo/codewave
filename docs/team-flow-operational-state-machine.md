@@ -1,7 +1,7 @@
 # AUTOCARE Operational State Machine
 
-Date: 2026-04-18  
-Purpose: Authoritative operational record-state reference for booking, appointment conversion, QA release, and timeline-triggering events
+Date: 2026-08-05
+Purpose: Authoritative operational record-state reference for booking, appointment conversion, adviser-owned workshop execution, QA release, and timeline-triggering events
 
 ## Operational State Diagram
 
@@ -65,7 +65,7 @@ These should be modeled as side effects, not as inline business-state boxes:
 | Booking create | `customer`, `service_adviser` | `main-service.bookings` | valid held slot, customer, vehicle | `booking_confirmed` | sync API | customer own booking / adviser |
 | Reschedule / decline / cancel | `customer`, `service_adviser`, `super_admin` | `main-service.bookings` | existing booking, decision, optional new slot | `booking_rescheduled`, `booking_declined`, or `booking_cancelled` | sync API | owner/adviser/admin |
 | Convert to job order | `service_adviser`, `super_admin` | `main-service.job-orders` | confirmed booking, adviser context | `job_order_active` | sync API | adviser/admin |
-| Progress and evidence updates | `technician`, `super_admin` | `main-service.job-orders` | assigned job order, notes, photos | remain in `job_order_active` with more evidence | sync API | assigned technician/admin |
-| Finalize work | `technician`, `service_adviser`, `super_admin` | `main-service.job-orders` | completed work, required evidence | `ready_for_qa` | sync API | assigned technician or adviser/admin |
+| Progress and evidence updates | `service_adviser`, `super_admin` | `main-service.job-orders` | assigned Job Order, technician-profile checklist, notes, photos | remain in `job_order_active` with more evidence | sync API | adviser/admin |
+| Finalize work | `service_adviser`, `super_admin` | `main-service.job-orders` | completed work, required evidence | `ready_for_qa` | sync API | adviser/admin |
 | QA release / rework / override | `service_adviser`, `super_admin` | `main-service.quality-gates` | finalized work package, QA analysis, reviewer decision | `rework_required` or `released` | sync API + jobs | reviewer/admin |
 | Job order close | `service_adviser`, `super_admin` | `main-service.job-orders` | released job order | `job_order_closed` | sync API | adviser/admin |

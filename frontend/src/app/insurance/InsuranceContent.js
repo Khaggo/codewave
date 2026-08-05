@@ -1,5 +1,4 @@
 'use client'
-
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as CheckboxPrimitives from '@radix-ui/react-checkbox'
 import * as Collapsible from '@radix-ui/react-collapsible'
@@ -27,6 +26,7 @@ import PageHeader from '@/components/ui/PageHeader'
 import PortalSelect from '@/components/ui/PortalSelect'
 import { useUser } from '@/lib/userContext'
 import { ApiError } from '@/lib/authClient'
+import { getInsuranceInquiryReference } from '@/lib/businessReferenceDisplay.mjs'
 import {
   getInsuranceDocumentFile,
   getInsuranceInquiryById,
@@ -470,7 +470,6 @@ function CompactActionPanel({
     </Collapsible.Root>
   )
 }
-
 function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} }) {
   if (!inquiry) {
     return (
@@ -486,10 +485,11 @@ function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} 
       <div className="grid gap-3 md:grid-cols-2">
         <DetailField label="Customer" value={inquiry.customerDisplayName} />
         <DetailField label="Vehicle" value={inquiry.vehicleLabel} />
+        <DetailField label="Case Reference" value={getInsuranceInquiryReference(inquiry)} />
         <DetailField label="Subject" value={inquiry.subject} />
         <DetailField label="Purpose" value={formatStatusLabel(inquiry.purpose)} />
         <DetailField label="Inquiry Type" value={formatStatusLabel(inquiry.inquiryType)} />
-        <DetailField label="Assigned Staff" value={inquiry.assignedStaffId} />
+        <DetailField label="Assigned Staff" value={inquiry.assignedStaffId ? 'Staff assignment recorded' : 'Unassigned'} />
         <DetailField label="Provider Name" value={inquiry.providerName} />
         <DetailField label="Policy Number" value={inquiry.policyNumber} />
         <DetailField label="Created" value={formatDateTime(inquiry.createdAt)} />
@@ -721,7 +721,7 @@ function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} 
         <DetailField label="Renewal Status" value={formatStatusLabel(inquiry.renewalStatus)} />
         <DetailField label="Policy Expiry" value={formatDateOnly(inquiry.policyExpiryAt)} />
         <DetailField label="Renewal Due" value={formatDateOnly(inquiry.renewalDueAt)} />
-        <DetailField label="Assigned Staff" value={inquiry.assignedStaffId} />
+        <DetailField label="Assigned Staff" value={inquiry.assignedStaffId ? 'Staff assignment recorded' : 'Unassigned'} />
         <div className="md:col-span-2">
           <DetailField label="Renewal Guidance" value={getInsuranceRenewalGuidance(inquiry)} />
         </div>
@@ -744,7 +744,7 @@ function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} 
             <p className="text-[11px] text-ink-muted">{formatDateTime(activityItem.createdAt)}</p>
           </div>
           <p className="mt-2 text-xs text-ink-muted">
-            Actor: {activityItem.actorUserId || 'System'}{activityItem.documentType ? ` | ${formatStatusLabel(activityItem.documentType)}` : ''}
+            Staff update{activityItem.documentType ? ` | ${formatStatusLabel(activityItem.documentType)}` : ''}
           </p>
           {activityItem.notes ? <p className="mt-2 text-sm text-ink-secondary">{activityItem.notes}</p> : null}
         </div>
@@ -870,7 +870,7 @@ export default function InsuranceContent() {
 
     return liveQueueInquiries.filter((inquiry) =>
       [
-        inquiry.id,
+        inquiry.inquiryReference,
         inquiry.customerDisplayName,
         inquiry.vehicleLabel,
         inquiry.subject,
@@ -1069,7 +1069,7 @@ export default function InsuranceContent() {
       }),
     [broadcastMessage, broadcastTargetMode, broadcastTitle, filteredInquiries.length, selectedInquiryIds],
   )
-  const currentCaseLabel = selectedInquiry?.subject || selectedInquiry?.id || 'No case selected'
+  const currentCaseLabel = selectedInquiry?.subject || getInsuranceInquiryReference(selectedInquiry) || 'No case selected'
   const workspaceSections = useMemo(() => buildInsuranceWorkspaceSections(), [])
   const primaryFocus = useMemo(
     () =>
@@ -1794,13 +1794,13 @@ export default function InsuranceContent() {
                           <SurfaceCheckbox
                             checked={selectedInquiryIds.includes(inquiry.id)}
                             onCheckedChange={() => toggleInquirySelection(inquiry.id)}
-                            label={`Select insurance case ${inquiry.subject || inquiry.id}`}
+                            label={`Select insurance case ${inquiry.subject || getInsuranceInquiryReference(inquiry)}`}
                           />
                         </td>
                         <td>
                           <div className="space-y-1">
                             <p className="font-semibold text-ink-primary">{row.customer}</p>
-                            <p className="text-xs text-ink-muted">{inquiry.subject || inquiry.id}</p>
+                            <p className="text-xs text-ink-muted">{inquiry.subject || getInsuranceInquiryReference(inquiry)}</p>
                           </div>
                         </td>
                         <td>{row.vehicle}</td>

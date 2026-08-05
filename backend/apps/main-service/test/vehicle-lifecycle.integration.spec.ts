@@ -1,10 +1,39 @@
 import request from 'supertest';
 
+import type { VehicleLifecycleSummaryProvider } from '../src/modules/vehicle-lifecycle/services/vehicle-lifecycle-summary-provider.types';
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
+
+const testAiSummaryProvider: VehicleLifecycleSummaryProvider = {
+  assertAvailable: () => undefined,
+  buildQueuedProvenance: (events) => ({
+    provider: 'test-openai-compatible',
+    model: 'test-summary-model',
+    promptVersion: 'vehicle-lifecycle.summary.v2',
+    evidenceRefs: events.map(
+      (event) => `${event.sourceType}:${event.eventType}:${event.occurredAt.toISOString().slice(0, 10)}`,
+    ),
+    evidenceSummary: 'Customer-safe integration-test lifecycle evidence.',
+  }),
+  generate: async (input) => ({
+    summaryText: `${input.vehicleLabel} has reviewed lifecycle activity ready for staff verification.`,
+    provenance: {
+      provider: 'test-openai-compatible',
+      model: 'test-summary-model',
+      promptVersion: 'vehicle-lifecycle.summary.v2',
+      evidenceRefs: input.timelineEvents.map(
+        (event) => `${event.sourceType}:${event.eventType}:${event.occurredAt.toISOString().slice(0, 10)}`,
+      ),
+      evidenceSummary: 'Customer-safe integration-test lifecycle evidence.',
+    },
+  }),
+};
+
+const createVehicleLifecycleTestApp = () =>
+  createMainServiceTestApp({ aiSummaryProvider: testAiSummaryProvider });
 
 describe('VehicleLifecycleController integration', () => {
   it('returns a deterministic timeline with administrative and verified entries', async () => {
-    const { app, seedAuthUser } = await createMainServiceTestApp();
+    const { app, seedAuthUser } = await createVehicleLifecycleTestApp();
 
     try {
       const adviser = await seedAuthUser({
@@ -205,7 +234,7 @@ describe('VehicleLifecycleController integration', () => {
   });
 
   it('returns 404 for a missing vehicle timeline', async () => {
-    const { app, seedAuthUser } = await createMainServiceTestApp();
+    const { app, seedAuthUser } = await createVehicleLifecycleTestApp();
 
     try {
       const customer = await seedAuthUser({
@@ -230,7 +259,7 @@ describe('VehicleLifecycleController integration', () => {
   });
 
   it('generates and reviews lifecycle summaries while keeping customer visibility gated', async () => {
-    const { app, seedAuthUser } = await createMainServiceTestApp();
+    const { app, seedAuthUser } = await createVehicleLifecycleTestApp();
 
     try {
       const adviser = await seedAuthUser({
@@ -331,9 +360,9 @@ describe('VehicleLifecycleController integration', () => {
       );
       expect(generateResponse.body.provenance).toEqual(
         expect.objectContaining({
-          provider: 'ai-worker-placeholder',
-          model: 'queued-summary-generation',
-          promptVersion: 'vehicle-lifecycle.summary.v1',
+          provider: 'test-openai-compatible',
+          model: 'test-summary-model',
+          promptVersion: 'vehicle-lifecycle.summary.v2',
         }),
       );
       expect(generateResponse.body.generationJob).toEqual(
@@ -378,7 +407,7 @@ describe('VehicleLifecycleController integration', () => {
   });
 
   it('expands the lifecycle timeline with job-order, QA, and reviewed-summary events', async () => {
-    const { app, seedAuthUser } = await createMainServiceTestApp();
+    const { app, seedAuthUser } = await createVehicleLifecycleTestApp();
 
     try {
       const adviser = await seedAuthUser({

@@ -97,44 +97,46 @@ export class JobOrdersRepository extends BaseRepository {
   }
 
   async create(payload: CreateJobOrderPersistenceInput) {
-    const createdRows = await this.db
-      .insert(jobOrders)
-      .values({
-        sourceType: payload.sourceType,
-        sourceId: payload.sourceId,
-        jobType: payload.jobType,
-        parentJobOrderId: payload.parentJobOrderId ?? null,
-        customerUserId: payload.customerUserId,
-        vehicleId: payload.vehicleId,
-        serviceAdviserUserId: payload.serviceAdviserUserId,
-        serviceAdviserCode: payload.serviceAdviserCode,
-        status: payload.status,
-        notes: payload.notes ?? null,
-      })
-      .returning();
-    const createdJobOrder = this.assertFound(createdRows[0], 'Job order not found');
+    return this.db.transaction(async (tx) => {
+      const createdRows = await tx
+        .insert(jobOrders)
+        .values({
+          sourceType: payload.sourceType,
+          sourceId: payload.sourceId,
+          jobType: payload.jobType,
+          parentJobOrderId: payload.parentJobOrderId ?? null,
+          customerUserId: payload.customerUserId,
+          vehicleId: payload.vehicleId,
+          serviceAdviserUserId: payload.serviceAdviserUserId,
+          serviceAdviserCode: payload.serviceAdviserCode,
+          status: payload.status,
+          notes: payload.notes ?? null,
+        })
+        .returning();
+      const createdJobOrder = this.assertFound(createdRows[0], 'Job order not found');
 
-    await this.db.insert(jobOrderItems).values(
-      payload.items.map((item, index) => ({
-        jobOrderId: createdJobOrder.id,
-        name: item.name,
-        description: item.description ?? null,
-        estimatedHours: item.estimatedHours ?? null,
-        sortOrder: index,
-      })),
-    );
-
-    if (payload.assignments?.length) {
-      await this.db.insert(jobOrderAssignments).values(
-        payload.assignments.map((assignment) => ({
+      await tx.insert(jobOrderItems).values(
+        payload.items.map((item, index) => ({
           jobOrderId: createdJobOrder.id,
-          technicianProfileId: assignment.technicianProfileId,
-          selectedSpecialty: assignment.selectedSpecialty,
+          name: item.name,
+          description: item.description ?? null,
+          estimatedHours: item.estimatedHours ?? null,
+          sortOrder: index,
         })),
       );
-    }
 
-    return this.findById(createdJobOrder.id);
+      if (payload.assignments?.length) {
+        await tx.insert(jobOrderAssignments).values(
+          payload.assignments.map((assignment) => ({
+            jobOrderId: createdJobOrder.id,
+            technicianProfileId: assignment.technicianProfileId,
+            selectedSpecialty: assignment.selectedSpecialty,
+          })),
+        );
+      }
+
+      return this.findById(createdJobOrder.id, tx);
+    });
   }
 
   async findById(id: string, db: AppDatabase = this.db) {

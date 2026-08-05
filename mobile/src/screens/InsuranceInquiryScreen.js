@@ -2,7 +2,6 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
@@ -50,6 +49,7 @@ import {
   InsuranceSectionDivider,
 } from './insurance/InsurancePanelPrimitives';
 import InsuranceRequestPanel from './insurance/InsuranceRequestPanel';
+import InsuranceStatePanel from './insurance/InsuranceStatePanel';
 import InsuranceStatusDetailPanel from './insurance/InsuranceStatusDetailPanel';
 import InsuranceVehiclePicker from './insurance/InsuranceVehiclePicker';
 import {
@@ -70,53 +70,6 @@ const normalizeRouteId = (value) => {
   const normalizedValue = typeof value === 'string' ? value.trim() : '';
   return normalizedValue.length ? normalizedValue : null;
 };
-
-function InsuranceStatePanel({
-  icon,
-  title,
-  message,
-  actionLabel,
-  onAction,
-  tone = 'default',
-  loading = false,
-}) {
-  return (
-    <View
-      style={[
-        styles.statePanel,
-        tone === 'danger' && styles.statePanelDanger,
-        tone === 'warning' && styles.statePanelWarning,
-        tone === 'success' && styles.statePanelSuccess,
-      ]}
-    >
-      <View style={styles.statePanelHeader}>
-        <View style={styles.statePanelIconWrap}>
-          {loading ? (
-            <ActivityIndicator color={colors.primary} size="small" />
-          ) : (
-            <MaterialCommunityIcons name={icon} size={20} color={colors.primary} />
-          )}
-        </View>
-        <View style={styles.statePanelCopy}>
-          <Text style={styles.statePanelTitle}>{title}</Text>
-          <Text style={styles.statePanelText}>{message}</Text>
-        </View>
-      </View>
-
-      {actionLabel && onAction ? (
-        <TouchableOpacity
-          style={styles.statePanelButton}
-          onPress={onAction}
-          activeOpacity={0.88}
-          accessibilityRole="button"
-          accessibilityLabel={actionLabel}
-        >
-          <Text style={styles.statePanelButtonText}>{actionLabel}</Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
-}
 
 export default function InsuranceInquiryScreen({ account, navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -1124,6 +1077,9 @@ export default function InsuranceInquiryScreen({ account, navigation, route }) {
             onAction={() => handleChangeInsuranceTab(statusState.ctaRouteKey)}
           >
             <InsuranceSectionDivider title="Request path">
+              <Text style={styles.statusSectionMeta}>
+                Reference: {currentRequestSummary.referenceLabel ?? 'Reference unavailable'}
+              </Text>
               <Text style={styles.statusSectionMeta}>
                 {currentRequestSummary.purposeLabel} - {currentRequestSummary.inquiryTypeLabel}
               </Text>

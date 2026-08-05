@@ -2,11 +2,12 @@ import {
   Activity,
   AlertTriangle,
   CalendarClock,
-  PlusCircle,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react'
+import PortalSelect from '@/components/ui/PortalSelect'
+import { getVehicleReference } from '@/lib/businessReferenceDisplay.mjs'
 import { formatStatusLabel } from '../insuranceView.mjs'
 
 const POSITIVE_BADGE_VALUES = new Set(['active', 'renewed'])
@@ -26,7 +27,6 @@ const getBadgeClassName = (value) => {
   if (INFO_BADGE_VALUES.has(value)) return 'badge-blue'
   return 'badge-gray'
 }
-
 const formatDateTime = (value) => {
   if (!value) return 'Not available'
 
@@ -43,7 +43,6 @@ const formatDateTime = (value) => {
     minute: '2-digit',
   })
 }
-
 export const formatDateOnly = (value) => {
   if (!value) return 'Not set'
 
@@ -78,7 +77,6 @@ export function SummaryTile({ icon: Icon, label, value, sub }) {
     </div>
   )
 }
-
 const getFocusToneClasses = (tone) => {
   if (tone === 'urgent') {
     return 'border-[#f07c00]/30 bg-[#f07c00]/10 text-[#ffddb8]'
@@ -112,7 +110,6 @@ export function WorkspaceFocusBanner({ title, detail, tone = 'focused', meta = [
     </div>
   )
 }
-
 export function WorkspaceSignalCard({ eyebrow, title, detail, tone = 'neutral' }) {
   const toneClasses =
     tone === 'positive'
@@ -129,7 +126,6 @@ export function WorkspaceSignalCard({ eyebrow, title, detail, tone = 'neutral' }
     </div>
   )
 }
-
 export function BlockingState({ title, copy }) {
   return (
     <div className="empty-panel px-5 py-10 text-center">
@@ -139,7 +135,6 @@ export function BlockingState({ title, copy }) {
     </div>
   )
 }
-
 export function EmptyPanel({ title, copy }) {
   return (
     <div className="empty-panel px-4 py-10 text-center">
@@ -181,6 +176,7 @@ export function FilterSelect({ label, value, onChange, options, disabled = false
 }
 
 export function RenewalsDetailPanel({
+  assignedStaffLabel,
   detailMessage,
   detailState,
   onRefreshDetail,
@@ -234,7 +230,8 @@ export function RenewalsDetailPanel({
           <div className="grid gap-3 md:grid-cols-2">
             <DetailField label="Customer" value={selectedInquiry.customerDisplayName} />
             <DetailField label="Vehicle" value={selectedInquiry.vehicleLabel} />
-            <DetailField label="Subject" value={selectedInquiry.subject || selectedInquiry.id} />
+            <DetailField label="Case Reference" value={selectedInquiry.inquiryReference} />
+            <DetailField label="Subject" value={selectedInquiry.subject} />
             <DetailField label="Inquiry Type" value={formatStatusLabel(selectedInquiry.inquiryType)} />
             <DetailField label="Provider Name" value={selectedInquiry.providerName} />
             <DetailField label="Policy Number" value={selectedInquiry.policyNumber} />
@@ -244,7 +241,7 @@ export function RenewalsDetailPanel({
               value={formatDateOnly(selectedInquiry.renewalDueAt)}
               accent={selectedRow.timeWindow === 'Overdue'}
             />
-            <DetailField label="Assigned Staff" value={selectedInquiry.assignedStaffId} />
+            <DetailField label="Assigned Staff" value={assignedStaffLabel} />
             <DetailField label="Last Updated" value={formatDateTime(selectedInquiry.updatedAt)} />
             <div className="md:col-span-2">
               <DetailField label="Description" value={selectedInquiry.description} />
@@ -273,7 +270,7 @@ export function RenewalsDetailPanel({
                       <p className="text-[11px] text-ink-muted">{formatDateTime(activityItem.createdAt)}</p>
                     </div>
                     <p className="mt-2 text-xs text-ink-muted">
-                      Actor: {activityItem.actorUserId || 'System'}
+                      Staff update
                     </p>
                     {activityItem.notes ? (
                       <p className="mt-2 text-sm text-ink-secondary">{activityItem.notes}</p>
@@ -302,6 +299,7 @@ export function RenewalsWorkflowPanel({
   onDraftChange,
   onSave,
   renewalStatusOptions,
+  staffOptions = [],
   selectedInquiry,
   selectedRow,
   submitDisabled,
@@ -426,12 +424,17 @@ export function RenewalsWorkflowPanel({
         </label>
 
         <label className="label">
-          Assigned Staff Id
-          <input
+          Assigned Staff
+          <PortalSelect
             value={updateDraft.assignedStaffId}
-            onChange={(event) => onDraftChange('assignedStaffId', event.target.value)}
-            className="input"
-            placeholder="service-adviser-id"
+            onValueChange={(value) => onDraftChange('assignedStaffId', value)}
+            items={staffOptions.map((account) => ({
+              value: account.id,
+              label: account.displayName || account.email || account.staffCode || 'Staff member',
+              helper: account.roleLabel || account.staffCode || 'Staff account',
+            }))}
+            placeholder="Choose staff owner"
+            emptyOptionLabel="Unassigned"
             disabled={!selectedInquiry || isTerminalInquiry}
           />
         </label>
@@ -491,195 +494,6 @@ export function RenewalsWorkflowPanel({
 
       <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-ink-muted">
         <span className="badge badge-gray">Renewal fields only</span>
-      </div>
-    </div>
-  )
-}
-
-export function RenewalCreationPanel({
-  createDraft,
-  createMessage,
-  createState,
-  inquiryTypeOptions,
-  onCreate,
-  onDraftChange,
-  submitDisabled,
-}) {
-  const creationReady =
-    String(createDraft.userId ?? '').trim() &&
-    String(createDraft.vehicleId ?? '').trim() &&
-    String(createDraft.subject ?? '').trim() &&
-    String(createDraft.renewalDueAt ?? '').trim()
-
-  return (
-    <div className="card p-4 md:p-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="card-title">Manual Renewal Follow-Up</p>
-          <p className="mt-1 text-xs text-ink-muted">Create a staff-owned renewal case.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <span className="badge badge-green">Manual follow-up route</span>
-          <span className="badge badge-gray">Creates purpose `renewal`</span>
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px]">
-        <WorkspaceSignalCard
-          eyebrow="Creation readiness"
-          title={creationReady ? 'Ready for a staff-owned follow-up' : 'Needs the core renewal identifiers first'}
-          detail={
-            creationReady
-              ? 'This draft has the minimum queue anchors to create a renewal and send it straight into staff follow-up.'
-              : 'User, vehicle, subject, and a renewal due date give the queue enough structure to stay useful after creation.'
-          }
-          tone={creationReady ? 'positive' : 'warning'}
-        />
-        <div className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Quick state</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className={`badge ${creationReady ? 'badge-green' : 'badge-gray'}`}>
-              {creationReady ? 'Ready' : 'Needs basics'}
-            </span>
-            <span className="badge badge-gray">Creates renewal purpose</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <label className="label">
-          Customer User Id
-          <input
-            value={createDraft.userId}
-            onChange={(event) => onDraftChange('userId', event.target.value)}
-            className="input"
-            placeholder="user-id"
-          />
-        </label>
-
-        <label className="label">
-          Vehicle Id
-          <input
-            value={createDraft.vehicleId}
-            onChange={(event) => onDraftChange('vehicleId', event.target.value)}
-            className="input"
-            placeholder="vehicle-id"
-          />
-        </label>
-
-        <FilterSelect
-          label="Inquiry Type"
-          value={createDraft.inquiryType}
-          onChange={(event) => onDraftChange('inquiryType', event.target.value)}
-          options={inquiryTypeOptions}
-        />
-
-        <label className="label">
-          Assigned Staff Id
-          <input
-            value={createDraft.assignedStaffId}
-            onChange={(event) => onDraftChange('assignedStaffId', event.target.value)}
-            className="input"
-            placeholder="service-adviser-id"
-          />
-        </label>
-
-        <label className="label md:col-span-2">
-          Subject
-          <input
-            value={createDraft.subject}
-            onChange={(event) => onDraftChange('subject', event.target.value)}
-            className="input"
-            placeholder="Renewal due next month"
-          />
-        </label>
-
-        <label className="label md:col-span-2">
-          Description
-          <textarea
-            value={createDraft.description}
-            onChange={(event) => onDraftChange('description', event.target.value)}
-            rows={4}
-            className="input min-h-[120px] resize-y"
-            placeholder="Capture why staff are creating this renewal follow-up and what the next outreach should cover."
-          />
-        </label>
-
-        <label className="label">
-          Renewal Due Date
-          <input
-            type="date"
-            value={createDraft.renewalDueAt}
-            onChange={(event) => onDraftChange('renewalDueAt', event.target.value)}
-            className="input"
-          />
-        </label>
-
-        <label className="label">
-          Policy Expiry Date
-          <input
-            type="date"
-            value={createDraft.policyExpiryAt}
-            onChange={(event) => onDraftChange('policyExpiryAt', event.target.value)}
-            className="input"
-          />
-        </label>
-
-        <label className="label">
-          Provider Name
-          <input
-            value={createDraft.providerName}
-            onChange={(event) => onDraftChange('providerName', event.target.value)}
-            className="input"
-            placeholder="Insurer name"
-          />
-        </label>
-
-        <label className="label">
-          Policy Number
-          <input
-            value={createDraft.policyNumber}
-            onChange={(event) => onDraftChange('policyNumber', event.target.value)}
-            className="input"
-            placeholder="Policy number"
-          />
-        </label>
-
-        <label className="label md:col-span-2">
-          Internal Notes
-          <textarea
-            value={createDraft.notes}
-            onChange={(event) => onDraftChange('notes', event.target.value)}
-            rows={3}
-            className="input min-h-[100px] resize-y"
-            placeholder="Optional context for the staff-created follow-up."
-          />
-        </label>
-      </div>
-
-      {createMessage ? (
-        <div
-          className={`mt-4 ${
-            createState === 'created'
-              ? 'status-message status-message-success'
-              : createState === 'forbidden_role'
-                ? 'status-message status-message-warning'
-                : 'status-message status-message-danger'
-          }`}
-        >
-          {createMessage}
-        </div>
-      ) : null}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button onClick={onCreate} disabled={submitDisabled} className="btn-primary">
-          {createState === 'submitting' ? <RefreshCw size={14} className="animate-spin" /> : <PlusCircle size={14} />}
-          Create Renewal Follow-Up
-        </button>
-        <div className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-[11px] text-ink-muted">
-          <CalendarClock size={14} />
-          Returns to the queue after save.
-        </div>
       </div>
     </div>
   )

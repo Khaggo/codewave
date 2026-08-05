@@ -46,6 +46,18 @@ const CURRENT_LOYALTY_SOURCE_TYPES = new Set([
   'manual_adjustment',
   'service_reversal',
 ]);
+const CUSTOMER_SAFE_SERVICE_LABELS: Record<string, string> = {
+  body_work: 'Body work',
+  brake_service: 'Brake service',
+  collision_repair: 'Collision repair',
+  detailing: 'Detailing',
+  diagnostic: 'Diagnostics',
+  insurance_claim: 'Insurance claim service',
+  maintenance: 'Maintenance',
+  oil_change: 'Oil change',
+  repair: 'Repair',
+  tire_service: 'Tire service',
+};
 
 @Injectable()
 export class LoyaltyService {
@@ -133,6 +145,26 @@ export class LoyaltyService {
     await this.assertSuperAdminActor(actor.userId);
     const rules = await this.loyaltyRepository.listEarningRules({ includeInactive: true });
     return rules.map((rule) => this.toServiceEarningRule(rule));
+  }
+
+  async getEarningPolicy(actor: LoyaltyActor) {
+    const resolvedActor = await this.assertActiveActor(actor.userId);
+    if (!['customer', 'service_adviser', 'super_admin'].includes(resolvedActor.role)) {
+      throw new ForbiddenException('Only customers or staff roles can access the loyalty earning policy');
+    }
+
+    const rules = await this.loyaltyRepository.listActiveEarningRules();
+
+    return {
+      summary: rules.length
+        ? 'Points are earned after eligible paid service invoices are settled.'
+        : 'There are no active loyalty earning rules right now.',
+      requirements: rules.map((rule) => ({
+        formula: this.toCustomerFormula(rule),
+        eligibility: this.toCustomerEligibility(rule),
+      })),
+      exclusions: ['Accessory purchases are not currently eligible for loyalty points.'],
+    };
   }
 
   async createEarningRule(payload: CreateEarningRuleDto, actor: LoyaltyActor) {
@@ -473,6 +505,58 @@ export class LoyaltyService {
         createdAt: audit.createdAt,
       })),
     };
+  }
+
+  private toCustomerFormula(rule: LoyaltyEarningRuleRecord) {
+    if (rule.formulaType === 'flat_points' && rule.flatPoints) {
+      return `Earn ${rule.flatPoints} ${rule.flatPoints === 1 ? 'point' : 'points'} for each eligible paid service invoice.`;
+    }
+
+    if (rule.formulaType === 'amount_ratio' && rule.amountStepCents && rule.pointsPerStep) {
+      const pointsLabel = rule.pointsPerStep === 1 ? 'point' : 'points';
+      return `Earn ${rule.pointsPerStep} ${pointsLabel} for every ${this.formatCustomerAmount(rule.amountStepCents)} paid on an eligible service.`;
+    }
+
+    return 'Earn points according to the active paid-service rule.';
+  }
+
+  private toCustomerEligibility(rule: LoyaltyEarningRuleRecord) {
+    const conditions = ['Payment must be settled for a service invoice.'];
+
+    if (rule.minimumAmountCents && rule.minimumAmountCents > 0) {
+      conditions.push(
+        `A minimum payment of ${this.formatCustomerAmount(rule.minimumAmountCents)} applies.`,
+      );
+    }
+
+    if (rule.eligibleServiceTypes?.length) {
+      conditions.push(this.toCustomerServiceEligibility('types', rule.eligibleServiceTypes));
+    }
+
+    if (rule.eligibleServiceCategories?.length) {
+      conditions.push(
+        this.toCustomerServiceEligibility('categories', rule.eligibleServiceCategories),
+      );
+    }
+
+    return conditions.join(' ');
+  }
+
+  private formatCustomerAmount(amountCents: number) {
+    return `PHP ${(amountCents / 100).toFixed(2)}`;
+  }
+
+  private toCustomerServiceEligibility(kind: 'types' | 'categories', values: string[]) {
+    const labels = values
+      .map((value) => CUSTOMER_SAFE_SERVICE_LABELS[value.trim().toLowerCase()])
+      .filter((value): value is string => Boolean(value));
+    const label = kind === 'types' ? 'service types' : 'service categories';
+
+    if (!labels.length) {
+      return `Only qualifying ${label} selected by the workshop are eligible.`;
+    }
+
+    return `Eligible ${label}: ${labels.join(', ')}.`;
   }
 
   private async assertCanAccessAccount(userId: string, actor: LoyaltyActor) {

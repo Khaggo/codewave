@@ -12,7 +12,7 @@ export class CustomerServiceHistoryResponseDto {
   jobOrderId!: string;
 
   @ApiProperty({
-    example: 'JO-5E5C598C',
+    example: 'JO-2026-000001',
   })
   jobOrderReference!: string;
 

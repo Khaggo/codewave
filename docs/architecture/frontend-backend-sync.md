@@ -63,7 +63,8 @@ This file defines the canonical coordination model between frontend and backend 
 ## Customer Mobile Navigation
 
 - Customer mobile uses five primary destinations: `Home`, `Garage`, `Book`, `Insurance`, and `More`.
-- `Rewards` and `Shop` remain supported under `More` and may also appear as contextual Home shortcuts.
+- `Rewards` and approved `Accessories` remain supported under `More` and may also appear as
+  contextual Home shortcuts. The retired generic Shop/ecommerce surface is not a current route.
 - Garage is the authoritative vehicle-first surface for vehicle selection, Add Vehicle, live summary, and paginated timeline access. Dashboard cards may link into Garage but must not own a competing full implementation.
 - Insurance is a guided inquiry and document-tracking service. It must not imply insurer approval, repair authorization, or claim settlement.
 - Customer responses must come from customer-specific projections; client-side sanitization is defense in depth, not the privacy boundary.

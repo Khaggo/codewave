@@ -97,9 +97,12 @@ export default function InsuranceStatusDetailPanel({
     >
       <InsurancePanelShell eyebrow={eyebrow} title={title} subtitle={subtitle}>
         <InsuranceSectionDivider title="Current status" leading>
-          <View style={styles.currentStatusCard}>
-            <Text style={styles.statusTitle}>{statusState.title}</Text>
-            <Text style={styles.statusSummary}>{statusState.summary}</Text>
+            <View style={styles.currentStatusCard}>
+              <Text style={styles.statusTitle}>{statusState.title}</Text>
+              <Text style={styles.statusSummary}>
+                Reference: {statusState.inquiryReference ?? 'Reference unavailable'}
+              </Text>
+              <Text style={styles.statusSummary}>{statusState.summary}</Text>
             {statusState.ctaRouteKey !== 'status' && statusState.ctaLabel && onAction ? (
               <TouchableOpacity
                 style={styles.statusAction}

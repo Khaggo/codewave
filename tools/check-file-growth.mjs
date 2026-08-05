@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import { shouldSkipRepositoryDirectory } from './repo-policy-check.mjs';
+
 const root = process.cwd();
 const baseline = JSON.parse(
   readFileSync(path.join(root, 'tools', 'quality-baseline.json'), 'utf8'),
@@ -21,14 +23,7 @@ const visit = (directory) => {
   for (const entry of readdirSync(directory)) {
     const entryPath = path.join(directory, entry);
     const relative = normalize(path.relative(root, entryPath));
-    if (
-      entry === 'node_modules' ||
-      entry === '.runtime' ||
-      entry.startsWith('.next') ||
-      entry === 'coverage' ||
-      entry === 'dist' ||
-      entry === 'graphify-out'
-    ) {
+    if (shouldSkipRepositoryDirectory(entry)) {
       continue;
     }
 

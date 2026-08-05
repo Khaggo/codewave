@@ -1,7 +1,7 @@
 # AUTOCARE Combined Mermaid Pack
 
-Date: 2026-04-18  
-Purpose: Three Mermaid-safe diagrams: a unified flow, a dedicated admin flow, and a required-data map, updated for service-payment-only loyalty.
+Date: 2026-08-05
+Purpose: Three Mermaid-safe diagrams: a unified flow, a dedicated staff flow, and a required-data map for the current service-only product plus bounded mobile Accessories pickup.
 
 ## 1. Combined System Flow
 
@@ -23,20 +23,20 @@ flowchart TD
   C6 --> C12[Loyalty]
   C12 --> C13[Redeem Reward]
 
-  C6 --> C14[Shop]
-  C14 --> C15[Cart]
-  C15 --> C16[Checkout]
-  C16 --> E1[Create Order]
+  C6 --> C14[Accessories from More or Home]
+  C14 --> C15[Catalog and Fitment]
+  C15 --> C16[Cart and Pickup Checkout]
+  C16 --> E1[Create Accessory Order]
   E1 --> E2[Reserve Stock]
-  E2 --> E3[Invoice and Payment]
-  E3 --> E4[Fulfillment]
+  E2 --> E3[PayMongo or Pay at Shop]
+  E3 --> E4[Single-Shop Pickup Fulfillment]
 
   S1[Web Entry] --> S2[Staff Login]
   S2 --> S3[Role Check]
   S3 --> S4[Dashboard]
   S4 --> S5[Booking Queue]
   S5 --> S6[Create Job Order]
-  S6 --> S7[Assign Tech]
+  S6 --> S7[Assign Technician Profile]
   S7 --> S8[Work Update]
   S8 --> S9[Upload Evidence]
   S9 --> S10[QA Review]
@@ -47,7 +47,7 @@ flowchart TD
   S13 --> S14[Claim Update]
   S4 --> S15[Loyalty Admin]
   S15 --> S15A[Configure Rewards]
-  S15 --> S15B[Configure Earning Rules]
+  S15 --> S15B[Configure Service Earning Rules]
   S4 --> S16[Staff Provision]
 
   C9 --> S5
@@ -64,8 +64,8 @@ flowchart TD
 
   S14 --> A4[Claim Notice]
 
-  E1 --> A5[Stock Update]
-  E1 --> A6[Fulfillment Alert]
+  E1 --> A5[Accessory Stock Update]
+  E1 --> A6[Pickup Fulfillment Alert]
 
   C4 --> A7[OTP Job]
   A7 --> A8[Email Delivery]
@@ -98,8 +98,8 @@ flowchart LR
   N6[Redeem Reward] --> N6A[UI: reward choice]
   N6 --> N6B[System: loyalty account, points balance]
 
-  N7[Checkout] --> N7A[UI: cart items, quantity, checkout action]
-  N7 --> N7B[System: product snapshot, stock state]
+  N7[Accessory Checkout] --> N7A[UI: variant, quantity, pickup, payment choice]
+  N7 --> N7B[System: product snapshot, fitment acknowledgement, stock reservation]
   N7 --> N7C[System: active customer session]
 
   N8[Create Job Order] --> N8A[UI: adviser decision, technician assignment]
@@ -166,4 +166,9 @@ flowchart TD
 - Use the second diagram when you want to explain what data each major node depends on.
 - Use the third diagram when you need a standalone admin/staff Mermaid flow.
 - Loyalty is earned only from successful paid service work.
+- Accessories is a mobile-only, single-shop pickup flow with explicit fitment acknowledgement;
+  it is separate from service Job Orders, QA, invoices, and loyalty accrual.
+- Technicians are non-login profiles. Advisers and super admins own workshop actions.
+- Visible vehicle, Job Order, insurance, and back-job references are persisted business IDs, not
+  UUID fragments.
 - If your Mermaid renderer is strict, test this file first before using the more detailed engineering documentation.

@@ -11,6 +11,11 @@ export class JobOrderInvoiceLookupResponseDto {
   id!: string;
 
   @ApiProperty({
+    example: 'JO-2026-000001',
+  })
+  jobOrderReference!: string;
+
+  @ApiProperty({
     enum: jobOrderStatusEnum.enumValues,
     example: 'finalized',
   })

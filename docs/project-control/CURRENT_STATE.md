@@ -1,6 +1,6 @@
 # AUTOCARE Current State
 
-Last updated: 2026-08-03
+Last updated: 2026-08-05
 
 ## Project Goal
 
@@ -74,6 +74,12 @@ Managed commands are detached and bounded. Use `npm run runtime:status`, `runtim
 
 ## Verification Baseline
 
+Current panel-remediation verification (2026-08-05) reports web `230/230`, mobile `213/213`,
+focused backend AI/reference/loyalty `21/21`, migration smoke passed, contract drift passed,
+backend typecheck passed, and repository policy checks passed. The current evidence is focused
+implementation evidence; live Playwright, production performance, and respondent survey results
+remain pending.
+
 The current scope-aligned baseline requires:
 
 - backend typecheck, targeted tests, full serial tests, and production build;
@@ -82,6 +88,9 @@ The current scope-aligned baseline requires:
 - runtime-manager tests;
 - OpenAPI contract drift, architecture documentation, agent manifest, and migration consistency checks;
 - zero stale route, import, environment, generated-contract, or runtime references outside active service workflows.
+
+The ISO/IEC 25010 instrument and survey boundary are recorded in
+[`ISO_25010_INSTRUMENT.md`](./ISO_25010_INSTRUMENT.md).
 
 Exact results are recorded in [`QA_LEDGER.md`](./QA_LEDGER.md).
 

@@ -117,7 +117,7 @@ export const getBackJobById = async ({ accessToken, backJobId }) => {
   const normalizedBackJobId = trimOrUndefined(backJobId);
 
   if (!normalizedBackJobId) {
-    throw new ApiError('Enter a back-job id before loading detail.', 400, {
+    throw new ApiError('Choose a back-job case before loading detail.', 400, {
       path: '/api/back-jobs/:id',
     });
   }
@@ -134,7 +134,7 @@ export const listBackJobsByVehicle = async ({ accessToken, vehicleId }) => {
   const normalizedVehicleId = trimOrUndefined(vehicleId);
 
   if (!normalizedVehicleId) {
-    throw new ApiError('Enter a vehicle id before loading back-jobs.', 400, {
+    throw new ApiError('Choose a vehicle before loading back-jobs.', 400, {
       path: '/api/vehicles/:id/back-jobs',
     });
   }

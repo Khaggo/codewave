@@ -1,5 +1,7 @@
 import { Clock3 } from 'lucide-react'
 
+import { safeBusinessReference } from '@/lib/businessReferenceDisplay.mjs'
+
 function formatWait(value) {
   if (value === null || value === undefined || String(value).trim() === '') return ''
   const time = new Date(value).getTime()
@@ -11,7 +13,10 @@ function formatWait(value) {
 }
 
 function itemTitle(item) {
-  return item.reference || item.jobOrderId || item.bookingId || item.entityId || 'Unidentified work item'
+  return safeBusinessReference(
+    item.reference || item.jobOrderReference || item.inquiryReference || item.backJobReference,
+    'Work item',
+  )
 }
 
 export default function StaffWorkQueueItem({

@@ -1,8 +1,31 @@
 # Implementation Roadmap
 
-Last updated: 2026-08-03
+Last updated: 2026-08-05
 
 This roadmap is ordered for panel recovery. Do not work only on nice-to-have UI polish while objective-critical features remain unproven.
+
+## Delivery Method and Evidence Rule
+
+AUTOCARE uses **Kanban** for implementation and panel recovery. Work is pulled through
+explicit `ready`, `in_progress`, `review`, `verified`, and `deferred` states; WIP is kept
+visible in the project-control pack, and a ticket is not considered verified without a named
+test or evidence source. Sprint headings below are planning groupings, not a Scrum cadence or
+claim of fixed iterations.
+
+## Verified Remediation Gate - 2026-08-05
+
+- Persisted immutable VEH/JO/INS/BJ references are implemented through
+  `0003_panelist_alignment_ids`; migration smoke and concurrent reference proof pass.
+- The OpenAI-compatible lifecycle-summary provider is optional and disabled by default. AI output
+  remains filtered, provenance-backed, and hidden until human review.
+- The customer-safe loyalty earning-policy endpoint and mobile display are implemented; Accessories
+  purchases are not represented as eligible points activity.
+- Staff/customer reference rendering, selectors, Garage consolidation, and Insurance customer-safe
+  recovery paths are present in the current tree.
+- Verified focused results are web `230/230`, mobile `213/213`, focused backend AI/reference/loyalty
+  `21/21`, migration smoke passed, contract drift passed, typecheck passed, and policy checks passed.
+- Live Playwright and respondent survey results remain separate pending evidence. Do not move those
+  items to `verified` based on focused tests alone.
 
 ## Active Delivery: Accessories Store
 
@@ -134,3 +157,8 @@ Acceptance:
 
 - Every diagram and table matches implemented behavior.
 - Every objective has supporting screenshot, QA result, or system demo path.
+
+The paper-facing diagram sources now use the current adviser-owned technician-profile model,
+the bounded mobile Accessories surface, persisted business references, and review-gated AI.
+Rendered figure readability and the final manuscript remain pending until the latest thesis DOCX
+is supplied.

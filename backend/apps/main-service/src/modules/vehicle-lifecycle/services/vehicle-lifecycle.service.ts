@@ -28,6 +28,10 @@ import { ListCustomerVehicleTimelineQueryDto } from '../dto/list-customer-vehicl
 import { ReviewVehicleLifecycleSummaryDto } from '../dto/review-vehicle-lifecycle-summary.dto';
 import { VehicleLifecycleRepository } from '../repositories/vehicle-lifecycle.repository';
 import { VehicleLifecycleSummaryProviderService } from './vehicle-lifecycle-summary-provider.service';
+import {
+  buildQueuedSummaryProvenanceFallback,
+  type LifecycleSummaryEvidenceReference,
+} from './vehicle-lifecycle-summary-provider.types';
 type LifecycleActor = {
   userId: string;
   role: string;
@@ -258,6 +262,7 @@ export class VehicleLifecycleService {
 
   async generateLifecycleSummary(vehicleId: string, actor: LifecycleActor) {
     await this.assertReviewer(actor);
+    this.assertSummaryProviderAvailable();
     await this.vehiclesService.findById(vehicleId);
     const timelineEvents = await this.refreshVehicleTimeline(vehicleId);
 
@@ -325,14 +330,13 @@ export class VehicleLifecycleService {
 
     await this.vehicleLifecycleRepository.updateSummaryGenerationJob(summaryId, generationJob, 'generating');
 
-    const { summaryText, provenance } = this.vehicleLifecycleSummaryProvider.generate({
+    const { summaryText, provenance } = await this.vehicleLifecycleSummaryProvider.generate({
       vehicleLabel: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
       timelineEvents: timelineEvents.map((event) => ({
         eventType: event.eventType,
         eventCategory: event.eventCategory,
         sourceType: event.sourceType,
         occurredAt: new Date(event.occurredAt),
-        dedupeKey: event.dedupeKey,
       })),
     });
 
@@ -784,16 +788,12 @@ export class VehicleLifecycleService {
     return reviewer;
   }
 
-  private buildQueuedSummaryProvenance(
-    timelineEvents: Array<{ dedupeKey: string }>,
-  ) {
-    return {
-      provider: 'ai-worker-placeholder',
-      model: 'queued-summary-generation',
-      promptVersion: 'vehicle-lifecycle.summary.v1',
-      evidenceRefs: timelineEvents.map((event) => event.dedupeKey),
-      evidenceSummary:
-        'Lifecycle evidence is queued for AI worker processing and remains hidden from customers until human review completes.',
-    };
+  private buildQueuedSummaryProvenance(timelineEvents: LifecycleSummaryEvidenceReference[]) {
+    return (this.vehicleLifecycleSummaryProvider as Partial<VehicleLifecycleSummaryProviderService>)
+      .buildQueuedProvenance?.(timelineEvents) ?? buildQueuedSummaryProvenanceFallback(timelineEvents);
+  }
+  private assertSummaryProviderAvailable() {
+    (this.vehicleLifecycleSummaryProvider as Partial<VehicleLifecycleSummaryProviderService>)
+      .assertAvailable?.();
   }
 }

@@ -76,6 +76,11 @@ cancellation exception, refund, and fulfillment transition must be audit-visible
 - Adviser snapshots should store both the immutable adviser identifier and the user reference used at creation time.
 - Technician-profile assignments should snapshot the profile label, selected specialty, and assignment context so completed operational records remain auditable even if the profile changes later.
 - Customer-facing and staff-facing references should use business-readable references instead of raw UUIDs or UUID fragments.
+- Current persisted reference formats are `VEH-YYYY-NNNNNN`, `JO-YYYY-NNNNNN`,
+  `INS-YYYY-NNNNNN`, and `BJ-YYYY-NNNNNN`. They are database-owned, immutable, and must not be
+  regenerated from a plate, booking reference, hash, or UUID fragment.
+- A missing legacy reference is displayed as `Reference unavailable`; routing and relationship
+  UUIDs remain non-display implementation fields.
 
 ## Audit Expectations
 

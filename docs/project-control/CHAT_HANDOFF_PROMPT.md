@@ -24,6 +24,13 @@ If the task may benefit from the repo's self-improving agent system, also read:
 
 Treat these files as the source of truth for what is done, what failed panel review, what passed QA, and what still needs work.
 
+Current remediation evidence (2026-08-05) reports web `230/230`, mobile `213/213`, and focused
+backend AI/reference/loyalty `21/21`, with migration smoke, contract drift, typecheck, and policy
+checks passing. Persisted VEH/JO/INS/BJ references, optional disabled-by-default AI, customer-safe
+loyalty earning policy, and reference/Garage/selector changes are implementation-verified.
+This does not replace dated live Playwright reports; no new live Playwright or respondent survey
+result may be inferred from these counts. Survey status is pending.
+
 Do not rely only on chat history.
 
 If Notion access is available, also check the AUTOCARE Wiki dashboard for team-facing context:

@@ -8,7 +8,7 @@ export class BookingWorkshopHandoffResponseDto {
   jobOrderId!: string;
 
   @ApiProperty({
-    example: 'JO · BK-20260724-0003',
+    example: 'JO-2026-000001',
   })
   reference!: string;
 

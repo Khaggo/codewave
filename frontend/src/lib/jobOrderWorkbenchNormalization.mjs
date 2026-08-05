@@ -10,6 +10,7 @@ export const normalizeJobOrderForWorkbench = (jobOrder) => {
 
   return {
     ...jobOrder,
+    jobOrderReference: jobOrder?.jobOrderReference ?? null,
     items,
     assignments,
     progressEntries,

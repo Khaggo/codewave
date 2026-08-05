@@ -20,6 +20,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    include: ['@radix-ui/react-select'],
     rolldownOptions: {
       moduleTypes: {
         '.js': 'jsx',

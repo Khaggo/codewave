@@ -147,12 +147,17 @@ export function buildInsuranceWorkspaceViewModel({
     latestUpdateLabel: latestStatusUpdateLabel,
     isStale: isTrackingStale,
   });
+  statusState.inquiryReference = latestInquiry?.inquiryReference ?? null;
   const processSteps = getInsuranceProcessSteps({
     latestInquiry,
     missingRequiredDocuments,
   });
   const currentRequestSummary = latestInquiry?.id
     ? {
+        referenceLabel:
+          latestInquiry.referenceLabel ??
+          latestInquiry.inquiryReference ??
+          'Reference unavailable',
         purposeLabel: getPurposeLabel(latestInquiry.purpose),
         inquiryTypeLabel:
           latestInquiry.inquiryTypeLabel ?? 'Insurance',
@@ -161,6 +166,7 @@ export function buildInsuranceWorkspaceViewModel({
           latestInquiry.statusHint ?? requestGuidance.sectionHelper,
       }
     : {
+        referenceLabel: 'Reference unavailable',
         purposeLabel: getPurposeLabel(activePurpose),
         inquiryTypeLabel:
           coverageOptions.find(

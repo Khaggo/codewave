@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import {
   pgEnum,
   pgTable,
@@ -77,6 +77,11 @@ export const insuranceInquiries = pgTable(
   'insurance_inquiries',
   {
     id: uuid('id').defaultRandom().primaryKey(),
+    inquiryReference: varchar('inquiry_reference', { length: 24 })
+      .notNull()
+      .default(
+        sql`('INS-' || to_char(CURRENT_TIMESTAMP, 'YYYY') || '-' || lpad(nextval('insurance_inquiries_reference_seq')::text, 6, '0'))`,
+      ),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -111,6 +116,7 @@ export const insuranceInquiries = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    inquiryReferenceUnique: uniqueIndex('insurance_inquiries_inquiry_reference_idx').on(table.inquiryReference),
     insuranceInquiryClientRequestUnique: uniqueIndex('insurance_inquiries_user_client_request_idx').on(
       table.userId,
       table.clientRequestId,

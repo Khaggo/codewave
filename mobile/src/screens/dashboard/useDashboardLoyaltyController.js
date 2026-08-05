@@ -15,6 +15,8 @@ const createInitialLoyaltyState = () => ({
   errorMessage: '',
   hasLoadedSnapshot: false,
   redeemingRewardId: null,
+  earningPolicy: null,
+  earningPolicyError: '',
   ...createEmptyCustomerLoyaltySnapshot(),
 })
 
@@ -69,6 +71,8 @@ export default function useDashboardLoyaltyController({ account }) {
         ...snapshot,
         errorMessage: '',
         redeemingRewardId: null,
+        earningPolicy: snapshot.earningPolicy ?? null,
+        earningPolicyError: snapshot.earningPolicyError ?? '',
       })
     } catch (error) {
       if (!coordinator.isCurrent(token)) {
@@ -169,6 +173,8 @@ export default function useDashboardLoyaltyController({ account }) {
   )
 
   return {
+    earningPolicy: state.earningPolicy ?? null,
+    earningPolicyError: state.earningPolicyError ?? '',
     featuredReward: state.featuredReward ?? null,
     pointsBalance: state.account?.pointsBalance ?? 0,
     redeem,

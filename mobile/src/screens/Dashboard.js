@@ -85,8 +85,9 @@ export default function Dashboard({
   };
   const garageController = useDashboardGarageController({
     account,
-    garageActive: activeTab === 'insurance',
+    garageActive: activeTab === 'insurance' || activeTab === 'messages',
     lifecycleActive: false,
+    refreshSignal: garageRefreshSignal,
   });
   const {
     selectVehicle: setSelectedGarageVehicleId,

@@ -3,7 +3,7 @@ import { AccessoriesHeader, AccessoriesNotice, AccessoriesState, StatusBadge } f
 const meta = {
   title: 'Accessories/Workspace chrome',
   component: AccessoriesHeader,
-  decorators: [(Story) => <main aria-label="Accessories component preview"><Story /></main>],
+  decorators: [(Story) => <div><Story /></div>],
 }
 
 export default meta

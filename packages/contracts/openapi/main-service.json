@@ -745,6 +745,10 @@
       },
       "BackJobResponseDto": {
         "properties": {
+          "backJobReference": {
+            "example": "BJ-2026-000001",
+            "type": "string"
+          },
           "complaint": {
             "example": "Customer reports the same leak two days after the previous repair.",
             "type": "string"
@@ -821,6 +825,7 @@
         },
         "required": [
           "id",
+          "backJobReference",
           "customerUserId",
           "vehicleId",
           "originalJobOrderId",
@@ -1502,7 +1507,7 @@
             "type": "string"
           },
           "reference": {
-            "example": "JO · BK-20260724-0003",
+            "example": "JO-2026-000001",
             "type": "string"
           }
         },
@@ -2984,6 +2989,10 @@
             "example": "ABC 1234",
             "type": "string"
           },
+          "publicReference": {
+            "example": "VEH-2026-000001",
+            "type": "string"
+          },
           "vin": {
             "example": "JTDBR32E720123456",
             "nullable": true,
@@ -2996,6 +3005,7 @@
         },
         "required": [
           "id",
+          "publicReference",
           "plateNumber",
           "make",
           "model",
@@ -3161,6 +3171,10 @@
             "format": "date-time",
             "type": "object"
           },
+          "inquiryReference": {
+            "example": "INS-2026-000001",
+            "type": "string"
+          },
           "inquiryType": {
             "enum": [
               "ctpl",
@@ -3265,6 +3279,7 @@
         },
         "required": [
           "id",
+          "inquiryReference",
           "vehicleId",
           "inquiryType",
           "purpose",
@@ -3366,7 +3381,7 @@
             "type": "string"
           },
           "jobOrderReference": {
-            "example": "JO-5E5C598C",
+            "example": "JO-2026-000001",
             "type": "string"
           },
           "status": {
@@ -4503,6 +4518,10 @@
             "format": "date-time",
             "type": "object"
           },
+          "inquiryReference": {
+            "example": "INS-2026-000001",
+            "type": "string"
+          },
           "inquiryType": {
             "enum": [
               "ctpl",
@@ -4628,6 +4647,7 @@
         },
         "required": [
           "id",
+          "inquiryReference",
           "userId",
           "vehicleId",
           "inquiryType",
@@ -5022,6 +5042,10 @@
           "invoiceRecord": {
             "$ref": "#/components/schemas/JobOrderInvoiceRecordResponseDto"
           },
+          "jobOrderReference": {
+            "example": "JO-2026-000001",
+            "type": "string"
+          },
           "jobType": {
             "enum": [
               "normal",
@@ -5075,6 +5099,7 @@
         },
         "required": [
           "id",
+          "jobOrderReference",
           "status",
           "sourceType",
           "jobType",
@@ -5677,8 +5702,8 @@
             "type": "array"
           },
           "jobOrderReference": {
-            "example": "JO · BK-20260521-0007",
-            "type": "object"
+            "example": "JO-2026-000001",
+            "type": "string"
           },
           "jobType": {
             "enum": [
@@ -5778,6 +5803,7 @@
           "vehicleId",
           "serviceAdviserUserId",
           "serviceAdviserCode",
+          "jobOrderReference",
           "status",
           "createdAt",
           "updatedAt",
@@ -5824,7 +5850,7 @@
           },
           "jobOrderReference": {
             "description": "Readable selector reference for staff workbench and QA queue surfaces.",
-            "example": "JO · BK-20260603-0003",
+            "example": "JO-2026-000001",
             "type": "string"
           },
           "serviceAdviserCode": {
@@ -5832,7 +5858,7 @@
             "type": "string"
           },
           "sourceBackJobReference": {
-            "example": "BJ-20260603-091500 · BK-20260601-0001",
+            "example": "BJ-2026-000001 · BK-20260601-0001",
             "nullable": true,
             "type": "object"
           },
@@ -6186,6 +6212,52 @@
           "transactionType",
           "count",
           "netPointsDelta"
+        ],
+        "type": "object"
+      },
+      "LoyaltyEarningPolicyRequirementDto": {
+        "properties": {
+          "eligibility": {
+            "example": "Payment must be settled for a service invoice. A minimum payment of PHP 100.00 applies.",
+            "type": "string"
+          },
+          "formula": {
+            "example": "Earn 1 point for every PHP 100.00 paid on an eligible service.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "formula",
+          "eligibility"
+        ],
+        "type": "object"
+      },
+      "LoyaltyEarningPolicyResponseDto": {
+        "properties": {
+          "exclusions": {
+            "example": [
+              "Accessory purchases are not currently eligible for loyalty points."
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/LoyaltyEarningPolicyRequirementDto"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "example": "Points are earned after eligible paid service invoices are settled.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "requirements",
+          "exclusions"
         ],
         "type": "object"
       },
@@ -8615,6 +8687,10 @@
             "format": "date-time",
             "type": "object"
           },
+          "inquiryReference": {
+            "example": "INS-2026-000001",
+            "type": "string"
+          },
           "inquiryType": {
             "enum": [
               "ctpl",
@@ -8740,6 +8816,7 @@
         },
         "required": [
           "id",
+          "inquiryReference",
           "userId",
           "vehicleId",
           "inquiryType",
@@ -8922,15 +8999,15 @@
             "type": "string"
           },
           "model": {
-            "example": "timeline-summary-v1",
+            "example": "gpt-4o-mini",
             "type": "string"
           },
           "promptVersion": {
-            "example": "vehicle-lifecycle.summary.v1",
+            "example": "vehicle-lifecycle.summary.v2",
             "type": "string"
           },
           "provider": {
-            "example": "local-summary-adapter",
+            "example": "openai_compatible",
             "type": "string"
           }
         },
@@ -15605,6 +15682,39 @@
           }
         ],
         "summary": "List loyalty ledger transactions for a user.",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/loyalty/earning-policy": {
+      "get": {
+        "operationId": "LoyaltyController_getEarningPolicy",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoyaltyEarningPolicyResponseDto"
+                }
+              }
+            },
+            "description": "Active loyalty earning requirements without internal rule or audit metadata."
+          },
+          "401": {
+            "description": "Missing or invalid access token."
+          },
+          "403": {
+            "description": "Only customers and staff roles can read the earning policy."
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Read the active customer-safe loyalty earning policy.",
         "tags": [
           "loyalty"
         ]

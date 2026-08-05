@@ -585,10 +585,10 @@ describe('JobOrdersService', () => {
         },
       ],
     };
-
     const jobOrdersRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'job-order-1',
+        jobOrderReference: 'JO-2026-000001',
         status: 'in_progress',
         items: [{ id: 'item-1', requiresPhotoEvidence: false }],
         assignments: [{ technicianUserId: 'tech-1' }],
@@ -856,11 +856,11 @@ describe('JobOrdersService', () => {
     );
     expect(result).toBe(finalizedResult);
   });
-
   it('returns readable labels and references for job-order detail surfaces', async () => {
     const jobOrdersRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'job-order-1',
+        jobOrderReference: 'JO-2026-000001',
         sourceType: 'booking',
         sourceId: 'booking-1',
         jobType: 'normal',
@@ -950,7 +950,7 @@ describe('JobOrdersService', () => {
       }),
     ).resolves.toEqual(
       expect.objectContaining({
-        jobOrderReference: 'JO · BK-20260521-0007',
+        jobOrderReference: 'JO-2026-000001',
         sourceBookingReference: 'BK-20260521-0007',
         customerLabel: 'Jamie Cruz',
         vehicleLabel: 'Toyota Vios (ABC-1234)',

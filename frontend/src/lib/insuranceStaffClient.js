@@ -156,6 +156,7 @@ export const normalizeInsuranceInquiryForStaff = (inquiry) => {
 
   return {
     id: inquiry.id ?? null,
+    inquiryReference: inquiry.inquiryReference ?? inquiry.reference ?? null,
     userId: inquiry.userId ?? null,
     vehicleId: inquiry.vehicleId ?? null,
     inquiryType: inquiry.inquiryType ?? 'comprehensive',
@@ -205,7 +206,7 @@ export const listInsuranceInquiries = async ({ accessToken, status, paymentStatu
 
 export const getInsuranceInquiryById = async ({ inquiryId, accessToken }) => {
   if (!inquiryId) {
-    throw new ApiError('Select a queue item or enter an inquiry id before loading detail.', 400, {
+    throw new ApiError('Select a queue item before loading inquiry detail.', 400, {
       path: '/api/insurance/inquiries/:id',
     });
   }

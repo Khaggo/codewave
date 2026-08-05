@@ -1020,7 +1020,6 @@ test('vehicle matching rejects inquiries that belong to a different vehicle cont
     true,
   )
 })
-
 test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for helper behavior', () => {
   assert.deepEqual(
     normalizeCustomerInsuranceInquiry({
@@ -1051,6 +1050,8 @@ test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for 
     }),
     {
       id: 'inq-1',
+      inquiryReference: null,
+      referenceLabel: 'Reference unavailable',
       vehicleId: null,
       inquiryType: 'comprehensive',
       inquiryTypeLabel: 'Comprehensive',
@@ -1087,7 +1088,6 @@ test('normalizeCustomerInsuranceInquiry keeps only workflow metadata needed for 
     },
   )
 })
-
 test('uploadInsuranceInquiryDocumentFile posts multipart form data without forcing json headers', async () => {
   const originalFetch = globalThis.fetch
   const originalFormData = globalThis.FormData

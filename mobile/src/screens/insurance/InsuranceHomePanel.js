@@ -40,6 +40,9 @@ export default function InsuranceHomePanel({
             {currentRequestSummary?.purposeLabel ?? 'Request'} -{' '}
             {currentRequestSummary?.inquiryTypeLabel ?? 'Insurance'}
           </Text>
+          <Text style={styles.vehicleMeta}>
+            Request reference: {currentRequestSummary?.referenceLabel ?? 'Reference unavailable'}
+          </Text>
         </View>
       </InsuranceSectionDivider>
 

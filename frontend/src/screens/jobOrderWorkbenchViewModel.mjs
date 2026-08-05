@@ -1,4 +1,5 @@
 import { getSuggestedJobOrderWorkspaceStage } from '../lib/jobOrderWorkspaceStage.mjs'
+import { getBookingReference, getJobOrderReference } from '../lib/businessReferenceDisplay.mjs'
 
 export const STATUS_META = {
   draft: { label: 'Draft', cls: 'badge-gray' },
@@ -19,59 +20,12 @@ export const WORKSHOP_STATUS_ACTION_LABELS = {
 
 export const getSuggestedControlCenterStage = getSuggestedJobOrderWorkspaceStage
 
-function normalizeBusinessToken(value, fallback = 'UNSET') {
-  const normalizedValue = String(value ?? '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-  return normalizedValue || fallback
-}
-
-function formatCompactDateToken(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}${month}${day}`
-}
-
-function formatCompactTimeToken(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  const seconds = String(date.getSeconds()).padStart(2, '0')
-  return `${hours}${minutes}${seconds}`
-}
-
 export function formatBookingReference(record) {
-  if (record?.bookingReference) return record.bookingReference
-
-  const compactDate = String(record?.scheduledDate ?? record?.workDate ?? '')
-    .slice(0, 10)
-    .replace(/-/g, '')
-  const plateToken = normalizeBusinessToken(record?.plateNumber ?? record?.vehicleDisplayName, 'PENDING')
-  return compactDate ? `BK-${compactDate}-${plateToken}` : `BK-${plateToken}`
+  return getBookingReference(record)
 }
 
 export function formatJobOrderReference(record) {
-  if (record?.jobOrderReference) return record.jobOrderReference
-  if (record?.sourceBackJobReference) return `JO-RW \u00b7 ${record.sourceBackJobReference}`
-  if (record?.sourceBookingReference) return `JO \u00b7 ${record.sourceBookingReference}`
-
-  const compactDate = String(record?.workDate ?? record?.createdAt ?? '')
-    ? formatCompactDateToken(record?.workDate ?? record?.createdAt)
-    : ''
-  const timeToken = formatCompactTimeToken(record?.createdAt ?? record?.updatedAt)
-  const plateToken = normalizeBusinessToken(
-    record?.plateNumber ?? record?.vehicleDisplayName ?? record?.serviceAdviserCode,
-    'WORK',
-  )
-  const prefix = record?.jobType === 'back_job' ? 'JO-RW' : 'JO'
-  return compactDate ? `${prefix}-${compactDate}-${timeToken || plateToken}` : `${prefix}-${plateToken}`
+  return getJobOrderReference(record)
 }
 
 export const initialCreateState = {

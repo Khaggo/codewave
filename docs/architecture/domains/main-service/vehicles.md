@@ -1,5 +1,7 @@
 # vehicles
 
+Last updated: 2026-08-05
+
 ## Domain ID
 
 `main-service.vehicles`
@@ -45,6 +47,9 @@ Key relations:
 - enforce uniqueness for plate or VIN rules where required
 - support customer ownership changes without losing historical references
 - expose vehicle metadata to bookings, inspections, and lifecycle views
+- assign a database-owned immutable `publicReference` in the form `VEH-YYYY-NNNNNN`
+- return `publicReference` to authorized staff/customer projections; never derive a visible
+  reference from a UUID, hash fragment, or mutable plate
 
 ## Process Flow
 
@@ -67,12 +72,17 @@ Key relations:
 - `GET /users/:id/vehicles`
 - `POST /vehicles/:id/transfer-owner`
 
+Vehicle response projections include the persisted `publicReference`. Legacy rows without a
+reference render `Reference unavailable` at the client boundary until the additive backfill is
+completed; internal UUIDs remain relationship and routing fields only.
+
 ## Edge Cases
 
 - same plate encoded twice with formatting differences
 - vehicle ownership changes after prior bookings exist
 - customer attempts to access another user's vehicle
 - missing core metadata blocks downstream workflows
+- legacy or malformed public references must not fall back to an internal identifier
 
 ## Writable Sections
 

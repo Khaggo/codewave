@@ -84,6 +84,7 @@ export class VehiclesService {
     return {
       items: page.items.map((vehicle) => ({
         id: vehicle.id,
+        publicReference: vehicle.publicReference,
         plateNumber: vehicle.plateNumber,
         make: vehicle.make,
         model: vehicle.model,

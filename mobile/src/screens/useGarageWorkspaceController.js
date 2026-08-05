@@ -1,30 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-
 import { loadCustomerDigitalGarageSnapshot } from '../lib/digitalGarageClient';
 import {
-  buildCustomerTimelineEventPresentation,
   createEmptyCustomerVehicleLifecycleSnapshot,
   getCustomerGarageSummary,
-  listCustomerVehicleTimelinePage,
   loadCustomerVehicleLifecycleSnapshot,
 } from '../lib/vehicleLifecycleClient';
 import { createLatestRequestCoordinator } from '../utils/latestRequestCoordinator.mjs';
 import { GARAGE_PAGE_SIZE } from './garagePaginationModel.mjs';
+import { buildGarageWorkspaceSessionState } from './garageWorkspaceSession.mjs';
+import {
+  loadMoreGarageTimelinePage,
+  mergeGarageTimelineSuccess,
+} from './garageWorkspaceTimeline.mjs';
 import {
   buildGarageWorkspacePageModel,
   createGarageWorkspaceInitialState,
   getGarageLoadErrorMessage,
   getNextGaragePageRequest,
   getPreviousGaragePageRequest,
-  mergeGarageTimelinePage,
   normalizeGarageWorkspacePage,
   resolveGarageWorkspaceVehicleId,
 } from './garageWorkspaceModel.mjs';
-
 const createEmptySnapshot = () => createEmptyCustomerVehicleLifecycleSnapshot();
 
 export default function useGarageWorkspaceController({
   account,
+  enabled = true,
   onSelectedVehicleChange,
   refreshSignal,
   routeVehicleId,
@@ -60,6 +61,7 @@ export default function useGarageWorkspaceController({
   const vehicleDetailCoordinatorRef = useRef(null);
   const garageCursorHistoryRef = useRef([null]);
   const refreshSignalRef = useRef(refreshSignal);
+  const sessionKey = `${account?.userId ?? ''}:${account?.accessToken ?? ''}`;
 
   if (!vehicleListCoordinatorRef.current) {
     vehicleListCoordinatorRef.current = createLatestRequestCoordinator();
@@ -98,6 +100,31 @@ export default function useGarageWorkspaceController({
     selectedVehicleChangeRef.current?.(normalizedVehicleId);
     return normalizedVehicleId;
   }, []);
+
+  useEffect(() => {
+    vehicleListCoordinatorRef.current?.invalidate();
+    vehicleDetailCoordinatorRef.current?.invalidate();
+    garageCursorHistoryRef.current = [null];
+    vehicleSearchRef.current = '';
+    setVehicleSearch('');
+    const { vehicles: nextVehicles, page: nextPage, selectedVehicleId: nextSelectedVehicleId } =
+      buildGarageWorkspaceSessionState({
+        account,
+        pageSize: GARAGE_PAGE_SIZE,
+        routeVehicleId,
+      });
+    vehiclesRef.current = nextVehicles;
+    garagePageRef.current = nextPage;
+    setVehicles(nextVehicles);
+    setGaragePage(nextPage);
+    commitSelectedVehicleId(nextSelectedVehicleId);
+    setSnapshot(createEmptySnapshot());
+    setGarageSummary(null);
+    activeSourceTypeRef.current = null;
+    setActiveSourceType(null);
+    setIsLoadingMore(false);
+    setErrorMessage('');
+  }, [account?.primaryVehicleId, commitSelectedVehicleId, sessionKey]);
 
   const commitActiveSourceType = useCallback((sourceType) => {
     const normalizedSourceType = String(sourceType ?? '').trim() || null;
@@ -304,17 +331,24 @@ export default function useGarageWorkspaceController({
   ]);
 
   useEffect(() => {
-    void loadLifecycle();
-  }, [loadLifecycle]);
+    if (enabled) {
+      void loadLifecycle();
+    }
+  }, [enabled, loadLifecycle]);
 
   useEffect(() => {
+    if (!enabled) {
+      refreshSignalRef.current = refreshSignal;
+      return;
+    }
+
     if (Object.is(refreshSignalRef.current, refreshSignal)) {
       return;
     }
 
     refreshSignalRef.current = refreshSignal;
     void loadLifecycle();
-  }, [loadLifecycle, refreshSignal]);
+  }, [enabled, loadLifecycle, refreshSignal]);
 
   useEffect(
     () => () => {
@@ -383,68 +417,33 @@ export default function useGarageWorkspaceController({
     [commitActiveSourceType, loadSelectedVehicle],
   );
 
-  const loadMore = useCallback(async () => {
-    const currentVehicleId = selectedVehicleIdRef.current;
-    const currentSnapshot = snapshot;
-    if (
-      !currentVehicleId ||
-      !currentSnapshot.page?.hasNext ||
-      !currentSnapshot.page?.nextCursor ||
-      isLoadingMore
-    ) {
-      return false;
-    }
-
-    setIsLoadingMore(true);
-    setErrorMessage('');
-    const coordinator = vehicleDetailCoordinatorRef.current;
-    const token = coordinator.begin(
-      `${account?.userId ?? 'customer'}:${currentVehicleId}:${
-        activeSourceTypeRef.current ?? 'all'
-      }:${currentSnapshot.page.nextCursor}`,
-    );
-
-    try {
-      const nextPage = await listCustomerVehicleTimelinePage({
-        vehicleId: currentVehicleId,
-        cursor: currentSnapshot.page.nextCursor,
-        sourceType: activeSourceTypeRef.current,
-        limit: 20,
+  const loadMore = useCallback(
+    () =>
+      loadMoreGarageTimelinePage({
         accessToken: account?.accessToken,
-      });
-      if (!coordinator.isCurrent(token)) {
-        return false;
-      }
-
-      const nextEvents = nextPage.items.map(
-        buildCustomerTimelineEventPresentation,
-      );
-      setSnapshot((currentState) =>
-        mergeGarageTimelinePage({
-          snapshot: currentState,
-          nextEvents,
-          page: nextPage.page,
-        }),
-      );
-      return true;
-    } catch (error) {
-      if (!coordinator.isCurrent(token)) {
-        return false;
-      }
-
-      setErrorMessage(
-        getGarageLoadErrorMessage(
-          error,
-          'We could not load more Garage updates.',
-        ),
-      );
-      return false;
-    } finally {
-      if (coordinator.isCurrent(token)) {
-        setIsLoadingMore(false);
-      }
-    }
-  }, [account?.accessToken, account?.userId, isLoadingMore, snapshot]);
+        accountUserId: account?.userId,
+        activeSourceType: activeSourceTypeRef.current,
+        coordinator: vehicleDetailCoordinatorRef.current,
+        currentSnapshot: snapshot,
+        currentVehicleId: selectedVehicleIdRef.current,
+        isLoadingMore,
+        onError: setErrorMessage,
+        onFinish: () => setIsLoadingMore(false),
+        onStart: () => {
+          setIsLoadingMore(true);
+          setErrorMessage('');
+        },
+        onSuccess: ({ nextEvents, page }) =>
+          setSnapshot((currentState) =>
+            mergeGarageTimelineSuccess({
+              snapshot: currentState,
+              nextEvents,
+              page,
+            }),
+          ),
+      }),
+    [account?.accessToken, account?.userId, isLoadingMore, snapshot],
+  );
 
   const addCreatedVehicle = useCallback(
     async (createdVehicle) => {
@@ -477,6 +476,7 @@ export default function useGarageWorkspaceController({
     canGoPrevious: status !== 'loading' && garagePage.currentPage > 0,
     changeSource,
     errorMessage,
+    garagePage,
     garagePageModel,
     garageSummary,
     isLoadingMore,

@@ -1,6 +1,42 @@
 # QA Ledger
 
-Last updated: 2026-08-02
+Last updated: 2026-08-05
+
+## Panelist Remediation Verification - 2026-08-05
+
+### Scope
+
+Wave 1/2 implementation evidence and documentation alignment for persisted references, optional
+review-gated AI, loyalty earning policy, customer-safe Garage/Insurance surfaces, selectors, and
+panelist-facing references. No servers, builds, or live browser runs were started for this docs-only
+pass.
+
+### Verified Results
+
+| Check | Result |
+| --- | --- |
+| Web focused tests | Passed: `230/230` |
+| Mobile focused tests | Passed: `213/213` |
+| Focused backend AI/reference/loyalty tests | Passed: `21/21` |
+| `0003_panelist_alignment_ids` migration smoke | Passed; concurrent persisted references are unique and immutable |
+| OpenAPI contract drift | Passed |
+| Backend typecheck | Passed |
+| Repository policy checks | Passed |
+| Storybook interaction and accessibility tests | Passed: `34/34` |
+| Static Storybook Playwright smoke | Passed: `5/5`; bounded runner released port `6006` |
+| AI provider boundary | Disabled by default; optional OpenAI-compatible adapter, safe evidence filtering, failure handling, and review gating are implemented |
+| Loyalty policy boundary | Active service rules only; customer-safe endpoint and mobile display; Accessories purchases excluded |
+
+### Evidence Boundary
+
+- These are focused implementation and contract results from the current worktree.
+- The Storybook smoke is isolated component/catalog evidence, not a live application E2E result.
+- Live application Playwright flows, live viewport screenshots, production performance, and respondent survey
+  results are not claimed here.
+- The ISO instrument is [`ISO_25010_INSTRUMENT.md`](./ISO_25010_INSTRUMENT.md); survey status is
+  `pending` until real customers/staff complete it.
+- Historical QA sections below retain their original dates and remain useful as historical evidence,
+  but they must not be presented as the current Wave 3 execution result.
 
 ## Scope-Aligned Repository Verification - 2026-08-02
 

@@ -4758,9 +4758,9 @@ class FakeMailDeliveryService {
     };
   }
 }
-
 export async function createMainServiceTestApp(options: {
   workClaimEnforcementMode?: 'observe' | 'strict';
+  aiSummaryProvider?: import('../../src/modules/vehicle-lifecycle/services/vehicle-lifecycle-summary-provider.types').VehicleLifecycleSummaryProvider;
 } = {}): Promise<{
   app: INestApplication;
   seedWorkClaim: (payload: Omit<SeededWorkClaim, 'id'>) => SeededWorkClaim;
@@ -4866,7 +4866,7 @@ export async function createMainServiceTestApp(options: {
       QualityGatesService,
       InspectionEvidenceStorageService,
       InspectionsService,
-      VehicleLifecycleSummaryProviderService,
+      { provide: VehicleLifecycleSummaryProviderService, useValue: options.aiSummaryProvider ?? new VehicleLifecycleSummaryProviderService() },
       VehicleLifecycleService,
       AiWorkerProcessor,
       AutocareEventBusService,

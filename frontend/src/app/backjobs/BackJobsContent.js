@@ -26,6 +26,7 @@ import {
 import { listVehicleBookings } from '@/lib/bookingStaffClient'
 import { listVehicleInspections } from '@/lib/inspectionStaffClient'
 import { listVehicleJobOrders } from '@/lib/jobOrderWorkbenchClient'
+import { getBackJobReference, getBookingReference, getJobOrderReference, REFERENCE_UNAVAILABLE } from '@/lib/businessReferenceDisplay.mjs'
 import { useUser } from '@/lib/userContext'
 import {
   backJobReviewContractSources,
@@ -175,17 +176,7 @@ const formatVehicleDisplayLabel = (vehicle) => {
     : summary || 'Unknown vehicle'
 }
 
-const formatBackJobCaseReference = (backJob, vehicleLabel) => {
-  if (!backJob) {
-    return 'Back-job case'
-  }
-
-  const dateToken = formatCompactDateToken(backJob.createdAt)
-  const timeToken = formatCompactTimeToken(backJob.createdAt)
-  const vehicleToken = normalizeBusinessToken(vehicleLabel, 'VEHICLE')
-
-  return [dateToken, timeToken, vehicleToken].filter(Boolean).join('-').replace(/^/, 'BJ-')
-}
+const formatBackJobCaseReference = (backJob) => getBackJobReference(backJob, REFERENCE_UNAVAILABLE)
 
 const formatJobOrderDisplayReference = (jobOrder, fallbackId) => {
   if (jobOrder?.jobOrderReference) {
@@ -200,15 +191,7 @@ const formatJobOrderDisplayReference = (jobOrder, fallbackId) => {
     return `JO · ${jobOrder.sourceBookingReference}`
   }
 
-  const workDateToken = formatCompactDateToken(jobOrder?.workDate ?? jobOrder?.createdAt)
-  const updatedTimeToken = formatCompactTimeToken(jobOrder?.createdAt ?? jobOrder?.updatedAt)
-  const prefix = jobOrder?.jobType === 'back_job' ? 'JO-RW' : 'JO'
-
-  if (workDateToken) {
-    return `${prefix}-${workDateToken}${updatedTimeToken ? `-${updatedTimeToken}` : ''}`
-  }
-
-  return fallbackId ? `Job order ${String(fallbackId).slice(0, 8).toUpperCase()}` : 'Original job order'
+  return getJobOrderReference(jobOrder)
 }
 
 const formatBookingDisplayReference = (booking, fallbackId) => {
@@ -220,7 +203,7 @@ const formatBookingDisplayReference = (booking, fallbackId) => {
     return booking.reference
   }
 
-  return fallbackId ? `Booking ${String(fallbackId).slice(0, 8).toUpperCase()}` : 'No booking reference'
+  return getBookingReference(booking, REFERENCE_UNAVAILABLE)
 }
 
 const formatReturnInspectionReference = (inspection, fallbackId) => {
@@ -277,7 +260,7 @@ function BackJobDetail({
   if (!backJob) {
     return (
       <div className="empty-panel text-sm text-ink-muted">
-        Load a vehicle list, create a case, or search by back-job id to inspect live detail.
+        Load a vehicle list, create a case, or choose a back-job reference to inspect live detail.
       </div>
     )
   }
@@ -487,12 +470,11 @@ export default function BackJobsContent() {
   const activeReworkJobOrder = activeBackJob?.reworkJobOrderId
     ? jobOrderById.get(activeBackJob.reworkJobOrderId) ?? null
     : null
-  const activeCustomerLabel =
-    activeCustomer?.displayName || activeCustomer?.email || activeBackJob?.customerUserId || 'Unknown customer'
+  const activeCustomerLabel = activeCustomer?.displayName || activeCustomer?.email || 'Customer unavailable'
   const activeVehicleLabel = formatVehicleDisplayLabel(activeVehicle)
   const activeCaseReference = formatBackJobCaseReference(
     activeBackJob,
-    activeVehicle?.plateNumber || activeVehicle?.id,
+    activeVehicle?.plateNumber,
   )
   const activeOriginalJobOrderReference = formatJobOrderDisplayReference(
     activeOriginalJobOrder,
@@ -957,7 +939,7 @@ export default function BackJobsContent() {
       syncActiveBackJob(refreshedBackJob)
       setReworkState({
         status: 'rework_saved',
-        message: `Rework job order ${createdJobOrder?.id ?? 'created'} linked to this back-job.`,
+        message: `Rework job order ${getJobOrderReference(createdJobOrder)} linked to this back-job.`,
       })
     } catch (error) {
       let nextState = 'rework_failed'
@@ -1032,8 +1014,8 @@ export default function BackJobsContent() {
                 emptyOptionLabel="Choose customer"
                 items={customers.map((customer) => ({
                   value: customer.id,
-                  label: customer.displayName || customer.email || customer.id,
-                  helper: customer.email || customer.id,
+                   label: customer.displayName || customer.email || 'Customer unavailable',
+                   helper: customer.email || 'Customer record',
                 }))}
               />
             </label>
@@ -1046,9 +1028,9 @@ export default function BackJobsContent() {
                 emptyOptionLabel="Choose vehicle"
                 items={selectedCustomerVehicles.map((vehicle) => ({
                   value: vehicle.id,
-                  label: vehicle.plateNumber || vehicle.id,
+                   label: vehicle.plateNumber || vehicle.publicReference || 'Vehicle unavailable',
                   helper:
-                    [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') || vehicle.id,
+                     [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'Vehicle details unavailable',
                 }))}
               />
             </label>
@@ -1067,29 +1049,26 @@ export default function BackJobsContent() {
           >
             <p className="text-sm font-bold text-ink-primary">Load Case Detail</p>
             <p className="mt-1 text-xs text-ink-muted">
-              Paste a back-job id directly, or pick from the loaded vehicle cases when staff need to review one specific record.
+              Pick a loaded back-job case when staff need to review one specific record.
             </p>
             <label className="label mt-3">
-              Back-job id
-              <input
+              Back-job case
+              <PortalSelect
                 value={backJobId}
-                onChange={(event) => setBackJobId(event.target.value)}
-                className="input"
-                list="loaded-back-job-options"
-                placeholder="Paste a back-job id or choose a loaded case"
+                onValueChange={setBackJobId}
+                items={backJobs.map((backJob) => ({
+                  value: backJob.id,
+                  label: formatBackJobCaseReference(backJob),
+                  helper: `${backJob.status.replaceAll('_', ' ')} - ${backJob.complaint || 'No complaint summary'}`,
+                }))}
+                emptyOptionLabel="Choose a loaded case"
+                placeholder="Choose a loaded case"
               />
-              <datalist id="loaded-back-job-options">
-                {backJobs.map((backJob) => (
-                  <option key={backJob.id} value={backJob.id}>
-                    {backJob.complaint} / {backJob.status}
-                  </option>
-                ))}
-              </datalist>
             </label>
             <p className="mt-2 text-xs text-ink-muted">
               {backJobs.length
-                ? 'Loaded cases are available as suggestions, but you can still look up any back-job id directly.'
-                : 'No vehicle cases are loaded yet. You can still paste a known back-job id here.'}
+                ? 'Choose a case from the loaded vehicle list.'
+                : 'Load a customer vehicle first to choose a back-job case.'}
             </p>
             <button type="submit" className="btn-primary mt-3" disabled={loadState.status === 'back_jobs_loading'}>
               {loadState.status === 'back_jobs_loading' ? <RefreshCw size={15} className="animate-spin" /> : <Search size={15} />}
@@ -1138,7 +1117,7 @@ export default function BackJobsContent() {
                     <tr key={backJob.id}>
                       <td>
                         <p className="text-sm font-semibold text-brand-orange">
-                          {formatBackJobCaseReference(backJob, tableVehicle?.plateNumber || tableVehicle?.id)}
+                          {formatBackJobCaseReference(backJob)}
                         </p>
                         <p className="mt-1 text-xs text-ink-muted">{formatVehicleDisplayLabel(tableVehicle)}</p>
                       </td>
@@ -1204,8 +1183,8 @@ export default function BackJobsContent() {
                 emptyOptionLabel="Choose customer"
                 items={customers.map((customer) => ({
                   value: customer.id,
-                  label: customer.displayName || customer.email || customer.id,
-                  helper: customer.email || customer.id,
+                  label: customer.displayName || customer.email || 'Customer unavailable',
+                  helper: customer.email || 'Customer record',
                 }))}
               />
             </label>
@@ -1226,9 +1205,9 @@ export default function BackJobsContent() {
                 emptyOptionLabel="Choose vehicle"
                 items={(customers.find((customer) => customer.id === createDraft.customerUserId)?.vehicles ?? []).map((vehicle) => ({
                   value: vehicle.id,
-                  label: vehicle.plateNumber || vehicle.id,
+                  label: vehicle.plateNumber || vehicle.publicReference || 'Vehicle unavailable',
                   helper:
-                    [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') || vehicle.id,
+                    [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'Vehicle details unavailable',
                 }))}
               />
             </label>
@@ -1291,8 +1270,8 @@ export default function BackJobsContent() {
                   .filter((jobOrder) => jobOrder.status === 'finalized')
                   .map((jobOrder) => ({
                     value: jobOrder.id,
-                    label: `JO-${jobOrder.id.slice(0, 8).toUpperCase()}`,
-                    helper: `${jobOrder.id} • ${jobOrder.status.replaceAll('_', ' ')}`,
+                    label: formatJobOrderDisplayReference(jobOrder),
+                    helper: jobOrder.status.replaceAll('_', ' '),
                   }))}
               />
             </label>
@@ -1307,8 +1286,8 @@ export default function BackJobsContent() {
                 emptyOptionLabel="No booking reference"
                 items={vehicleBookings.map((booking) => ({
                   value: booking.id,
-                  label: booking.scheduledDate || booking.id,
-                  helper: `${booking.id} • ${booking.status}`,
+                    label: formatBookingDisplayReference(booking),
+                  helper: `${booking.scheduledDate || 'No scheduled date'} - ${booking.status}`,
                 }))}
               />
             </label>
@@ -1566,7 +1545,7 @@ export default function BackJobsContent() {
           <div>
             <p className="card-title">Live Back-Job Boundaries</p>
             <p className="mt-1 max-w-3xl text-sm text-ink-secondary">
-              This page shows only the back-job cases staff intentionally load by vehicle or case id, so the workflow stays focused on active operational review instead of an artificial queue.
+              This page shows only the back-job cases staff intentionally load by vehicle or case reference, so the workflow stays focused on active operational review instead of an artificial queue.
             </p>
           </div>
           <span className="badge badge-gray">Loaded on demand</span>

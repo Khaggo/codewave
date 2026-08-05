@@ -173,4 +173,5 @@ export class BackJobsRepository extends BaseRepository {
     this.assertFound(updatedBackJob, 'Back job not found');
     return this.findById(id);
   }
+
 }

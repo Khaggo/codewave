@@ -25,11 +25,14 @@ export default function DashboardRewardsPanel({
   isVeryCompactPhone,
   notificationCount,
   loyaltyState,
+  earningPolicy,
+  earningPolicyError,
   rewards,
   pointsBalance,
   tier,
   transactions,
   onToggleNotifications,
+  onRefreshEarningPolicy,
   onRedeemReward,
 }) {
   const [searchQuery, setSearchQuery] = useState('')
@@ -104,6 +107,48 @@ export default function DashboardRewardsPanel({
             ]}
           />
         </View>
+      </View>
+
+      <View
+        style={styles.infoPanel}
+        accessibilityLiveRegion={earningPolicyError ? 'assertive' : 'polite'}
+        accessibilityRole={earningPolicyError ? 'alert' : undefined}
+      >
+        <Text style={styles.infoPanelTitle}>How to earn</Text>
+        {earningPolicy ? (
+          <>
+            <Text style={styles.infoPanelText}>{earningPolicy.summary}</Text>
+            {earningPolicy.requirements.map((requirement, index) => (
+              <View key={`${requirement.formula ?? 'rule'}-${index}`} style={{ gap: 3, marginTop: 8 }}>
+                {requirement.formula ? <Text style={styles.infoPanelText}>{requirement.formula}</Text> : null}
+                {requirement.eligibility ? <Text style={styles.infoPanelText}>{requirement.eligibility}</Text> : null}
+              </View>
+            ))}
+            {earningPolicy.exclusions.map((exclusion) => (
+              <Text key={exclusion} style={[styles.infoPanelText, { marginTop: 8 }]}>
+                {exclusion}
+              </Text>
+            ))}
+          </>
+        ) : (
+          <>
+            <Text style={styles.infoPanelText}>
+              {earningPolicyError || 'Earning guidance is not available yet.'}
+            </Text>
+            {onRefreshEarningPolicy ? (
+              <TouchableOpacity
+                accessibilityLabel="Retry loading earning guidance"
+                accessibilityRole="button"
+                accessibilityState={{ busy: loyaltyState.status === 'loading' }}
+                disabled={loyaltyState.status === 'loading'}
+                onPress={onRefreshEarningPolicy}
+                style={[styles.secondaryButton, { minHeight: 44, marginTop: 10 }]}
+              >
+                <Text style={styles.secondaryButtonText}>Try again</Text>
+              </TouchableOpacity>
+            ) : null}
+          </>
+        )}
       </View>
 
       <Text style={styles.sectionHeading}>Available Rewards</Text>

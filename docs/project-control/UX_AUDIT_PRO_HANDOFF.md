@@ -55,6 +55,11 @@ https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/comm
 
 AUTOCARE is a mobile and web-based service management and customer engagement system for Cruisers Crib Auto Care Center.
 
+Current scope note (2026-08-05): the generic Shop/ecommerce surface is retired. Any current
+customer purchase discussion refers only to the bounded mobile Accessories pickup flow under More
+and Home shortcuts. The current role boundary is adviser/super-admin web plus non-login technician
+profiles.
+
 Primary panelist UX/system concerns:
 
 - Mobile app flow feels confusing and needs better design.
@@ -66,11 +71,15 @@ Primary panelist UX/system concerns:
 - Billing details and final payment flow need clearer proof.
 - Objective 5 must be visibly demonstrable through QA Audit proof anchors and customer-facing reviewed summaries.
 
-Latest automated QA evidence:
+Historical automated QA evidence:
 
 - Report: `qa/playwright/artifacts/qa-summary.md`
 - Latest result at handoff time: 5 passed, 0 failed, 0 timed out, 0 skipped.
 - Residual UX risk still worth reviewing: mixed Job Orders queue dates where an existing job order and a fresh booking handoff share the same work date may still be cognitively heavy for advisers.
+
+Current focused remediation evidence is recorded in `PANELIST_FEEDBACK_MATRIX.md` and `QA_LEDGER.md`.
+It reports web `230/230`, mobile `213/213`, and focused backend AI/reference/loyalty `21/21`;
+these counts do not replace live Playwright or survey evidence.
 
 ## Screenshot Packet
 

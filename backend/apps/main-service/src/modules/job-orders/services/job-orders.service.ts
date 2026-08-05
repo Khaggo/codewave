@@ -7,7 +7,6 @@ import {
   Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jobs.repository';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
@@ -18,7 +17,6 @@ import { StaffWorkQueuesService } from '@main-modules/staff-work-queues/services
 import { TechnicianProfilesService } from '@main-modules/technician-profiles/services/technician-profiles.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles.repository';
-
 import { AddJobOrderPhotoDto } from '../dto/add-job-order-photo.dto';
 import { AddJobOrderProgressDto } from '../dto/add-job-order-progress.dto';
 import { CreateJobOrderDto } from '../dto/create-job-order.dto';
@@ -45,9 +43,9 @@ import {
   buildCustomerDisplayName,
   buildJobOrderReadableReference,
   buildVehicleDisplayLabel,
+  REFERENCE_UNAVAILABLE,
 } from './job-order-reference';
 import { JobOrderTechnicianChecklistPdfService } from './job-order-technician-checklist-pdf.service';
-
 type JobOrderActorRole = 'service_adviser' | 'super_admin';
 type JobOrderActor = {
   userId: string;
@@ -297,6 +295,7 @@ export class JobOrdersService {
         const sourceBookingReference = sourceBookingReadModel?.bookingReference ?? null;
         const sourceBackJobReference = buildBackJobReadableReference(sourceBackJob);
         const jobOrderReference = buildJobOrderReadableReference({
+          jobOrderReference: jobOrder.jobOrderReference,
           sourceBookingReference,
           sourceBackJobReference,
           workDate,
@@ -437,7 +436,7 @@ export class JobOrdersService {
       currentWorkshopStage: jobOrder.currentWorkshopStage ?? null,
       workshopStageHistory,
       jobOrderReference: buildJobOrderReadableReference({
-        jobOrderReference: null,
+        jobOrderReference: jobOrder.jobOrderReference,
         sourceBookingReference,
         sourceBackJobReference,
         workDate: sourceBookingReference ? undefined : null,
@@ -460,6 +459,7 @@ export class JobOrdersService {
 
     return {
       id: jobOrder.id,
+      jobOrderReference: jobOrder.jobOrderReference ?? REFERENCE_UNAVAILABLE,
       status: jobOrder.status,
       sourceType: jobOrder.sourceType,
       jobType: jobOrder.jobType,
@@ -515,7 +515,7 @@ export class JobOrdersService {
       return {
         id: `service-history-${jobOrder.id}`,
         jobOrderId: jobOrder.id,
-        jobOrderReference: `JO-${jobOrder.id.replace(/-/g, '').slice(0, 8).toUpperCase()}`,
+        jobOrderReference: jobOrder.jobOrderReference ?? REFERENCE_UNAVAILABLE,
         bookingDate:
           jobOrder.sourceType === 'booking'
             ? scheduledDateByBookingId.get(jobOrder.sourceId) ?? null
@@ -1716,7 +1716,7 @@ export class JobOrdersService {
       vehicleLabel: vehicle
         ? `${vehicle.year ?? 'Vehicle'} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim()
         : 'Unknown vehicle',
-      jobOrderReference: jobOrder.id,
+      jobOrderReference: jobOrder.jobOrderReference ?? REFERENCE_UNAVAILABLE,
       invoiceReference: invoiceRecord.invoiceReference,
       officialReceiptReference: invoiceRecord.officialReceiptReference,
       serviceDate: (invoiceRecord.createdAt ?? new Date()).toISOString(),

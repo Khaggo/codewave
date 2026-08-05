@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, AlertTriangle, CalendarClock, Search } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
-import { ApiError } from '@/lib/authClient'
+import { ApiError, listAdminCustomers, listStaffAccounts } from '@/lib/authClient'
+import { getStaffDisplayLabel } from '@/lib/businessReferenceDisplay.mjs'
 import {
   createInsuranceRenewalFollowUp,
   getInsuranceInquiryById,
@@ -30,17 +31,15 @@ import {
 import { formatStatusLabel } from '../insuranceView.mjs'
 import {
   BlockingState,
-  EmptyPanel,
   FilterSelect,
-  RenewalCreationPanel,
   RenewalsDetailPanel,
   RenewalsWorkflowPanel,
   SummaryTile,
   WorkspaceFocusBanner,
   WorkspaceSignalCard,
-  WorkflowBadge,
-  formatDateOnly,
 } from './RenewalsPanels'
+import { RenewalCreationPanel } from './RenewalCreationPanel'
+import { RenewalsQueuePanel } from './RenewalsQueuePanel'
 
 const RENEWAL_STATUS_OPTIONS = ACTIVE_RENEWAL_WORKSPACE_STATUSES
 
@@ -103,6 +102,7 @@ export default function RenewalsContent() {
   const [createState, setCreateState] = useState('idle')
   const [createMessage, setCreateMessage] = useState('')
   const [createDraft, setCreateDraft] = useState(DEFAULT_CREATE_DRAFT)
+  const [directory, setDirectory] = useState({ customers: [], staff: [], status: 'idle' })
   const [reloadTick, setReloadTick] = useState(0)
   const selectedInquiryIdRef = useRef('')
   const previousSelectedInquiryIdRef = useRef('')
@@ -147,6 +147,32 @@ export default function RenewalsContent() {
     }
   }, [canReviewInsurance, filters.renewalStatus, reloadTick, user?.accessToken])
 
+  useEffect(() => {
+    if (!user?.accessToken || !canReviewInsurance) {
+      setDirectory({ customers: [], staff: [], status: 'idle' })
+      return
+    }
+
+    let ignore = false
+    setDirectory((current) => ({ ...current, status: 'loading' }))
+    void Promise.all([
+      listAdminCustomers(user.accessToken),
+      listStaffAccounts(user.accessToken),
+    ])
+      .then(([customers, staff]) => {
+        if (ignore) return
+        setDirectory({ customers, staff, status: 'ready' })
+      })
+      .catch(() => {
+        if (ignore) return
+        setDirectory({ customers: [], staff: [], status: 'error' })
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [canReviewInsurance, user?.accessToken])
+
   const renewalQueue = useMemo(
     () => inquiries.filter((inquiry) => isRenewalWorkspaceInquiry(inquiry)),
     [inquiries],
@@ -184,6 +210,10 @@ export default function RenewalsContent() {
   const selectedInquiry = selectedItem?.inquiry ?? null
   const selectedRow = selectedItem?.row ?? null
   const isTerminalInquiry = TERMINAL_INQUIRY_STATUSES.has(selectedInquiry?.status)
+  const selectedAssignedStaff = useMemo(
+    () => directory.staff.find((account) => account.id === selectedInquiry?.assignedStaffId) ?? null,
+    [directory.staff, selectedInquiry?.assignedStaffId],
+  )
 
   useEffect(() => {
     if (!selectedInquiry) {
@@ -483,7 +513,7 @@ export default function RenewalsContent() {
                 value={filters.search}
                 onChange={handleFilterChange('search')}
                 className="input pl-9"
-                placeholder="Customer, vehicle, policy, or case id"
+                placeholder="Customer, vehicle, policy, or case reference"
               />
             </div>
           </label>
@@ -532,86 +562,13 @@ export default function RenewalsContent() {
       </div>
 
       <div className="grid gap-5">
-        <section className="table-surface">
-          <div className="flex flex-col gap-2 border-b border-surface-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="card-title">Renewals Queue</p>
-              <p className="mt-1 text-xs text-ink-muted">Timing stays visible for quick triage.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <span className={`badge ${filteredItems.length ? 'badge-orange' : 'badge-gray'}`}>
-                {filteredItems.length} visible renewal{filteredItems.length === 1 ? '' : 's'}
-              </span>
-              <span className="badge badge-gray">
-                {selectedInquiry ? `Selected ${selectedInquiry.customerDisplayName || selectedInquiry.id}` : 'No active selection'}
-              </span>
-            </div>
-          </div>
-
-          {listState === 'loading' ? (
-            <div className="px-4 py-8 text-sm text-ink-muted">Loading live renewal cases...</div>
-          ) : filteredItems.length ? (
-            <div className="table-scroll">
-              <table className="data-table w-full min-w-[1120px]">
-                <thead>
-                  <tr>
-                    <th>Customer</th>
-                    <th>Vehicle</th>
-                    <th>Status</th>
-                    <th>Renewal Stage</th>
-                    <th>Renewal Due</th>
-                    <th>Policy Expiry</th>
-                    <th>Time Window</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map(({ inquiry, row }) => {
-                    const isSelected = inquiry.id === selectedInquiryId
-
-                    return (
-                      <tr
-                        key={row.key}
-                        onClick={() => setSelectedInquiryId(inquiry.id)}
-                        className={isSelected ? 'bg-[#f07c00]/10' : undefined}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td>
-                          <div className="space-y-1">
-                            <p className="font-semibold text-ink-primary">{row.customer}</p>
-                            <p className="text-xs text-ink-muted">{inquiry.subject || inquiry.id}</p>
-                          </div>
-                        </td>
-                        <td>{row.vehicle}</td>
-                        <td>
-                          <WorkflowBadge value={inquiry.status}>{row.status}</WorkflowBadge>
-                        </td>
-                        <td>
-                          <WorkflowBadge value={inquiry.renewalStatus}>{row.renewalStage}</WorkflowBadge>
-                        </td>
-                        <td>{formatDateOnly(row.renewalDueAt)}</td>
-                        <td>{formatDateOnly(row.policyExpiryAt)}</td>
-                        <td>
-                          {row.timeWindow ? (
-                            <span className={`badge ${row.timeWindow === 'Overdue' ? 'badge-orange' : 'badge-gray'}`}>
-                              {row.timeWindow}
-                            </span>
-                          ) : (
-                            <span className="badge badge-gray">No target date</span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyPanel
-              title="No renewals match the current filters"
-              copy="Broaden filters or clear manual-only mode."
-            />
-          )}
-        </section>
+        <RenewalsQueuePanel
+          filteredItems={filteredItems}
+          listState={listState}
+          onSelect={setSelectedInquiryId}
+          selectedInquiry={selectedInquiry}
+          selectedInquiryId={selectedInquiryId}
+        />
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
           <RenewalsDetailPanel
@@ -620,6 +577,7 @@ export default function RenewalsContent() {
             onRefreshDetail={handleRefreshDetail}
             selectedInquiry={selectedInquiry}
             selectedRow={selectedRow}
+            assignedStaffLabel={selectedAssignedStaff ? getStaffDisplayLabel(selectedAssignedStaff) : 'Staff assignment unavailable'}
           />
 
           <RenewalsWorkflowPanel
@@ -628,6 +586,7 @@ export default function RenewalsContent() {
             onDraftChange={handleUpdateDraftChange}
             onSave={submitWorkflowUpdate}
             renewalStatusOptions={RENEWAL_STATUS_OPTIONS}
+            staffOptions={directory.staff}
             selectedInquiry={selectedInquiry}
             selectedRow={selectedRow}
             submitDisabled={!selectedInquiry || isTerminalInquiry || updateState === 'status_update_submitting'}
@@ -640,6 +599,8 @@ export default function RenewalsContent() {
             createDraft={createDraft}
             createMessage={createMessage}
             createState={createState}
+            customerOptions={directory.customers}
+            staffOptions={directory.staff}
             inquiryTypeOptions={INQUIRY_TYPE_OPTIONS}
             onCreate={handleCreateFollowUp}
             onDraftChange={handleCreateDraftChange}

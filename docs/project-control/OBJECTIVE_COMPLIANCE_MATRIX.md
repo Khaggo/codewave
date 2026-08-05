@@ -1,14 +1,33 @@
 # Objective Compliance Matrix
 
-Last updated: 2026-07-25
+Last updated: 2026-08-05
 
 The panel said only one objective was considered passed. This file tracks what must be proven for each objective.
+
+## Current Evidence Boundary - 2026-08-05
+
+The current implementation-remediation evidence is separate from the dated live Playwright
+reports retained below:
+
+- Web tests: `230/230` passed.
+- Mobile tests: `213/213` passed.
+- Focused backend AI/reference/loyalty tests: `21/21` passed.
+- Migration smoke, generated contract drift, backend typecheck, and repository policy checks passed.
+- Persisted immutable business references are now required for vehicles, Job Orders, insurance
+  inquiries, and back-jobs; migration `0003_panelist_alignment_ids` and the concurrent smoke proof
+  cover the new formats.
+- AI lifecycle summaries use an optional OpenAI-compatible provider, default to disabled, filter
+  evidence, and remain hidden until adviser or super-admin review.
+- `GET /api/loyalty/earning-policy` exposes active customer-safe service rules, and mobile Loyalty
+  explains those rules without claiming Accessories eligibility.
+- Live Playwright results are not inferred from these focused checks, and ISO respondent results
+  remain pending until an actual survey is administered.
 
 ## Objective 1
 
 Objective:
 
-Design a mobile application that lets users book an appointment, view and purchase automotive products, earn rewards, and submit insurance requests.
+Design a mobile application that lets users book an appointment, view and purchase approved automotive accessories, earn service rewards, and submit insurance requests.
 
 Current status: QA Passed / Monitor
 
@@ -46,7 +65,8 @@ Gaps:
 
 Required proof:
 
-- Mobile E2E covering login persistence, multi-car garage, multi-service booking, shop purchase, reward display, and insurance request submission.
+- Mobile E2E covering login persistence, multi-car garage, multi-service booking, approved
+  Accessories pickup, service reward display, and insurance request submission.
 
 ## Objective 2
 
@@ -104,7 +124,9 @@ Evidence available:
 
 Gaps:
 
-- Shop/catalog/runtime-created product visibility, customer checkout/rewards, and admin billing follow-through pass in the latest full-system rerun.
+- The retired generic Shop/ecommerce surface is not part of the current scope. Accessories is a
+  separate mobile catalog/pickup domain and must be proven through its own rollout gates; it is not
+  a service invoice or loyalty flow.
 - Service pricing, inventory threshold persistence, and finalized service invoice proof are now all green in the latest admin rerun; the remaining Objective 3 gaps are paper/demo documentation rather than blocker defects.
 - Loyalty earning logic has paid-service invoice proof.
 - Staff insurance document review open/download behavior is QA-closed for locally uploaded OR/CR, policy, and police report files.
@@ -151,7 +173,7 @@ Objective:
 
 Integrate a quality audit service completion module using NLP and a rule-based scoring model to detect discrepancies, plus generative AI for customer-facing summaries.
 
-Current status: In Progress
+Current status: Implementation Verified / Guided Demo Pending
 
 Evidence available:
 
@@ -162,12 +184,12 @@ Evidence available:
 - The panelist QA audit passed quality-gate service specs covering semantic/rule findings and QA verdict behavior.
 - `docs/project-control/OBJECTIVE5_DEMO_PROOF.md` now ties together the backend discrepancy engine, QA Audit visible risk/finding sections, and the customer-facing lifecycle summary route.
 - Targeted proof tests now verify QA Audit risk/discrepancy section anchors plus customer mobile rendering of the reviewed lifecycle summary.
-- The panelist flow QA verified live QA Audit anchors for Risk Score, Semantic Match, Blocking Findings, and Review Needed, and verified a customer-visible reviewed summary card after adviser approval.
+- Existing dated panelist flow QA verified QA Audit anchors and a reviewed summary card; the current remediation adds focused provider, privacy, provenance, and review-state evidence without claiming a new live Playwright run.
 
 Gaps:
 
 - Visible proof of NLP/rule scoring outputs now exists in automated view/source checks plus backend specs, but a guided panel demo capture is still missing.
-- Customer-facing generative AI summary text is now exposed on the mobile lifecycle route and has live reviewed-summary proof; it still needs repeatable Playwright data setup.
+- Customer-facing generative AI summaries remain review-gated. The provider adapter is optional and disabled by default; no unconfigured or failed generation is presented as AI.
 - Discrepancy scenario proof now exists in backend QA specs and the Objective 5 proof note, but not yet in a fresh panel-style live walkthrough.
 - Technician should be checklist-only. This is now live-proven under the retired-login adviser-owned technician-profile workflow; remaining work is demo capture and broader Objective 5 walkthrough evidence.
 
@@ -181,27 +203,27 @@ Objective:
 
 Evaluate the mobile and web application using ISO/IEC 25010 focused on functional suitability, reliability, usability, compatibility, and security.
 
-Current status: In Progress / Automated Gate Green
+Current status: Implementation Evidence Green / Survey Pending
 
 Evidence available:
 
-- Playwright QA suite exists, and the latest full-system rerun passes: `20` passed, `0` failed.
+- Historical Playwright QA evidence remains in the dated reports. The current remediation run reports web `230/230`, mobile `213/213`, and focused backend AI/reference/loyalty `21/21`; this does not claim a new live Playwright execution.
 - Role access and validation tests exist.
 - The service-only gate must confirm adviser-owned Job Orders/QA Audit access, retired-login copy, readable IDs, service billing, Objective 2, Back-Jobs, insurance reminder/broadcast, checklist workshop proof, booking-to-cash, service loyalty, and mobile multi-service booking.
 - Targeted regression verification on 2026-05-21 passed after patching the four residual booking-to-cash QA findings in code.
 - The panelist QA audit added backend, staff web, mobile helper/view, Android export, and objective-level evidence in `docs/project-control/PANELIST_SYSTEM_QA_AUDIT_2026-05-21.md`.
 - Insurance/loyalty QA on 2026-05-21 added targeted backend, helper/view, and live Playwright evidence; the final live rerun passed staff insurance document open/download behavior and service-payment loyalty timing.
 - Repo-root runtime commands use a single-instance manager for the main backend, staff web, Storybook, and Expo listeners so local QA evidence is less likely to be polluted by duplicate processes.
-- A fresh 2026-07-25 staff usability pass made Booking queue-first, preserved record context through Intake, Job Orders, QA, and Billing, added shared lifecycle/next-action guidance, and replaced long QA/Billing selection dropdowns with searchable queues. The booking-to-cash, role-access, and Objective 2 lifecycle/readable-ID Playwright runs all passed.
+- The 2026-07-25 staff usability pass remains historical live evidence. Current client changes additionally cover persisted-reference display, selectors, Garage consolidation, customer-safe states, and focused Storybook stories; live viewport confirmation is still pending.
 
 Gaps:
 
-- Need formal ISO/IEC 25010 evaluation table with metrics, tools, respondents/testers, and results.
+- The ISO/IEC 25010 instrument and machine-readable evidence schema are now documented. Automated evidence is populated only from observed test output; respondent count and survey results remain pending.
 - Broader usability evidence is improved with fresh end-to-end and responsive proof. The older `workspaceCopyCleanup.test.mjs` result still needs reconciliation with the approved queue-first staff UX standard.
 - technician web login has been intentionally retired. Any QA helper, paper section, or Playwright test that still expects those roles to sign in must be rewritten around adviser-owned technician profiles, specialties, checklist/progress/evidence, and QA release.
-- Need compatibility evidence for mobile/web environments.
-- Need security evidence beyond role access.
+- Compatibility targets and viewport checks are defined, but the current Wave 3 update does not claim live Playwright viewport results.
+- Reference privacy, customer-safe payload, role-boundary, and review-gating checks are documented; broader live security testing remains a follow-up.
 
 Required proof:
 
-- Evaluation chapter/table with QA results, usability testing, compatibility matrix, security role tests, and reliability defect log.
+- Evaluation chapter/table with the automated evidence report, administered usability survey, compatibility results, security role tests, and reliability defect log.

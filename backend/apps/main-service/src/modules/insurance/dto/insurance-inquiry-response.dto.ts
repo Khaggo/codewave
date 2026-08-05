@@ -64,6 +64,11 @@ export class InsuranceInquiryResponseDto {
   id!: string;
 
   @ApiProperty({
+    example: 'INS-2026-000001',
+  })
+  inquiryReference!: string;
+
+  @ApiProperty({
     example: 'a3cce1f2-a6eb-4fdd-bf11-8b17d3ddfc17',
   })
   userId!: string;

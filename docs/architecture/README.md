@@ -63,6 +63,7 @@ Use the docs in this directory to build and improve the backend quickly while pr
 - [`rbac-policy.md`](./rbac-policy.md): canonical role model, staff provisioning, and permission boundaries
 - [`auth-security-policy.md`](./auth-security-policy.md): canonical signup activation model, OTP ownership split, and legacy-login position
 - [`ai-governance.md`](./ai-governance.md): approved AI scope, provider adapter policy, and human-review requirements
+- [`../project-control/ISO_25010_INSTRUMENT.md`](../project-control/ISO_25010_INSTRUMENT.md): automated evidence boundary and pending usability survey instrument
 - [`domain-map.md`](./domain-map.md): dependency map and load guidance
 - [`golden-domain-template.md`](./golden-domain-template.md): reusable starter pattern for new domains based on auth/users
 - [`markdown-contract.md`](./markdown-contract.md): required Markdown structure

@@ -1,5 +1,7 @@
 # loyalty
 
+Last updated: 2026-08-05
+
 ## Domain ID
 
 `main-service.loyalty`
@@ -51,6 +53,10 @@ service-based policy.
 - keep ledger entries append-only
 - require an active reward and sufficient balance before redemption
 - keep admin changes audited
+- expose a customer-safe earning-policy projection containing active service rules, formula
+  summaries, and eligibility language without rule IDs, actor data, or audit metadata
+- keep Accessories purchases outside the active earning-policy response until a separate approved
+  loyalty decision exists
 
 ## Process Flow
 
@@ -72,6 +78,7 @@ service-based policy.
 - `GET /loyalty/accounts/:userId`
 - `GET /loyalty/accounts/:userId/transactions`
 - `GET /loyalty/rewards`
+- `GET /api/loyalty/earning-policy`
 - `POST /loyalty/redemptions`
 - admin reward and earning-rule routes
 
@@ -82,6 +89,7 @@ service-based policy.
 - insufficient points
 - inactive reward
 - legacy ledger row from an older installation
+- policy endpoint must exclude inactive, expired, internal, or deferred product-purchase rules
 
 ## Writable Sections
 

@@ -2,6 +2,11 @@
 
 This file defines the approved AI scope, provider model, and safety guardrails for AUTOCARE Phase 2 features.
 
+Last updated: 2026-08-05
+
+Status: Active. This document describes implementation-backed provider behavior; it does not
+claim that a production provider or respondent evaluation is configured.
+
 ## Approved AI Scope
 
 - Approved AI usage is limited to Phase 2 features after the operational core is stable.
@@ -21,6 +26,18 @@ This file defines the approved AI scope, provider model, and safety guardrails f
 - Approved external AI provider APIs are an explicit exception to the default "no third-party API" rule because they support canonical Phase 2 features.
 - AI features must degrade safely when the provider is unavailable.
 
+## Current Provider Configuration
+
+- `AI_SUMMARY_PROVIDER` accepts `disabled` or `openai_compatible` and defaults to `disabled`.
+- The compatible adapter uses native Node `fetch` and reads its base URL, model, optional API key,
+  and bounded timeout/output limits from environment configuration.
+- When disabled or unconfigured, generation returns an unavailable error before creating a draft.
+- Timeout, network failure, malformed output, and exhausted retries produce `generation_failed`;
+  deterministic text is never labeled as AI.
+- Provider, model, prompt, and evidence provenance is retained with the generated artifact while
+  secrets, tokens, actor IDs, raw internal notes, and unrestricted database payloads are excluded.
+- The existing BullMQ job metadata remains the operational progress surface.
+
 ## Human Review Requirements
 
 - AI-generated lifecycle summaries remain hidden from customers until a human reviewer approves them.
@@ -28,6 +45,8 @@ This file defines the approved AI scope, provider model, and safety guardrails f
 - Reviewer identity, review timestamp, and final publish state must be captured for any customer-visible AI-generated content.
 - Re-review is required when the provider configuration, prompt template, or governing evidence set changes materially for a stored AI artifact.
 - AI output should be treated as advisory evidence, not a substitute for inspection, technician evidence, or approved job-order records.
+- Approval, rejection, and regeneration are auditable. Rejection or regeneration does not mutate a
+  previously reviewed customer-visible output.
 
 ## Prompt and Output Rules
 
@@ -35,6 +54,8 @@ This file defines the approved AI scope, provider model, and safety guardrails f
 - Inputs should use stable IDs, structured evidence, and filtered internal notes rather than raw unrestricted dumps.
 - Outputs must be constrained to structured summaries, risk annotations, or review-ready prose that can be audited later.
 - Persisted AI output must carry provenance that explains which provider adapter path, prompt version, and evidence bundle produced it.
+- Only customer-safe lifecycle evidence may enter the provider request. Internal review notes,
+  staff identifiers, raw source IDs, tokens, and unrestricted persistence payloads are prohibited.
 - Do not allow AI outputs to inject new permissions, state transitions, or customer-facing claims without human approval.
 
 ## Operational Safety

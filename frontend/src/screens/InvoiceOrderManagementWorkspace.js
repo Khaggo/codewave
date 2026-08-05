@@ -19,6 +19,7 @@ import {
   listJobOrderWorkbenchSummaries,
 } from '@/lib/jobOrderWorkbenchClient'
 import { useUser } from '@/lib/userContext'
+import { getJobOrderReference, safeBusinessReference } from '@/lib/businessReferenceDisplay.mjs'
 import {
   getInvoicePdfStateLabel,
   getLoadMessageTone,
@@ -54,12 +55,7 @@ const formatLabel = (value, fallback = 'Unknown') => {
     .join(' ')
 }
 
-const formatJobOrderReference = (jobOrder) =>
-  jobOrder?.jobOrderReference ??
-  jobOrder?.reference ??
-  jobOrder?.sourceBackJobReference ??
-  jobOrder?.sourceBookingReference ??
-  `JO-${String(jobOrder?.id ?? '').slice(0, 8).toUpperCase()}`
+const formatJobOrderReference = (jobOrder) => getJobOrderReference(jobOrder)
 
 const getLoadMessageToneClass = (status) =>
   getLoadMessageTone(status === 'loaded' ? 'invoice_order_loaded' : status === 'failed' ? 'invoice_order_failed' : 'invoice_order_empty') === 'success'
@@ -396,7 +392,9 @@ export default function InvoiceOrderManagementWorkspace() {
               <tbody>
                 {trackedPolicies.length ? trackedPolicies.map((policy) => (
                   <tr key={policy.invoiceId}>
-                    <td className="break-all font-semibold text-ink-primary">{policy.invoiceId}</td>
+                    <td className="break-all font-semibold text-ink-primary">
+                      {safeBusinessReference(policy.invoiceReference ?? policy.invoiceId)}
+                    </td>
                     <td className="text-ink-secondary">{policy.latestReminderStatus}</td>
                     <td className="text-ink-secondary">{policy.latestScheduledForLabel}</td>
                     <td className="font-semibold text-ink-primary">{policy.reminderRuleIds?.length ?? 0}</td>

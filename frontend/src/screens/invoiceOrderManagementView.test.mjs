@@ -4,7 +4,6 @@ import assert from 'node:assert/strict'
 import {
   getInvoicePdfStateLabel,
   getLoadMessageTone,
-  shortId,
 } from './invoiceOrderManagementView.mjs'
 
 test('getInvoicePdfStateLabel returns the correct delivery label', () => {
@@ -26,9 +25,4 @@ test('getLoadMessageTone keeps finance workspace tones stable', () => {
   assert.equal(getLoadMessageTone('invoice_order_empty'), 'warning')
   assert.equal(getLoadMessageTone('invoice_order_loaded'), 'success')
   assert.equal(getLoadMessageTone('invoice_order_forbidden_role'), 'danger')
-})
-
-test('shortId returns a stable uppercase preview', () => {
-  assert.equal(shortId('abc123def456'), 'ABC123DE')
-  assert.equal(shortId(''), 'NONE')
 })

@@ -1,5 +1,7 @@
 # job-orders
 
+Last updated: 2026-08-05
+
 ## Domain ID
 
 `main-service.job-orders`
@@ -50,6 +52,7 @@ Key relations:
 - one job order may generate one invoice-ready record
 - one job order stores `job_type = normal | back_job` and nullable `parent_job_order_id` for rework lineage
 - one job order stores immutable `service_adviser_user_id` and adviser-code snapshot data for auditability
+- each job order has a database-owned immutable `jobOrderReference` in the form `JO-YYYY-NNNNNN`
 
 ## Primary Business Logic
 
@@ -63,6 +66,8 @@ Key relations:
 - link rework job orders back to the original finalized job order when source type is `back_job`
 - separate workshop execution state from booking state and payment tracking
 - record invoice payment tracking only after invoice-ready finalization while avoiding automated payment-gateway settlement assumptions
+- keep readable references authoritative in staff queues, workspace headers, invoice lookups, and
+  PDF output; UUIDs remain routing and relationship fields only
 
 ## Process Flow
 
@@ -98,6 +103,10 @@ Live in the current slice:
 - `POST /job-orders/:id/photos`
 - `POST /job-orders/:id/finalize`
 - `POST /job-orders/:id/invoice/payments`
+
+Legacy records without a persisted reference render `Reference unavailable` at the presentation
+boundary. No source booking reference, back-job reference, or UUID fragment is used as a new
+Job Order reference.
 
 Planned for later slices:
 - none in the current job-orders contract pack

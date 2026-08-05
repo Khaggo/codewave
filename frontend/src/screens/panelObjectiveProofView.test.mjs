@@ -31,21 +31,21 @@ test('staff workflow references prefer business identifiers over record ids', ()
       scheduledDate: '2026-07-29',
       plateNumber: 'ABC 1234',
     }),
-    'BK-20260729-ABC1234',
+    'Reference unavailable',
   )
   assert.equal(
     formatJobOrderReference({
       id: rawId,
       sourceBookingReference: 'BK-20260729-0042',
     }),
-    'JO \u00b7 BK-20260729-0042',
+    'Reference unavailable',
   )
   assert.equal(
     formatJobOrderReference({
       id: rawId,
       sourceBackJobReference: 'BJ-20260729-0003',
     }),
-    'JO-RW \u00b7 BJ-20260729-0003',
+    'Reference unavailable',
   )
 })
 
@@ -74,15 +74,15 @@ test('QA resolves the selected reference from authoritative gate then queue cont
   )
   assert.equal(
     getLoadedJobOrderReference('', jobOrderOptions, { jobOrderId: 'job-2' }),
-    'JO \u00b7 BK-20260729-0002',
+    'Reference unavailable',
   )
-  assert.equal(getLoadedJobOrderReference('', []), 'Selected job order')
+  assert.equal(getLoadedJobOrderReference('', []), 'Reference unavailable')
   assert.equal(
     formatQaJobOrderReference({
       jobType: 'back_job',
       sourceBackJobReference: 'BJ-20260729-0003',
     }),
-    'JO-RW \u00b7 BJ-20260729-0003',
+    'Reference unavailable',
   )
 })
 

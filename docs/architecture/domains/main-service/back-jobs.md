@@ -1,5 +1,7 @@
 # back-jobs
 
+Last updated: 2026-08-05
+
 ## Domain ID
 
 `main-service.back-jobs`
@@ -43,6 +45,7 @@ Key relations:
 - one back job belongs to one vehicle and one customer
 - one back job references one original finalized job order and may also snapshot the original booking
 - one back job may link one return inspection and one rework job order
+- each back-job case has a database-owned immutable `backJobReference` in the form `BJ-YYYY-NNNNNN`
 - related job orders should support `job_type = normal | back_job`
 - returned work can be linked using nullable `parent_job_order_id`
 
@@ -56,6 +59,8 @@ Key relations:
 - feed quality metrics to analytics and visible history to lifecycle
 - ensure return diagnosis is supported by inspection records when needed
 - keep customer-facing back-job visibility limited to approved customer-safe states and dedicated read models
+- show the persisted `backJobReference` in staff and approved customer-safe views; a missing legacy
+  value renders `Reference unavailable` instead of an internal UUID
 
 ## Process Flow
 

@@ -1,5 +1,5 @@
-import { relations } from 'drizzle-orm';
-import { boolean, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { relations, sql } from 'drizzle-orm';
+import { boolean, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 
 import { vehicleInspections } from '@main-modules/inspections/schemas/inspections.schema';
 import { jobOrders } from '@main-modules/job-orders/schemas/job-orders.schema';
@@ -26,6 +26,11 @@ export const backJobFindingSeverityEnum = pgEnum('back_job_finding_severity', [
 
 export const backJobs = pgTable('back_jobs', {
   id: uuid('id').defaultRandom().primaryKey(),
+  backJobReference: varchar('back_job_reference', { length: 24 })
+    .notNull()
+    .default(
+      sql`('BJ-' || to_char(CURRENT_TIMESTAMP, 'YYYY') || '-' || lpad(nextval('back_jobs_reference_seq')::text, 6, '0'))`,
+    ),
   customerUserId: uuid('customer_user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'restrict' }),
@@ -49,7 +54,9 @@ export const backJobs = pgTable('back_jobs', {
     .references(() => users.id, { onDelete: 'restrict' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  backJobReferenceUnique: uniqueIndex('back_jobs_back_job_reference_idx').on(table.backJobReference),
+}));
 
 export const backJobFindings = pgTable('back_job_findings', {
   id: uuid('id').defaultRandom().primaryKey(),

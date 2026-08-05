@@ -282,7 +282,7 @@ function GiftCenter({ loyaltyTransactions, onBack }) {
         <View style={styles.infoBlock}>
           <Text style={styles.infoTitle}>No loyalty activity yet</Text>
           <Text style={styles.infoText}>
-            Earn points from qualifying paid services and orders, then return here to review them.
+            Earn points from qualifying paid services, then return here to review them.
           </Text>
         </View>
       )}

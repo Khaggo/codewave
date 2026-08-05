@@ -1,5 +1,7 @@
 # insurance
 
+Last updated: 2026-08-05
+
 ## Domain ID
 
 `main-service.insurance`
@@ -43,6 +45,7 @@ Key relations:
 - one user and one vehicle may have many insurance inquiries
 - one inquiry may have many supporting documents
 - one customer-generated `client_request_id` is unique per user and makes inquiry creation retry-safe
+- one inquiry has a database-owned immutable `inquiryReference` in the form `INS-YYYY-NNNNNN`
 - `insurance_records` are optional follow-on records
 
 ## Primary Business Logic
@@ -62,6 +65,9 @@ Key relations:
 - expose a live adviser/admin custom broadcast route for insurance-only in-app customer messaging
 - expose inquiry updates to notifications and lifecycle modules
 - keep direct insurer integration out of assumed scope unless explicitly added later
+- keep the product boundary as guided claim assistance: intake, document tracking, staff review,
+  customer-visible updates, and status tracking are supported; insurer approval, structured
+  estimates, repair authorization, and payment settlement are not implied
 
 ## Process Flow
 
@@ -99,6 +105,10 @@ Key relations:
 - `POST /insurance/inquiries/:id/documents/upload`
 - `POST /insurance/inquiries/:id/documents`
 - `GET /vehicles/:id/insurance-records`
+
+Customer inquiry projections expose `inquiryReference` and explicit customer-facing messages only.
+Missing legacy references render `Reference unavailable`; internal UUIDs remain non-display routing
+and relationship fields.
 
 ## Manual Broadcasts
 

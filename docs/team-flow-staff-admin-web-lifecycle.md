@@ -1,6 +1,6 @@
 # AUTOCARE Staff and Admin Web Lifecycle
 
-Date: 2026-04-18  
+Date: 2026-08-05
 Purpose: Staff/admin portal lifecycle reference for operations, QA, insurance handling, and privileged administration
 
 ## Staff/Admin Flow
@@ -21,14 +21,14 @@ flowchart LR
   CAL --> APPT[View Appointment]
   APPT --> DECIDE{Confirm / Reschedule / Decline?}
   DECIDE --> JO[Convert Confirmed Booking to Job Order]
-  JO --> ASSIGN[Assign Technician]
+  JO --> ASSIGN[Assign Technician Profile]
   ASSIGN --> ACTIVE[Job Order Active]
   ACTIVE --> PROGRESS[Update Progress / Diagnosis]
   PROGRESS --> EVIDENCE[Upload Photo Evidence]
   EVIDENCE --> FINALIZE[Finalize Work]
   FINALIZE --> QAQUEUE[Send to QA Review]
 
-  QAQUEUE --> QAASSIST[AI-Assisted QA Analysis]
+  QAQUEUE --> QAASSIST[Optional AI-Assisted QA Analysis]
   QAASSIST --> HUMANQA[Human Reviewer Decision]
   HUMANQA --> RELEASE{Release Approved?}
   RELEASE -- No --> REWORK[Return for Rework / Override Process]
@@ -46,19 +46,23 @@ flowchart LR
 ## Notes
 
 - `customer` should never remain in this portal after successful authentication.
-- `service_adviser` owns intake, booking decisions, and job-order coordination.
-- `technician` owns work progress and evidence, not staff provisioning or final release authority.
+- `service_adviser` owns intake, booking decisions, technician-profile assignment, adviser-owned
+  workshop progress/evidence, and job-order coordination.
+- Technician profiles are non-login operational records with specialties and checklist context;
+  the authenticated actor remains the service adviser or super admin.
 - `super_admin` owns staff provisioning, deactivation, and QA override authority.
+- Customer-visible records use persisted readable references; raw UUIDs remain internal routing and
+  relationship fields.
 
 ## Flow Contract Appendix
 
 | Segment | Actor | Owning Domain / Service | Required Inputs | Output / State Change | Transport | RBAC Gate |
 | --- | --- | --- | --- | --- | --- | --- |
-| Staff login | `technician`, `service_adviser`, `super_admin` | `main-service.auth` | email, password | authenticated staff session | sync API | staff roles only |
+| Staff login | `service_adviser`, `super_admin` | `main-service.auth` | email, password | authenticated staff session | sync API | staff roles only |
 | Booking decision | `service_adviser`, `super_admin` | `main-service.bookings` | booking reference, decision, optional new slot | booking confirmed, rescheduled, or declined | sync API | adviser/admin |
 | Convert to job order | `service_adviser`, `super_admin` | `main-service.job-orders` | confirmed booking, adviser identity | job order created | sync API | adviser/admin |
-| Technician assignment | `service_adviser`, `super_admin` | `main-service.job-orders` | job-order reference, technician identity | technician assignment recorded | sync API | adviser/admin |
-| Progress and evidence | `technician`, `super_admin` | `main-service.job-orders` | job-order reference, progress note, photo evidence | work state updated | sync API | assigned technician/admin |
+| Technician-profile assignment | `service_adviser`, `super_admin` | `main-service.job-orders` | Job Order reference, profile, specialty | technician-profile assignment recorded | sync API | adviser/admin |
+| Progress and evidence | `service_adviser`, `super_admin` | `main-service.job-orders` | Job Order reference, checklist/progress note, photo evidence | work state updated | sync API | adviser/admin |
 | QA review | `service_adviser`, `super_admin` | `main-service.quality-gates` | finalized work, evidence, QA annotations | release approved, blocked, or sent for rework | sync API + jobs | reviewer/admin |
 | Insurance queue update | `service_adviser`, `super_admin` | `main-service.insurance` | claim reference, new status, optional note | insurance status updated | sync API | adviser/admin |
 | Staff provisioning | `super_admin` | `main-service.auth`, `main-service.users` | staff identity, role, staff code | pending staff account created | sync API | super admin only |

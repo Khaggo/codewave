@@ -1,6 +1,6 @@
 # AUTOCARE Business-Process Implementation Alignment Report
 
-Date: 2026-05-23
+Date: 2026-08-05
 Status: Business-process audit against the uploaded `Business-Process.pdf`, the captured repo source in `docs/business-process-cruisers-crib.md`, and the current AUTOCARE implementation
 
 ## Purpose
@@ -12,6 +12,27 @@ It is intentionally strict:
 - implemented means the current system has an actual product or workflow surface for it
 - partial means the system models some of the process, but not the whole business requirement
 - missing means the paper or demo must not claim it as implemented
+
+## Current Remediation Evidence
+
+The following changes are verified in the current worktree and are separate from the historical
+live-flow notes retained in this report:
+
+- Vehicle, Job Order, insurance inquiry, and back-job records now have additive, persisted,
+  immutable business references (`VEH-YYYY-NNNNNN`, `JO-YYYY-NNNNNN`, `INS-YYYY-NNNNNN`, and
+  `BJ-YYYY-NNNNNN`) through migration `0003_panelist_alignment_ids`. Migration smoke and the
+  concurrent reference proof passed.
+- Insurance remains a guided inquiry and document-tracking workflow. Customer recovery is
+  server-backed and customer projections exclude internal notes, actor identifiers, deduplication
+  metadata, and raw source identifiers. This does not add insurer approval or repair authorization.
+- Lifecycle summaries use an optional OpenAI-compatible provider that is disabled by default. Safe
+  evidence filtering, provenance, failure handling, and adviser/super-admin review gating are
+  implemented; no unconfigured output is presented as AI.
+- Active service earning rules are available through the customer-safe loyalty earning-policy
+  endpoint and mobile display. Accessories purchases are not represented as eligible rewards.
+- Current focused verification reports web `230/230`, mobile `213/213`, focused backend
+  AI/reference/loyalty `21/21`, migration smoke, contract drift, backend typecheck, and policy
+  checks passed. This section does not claim a new live Playwright run or survey results.
 
 ## Executive Summary
 

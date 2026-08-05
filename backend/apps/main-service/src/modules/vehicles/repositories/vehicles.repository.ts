@@ -18,7 +18,7 @@ export class VehiclesRepository extends BaseRepository {
 
   async create(createVehicleDto: CreateVehicleDto) {
     const [vehicle] = await this.db.insert(vehicles).values(createVehicleDto).returning();
-    return vehicle;
+    return this.assertFound(vehicle, 'Vehicle not found');
   }
 
   async findById(id: string) {
@@ -87,6 +87,7 @@ export class VehiclesRepository extends BaseRepository {
       this.db
         .select({
           id: vehicles.id,
+          publicReference: vehicles.publicReference,
           plateNumber: vehicles.plateNumber,
           make: vehicles.make,
           model: vehicles.model,
@@ -131,4 +132,5 @@ export class VehiclesRepository extends BaseRepository {
       where: and(eq(vehicles.id, vehicleId), eq(vehicles.userId, userId)),
     });
   }
+
 }

@@ -1,6 +1,6 @@
 # Project Control Pack
 
-Last updated: 2026-07-28
+Last updated: 2026-08-05
 
 This folder is the continuity source of truth for AUTOCARE recovery work after the panel evaluation.
 
@@ -15,6 +15,7 @@ Every new chat or agent working on this project should read these files before m
 7. `UX_AUDIT_BACKLOG.md`
 8. `CHAT_HANDOFF_PROMPT.md`
 9. `WORKTREE_INTEGRATION_GUIDE.md` (required before staging or integrating the current large worktree)
+10. `ISO_25010_INSTRUMENT.md` when preparing evaluation or defense evidence
 
 ## Operating Rule
 

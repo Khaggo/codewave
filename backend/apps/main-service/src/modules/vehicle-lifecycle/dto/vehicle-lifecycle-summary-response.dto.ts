@@ -5,17 +5,17 @@ import { vehicleLifecycleSummaryStatusEnum } from '../schemas/vehicle-lifecycle.
 
 export class VehicleLifecycleSummaryProvenanceResponseDto {
   @ApiProperty({
-    example: 'local-summary-adapter',
+    example: 'openai_compatible',
   })
   provider!: string;
 
   @ApiProperty({
-    example: 'timeline-summary-v1',
+    example: 'gpt-4o-mini',
   })
   model!: string;
 
   @ApiProperty({
-    example: 'vehicle-lifecycle.summary.v1',
+    example: 'vehicle-lifecycle.summary.v2',
   })
   promptVersion!: string;
 

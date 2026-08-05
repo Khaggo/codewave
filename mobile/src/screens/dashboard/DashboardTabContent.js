@@ -125,11 +125,14 @@ export default function DashboardTabContent({
         isVeryCompactPhone={isVeryCompactPhone}
         notificationCount={notificationCount}
         loyaltyState={loyalty.state}
+        earningPolicy={loyalty.earningPolicy}
+        earningPolicyError={loyalty.earningPolicyError}
         rewards={loyalty.rewards}
         pointsBalance={loyalty.pointsBalance}
         tier={loyalty.tier}
         transactions={loyalty.transactions}
         onToggleNotifications={notifications.toggle}
+        onRefreshEarningPolicy={loyalty.reload}
         onRedeemReward={loyalty.redeem}
       />
     )
@@ -206,17 +209,13 @@ export default function DashboardTabContent({
         account={account}
         embedded
         navigation={navigation}
+        workspaceController={garage.workspaceController}
         onBookVehicle={navigateToBookingForVehicle}
         onOpenInsurance={(vehicleId) =>
           navigateToInsuranceInquiry(vehicleId, { useRememberedInquiry: false })
         }
         onSelectedVehicleChange={garage.selectVehicle}
         refreshSignal={garageRefreshSignal}
-        route={{
-          params: {
-            vehicleId: garage.selectedVehicleId,
-          },
-        }}
       />
     )
   }

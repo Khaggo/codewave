@@ -186,7 +186,7 @@ export const sendBookingToWorkshop = async ({ bookingId, accessToken }) => {
 
 export const getJobOrderById = async ({ jobOrderId, accessToken }) => {
   if (!jobOrderId) {
-    throw new ApiError('Enter or select a job-order id before loading detail.', 400, {
+    throw new ApiError('Choose a job order before loading detail.', 400, {
       path: '/api/job-orders/:id',
     });
   }

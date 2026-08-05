@@ -1,10 +1,11 @@
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import {
   index,
   integer,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -15,6 +16,11 @@ export const vehicles = pgTable(
   'vehicles',
   {
     id: uuid('id').defaultRandom().primaryKey(),
+    publicReference: varchar('public_reference', { length: 24 })
+      .notNull()
+      .default(
+        sql`('VEH-' || to_char(CURRENT_TIMESTAMP, 'YYYY') || '-' || lpad(nextval('vehicles_public_reference_seq')::text, 6, '0'))`,
+      ),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -29,6 +35,7 @@ export const vehicles = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    publicReferenceUnique: uniqueIndex('vehicles_public_reference_idx').on(table.publicReference),
     ownerGaragePageIndex: index('vehicles_user_created_id_idx').on(
       table.userId,
       table.createdAt,

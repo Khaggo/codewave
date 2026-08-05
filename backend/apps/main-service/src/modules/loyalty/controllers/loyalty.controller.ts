@@ -21,6 +21,7 @@ import { CreateEarningRuleDto } from '../dto/create-earning-rule.dto';
 import { CreateRewardDto } from '../dto/create-reward.dto';
 import { EarningRuleResponseDto } from '../dto/earning-rule-response.dto';
 import { LoyaltyAccountResponseDto } from '../dto/loyalty-account-response.dto';
+import { LoyaltyEarningPolicyResponseDto } from '../dto/loyalty-earning-policy-response.dto';
 import { LoyaltyTransactionResponseDto } from '../dto/loyalty-transaction-response.dto';
 import { RedeemRewardDto } from '../dto/redeem-reward.dto';
 import { RewardRedemptionResponseDto } from '../dto/reward-redemption-response.dto';
@@ -35,6 +36,23 @@ import { LoyaltyService } from '../services/loyalty.service';
 @Controller()
 export class LoyaltyController {
   constructor(private readonly loyaltyService: LoyaltyService) {}
+
+  @Get('loyalty/earning-policy')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Read the active customer-safe loyalty earning policy.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({
+    description: 'Active loyalty earning requirements without internal rule or audit metadata.',
+    type: LoyaltyEarningPolicyResponseDto,
+  })
+  @ApiForbiddenResponse({ description: 'Only customers and staff roles can read the earning policy.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  getEarningPolicy(@Req() request: Request) {
+    return this.loyaltyService.getEarningPolicy(
+      request.user as { userId: string; role: string },
+    );
+  }
 
   @Get('loyalty/accounts/:userId')
   @UseGuards(JwtAuthGuard, RolesGuard)

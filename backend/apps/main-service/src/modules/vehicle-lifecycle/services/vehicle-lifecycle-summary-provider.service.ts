@@ -1,88 +1,96 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 
 import type { VehicleLifecycleSummaryProvenance } from '../schemas/vehicle-lifecycle.schema';
-
-const VEHICLE_LIFECYCLE_SUMMARY_PROVIDER = 'local-summary-adapter';
-const VEHICLE_LIFECYCLE_SUMMARY_MODEL = 'timeline-summary-v1';
-const VEHICLE_LIFECYCLE_SUMMARY_PROMPT_VERSION = 'vehicle-lifecycle.summary.v1';
-
-type LifecycleSummaryInput = {
-  vehicleLabel: string;
-  timelineEvents: Array<{
-    eventType: string;
-    eventCategory: 'administrative' | 'verified';
-    sourceType: 'booking' | 'inspection' | 'job_order' | 'quality_gate' | 'lifecycle_summary' | 'manual';
-    occurredAt: Date;
-    dedupeKey: string;
-  }>;
-};
-
-type LifecycleSummaryOutput = {
-  summaryText: string;
-  provenance: VehicleLifecycleSummaryProvenance;
-};
+import {
+  AI_SUMMARY_CONFIG,
+  AI_SUMMARY_PROMPT_VERSION,
+  AI_SUMMARY_UNAVAILABLE_CODE,
+  type AiSummaryConfig,
+  isAiSummaryConfigured,
+  readAiSummaryConfig,
+} from './ai-summary-config';
+import { OpenAiCompatibleSummaryAdapter } from './openai-compatible-summary.adapter';
+import {
+  type LifecycleSummaryEvidence,
+  type LifecycleSummaryEvidenceReference,
+  type LifecycleSummaryInput,
+  type LifecycleSummaryOutput,
+  type VehicleLifecycleSummaryProvider,
+} from './vehicle-lifecycle-summary-provider.types';
 
 @Injectable()
-export class VehicleLifecycleSummaryProviderService {
-  generate(input: LifecycleSummaryInput): LifecycleSummaryOutput {
-    const orderedEvents = [...input.timelineEvents].sort(
-      (left, right) => left.occurredAt.getTime() - right.occurredAt.getTime(),
-    );
-    const verifiedEvents = orderedEvents.filter((event) => event.eventCategory === 'verified');
-    const administrativeEvents = orderedEvents.filter((event) => event.eventCategory === 'administrative');
-    const latestVerifiedEvent = verifiedEvents[verifiedEvents.length - 1] ?? null;
-    const evidenceRefs = orderedEvents.slice(-8).map((event) => event.dedupeKey);
+export class VehicleLifecycleSummaryProviderService
+  implements VehicleLifecycleSummaryProvider
+{
+  private readonly config: AiSummaryConfig;
+  private readonly adapter: OpenAiCompatibleSummaryAdapter;
 
-    const summaryParts = [
-      `${input.vehicleLabel} has ${orderedEvents.length} recorded lifecycle event${orderedEvents.length === 1 ? '' : 's'} in this history snapshot.`,
-      administrativeEvents.length
-        ? `Administrative milestones include ${summarizeEvents(administrativeEvents.slice(0, 3))}.`
-        : 'Administrative booking milestones are not yet present in this summary snapshot.',
-      verifiedEvents.length
-        ? `Verified evidence includes ${summarizeEvents(verifiedEvents.slice(-2))}.`
-        : 'There is no verified inspection-backed lifecycle evidence in this summary draft yet.',
-      latestVerifiedEvent
-        ? `The latest verified service record was logged on ${latestVerifiedEvent.occurredAt.toISOString().slice(0, 10)}.`
-        : 'Any customer-visible publication still depends on a reviewer confirming the draft against the latest verified evidence.',
-    ];
+  constructor(@Optional() @Inject(AI_SUMMARY_CONFIG) config?: AiSummaryConfig) {
+    this.config = config ?? readAiSummaryConfig();
+    this.adapter = new OpenAiCompatibleSummaryAdapter(this.config);
+  }
 
+  assertAvailable() {
+    if (!isAiSummaryConfigured(this.config)) {
+      throw new ServiceUnavailableException({
+        code: AI_SUMMARY_UNAVAILABLE_CODE,
+        message:
+          'AI summary generation is unavailable until an OpenAI-compatible provider is configured.',
+      });
+    }
+  }
+
+  buildQueuedProvenance(
+    events: LifecycleSummaryEvidenceReference[],
+  ): VehicleLifecycleSummaryProvenance {
     return {
-      summaryText: summaryParts.join(' '),
-      provenance: {
-        provider: VEHICLE_LIFECYCLE_SUMMARY_PROVIDER,
-        model: VEHICLE_LIFECYCLE_SUMMARY_MODEL,
-        promptVersion: VEHICLE_LIFECYCLE_SUMMARY_PROMPT_VERSION,
-        evidenceRefs,
-        evidenceSummary:
-          'Evidence is limited to normalized lifecycle timeline events, with special emphasis on verified inspection-backed milestones and customer-safe administrative statuses.',
-      },
+      provider: this.config.provider,
+      model: this.config.model ?? 'unconfigured',
+      promptVersion: AI_SUMMARY_PROMPT_VERSION,
+      evidenceRefs: this.toSafeEvidenceRefs(events),
+      evidenceSummary:
+        'Lifecycle evidence is queued for an optional AI provider and remains hidden until staff review.',
     };
   }
+
+  generate(input: LifecycleSummaryInput): Promise<LifecycleSummaryOutput> {
+    this.assertAvailable();
+    return this.adapter.generate({
+      vehicleLabel: this.sanitizeVehicleLabel(input.vehicleLabel),
+      timelineEvents: input.timelineEvents
+        .slice(-this.config.maxEvidenceEvents)
+        .map((event) => ({
+          eventType: event.eventType,
+          eventCategory: event.eventCategory,
+          sourceType: event.sourceType,
+          occurredAt: event.occurredAt,
+        })),
+    });
+  }
+
+  private toSafeEvidenceRefs(events: LifecycleSummaryEvidence[]) {
+    return events.slice(-this.config.maxEvidenceEvents).map((event) => {
+      const eventType =
+        event.eventType
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 80) || 'lifecycle_event';
+      return (
+        event.sourceType +
+        ':' +
+        eventType +
+        ':' +
+        event.occurredAt.toISOString().slice(0, 10)
+      );
+    });
+  }
+
+  private sanitizeVehicleLabel(value: string) {
+    return value
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120);
+  }
 }
-
-const summarizeEvents = (
-  events: Array<{
-    eventType: string;
-    occurredAt: Date;
-  }>,
-) =>
-  events
-    .map((event) => `${humanizeEventType(event.eventType)} (${event.occurredAt.toISOString().slice(0, 10)})`)
-    .join(', ');
-
-const humanizeEventType = (eventType: string) => {
-  if (eventType.startsWith('inspection_')) {
-    return eventType
-      .replace(/^inspection_/, '')
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, (letter) => letter.toUpperCase());
-  }
-
-  if (eventType.startsWith('booking_')) {
-    return eventType
-      .replace(/^booking_/, 'booking ')
-      .replace(/_/g, ' ');
-  }
-
-  return eventType.replace(/_/g, ' ');
-};

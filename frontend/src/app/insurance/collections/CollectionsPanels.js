@@ -6,6 +6,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { formatStatusLabel } from '../insuranceView.mjs'
+import { getInsuranceInquiryReference } from '@/lib/businessReferenceDisplay.mjs'
 
 const POSITIVE_BADGE_VALUES = new Set(['active', 'paid'])
 const WARNING_BADGE_VALUES = new Set([
@@ -215,7 +216,8 @@ export function CollectionsDetailPanel({
           <div className="grid gap-3 md:grid-cols-2">
             <DetailField label="Customer" value={selectedInquiry.customerDisplayName} />
             <DetailField label="Vehicle" value={selectedInquiry.vehicleLabel} />
-            <DetailField label="Subject" value={selectedInquiry.subject || selectedInquiry.id} />
+            <DetailField label="Case Reference" value={getInsuranceInquiryReference(selectedInquiry)} />
+            <DetailField label="Subject" value={selectedInquiry.subject} />
             <DetailField label="Policy Number" value={selectedInquiry.policyNumber} />
             <DetailField label="Payment Due" value={formatDateOnly(selectedInquiry.paymentDueAt)} />
             <DetailField
@@ -272,7 +274,7 @@ export function CollectionsDetailPanel({
                       <p className="text-[11px] text-ink-muted">{formatDateTime(activityItem.createdAt)}</p>
                     </div>
                     <p className="mt-2 text-xs text-ink-muted">
-                      Actor: {activityItem.actorUserId || 'System'}
+                      Staff update
                     </p>
                     {activityItem.notes ? (
                       <p className="mt-2 text-sm text-ink-secondary">{activityItem.notes}</p>

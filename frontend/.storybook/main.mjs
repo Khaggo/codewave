@@ -60,6 +60,10 @@ const config = {
     },
     optimizeDeps: {
       ...viteConfig.optimizeDeps,
+      include: [
+        ...(viteConfig.optimizeDeps?.include ?? []),
+        '@radix-ui/react-select',
+      ],
       rolldownOptions: {
         ...viteConfig.optimizeDeps?.rolldownOptions,
         moduleTypes: {

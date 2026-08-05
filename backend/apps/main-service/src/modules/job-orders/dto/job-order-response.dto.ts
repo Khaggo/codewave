@@ -145,10 +145,10 @@ export class JobOrderResponseDto {
   })
   vehicleLabel?: string | null;
 
-  @ApiPropertyOptional({
-    example: 'JO · BK-20260521-0007',
+  @ApiProperty({
+    example: 'JO-2026-000001',
   })
-  jobOrderReference?: string | null;
+  jobOrderReference!: string;
 
   @ApiPropertyOptional({
     example: 'BK-20260521-0007',
