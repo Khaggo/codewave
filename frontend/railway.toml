@@ -1,3 +1,4 @@
+# Release marker: full-system deployment 2026-08-05.
 [build]
 builder = "RAILPACK"
 buildCommand = "npm --workspace autocare-web run build"
