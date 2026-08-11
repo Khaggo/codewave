@@ -36,6 +36,41 @@
       "when": 1785915900000,
       "tag": "0004_legacy_production_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785963220781,
+      "tag": "0005_mute_iron_fist",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786188454128,
+      "tag": "0006_web_qa_intake_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786359439312,
+      "tag": "0007_lyrical_mojo",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786418639871,
+      "tag": "0008_acoustic_white_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786421000000,
+      "tag": "0009_staff_first_login_security",
+      "breakpoints": true
     }
   ]
 }

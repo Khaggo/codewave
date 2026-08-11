@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import {
   getRuntimeLogPolicy,
+  removeFileSafely,
   rotateLogFile,
 } from './runtime-file-utils.mjs';
 
@@ -21,6 +22,25 @@ test('runtime log policy uses bounded defaults and valid overrides', () => {
     }),
     { maxBytes: 1024, retainedFiles: 2 },
   );
+});
+
+test('Windows stale metadata cleanup tolerates EPERM without looping', () => {
+  let removeAttempts = 0;
+  const fileSystem = {
+    chmodSync() {},
+    rmSync() {
+      removeAttempts += 1;
+      const error = new Error('simulated Windows file lock');
+      error.code = 'EPERM';
+      throw error;
+    },
+  };
+
+  assert.equal(
+    removeFileSafely('stale-lock.json', { fileSystem, platform: 'win32' }),
+    false,
+  );
+  assert.equal(removeAttempts, 2);
 });
 
 test('log rotation retains the configured generations', () => {

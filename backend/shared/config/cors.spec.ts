@@ -1,5 +1,6 @@
 import {
   CUSTOMER_API_CORS_ALLOWED_HEADERS,
+  createCorsOriginCallback,
   isAllowedCorsOrigin,
   STAFF_API_CORS_ALLOWED_HEADERS,
 } from './cors';
@@ -75,5 +76,33 @@ describe('isAllowedCorsOrigin', () => {
         env: 'development',
       }),
     ).toBe(false);
+  });
+
+  it('rejects an invalid origin without returning a middleware error', () => {
+    const callback = createCorsOriginCallback({
+      allowedOrigins: ['https://staff.autocare.example'],
+      env: 'production',
+    });
+    let result: { error: Error | null; allow?: boolean } | undefined;
+
+    callback('https://untrusted.example', (error, allow) => {
+      result = { error, allow };
+    });
+
+    expect(result).toEqual({ error: null, allow: false });
+  });
+
+  it('preserves allowed-origin behavior through the callback', () => {
+    const callback = createCorsOriginCallback({
+      allowedOrigins: ['https://staff.autocare.example'],
+      env: 'production',
+    });
+    let result: { error: Error | null; allow?: boolean } | undefined;
+
+    callback('https://staff.autocare.example', (error, allow) => {
+      result = { error, allow };
+    });
+
+    expect(result).toEqual({ error: null, allow: true });
   });
 });

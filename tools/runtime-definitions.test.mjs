@@ -51,10 +51,13 @@ test('mobile web health stays fast while readiness warms the real application bu
 });
 
 test('managed main backend requires database-aware readiness', () => {
+  const definition = getRuntimeDefinition('backend-main');
+
   assert.equal(
-    getRuntimeDefinition('backend-main').healthUrl,
+    definition.healthUrl,
     'http://127.0.0.1:3000/api/health/ready',
   );
+  assert.equal(getRuntimeStartTimeoutMs(definition), 60_000);
 });
 
 test('managed staff web keeps development output separate from production builds', () => {
@@ -86,10 +89,7 @@ test('managed mobile Storybook is isolated from production Expo bundles', () => 
 });
 
 test('runtime startup bounds are service-aware and retain a safe default', () => {
-  assert.equal(
-    getRuntimeStartTimeoutMs(getRuntimeDefinition('backend-main')),
-    120_000,
-  );
+  assert.equal(getRuntimeStartTimeoutMs(getRuntimeDefinition('backend-main')), 60_000);
   assert.equal(getRuntimeStartTimeoutMs({}), DEFAULT_RUNTIME_START_TIMEOUT_MS);
   assert.equal(getRuntimeStartTimeoutMs({}, 1_500), 1_500);
   assert.equal(

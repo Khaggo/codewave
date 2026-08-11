@@ -3,6 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 const WINDOWS_RENAME_RETRY_DELAYS_MS = [10, 25, 50, 100, 200];
+const WINDOWS_REMOVE_RETRY_OPTIONS = { maxRetries: 2, retryDelay: 50 };
 const DEFAULT_LOG_MAX_BYTES = 5 * 1024 * 1024;
 const DEFAULT_LOG_RETAINED_FILES = 3;
 
@@ -23,12 +24,47 @@ export function writeJsonAtomic(filePath, value) {
         && ['EACCES', 'EPERM'].includes(error?.code)
         && attempt < WINDOWS_RENAME_RETRY_DELAYS_MS.length;
       if (!retryableWindowsReplace) {
-        try {
-          fs.unlinkSync(temporaryPath);
-        } catch {}
+        removeFileSafely(temporaryPath);
         throw error;
       }
       sleepSync(WINDOWS_RENAME_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+}
+
+export function removeFileSafely(filePath, options = {}) {
+  const fileSystem = options.fileSystem ?? fs;
+  const platform = options.platform ?? process.platform;
+  const removeOptions = platform === 'win32'
+    ? { force: true, ...WINDOWS_REMOVE_RETRY_OPTIONS }
+    : { force: true };
+
+  try {
+    fileSystem.rmSync(filePath, removeOptions);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return true;
+    if (platform !== 'win32' || !['EACCES', 'EPERM'].includes(error?.code)) {
+      throw error;
+    }
+
+    try {
+      fileSystem.chmodSync(filePath, 0o666);
+    } catch (chmodError) {
+      if (chmodError?.code === 'ENOENT') return true;
+    }
+
+    try {
+      fileSystem.rmSync(filePath, {
+        force: true,
+        maxRetries: 1,
+        retryDelay: 50,
+      });
+      return true;
+    } catch (retryError) {
+      if (retryError?.code === 'ENOENT') return true;
+      if (['EACCES', 'EPERM'].includes(retryError?.code)) return false;
+      throw retryError;
     }
   }
 }

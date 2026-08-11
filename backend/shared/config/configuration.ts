@@ -35,6 +35,9 @@ export type AppConfig = {
   cors: {
     origins: string[];
   };
+  openApi: {
+    publicEnabled: boolean;
+  };
   database: {
     url: string;
   };
@@ -139,6 +142,20 @@ const toStringArray = (value: string | undefined, fallback: string[]): string[] 
   return values.length ? values : fallback;
 };
 
+export const getPublicOpenApiEnabled = ({
+  env,
+  configuredValue,
+}: {
+  env: string;
+  configuredValue?: string;
+}): boolean => {
+  if (env.trim().toLowerCase() === 'production') {
+    return false;
+  }
+
+  return configuredValue?.trim().toLowerCase() !== 'false';
+};
+
 export default (): AppConfig => {
   const env = coalesceString(process.env.NODE_ENV) ?? 'development';
   const staffWorkClaimEnforcementMode =
@@ -209,6 +226,12 @@ export default (): AppConfig => {
         'http://localhost:3002',
         'http://127.0.0.1:3002',
       ]),
+    },
+    openApi: {
+      publicEnabled: getPublicOpenApiEnabled({
+        env,
+        configuredValue: process.env.ENABLE_PUBLIC_OPENAPI,
+      }),
     },
     database: {
       url: coalesceString(process.env.DATABASE_URL) ?? 'postgresql://admin:root@localhost:5433/codewave',

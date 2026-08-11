@@ -1,6 +1,6 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "npm --workspace backend run build:main"
+buildCommand = "npm run build:main"
 watchPatterns = [
   "/backend/**",
   "/packages/**",
@@ -9,8 +9,8 @@ watchPatterns = [
 ]
 
 [deploy]
-preDeployCommand = "npm --workspace backend run db:migrate"
-startCommand = "npm --workspace backend run start:main:compiled"
+preDeployCommand = "npm run db:migrate"
+startCommand = "npm run start:main:compiled"
 healthcheckPath = "/api/health/ready"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

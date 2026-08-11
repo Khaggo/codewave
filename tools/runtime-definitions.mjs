@@ -9,7 +9,7 @@ export const RUNTIME_DEFINITIONS = Object.freeze({
     runtimeDirectory: '.managed-runtime',
     healthUrl: 'http://127.0.0.1:3000/api/health/ready',
     command: ['npm', 'run', 'dev:main:raw'],
-    startupTimeoutMs: 120_000,
+    startupTimeoutMs: 60_000,
   }),
   'staff-web': Object.freeze({
     name: 'staff-web',

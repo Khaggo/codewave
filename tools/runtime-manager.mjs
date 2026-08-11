@@ -13,7 +13,10 @@ import {
   normalizeSpawnEnvironment,
 } from './runtime-definitions.mjs';
 import { launchDetachedWatchdog } from './runtime-detached-launcher.mjs';
-import { writeJsonAtomic } from './runtime-file-utils.mjs';
+import {
+  removeFileSafely,
+  writeJsonAtomic,
+} from './runtime-file-utils.mjs';
 import {
   formatFailureLogs,
   formatRuntimeLogs,
@@ -21,8 +24,10 @@ import {
   printUsage,
 } from './runtime-manager-output.mjs';
 import {
-  getOwnedPids,
+  getProcessIdentity,
+  inspectRecordedProcessOwnership,
   isPidAlive,
+  isSameProcessIdentity,
   terminateOwnedTree,
 } from './runtime-process-tree.mjs';
 import { getListeningPid } from './runtime-port-listener.mjs';
@@ -74,20 +79,38 @@ function readJson(filePath) {
 }
 
 function removeFile(filePath) {
-  try {
-    fs.unlinkSync(filePath);
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
-  }
+  return removeFileSafely(filePath);
 }
 
-function isOwnedLock(lock, definition) {
+function isOwnedLock(lock, definition, options = {}) {
+  const inspect = options.getProcessIdentity ?? getProcessIdentity;
   return Boolean(
     lock?.instanceId
       && lock.name === definition.name
       && lock.port === definition.port
-      && isPidAlive(Number(lock.watchdogPid)),
+      && isSameProcessIdentity(
+        lock.watchdogIdentity,
+        inspect(Number(lock.watchdogPid)),
+      ),
   );
+}
+
+export function canClearStaleRuntimeMetadata(lock, options = {}) {
+  return inspectRecordedProcessOwnership(lock, options).safeToClear;
+}
+
+function clearStaleRuntimeMetadata(status, definition, options = {}) {
+  const ownership = inspectRecordedProcessOwnership(status.lock, options);
+  if (!ownership.safeToClear) {
+    throw new Error(
+      `${definition.name} stale metadata ownership could not be disproved. Refusing cleanup while recorded PID identity remains owned or unknown.`,
+    );
+  }
+  if (!removeFile(status.paths.lock)) {
+    throw new Error(
+      `${definition.name} stale metadata could not be cleared after ownership was disproved.`,
+    );
+  }
 }
 
 function isActiveLaunchReservation(lock, definition) {
@@ -114,7 +137,7 @@ export async function getRuntimeStatus(definition, options = {}) {
       attempts: options.healthProbeAttempts ?? 1,
       retryDelayMs: options.healthProbeRetryDelayMs ?? 150,
     });
-  const lockOwned = isOwnedLock(lock, definition);
+  const lockOwned = isOwnedLock(lock, definition, options);
   const launchReserved = isActiveLaunchReservation(lock, definition);
   const listenerMatches = Boolean(
     lockOwned
@@ -167,7 +190,7 @@ export async function startRuntime(definition, options = {}) {
     return { ...initialStatus, reused: true };
   }
   if (initialStatus.state === 'stale-lock') {
-    removeFile(paths.lock);
+    clearStaleRuntimeMetadata(initialStatus, definition, options);
   }
 
   const instanceId = randomUUID();
@@ -259,7 +282,7 @@ export async function waitForRuntime(definition, options = {}) {
     rootDirectory,
     probeReadiness: true,
   });
-  const ownedLock = isOwnedLock(lastStatus.lock, definition);
+  const ownedLock = isOwnedLock(lastStatus.lock, definition, options);
   const activeReservation = isActiveLaunchReservation(
     lastStatus.lock,
     definition,
@@ -288,7 +311,9 @@ export async function waitForRuntime(definition, options = {}) {
   }
 
   if (ownedLock) {
-    terminateOwnedTree(lastStatus.lock);
+    terminateOwnedTree(lastStatus.lock, {
+      getProcessIdentity: options.getProcessIdentity,
+    });
     const stopDeadline = Date.now() + DEFAULT_STOP_TIMEOUT_MS;
     while (Date.now() < stopDeadline && getListeningPid(definition.port)) {
       await sleep(POLL_INTERVAL_MS);
@@ -306,10 +331,10 @@ export async function stopRuntime(definition, options = {}) {
   const status = await getRuntimeStatus(definition, { rootDirectory });
   if (status.state === 'stopped') return { ...status, stopped: true };
   if (status.state === 'stale-lock' && !status.listenerPid) {
-    removeFile(status.paths.lock);
+    clearStaleRuntimeMetadata(status, definition, options);
     return { ...status, state: 'stopped', stopped: true };
   }
-  if (!isOwnedLock(status.lock, definition)) {
+  if (!isOwnedLock(status.lock, definition, options)) {
     throw new Error(
       `${definition.name} is ${status.state} on port ${definition.port}. Refusing to stop a process that is not owned by the runtime manager.`,
     );
@@ -324,7 +349,9 @@ export async function stopRuntime(definition, options = {}) {
     );
   }
 
-  const ownedPids = terminateOwnedTree(status.lock);
+  const ownedPids = terminateOwnedTree(status.lock, {
+    getProcessIdentity: options.getProcessIdentity,
+  });
   const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_STOP_TIMEOUT_MS);
   let listenerPid = getListeningPid(definition.port);
   let activeOwnedPids = ownedPids.filter(isPidAlive);
@@ -343,7 +370,11 @@ export async function stopRuntime(definition, options = {}) {
   }
   const currentLock = readJson(status.paths.lock);
   if (!currentLock || currentLock.instanceId === status.lock.instanceId) {
-    removeFile(status.paths.lock);
+    if (!removeFile(status.paths.lock)) {
+      throw new Error(
+        `${definition.name} metadata could not be cleared after stopping owned processes.`,
+      );
+    }
   }
   return {
     ...(await getRuntimeStatus(definition, { rootDirectory })),

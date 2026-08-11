@@ -24,6 +24,7 @@ import {
   staffPortalStateMessages,
 } from '@/lib/api/generated/auth/staff-web-session'
 import { getStaffPortalRouteGuardDecision } from '@/lib/api/generated/auth/client-surface-guardrails'
+import { isPublicPaymentReturnRoute } from './publicPaymentRouteAccess.mjs'
 import { getSidebarWidth } from './layoutShellView.mjs'
 import {
   heartbeatStaffWorkClaim,
@@ -401,6 +402,10 @@ export default function AppShell({ children }) {
     setSession(nextSession)
     saveStoredSession(nextSession)
     return nextSession.user
+  }
+
+  if (isPublicPaymentReturnRoute(pathname)) {
+    return children
   }
 
   if (!authReady) {

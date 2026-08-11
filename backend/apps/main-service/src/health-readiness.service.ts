@@ -3,6 +3,8 @@ import type { Pool } from 'pg';
 
 import { PG_POOL } from '@shared/db/database.constants';
 
+import { getReleaseIdentity } from './release-identity';
+
 type ReadinessRow = {
   coreTableReady: boolean;
   insuranceColumnsReady: boolean;
@@ -38,22 +40,13 @@ const READINESS_QUERY = `
     ) AS "insuranceColumnsReady"
 `;
 
-const getServiceVersion = () => {
-  const candidate =
-    process.env.APP_VERSION?.trim() ||
-    process.env.RAILWAY_GIT_COMMIT_SHA?.trim().slice(0, 12) ||
-    'development';
-
-  return candidate.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 64) || 'development';
-};
-
 const buildPayload = (
   status: ReadinessPayload['status'],
   database: DependencyState,
   schema: DependencyState,
 ): ReadinessPayload => ({
   service: 'main-service',
-  version: getServiceVersion(),
+  version: getReleaseIdentity(),
   status,
   dependencies: {
     database,

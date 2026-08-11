@@ -8,6 +8,7 @@ import {
 import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 
 import { HealthReadinessService } from './health-readiness.service';
+import { getReleaseIdentity } from './release-identity';
 
 const readinessResponseSchema: SchemaObject = {
   type: 'object',
@@ -56,6 +57,7 @@ export class HealthController {
     schema: {
       example: {
         service: 'main-service',
+        version: 'development',
         status: 'ok',
       },
     },
@@ -63,6 +65,7 @@ export class HealthController {
   getHealth() {
     return {
       service: 'main-service',
+      version: getReleaseIdentity(),
       status: 'ok',
     };
   }

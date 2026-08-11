@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import {
+  canClearStaleRuntimeMetadata,
   getCliTimeoutMs,
   getCliWaitTimeoutMs,
   getListeningPid,
@@ -53,6 +54,74 @@ test('CLI commands have explicit hard deadlines', () => {
   );
   assert.equal(getCliWaitTimeoutMs({ startupTimeoutMs: 90_000 }), 20_000);
   assert.equal(getCliTimeoutMs('wait', { startupTimeoutMs: 90_000 }), 30_000);
+});
+
+test('stale metadata cleanup requires every recorded PID to be absent or not owned', () => {
+  const startedAt = '2026-08-11T12:00:00.000Z';
+  const lock = {
+    watchdogPid: 101,
+    watchdogIdentity: { pid: 101, startedAt, executablePath: 'node.exe' },
+    childPid: 102,
+    childIdentity: { pid: 102, startedAt, executablePath: 'node.exe' },
+  };
+
+  assert.equal(
+    canClearStaleRuntimeMetadata(lock, { getProcessIdentity: () => null }),
+    true,
+  );
+  assert.equal(
+    canClearStaleRuntimeMetadata(lock, {
+      getProcessIdentity: (pid) => ({
+        pid,
+        startedAt: '2026-08-11T13:00:00.000Z',
+        executablePath: 'other.exe',
+      }),
+    }),
+    true,
+  );
+  assert.equal(
+    canClearStaleRuntimeMetadata(lock, {
+      getProcessIdentity: (pid) => ({
+        pid,
+        startedAt,
+        executablePath: 'node.exe',
+      }),
+    }),
+    false,
+  );
+  assert.equal(
+    canClearStaleRuntimeMetadata(
+      { watchdogPid: 101 },
+      { getProcessIdentity: () => ({ pid: 101, startedAt }) },
+    ),
+    false,
+  );
+});
+
+test('managed launch paths never inherit terminal handles and CLI operations stay bounded', () => {
+  const detachedSource = fs.readFileSync(
+    path.join(TOOLS_DIR, 'runtime-detached-launcher.mjs'),
+    'utf8',
+  );
+  const bootstrapSource = fs.readFileSync(
+    path.join(TOOLS_DIR, 'runtime-windows-bootstrap.mjs'),
+    'utf8',
+  );
+  const watchdogSource = fs.readFileSync(
+    path.join(TOOLS_DIR, 'runtime-watchdog.mjs'),
+    'utf8',
+  );
+
+  assert.match(detachedSource, /stdio: 'ignore'/);
+  assert.match(bootstrapSource, /stdio: 'ignore'/);
+  assert.match(watchdogSource, /stdio: \['ignore', 'pipe', 'pipe'\]/);
+  assert.doesNotMatch(
+    `${detachedSource}\n${bootstrapSource}\n${watchdogSource}`,
+    /stdio:\s*['"]inherit['"]/,
+  );
+  for (const command of ['start', 'stop', 'restart', 'status', 'logs']) {
+    assert.ok(getCliTimeoutMs(command) <= 30_000, command);
+  }
 });
 
 function reservePort() {
@@ -176,7 +245,7 @@ test('detached runtime lifecycle is bounded, single-instance, and ownership-safe
     );
     const readyFirst = await waitForRuntime(definition, {
       rootDirectory,
-      timeoutMs: 3_000,
+      timeoutMs: definition.startupTimeoutMs + 2_000,
     });
     assert.equal(readyFirst.state, 'managed-healthy');
     assert.equal(readyFirst.lock.startupTimeoutMs, 10_000);
@@ -350,6 +419,43 @@ test('a bounded wait leaves an owned startup running until its configured deadli
     });
     assert.equal(ready.state, 'managed-healthy');
     assert.notEqual(ready.pending, true);
+  } finally {
+    const status = await getRuntimeStatus(definition, { rootDirectory }).catch(() => null);
+    if (status?.state?.startsWith('managed')) {
+      await stopRuntime(definition, { rootDirectory, timeoutMs: 5_000 }).catch(() => {});
+    }
+    removeFixtureDirectory(rootDirectory);
+  }
+});
+
+test('Windows detached bootstrap keeps a fixture listener alive after launch returns', {
+  timeout: 15_000,
+  skip: process.platform !== 'win32',
+}, async () => {
+  const rootDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'codewave-runtime-windows-'));
+  const port = await reservePort();
+  const definition = {
+    name: `windows-fixture-${process.pid}`,
+    port,
+    cwd: '.',
+    runtimeDirectory: '.runtime',
+    healthUrl: `http://127.0.0.1:${port}/health`,
+    command: [process.execPath, FIXTURE_SERVER, String(port)],
+    startupTimeoutMs: 5_000,
+  };
+
+  try {
+    await startRuntime(definition, { rootDirectory });
+    const ready = await waitForRuntime(definition, {
+      rootDirectory,
+      timeoutMs: 5_000,
+    });
+    assert.equal(ready.state, 'managed-healthy');
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const stable = await getRuntimeStatus(definition, { rootDirectory });
+    assert.equal(stable.state, 'managed-healthy');
+    assert.ok(stable.listenerPid);
   } finally {
     const status = await getRuntimeStatus(definition, { rootDirectory }).catch(() => null);
     if (status?.state?.startsWith('managed')) {

@@ -5,7 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import {
-  isAllowedCorsOrigin,
+  createCorsOriginCallback,
   STAFF_API_CORS_ALLOWED_HEADERS,
 } from '@shared/config/cors';
 import helmet from 'helmet';
@@ -23,6 +23,10 @@ async function bootstrap() {
     'http://localhost:3002',
     'http://127.0.0.1:3002',
   ]);
+  const publicOpenApiEnabled = configService.get<boolean>(
+    'openApi.publicEnabled',
+    env.toLowerCase() !== 'production',
+  );
 
   if (env.toLowerCase() === 'production') {
     app.getHttpAdapter().getInstance().set('trust proxy', 1);
@@ -35,23 +39,7 @@ async function bootstrap() {
   );
   app.setGlobalPrefix('api');
   app.enableCors({
-    origin: (
-      origin: string | undefined,
-      callback: (error: Error | null, allow?: boolean) => void,
-    ) => {
-      if (
-        isAllowedCorsOrigin({
-          origin,
-          allowedOrigins,
-          env,
-        })
-      ) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error(`Origin ${origin} is not allowed by CORS`), false);
-    },
+    origin: createCorsOriginCallback({ allowedOrigins, env }),
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: STAFF_API_CORS_ALLOWED_HEADERS,
   });
@@ -63,7 +51,9 @@ async function bootstrap() {
     }),
   );
 
-  setupSwagger(app);
+  if (publicOpenApiEnabled) {
+    setupSwagger(app);
+  }
 
   const rabbitmqUrl = configService.get<string>('rabbitmq.url');
   if (rabbitmqUrl) {

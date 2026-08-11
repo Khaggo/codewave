@@ -167,4 +167,27 @@ describe('validateEnv production security', () => {
       }),
     ).toThrow('CORS_ORIGINS must contain explicit trusted origins in production');
   });
+
+  it('validates the public OpenAPI flag and blocks it in production', () => {
+    expect(() =>
+      validateEnv({
+        ...productionConfig,
+        ENABLE_PUBLIC_OPENAPI: 'true',
+      }),
+    ).toThrow('ENABLE_PUBLIC_OPENAPI must be false in production');
+
+    expect(() =>
+      validateEnv({
+        ...productionConfig,
+        ENABLE_PUBLIC_OPENAPI: 'invalid',
+      }),
+    ).toThrow('ENABLE_PUBLIC_OPENAPI must be true or false');
+
+    expect(
+      validateEnv({
+        ...productionConfig,
+        ENABLE_PUBLIC_OPENAPI: 'false',
+      }).ENABLE_PUBLIC_OPENAPI,
+    ).toBe('false');
+  });
 });

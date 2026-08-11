@@ -1,0 +1,39 @@
+.returnPage {
+  box-sizing: border-box;
+  align-items: safe center;
+  justify-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.returnCard {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.returnCard > * {
+  min-width: 0;
+}
+
+.returnDetails {
+  min-width: 0;
+}
+
+.primaryAction {
+  box-sizing: border-box;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.primaryAction:focus-visible {
+  outline: 3px solid rgb(var(--brand-orange));
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px #ffffff;
+}

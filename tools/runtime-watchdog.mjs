@@ -9,10 +9,16 @@ import { format } from 'node:util';
 import { normalizeSpawnEnvironment } from './runtime-definitions.mjs';
 import {
   getRuntimeLogPolicy,
+  removeFileSafely,
   rotateLogFile,
   writeJsonAtomic,
 } from './runtime-file-utils.mjs';
 import { getListeningPid } from './runtime-port-listener.mjs';
+import {
+  getProcessIdentity,
+  inspectRecordedProcessOwnership,
+  isSameProcessIdentity,
+} from './runtime-process-tree.mjs';
 import { probeHealth } from './runtime-probe.mjs';
 
 let runtimeDirectory = path.join(process.cwd(), '.runtime');
@@ -176,9 +182,7 @@ function writeLock(name, data) {
 
 function removeLock(name) {
   const filePath = lockFilePath(name);
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-  }
+  return removeFileSafely(filePath);
 }
 
 function removeOwnedLock(name, instanceId) {
@@ -256,10 +260,19 @@ async function main() {
   const instanceId = options.instanceId || `${process.pid}-${Date.now()}`;
   const workingDirectory = path.resolve(process.cwd(), options.cwd);
   const existingLock = readLock(options.name);
+  const watchdogIdentity = getProcessIdentity(process.pid) ?? {
+    pid: process.pid,
+    startedAt: new Date(Date.now() - (process.uptime() * 1_000)).toISOString(),
+    executablePath: process.execPath,
+    commandLine: process.argv.join(' '),
+  };
 
   if (
     existingLock?.watchdogPid
-      && isPidAlive(existingLock.watchdogPid)
+      && isSameProcessIdentity(
+        existingLock.watchdogIdentity,
+        getProcessIdentity(Number(existingLock.watchdogPid)),
+      )
       && existingLock.instanceId !== instanceId
   ) {
     console.log(
@@ -269,7 +282,19 @@ async function main() {
   }
 
   if (existingLock && existingLock.instanceId !== instanceId) {
-    removeLock(options.name);
+    const ownership = inspectRecordedProcessOwnership(existingLock);
+    if (!ownership.safeToClear) {
+      console.error(
+        `[watchdog:${options.name}] existing metadata ownership is still active or unknown. No new process started.`,
+      );
+      return;
+    }
+    if (!removeLock(options.name)) {
+      console.error(
+        `[watchdog:${options.name}] stale metadata is still locked. No new process started.`,
+      );
+      return;
+    }
   }
 
   const currentPid = getListeningPid(options.port);
@@ -328,6 +353,7 @@ async function main() {
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    const childIdentity = getProcessIdentity(child.pid);
     const generation = ++childGeneration;
 
     writeLock(options.name, {
@@ -338,8 +364,11 @@ async function main() {
       cwd: workingDirectory,
       healthUrl: options.healthUrl || null,
       watchdogPid: process.pid,
+      watchdogIdentity,
       childPid: child.pid,
+      childIdentity,
       listenerPid: null,
+      listenerIdentity: null,
       startedAt: new Date().toISOString(),
       command,
       status: 'starting',
@@ -356,6 +385,7 @@ async function main() {
           writeLock(options.name, {
             ...current,
             listenerPid,
+            listenerIdentity: getProcessIdentity(listenerPid),
             status: 'healthy',
             readyAt: new Date().toISOString(),
           });
@@ -407,7 +437,11 @@ async function main() {
     cwd: workingDirectory,
     healthUrl: options.healthUrl || null,
     watchdogPid: process.pid,
+    watchdogIdentity,
     childPid: null,
+    childIdentity: null,
+    listenerPid: null,
+    listenerIdentity: null,
     startedAt: new Date().toISOString(),
     command,
     status: 'starting',

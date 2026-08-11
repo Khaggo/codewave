@@ -63,3 +63,22 @@ export const isAllowedCorsOrigin = ({
     return false;
   }
 };
+
+export const createCorsOriginCallback = ({
+  allowedOrigins,
+  env = 'development',
+}: Pick<CorsOriginCheck, 'allowedOrigins' | 'env'>) => {
+  return (
+    origin: string | undefined,
+    callback: (error: Error | null, allow?: boolean) => void,
+  ) => {
+    callback(
+      null,
+      isAllowedCorsOrigin({
+        origin,
+        allowedOrigins,
+        env,
+      }),
+    );
+  };
+};

@@ -28,6 +28,13 @@ export const validateEnv = (config: EnvRecord): EnvRecord => {
   }
 
   const isProduction = config.NODE_ENV?.trim().toLowerCase() === 'production';
+  const publicOpenApi = config.ENABLE_PUBLIC_OPENAPI?.trim().toLowerCase();
+  if (publicOpenApi && !['true', 'false'].includes(publicOpenApi)) {
+    throw new Error('ENABLE_PUBLIC_OPENAPI must be true or false');
+  }
+  if (isProduction && publicOpenApi === 'true') {
+    throw new Error('ENABLE_PUBLIC_OPENAPI must be false in production');
+  }
   const accessoryCommerceMode = config.ACCESSORY_COMMERCE_MODE?.trim().toLowerCase();
   if (!accessoryCommerceMode) {
     if (isProduction) {
