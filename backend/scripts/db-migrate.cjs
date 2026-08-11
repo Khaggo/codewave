@@ -2,14 +2,11 @@
 
 const { resolve } = require('node:path');
 
-const { drizzle } = require('drizzle-orm/node-postgres');
-const { migrate } = require('drizzle-orm/node-postgres/migrator');
-const { Pool } = require('pg');
-
-const DEFAULT_DATABASE_URL =
-  'postgresql://admin:root@localhost:5433/codewave';
 const DEFAULT_MIGRATIONS_FOLDER = resolve(__dirname, '../drizzle');
 const MIGRATION_CONTEXT = 'committed drizzle migrations';
+const STARTUP_MARKER = JSON.stringify({
+  event: 'database_migration_runner_started',
+});
 const MIGRATION_TIMEOUT_MILLIS = 5_000;
 const MAX_DIAGNOSTIC_LENGTH = 240;
 const MAX_ERROR_CHAIN_DEPTH = 4;
@@ -39,6 +36,81 @@ const SAFE_SEVERITIES = new Set([
   'FATAL',
   'PANIC',
 ]);
+
+const CONNECTION_ERROR_CODES = new Set([
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+  '28P01',
+  '28000',
+  '3D000',
+  '53300',
+  '57P03',
+]);
+
+function toDefinedString(value) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function isProductionRuntime(environment) {
+  return (
+    toDefinedString(environment.NODE_ENV)?.toLowerCase() === 'production' ||
+    toDefinedString(environment.npm_config_production)?.toLowerCase() ===
+      'true' ||
+    Boolean(toDefinedString(environment.RAILWAY_ENVIRONMENT_ID))
+  );
+}
+
+function createRunnerError(runnerCode) {
+  const error = new Error();
+  error.name = 'MigrationRunnerError';
+  error.runnerCode = runnerCode;
+  return error;
+}
+
+function resolveDatabaseUrl(explicitDatabaseUrl, environment) {
+  const databaseUrl =
+    toDefinedString(explicitDatabaseUrl) ??
+    toDefinedString(environment.DATABASE_URL);
+  const production = isProductionRuntime(environment);
+
+  if (!databaseUrl) {
+    throw createRunnerError('MIGRATION_CONFIG_MISSING');
+  }
+
+  try {
+    const parsed = new URL(databaseUrl);
+    if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+      throw createRunnerError('MIGRATION_CONFIG_INVALID');
+    }
+    if (
+      production &&
+      ['localhost', '127.0.0.1', '::1'].includes(
+        parsed.hostname.toLowerCase(),
+      )
+    ) {
+      throw createRunnerError('MIGRATION_CONFIG_INVALID');
+    }
+  } catch (error) {
+    if (readErrorField(error, 'runnerCode')) throw error;
+    throw createRunnerError('MIGRATION_CONFIG_INVALID');
+  }
+
+  return databaseUrl;
+}
+
+function loadRuntimeModules() {
+  const { drizzle } = require('drizzle-orm/node-postgres');
+  const { migrate } = require('drizzle-orm/node-postgres/migrator');
+  const { Pool } = require('pg');
+  return { drizzle, migrate, Pool };
+}
 
 function readErrorField(error, field) {
   if (!error || typeof error !== 'object') return undefined;
@@ -162,44 +234,102 @@ function formatMigrationFailure(failure) {
   return JSON.stringify({ event: 'database_migration_failed', ...failure });
 }
 
+function classifyFailure(error, stage) {
+  const sanitized = sanitizeMigrationError(error);
+  const explicitRunnerCode = sanitizeToken(
+    readErrorField(error, 'runnerCode'),
+    /^[A-Z0-9_]{1,64}$/,
+  );
+
+  if (explicitRunnerCode) {
+    return { ...sanitized, runner_code: explicitRunnerCode, stage };
+  }
+  if (stage === 'module-load') {
+    return {
+      ...sanitized,
+      runner_code: 'MIGRATION_MODULE_LOAD_FAILED',
+      stage,
+    };
+  }
+  if (
+    stage === 'connection' ||
+    CONNECTION_ERROR_CODES.has(sanitized.code) ||
+    sanitized.code?.startsWith('08')
+  ) {
+    return {
+      ...sanitized,
+      runner_code: 'MIGRATION_CONNECTION_FAILED',
+      stage: 'connection',
+    };
+  }
+  if (stage === 'cleanup') {
+    return {
+      ...sanitized,
+      runner_code: 'MIGRATION_CLEANUP_FAILED',
+      stage,
+    };
+  }
+  return {
+    ...sanitized,
+    runner_code: 'MIGRATION_APPLY_FAILED',
+    stage: 'migration',
+  };
+}
+
 async function runMigrations(dependencies = {}) {
   const logger = dependencies.logger ?? console;
-  const databaseUrl =
-    dependencies.databaseUrl ?? process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
+  const environment = dependencies.environment ?? process.env;
   const migrationsFolder =
     dependencies.migrationsFolder ?? DEFAULT_MIGRATIONS_FOLDER;
-  const createPool =
-    dependencies.createPool ?? ((config) => new Pool(config));
-  const createDatabase =
-    dependencies.createDatabase ?? ((pool) => drizzle(pool));
-  const applyMigrations =
-    dependencies.applyMigrations ??
-    ((database, config) => migrate(database, config));
 
   let pool;
   let failure;
+  let stage = 'configuration';
 
   try {
+    const databaseUrl = resolveDatabaseUrl(
+      dependencies.databaseUrl,
+      environment,
+    );
+    stage = 'module-load';
+    const runtime =
+      dependencies.createPool &&
+      dependencies.createDatabase &&
+      dependencies.applyMigrations
+        ? {}
+        : (dependencies.loadRuntimeModules ?? loadRuntimeModules)();
+    const createPool =
+      dependencies.createPool ??
+      ((config) => new runtime.Pool(config));
+    const createDatabase =
+      dependencies.createDatabase ??
+      ((createdPool) => runtime.drizzle(createdPool));
+    const applyMigrations =
+      dependencies.applyMigrations ??
+      ((database, config) => runtime.migrate(database, config));
+
+    stage = 'connection';
     pool = createPool({
       connectionString: databaseUrl,
       connectionTimeoutMillis: MIGRATION_TIMEOUT_MILLIS,
     });
     const database = createDatabase(pool);
+    stage = 'migration';
     await applyMigrations(database, { migrationsFolder });
   } catch (error) {
-    failure = error;
+    failure = { error, stage };
   } finally {
     if (pool) {
       try {
         await pool.end();
       } catch (error) {
-        failure ??= error;
+        failure ??= { error, stage: 'cleanup' };
       }
     }
   }
 
   if (failure) {
-    const sanitizedFailure = sanitizeMigrationError(failure);
+    const sanitizedFailure = classifyFailure(failure.error, failure.stage);
     logger.error(formatMigrationFailure(sanitizedFailure));
     return { ok: false, failure: sanitizedFailure };
   }
@@ -219,14 +349,29 @@ async function main(dependencies = {}) {
 }
 
 module.exports = {
+  classifyFailure,
   formatMigrationFailure,
+  loadRuntimeModules,
   main,
+  resolveDatabaseUrl,
   runMigrations,
   sanitizeMigrationError,
 };
 
 if (require.main === module) {
-  void main().then((exitCode) => {
-    process.exitCode = exitCode;
-  });
+  console.log(STARTUP_MARKER);
+  void main()
+    .then((exitCode) => {
+      process.exitCode = exitCode;
+    })
+    .catch((error) => {
+      console.error(
+        formatMigrationFailure({
+          ...sanitizeMigrationError(error),
+          runner_code: 'MIGRATION_UNHANDLED_FAILURE',
+          stage: 'runtime',
+        }),
+      );
+      process.exitCode = 1;
+    });
 }

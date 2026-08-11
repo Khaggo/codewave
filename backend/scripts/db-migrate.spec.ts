@@ -95,6 +95,8 @@ describe('database migration runner', () => {
           encoding: 'utf8',
           env: {
             ...process.env,
+            DATABASE_URL:
+              'postgresql://runner:fixture@db.internal:5432/runner',
             NODE_ENV: 'production',
             NODE_OPTIONS: '--require=' + preloadPath,
             npm_config_production: 'true',
@@ -110,11 +112,84 @@ describe('database migration runner', () => {
         status: result.status,
         stderr: result.stderr,
       }).toMatchObject({ status: 0 });
+      expect(result.stdout).toContain('database_migration_runner_started');
       expect(result.stdout).toContain('database_migration_succeeded');
       expect(result.stderr).not.toContain('ts-node is unavailable');
     } finally {
       rmSync(temporaryDirectory, { force: true, recursive: true });
     }
+  });
+
+  it.each([undefined, 'development', 'test', 'production'])(
+    'fails safely with no accepted database URL in NODE_ENV=%s',
+    async (nodeEnvironment) => {
+    const logger = createLogger();
+    const loadRuntimeModules = jest.fn();
+
+    const result = await runMigrations({
+      environment: {
+        DATABASE_PUBLIC_URL: 'sensitive-unaccepted-public-alias',
+        DATABASE_URL: '   ',
+        NODE_ENV: nodeEnvironment,
+        POSTGRES_URL: 'sensitive-unaccepted-postgres-alias',
+      },
+      loadRuntimeModules,
+      logger,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      failure: {
+        runner_code: 'MIGRATION_CONFIG_MISSING',
+        stage: 'configuration',
+      },
+    });
+    expect(loadRuntimeModules).not.toHaveBeenCalled();
+    const logLine = logger.error.mock.calls[0][0] as string;
+    expect(logLine).not.toContain('sensitive-unaccepted');
+    expect(logLine).not.toContain('DATABASE_URL');
+    expect(logLine).not.toContain('postgresql://');
+    },
+  );
+
+  it('distinguishes module-load and connection failures', async () => {
+    const moduleLogger = createLogger();
+    const moduleResult = await runMigrations({
+      databaseUrl: 'postgresql://runner:fixture@db.internal:5432/runner',
+      environment: { NODE_ENV: 'production' },
+      loadRuntimeModules: () => {
+        throw Object.assign(new Error('module path details'), {
+          code: 'MODULE_NOT_FOUND',
+        });
+      },
+      logger: moduleLogger,
+    });
+    expect(moduleResult).toMatchObject({
+      ok: false,
+      failure: {
+        runner_code: 'MIGRATION_MODULE_LOAD_FAILED',
+        stage: 'module-load',
+      },
+    });
+
+    const connectionLogger = createLogger();
+    const connectionResult = await runMigrations({
+      databaseUrl: 'postgresql://runner:fixture@db.internal:5432/runner',
+      environment: { NODE_ENV: 'production' },
+      logger: connectionLogger,
+      createPool: jest.fn(() => createPoolDouble()),
+      createDatabase: jest.fn(() => ({})),
+      applyMigrations: jest
+        .fn()
+        .mockRejectedValue(Object.assign(new Error(), { code: 'ECONNREFUSED' })),
+    });
+    expect(connectionResult).toMatchObject({
+      ok: false,
+      failure: {
+        runner_code: 'MIGRATION_CONNECTION_FAILED',
+        stage: 'connection',
+      },
+    });
   });
 
   it('returns a nonzero result and sanitized diagnostics on migration failure', async () => {
@@ -133,6 +208,7 @@ describe('database migration runner', () => {
     });
 
     const result = await runMigrations({
+      databaseUrl: 'postgresql://runner:fixture@db.internal:5432/runner',
       logger,
       createPool: jest.fn(() => pool),
       createDatabase: jest.fn(() => ({})),
@@ -140,7 +216,14 @@ describe('database migration runner', () => {
     });
 
     expect(result.ok).toBe(false);
+    expect(result).toMatchObject({
+      failure: {
+        runner_code: 'MIGRATION_APPLY_FAILED',
+        stage: 'migration',
+      },
+    });
     expect(await main({
+      databaseUrl: 'postgresql://runner:fixture@db.internal:5432/runner',
       logger: createLogger(),
       createPool: jest.fn(() => createPoolDouble()),
       createDatabase: jest.fn(() => ({})),
@@ -286,6 +369,7 @@ describe('database migration runner', () => {
     pool.end.mockRejectedValueOnce(new Error('cleanup secret=hidden'));
 
     const result = await runMigrations({
+      databaseUrl: 'postgresql://runner:fixture@db.internal:5432/runner',
       logger,
       createPool: jest.fn(() => pool),
       createDatabase: jest.fn(() => ({})),
