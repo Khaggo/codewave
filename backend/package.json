@@ -19,7 +19,7 @@
     "test:coverage": "jest --coverage --coverageReporters=json-summary --runInBand",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node -r ts-node/register scripts/db-migrate.ts",
     "db:push:local": "node -r ts-node/register scripts/db-push-local.ts",
     "contracts:generate": "node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/generate-openapi-contract.ts",
     "contracts:check": "node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/generate-openapi-contract.ts --check",
