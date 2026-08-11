@@ -1,16 +1,19 @@
-import type { Pool } from 'pg';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
-import {
+const {
   formatMigrationFailure,
   main,
   runMigrations,
   sanitizeMigrationError,
-} from './db-migrate';
+} = require('./db-migrate.cjs');
 
 function createPoolDouble() {
   return {
     end: jest.fn().mockResolvedValue(undefined),
-  } as unknown as Pool;
+  };
 }
 
 function createLogger() {
@@ -23,7 +26,7 @@ function createLogger() {
 describe('database migration runner', () => {
   it('applies committed migrations and reports success', async () => {
     const pool = createPoolDouble();
-    const database = {} as ReturnType<typeof import('drizzle-orm/node-postgres').drizzle>;
+    const database = {};
     const logger = createLogger();
     const applyMigrations = jest.fn().mockResolvedValue(undefined);
 
@@ -46,6 +49,74 @@ describe('database migration runner', () => {
     expect(logger.log.mock.calls[0][0]).not.toContain('secret');
   });
 
+  it('runs the exact public command in production mode with ts-node unavailable', () => {
+    const packageJson = require('../package.json') as {
+      scripts: Record<string, string>;
+    };
+    expect(packageJson.scripts['db:migrate']).toBe(
+      'node scripts/db-migrate.cjs',
+    );
+
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), 'codewave-db-migrate-production-'),
+    );
+    const preloadPath = join(temporaryDirectory, 'deny-ts-node.cjs');
+    writeFileSync(
+      preloadPath,
+      [
+        "'use strict';",
+        "const Module = require('node:module');",
+        'const originalLoad = Module._load;',
+        'Module._load = function(request, parent, isMain) {',
+        "  if (request === 'ts-node' || request.startsWith('ts-node/')) {",
+        "    throw new Error('ts-node is unavailable');",
+        '  }',
+        "  if (request === 'pg') {",
+        '    return { Pool: class { async end() {} } };',
+        '  }',
+        "  if (request === 'drizzle-orm/node-postgres') {",
+        '    return { drizzle: () => ({}) };',
+        '  }',
+        "  if (request === 'drizzle-orm/node-postgres/migrator') {",
+        '    return { migrate: async () => undefined };',
+        '  }',
+        '  return originalLoad.call(this, request, parent, isMain);',
+        '};',
+      ].join('\n'),
+    );
+
+    try {
+      const npmExecutable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+      const result = spawnSync(
+        npmExecutable,
+        ['--workspace', 'backend', 'run', 'db:migrate'],
+        {
+          cwd: resolve(__dirname, '../..'),
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            NODE_ENV: 'production',
+            NODE_OPTIONS: '--require=' + preloadPath,
+            npm_config_production: 'true',
+          },
+          shell: process.platform === 'win32',
+          timeout: 30_000,
+        },
+      );
+
+      expect({
+        error: result.error?.message,
+        signal: result.signal,
+        status: result.status,
+        stderr: result.stderr,
+      }).toMatchObject({ status: 0 });
+      expect(result.stdout).toContain('database_migration_succeeded');
+      expect(result.stderr).not.toContain('ts-node is unavailable');
+    } finally {
+      rmSync(temporaryDirectory, { force: true, recursive: true });
+    }
+  });
+
   it('returns a nonzero result and sanitized diagnostics on migration failure', async () => {
     const pool = createPoolDouble();
     const logger = createLogger();
@@ -64,7 +135,7 @@ describe('database migration runner', () => {
     const result = await runMigrations({
       logger,
       createPool: jest.fn(() => pool),
-      createDatabase: jest.fn(() => ({} as ReturnType<typeof import('drizzle-orm/node-postgres').drizzle>)),
+      createDatabase: jest.fn(() => ({})),
       applyMigrations: jest.fn().mockRejectedValue(migrationError),
     });
 
@@ -72,7 +143,7 @@ describe('database migration runner', () => {
     expect(await main({
       logger: createLogger(),
       createPool: jest.fn(() => createPoolDouble()),
-      createDatabase: jest.fn(() => ({} as ReturnType<typeof import('drizzle-orm/node-postgres').drizzle>)),
+      createDatabase: jest.fn(() => ({})),
       applyMigrations: jest.fn().mockRejectedValue(migrationError),
     })).toBe(1);
     expect(pool.end).toHaveBeenCalledTimes(1);
@@ -212,12 +283,12 @@ describe('database migration runner', () => {
       code: '42P01',
       severity: 'ERROR',
     });
-    (pool.end as jest.Mock).mockRejectedValueOnce(new Error('cleanup secret=hidden'));
+    pool.end.mockRejectedValueOnce(new Error('cleanup secret=hidden'));
 
     const result = await runMigrations({
       logger,
       createPool: jest.fn(() => pool),
-      createDatabase: jest.fn(() => ({} as ReturnType<typeof import('drizzle-orm/node-postgres').drizzle>)),
+      createDatabase: jest.fn(() => ({})),
       applyMigrations: jest.fn().mockRejectedValue(migrationError),
     });
 

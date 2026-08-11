@@ -1,8 +1,10 @@
-import { resolve } from 'node:path';
+'use strict';
 
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { Pool, type PoolConfig } from 'pg';
+const { resolve } = require('node:path');
+
+const { drizzle } = require('drizzle-orm/node-postgres');
+const { migrate } = require('drizzle-orm/node-postgres/migrator');
+const { Pool } = require('pg');
 
 const DEFAULT_DATABASE_URL =
   'postgresql://admin:root@localhost:5433/codewave';
@@ -38,67 +40,32 @@ const SAFE_SEVERITIES = new Set([
   'PANIC',
 ]);
 
-export type SanitizedMigrationFailure = {
-  name?: string;
-  code?: string;
-  severity?: string;
-  schema?: string;
-  table?: string;
-  column?: string;
-  constraint?: string;
-  detail?: string;
-  hint?: string;
-  migration: string;
-};
-
-export type MigrationRunResult =
-  | { ok: true }
-  | { ok: false; failure: SanitizedMigrationFailure };
-
-type MigrationDatabase = ReturnType<typeof drizzle>;
-type MigrationLogger = Pick<Console, 'log' | 'error'>;
-type ApplyMigrations = (
-  database: MigrationDatabase,
-  config: { migrationsFolder: string },
-) => Promise<void>;
-
-export type MigrationRunnerDependencies = {
-  databaseUrl?: string;
-  migrationsFolder?: string;
-  logger?: MigrationLogger;
-  createPool?: (config: PoolConfig) => Pool;
-  createDatabase?: (pool: Pool) => MigrationDatabase;
-  applyMigrations?: ApplyMigrations;
-};
-
-type ErrorRecord = Record<string, unknown>;
-
-function readErrorField(error: unknown, field: string): unknown {
+function readErrorField(error, field) {
   if (!error || typeof error !== 'object') return undefined;
 
   try {
-    return (error as ErrorRecord)[field];
+    return error[field];
   } catch {
     return undefined;
   }
 }
 
-function sanitizeToken(value: unknown, pattern: RegExp): string | undefined {
+function sanitizeToken(value, pattern) {
   if (typeof value !== 'string') return undefined;
 
   const normalized = value.trim();
   return pattern.test(normalized) ? normalized : undefined;
 }
 
-function sanitizeIdentifier(value: unknown): string | undefined {
+function sanitizeIdentifier(value) {
   return sanitizeToken(value, /^[A-Za-z_][A-Za-z0-9_$]{0,127}$/);
 }
 
-function containsSqlStructure(value: string): boolean {
+function containsSqlStructure(value) {
   return SQL_DIAGNOSTIC_PATTERNS.some((pattern) => pattern.test(value));
 }
 
-function sanitizeDiagnosticText(value: unknown): string | undefined {
+function sanitizeDiagnosticText(value) {
   if (typeof value !== 'string') return undefined;
 
   let sanitized = value.replace(/\s+/g, ' ').trim();
@@ -119,8 +86,14 @@ function sanitizeDiagnosticText(value: unknown): string | undefined {
       /\b(?:password|passwd|secret|token|api[_-]?key|authorization|cookie|database[_-]?url|url|email|phone|customer|user(?:name)?)\s*[:=]\s*(?:"[^"]*"|'[^']*'|\S+)/gi,
       '$1=[redacted]',
     )
-    .replace(/\([^()\r\n]{1,120}\)=\([^()\r\n]{0,240}\)/g, '([redacted-value])')
-    .replace(/\b(?:parameters?|values?)\s*[:=]\s*(?:\[[^\]]*\]|\([^)]*\)|\S+)/gi, '$1=[redacted]')
+    .replace(
+      /\([^()\r\n]{1,120}\)=\([^()\r\n]{0,240}\)/g,
+      '([redacted-value])',
+    )
+    .replace(
+      /\b(?:parameters?|values?)\s*[:=]\s*(?:\[[^\]]*\]|\([^)]*\)|\S+)/gi,
+      '$1=[redacted]',
+    )
     .replace(/'(?:''|[^'])*'/g, '[redacted-literal]')
     .replace(/\b(?:\+?\d[\d\s().-]{7,}\d)\b/g, '[redacted-number]');
 
@@ -128,9 +101,7 @@ function sanitizeDiagnosticText(value: unknown): string | undefined {
   return sanitized || undefined;
 }
 
-function sanitizeErrorFields(
-  error: unknown,
-): Omit<SanitizedMigrationFailure, 'migration'> {
+function sanitizeErrorFields(error) {
   const name = sanitizeToken(
     readErrorField(error, 'name'),
     /^[A-Za-z][A-Za-z0-9_. -]{0,63}$/,
@@ -170,12 +141,10 @@ function sanitizeErrorFields(
   };
 }
 
-export function sanitizeMigrationError(
-  error: unknown,
-): SanitizedMigrationFailure {
-  const fields: Omit<SanitizedMigrationFailure, 'migration'> = {};
-  const visited = new WeakSet<object>();
-  let current: unknown = error;
+function sanitizeMigrationError(error) {
+  const fields = {};
+  const visited = new WeakSet();
+  let current = error;
 
   for (let depth = 0; depth < MAX_ERROR_CHAIN_DEPTH; depth += 1) {
     if (!current || typeof current !== 'object') break;
@@ -189,30 +158,26 @@ export function sanitizeMigrationError(
   return { ...fields, migration: MIGRATION_CONTEXT };
 }
 
-export function formatMigrationFailure(
-  failure: SanitizedMigrationFailure,
-): string {
+function formatMigrationFailure(failure) {
   return JSON.stringify({ event: 'database_migration_failed', ...failure });
 }
 
-export async function runMigrations(
-  dependencies: MigrationRunnerDependencies = {},
-): Promise<MigrationRunResult> {
+async function runMigrations(dependencies = {}) {
   const logger = dependencies.logger ?? console;
   const databaseUrl =
     dependencies.databaseUrl ?? process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
   const migrationsFolder =
     dependencies.migrationsFolder ?? DEFAULT_MIGRATIONS_FOLDER;
-  const createPool = dependencies.createPool ?? ((config: PoolConfig) => new Pool(config));
+  const createPool =
+    dependencies.createPool ?? ((config) => new Pool(config));
   const createDatabase =
-    dependencies.createDatabase ?? ((pool: Pool) => drizzle(pool));
+    dependencies.createDatabase ?? ((pool) => drizzle(pool));
   const applyMigrations =
     dependencies.applyMigrations ??
-    ((database: MigrationDatabase, config: { migrationsFolder: string }) =>
-      migrate(database, config));
+    ((database, config) => migrate(database, config));
 
-  let pool: Pool | undefined;
-  let failure: unknown;
+  let pool;
+  let failure;
 
   try {
     pool = createPool({
@@ -248,12 +213,17 @@ export async function runMigrations(
   return { ok: true };
 }
 
-export async function main(
-  dependencies: MigrationRunnerDependencies = {},
-): Promise<number> {
+async function main(dependencies = {}) {
   const result = await runMigrations(dependencies);
   return result.ok ? 0 : 1;
 }
+
+module.exports = {
+  formatMigrationFailure,
+  main,
+  runMigrations,
+  sanitizeMigrationError,
+};
 
 if (require.main === module) {
   void main().then((exitCode) => {
