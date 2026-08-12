@@ -14,6 +14,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Feather from '@expo/vector-icons/Feather';
 import { colors, radius } from '../theme';
 import { createPlatformShadow } from '../utils/platformShadow';
+import {
+  LANDING_CTA_MIN_HEIGHT,
+  buildLandingBottomLayout,
+} from './landingLayout.mjs';
 
 const LANDING_HEADER_HEIGHT = 60;
 const LANDING_WEB_SCROLL_HEIGHT = `calc(100vh - ${LANDING_HEADER_HEIGHT}px)`;
@@ -54,6 +58,7 @@ export default function LandingPage({ navigation }) {
   const { width } = useWindowDimensions();
   const topInset = isWeb ? 0 : insets.top;
   const bottomInset = isWeb ? 0 : insets.bottom;
+  const bottomLayout = buildLandingBottomLayout({ bottomInset });
   const useInlineChatbotAction = isWeb && width <= 600;
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const contentTranslate = useRef(new Animated.Value(16)).current;
@@ -80,11 +85,13 @@ export default function LandingPage({ navigation }) {
     ]).start();
   }, [contentOpacity, contentTranslate]);
 
-  const renderChatbotAction = (inline = false) => (
+  const renderChatbotAction = (placement = 'floating') => (
     <TouchableOpacity
       style={[
         styles.chatbotButton,
-        inline ? styles.chatbotButtonInline : { bottom: 24 + bottomInset },
+        placement === 'inline' ? styles.chatbotButtonInline : null,
+        placement === 'docked' ? styles.chatbotButtonDocked : null,
+        placement === 'floating' ? { bottom: 24 + bottomInset } : null,
       ]}
       activeOpacity={0.9}
       onPress={() => navigation.navigate('ChatbotScreen')}
@@ -180,7 +187,7 @@ export default function LandingPage({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {useInlineChatbotAction ? renderChatbotAction(true) : null}
+      {useInlineChatbotAction ? renderChatbotAction('inline') : null}
     </>
   );
 
@@ -217,7 +224,7 @@ export default function LandingPage({ navigation }) {
               styles.content,
               {
                 paddingTop: LANDING_HEADER_HEIGHT + topInset + 20,
-                paddingBottom: 96 + bottomInset,
+                paddingBottom: bottomLayout.contentPaddingBottom,
               },
             ]}
             showsVerticalScrollIndicator={false}
@@ -233,7 +240,17 @@ export default function LandingPage({ navigation }) {
           </ScrollView>
         )}
 
-        {!useInlineChatbotAction ? renderChatbotAction() : null}
+        {isWeb && !useInlineChatbotAction ? renderChatbotAction() : null}
+        {!isWeb ? (
+          <View
+            style={[
+              styles.chatbotDock,
+              { paddingBottom: bottomLayout.dockPaddingBottom },
+            ]}
+          >
+            {renderChatbotAction('docked')}
+          </View>
+        ) : null}
       </View>
     </SafeAreaView>
   );
@@ -529,7 +546,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    minHeight: 44,
+    minHeight: LANDING_CTA_MIN_HEIGHT,
+    minWidth: LANDING_CTA_MIN_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -560,5 +578,16 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     marginTop: 16,
   },
+  chatbotButtonDocked: {
+    position: 'relative',
+    right: 'auto',
+    bottom: 'auto',
+    alignSelf: 'flex-end',
+  },
+  chatbotDock: {
+    flexShrink: 0,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    backgroundColor: colors.background,
+  },
 });
-
