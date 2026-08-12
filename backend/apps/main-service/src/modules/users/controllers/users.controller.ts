@@ -2,8 +2,10 @@ import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Req, UseG
 import { Request } from 'express';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -16,10 +18,12 @@ import { JwtAuthGuard } from '@main-modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@main-modules/auth/guards/roles.guard';
 import { AddressResponseDto } from '../dto/address-response.dto';
 import { CreateUserDto } from '../dto/create-user.dto';
+import { CreateWalkInCustomerDto } from '../dto/create-walk-in-customer.dto';
 import { UpdateAddressDto } from '../dto/update-address.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { UpsertAddressDto } from '../dto/upsert-address.dto';
 import { UserResponseDto } from '../dto/user-response.dto';
+import { WalkInCustomerVehicleResponseDto } from '../dto/walk-in-customer-vehicle-response.dto';
 import { UsersService } from '../services/users.service';
 
 @ApiTags('users')
@@ -37,6 +41,25 @@ export class UsersController {
   @ApiConflictResponse({ description: 'A user with the same email already exists.' })
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @Post('walk-in')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create or reuse a non-login walk-in customer identity and vehicle.' })
+  @ApiCreatedResponse({ type: WalkInCustomerVehicleResponseDto })
+  @ApiBadRequestResponse({ description: 'The walk-in payload or consent acknowledgement is invalid.' })
+  @ApiConflictResponse({ description: 'Phone, email, or plate matches a conflicting existing record.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can create walk-in records.' })
+  createWalkIn(
+    @Body() payload: CreateWalkInCustomerDto,
+    @Req() request: Request,
+  ) {
+    return this.usersService.createWalkInCustomer(
+      payload,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

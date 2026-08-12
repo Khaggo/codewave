@@ -1,9 +1,21 @@
 'use client'
 
+import Link from 'next/link'
+
+import { getPortalLinkKind } from './portalLinkModel.mjs'
+
 export default function PortalLink({ href, children, ...props }) {
+  if (getPortalLinkKind(href) === 'anchor') {
+    return (
+      <a href={href} {...props}>
+        {children}
+      </a>
+    )
+  }
+
   return (
-    <a href={href} {...props}>
+    <Link href={href} {...props}>
       {children}
-    </a>
+    </Link>
   )
 }

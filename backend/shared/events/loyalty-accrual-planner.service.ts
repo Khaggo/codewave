@@ -9,6 +9,7 @@ export interface LoyaltyAccrualPlan {
   triggerName: 'service.payment_recorded';
   sourceDomain: string;
   loyaltyUserId: string;
+  vehicleId: string;
   accrualKind: 'service_payment';
   idempotencyKey: string;
   sourceReference: string;
@@ -41,6 +42,7 @@ export class LoyaltyAccrualPlannerService {
       triggerName: event.name,
       sourceDomain: event.sourceDomain,
       loyaltyUserId: event.payload.customerUserId,
+      vehicleId: event.payload.vehicleId,
       accrualKind: 'service_payment',
       idempotencyKey: `loyalty:${event.name}:${event.payload.invoiceRecordId}`,
       sourceReference: event.payload.invoiceRecordId,

@@ -8,16 +8,38 @@ import { AiWorkerJobMetadata } from '@shared/queue/ai-worker.types';
 
 import {
   jobOrderQualityGates,
+  QualityGateAiSummary,
   qualityGateFindings,
   qualityGateFindingGateEnum,
   QualityGateFindingProvenance,
   qualityGateFindingSeverityEnum,
   QualityPreCheckSummary,
+  shouldReuseQualityGateAiGeneration,
   qualityGateOverrides,
   qualityGateReviewerVerdictEnum,
   qualityPreCheckStatusEnum,
   qualityGateStatusEnum,
 } from '../schemas/quality-gates.schema';
+
+type ClaimAiSummaryInput = {
+  evidenceFingerprint: string;
+  generationId: string;
+  jobId: string;
+  requestedAt: string;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  provenance: QualityGateAiSummary['provenance'];
+  auditJob: AiWorkerJobMetadata;
+  regenerate: boolean;
+};
+
+type UpdateAiSummaryOptions = {
+  evidenceFingerprint?: string;
+  generationId?: string;
+  jobId?: string;
+  requestedAt?: string;
+};
 
 type QualityGateStatus = (typeof qualityGateStatusEnum.enumValues)[number];
 type QualityGateFindingGate = (typeof qualityGateFindingGateEnum.enumValues)[number];
@@ -177,6 +199,143 @@ export class QualityGatesRepository extends BaseRepository {
         updatedAt: new Date(),
       })
       .where(eq(jobOrderQualityGates.id, gate.id));
+
+    return this.findByJobOrderId(jobOrderId);
+  }
+
+  async markAiSummaryStaleIfChanged(jobOrderId: string, evidenceFingerprint: string) {
+    const gate = await this.findOptionalByJobOrderId(jobOrderId);
+    const aiSummary = gate?.preCheckSummary?.aiSummary;
+    if (!gate || !aiSummary || aiSummary.evidenceFingerprint === evidenceFingerprint) {
+      return gate;
+    }
+
+    const preCheckSummary = {
+      ...(gate.preCheckSummary ?? {}),
+      aiSummary: {
+        ...aiSummary,
+        status: 'stale' as const,
+        summaryText: null,
+        errorCode: 'AI_SUMMARY_EVIDENCE_CHANGED',
+        errorMessage: 'QA evidence changed. Generate a new advisory summary before the verdict.',
+      },
+    } as QualityPreCheckSummary;
+
+    await this.db
+      .update(jobOrderQualityGates)
+      .set({
+        preCheckSummary,
+        version: sql`${jobOrderQualityGates.version} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(jobOrderQualityGates.id, gate.id),
+          eq(jobOrderQualityGates.version, gate.version),
+        ),
+      );
+
+    return this.findByJobOrderId(jobOrderId);
+  }
+
+  async claimAiSummaryGeneration(jobOrderId: string, input: ClaimAiSummaryInput) {
+    const gate = await this.findOptionalByJobOrderId(jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    const current = gate.preCheckSummary?.aiSummary;
+    if (shouldReuseQualityGateAiGeneration(current, input.evidenceFingerprint, input.regenerate)) {
+      return { claimed: false, gate };
+    }
+
+    const aiSummary: QualityGateAiSummary = {
+      status: 'queued',
+      summaryText: null,
+      provider: input.provider,
+      model: input.model,
+      promptVersion: input.promptVersion,
+      evidenceFingerprint: input.evidenceFingerprint,
+      generationId: input.generationId,
+      jobId: input.jobId,
+      requestedAt: input.requestedAt,
+      generatedAt: null,
+      errorCode: null,
+      errorMessage: null,
+      auditJob: input.auditJob,
+      provenance: input.provenance,
+    };
+    const preCheckSummary = {
+      ...(gate.preCheckSummary ?? {}),
+      aiSummary,
+    } as QualityPreCheckSummary;
+
+    const updated = await this.db
+      .update(jobOrderQualityGates)
+      .set({
+        preCheckSummary,
+        version: sql`${jobOrderQualityGates.version} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(jobOrderQualityGates.id, gate.id),
+          eq(jobOrderQualityGates.version, gate.version),
+        ),
+      )
+      .returning({ id: jobOrderQualityGates.id });
+
+    if (updated.length === 0) {
+      return { claimed: false, gate: await this.findByJobOrderId(jobOrderId) };
+    }
+
+    return { claimed: true, gate: await this.findByJobOrderId(jobOrderId) };
+  }
+
+  async updateAiSummary(
+    jobOrderId: string,
+    aiSummary: QualityGateAiSummary,
+    options: UpdateAiSummaryOptions = {},
+  ) {
+    const gate = await this.findOptionalByJobOrderId(jobOrderId);
+    if (!gate) {
+      throw new NotFoundException('Quality gate not found');
+    }
+
+    const preCheckSummary = {
+      ...(gate.preCheckSummary ?? {}),
+      aiSummary,
+    } as QualityPreCheckSummary;
+    const conditions = [eq(jobOrderQualityGates.id, gate.id)];
+    if (options.evidenceFingerprint) {
+      conditions.push(
+        sql`${jobOrderQualityGates.preCheckSummary}->'aiSummary'->>'evidenceFingerprint' = ${options.evidenceFingerprint}`,
+      );
+    }
+    if (options.generationId) {
+      conditions.push(
+        sql`${jobOrderQualityGates.preCheckSummary}->'aiSummary'->>'generationId' = ${options.generationId}`,
+      );
+    }
+    if (options.jobId) {
+      conditions.push(
+        sql`${jobOrderQualityGates.preCheckSummary}->'aiSummary'->>'jobId' = ${options.jobId}`,
+      );
+    }
+    if (options.requestedAt) {
+      conditions.push(
+        sql`${jobOrderQualityGates.preCheckSummary}->'aiSummary'->>'requestedAt' = ${options.requestedAt}`,
+      );
+    }
+
+    await this.db
+      .update(jobOrderQualityGates)
+      .set({
+        preCheckSummary,
+        version: sql`${jobOrderQualityGates.version} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(...conditions));
 
     return this.findByJobOrderId(jobOrderId);
   }

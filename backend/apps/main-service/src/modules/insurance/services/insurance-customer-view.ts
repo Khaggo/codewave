@@ -3,7 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { InsuranceRequirementsQueryDto } from '../dto/insurance-requirements.dto';
 import { ListMyInsuranceInquiriesQueryDto } from '../dto/list-my-insurance-inquiries-query.dto';
 import { InsuranceRepository } from '../repositories/insurance.repository';
-import { insuranceDocumentTypeEnum } from '../schemas/insurance.schema';
+import { resolveInsuranceRequirements } from './insurance-workflow-policy';
 
 type InsuranceActor = {
   userId: string;
@@ -26,13 +26,6 @@ type CustomerHiddenInquiryField =
 type CustomerInquiryProjection<T> = Omit<T, CustomerHiddenInquiryField> & {
   documents: Array<Record<string, unknown>>;
   activities: Array<Record<string, unknown>>;
-};
-
-const requiredDocumentTypesByPurpose: Record<string, string[]> = {
-  renewal: ['or_cr', 'policy'],
-  new_application: ['or_cr'],
-  claim: ['or_cr'],
-  quotation: ['or_cr'],
 };
 
 const encodeCursor = (createdAt: Date | string, id: string) =>
@@ -72,25 +65,34 @@ export const normalizeInquiryDocumentStatus = <
   T extends {
     purpose?: string | null;
     documentStatus?: string | null;
-    documents?: Array<{ documentType?: string | null }> | null;
+    documents?: Array<{ documentType?: string | null; status?: string | null }> | null;
+    activities?: Array<{ action?: string | null; documentType?: string | null }> | null;
   },
->(inquiry: T): T => {
-  if (inquiry?.documentStatus !== 'incomplete') {
-    return inquiry;
-  }
+>(inquiry: T): T & {
+  documentCount: number;
+  documentRequirements: ReturnType<typeof resolveInsuranceRequirements>['documentRequirements'];
+  requestedDocumentTypes: ReturnType<typeof resolveInsuranceRequirements>['requestedDocumentTypes'];
+  outstandingDocumentTypes: ReturnType<typeof resolveInsuranceRequirements>['outstandingDocumentTypes'];
+} => {
+  const requirements = resolveInsuranceRequirements({
+    purpose: inquiry?.purpose as Parameters<typeof resolveInsuranceRequirements>[0]['purpose'],
+    documents: inquiry?.documents,
+    activities: inquiry?.activities,
+  });
 
-  const requiredDocumentTypes =
-    requiredDocumentTypesByPurpose[String(inquiry?.purpose ?? 'quotation')]
-    ?? requiredDocumentTypesByPurpose.quotation;
-  const uploadedDocumentTypes = new Set(
-    (Array.isArray(inquiry?.documents) ? inquiry.documents : [])
-      .map((document) => document?.documentType)
-      .filter(Boolean),
-  );
-
-  return requiredDocumentTypes.every((documentType) => uploadedDocumentTypes.has(documentType))
-    ? { ...inquiry, documentStatus: 'complete' }
-    : inquiry;
+  return {
+    ...inquiry,
+    documentStatus: requirements.documentStatus,
+    documentCount: requirements.documentCount,
+    documentRequirements: requirements.documentRequirements,
+    requestedDocumentTypes: requirements.requestedDocumentTypes,
+    outstandingDocumentTypes: requirements.outstandingDocumentTypes,
+  } as T & {
+    documentCount: number;
+    documentRequirements: ReturnType<typeof resolveInsuranceRequirements>['documentRequirements'];
+    requestedDocumentTypes: ReturnType<typeof resolveInsuranceRequirements>['requestedDocumentTypes'];
+    outstandingDocumentTypes: ReturnType<typeof resolveInsuranceRequirements>['outstandingDocumentTypes'];
+  };
 };
 
 export const presentInquiryForActor = <
@@ -101,8 +103,31 @@ export const presentInquiryForActor = <
     activities?: Array<Record<string, unknown>>;
   },
 >(inquiry: T, actor: InsuranceActor): T | CustomerInquiryProjection<T> => {
+  const sanitizeDocument = (document: Record<string, unknown>, customer: boolean) => {
+    const safeMetadata = {
+      fileName: String(document.fileName ?? '').trim(),
+      documentType: document.documentType ?? 'other',
+      notes: document.notes ?? null,
+      createdAt: document.createdAt ?? null,
+      updatedAt: document.updatedAt ?? null,
+    };
+    if (customer) return safeMetadata;
+    const documentId = String(document.id ?? '').trim();
+    return {
+      ...safeMetadata,
+      downloadRoute: documentId
+        ? `/api/insurance/documents/${encodeURIComponent(documentId)}/file`
+        : null,
+    };
+  };
+
   if (actor.role !== 'customer') {
-    return inquiry;
+    return {
+      ...inquiry,
+      documents: Array.isArray(inquiry.documents)
+        ? inquiry.documents.map((document) => sanitizeDocument(document, false))
+        : [],
+    } as T;
   }
 
   const {
@@ -121,14 +146,14 @@ export const presentInquiryForActor = <
   } = inquiry as T & Record<string, unknown>;
 
   const customerDocuments = Array.isArray(documents)
-    ? documents.map(({ inquiryId: _inquiryId, uploadedByUserId: _uploader, ...document }) => document)
+    ? documents.map((document) => sanitizeDocument(document, true))
     : [];
   const customerActivities = Array.isArray(activities)
     ? activities
         .filter((activity) =>
           activity.action === 'document_uploaded'
           || Boolean(String(activity.customerMessage ?? '').trim()))
-        .map(({ id: _id, actorUserId: _actor, notes: _notes, updatedAt: _updated, ...activity }) =>
+        .map(({ id: _id, inquiryId: _inquiryId, actorUserId: _actor, notes: _notes, updatedAt: _updated, ...activity }) =>
           activity)
     : [];
 
@@ -149,16 +174,25 @@ export const presentInsuranceRecordsForActor = <
     record);
 };
 
-export const getInsuranceRequirements = (query: InsuranceRequirementsQueryDto) => {
-  const requiredDocumentTypes = requiredDocumentTypesByPurpose[query.purpose] ?? [];
-  const requiredSet = new Set(requiredDocumentTypes);
+export const getInsuranceRequirements = (
+  query: InsuranceRequirementsQueryDto,
+  requestedDocumentTypes: string[] = [],
+  documents: Array<{ documentType?: string | null; status?: string | null }> = [],
+) => {
+  const requirements = resolveInsuranceRequirements({
+    purpose: query.purpose,
+    documents,
+    requestedDocumentTypes,
+  });
   return {
     purpose: query.purpose,
     ...(query.inquiryType ? { inquiryType: query.inquiryType } : {}),
-    requiredDocumentTypes,
-    optionalDocumentTypes: insuranceDocumentTypeEnum.enumValues.filter(
-      (documentType) => !requiredSet.has(documentType),
-    ),
+    requiredDocumentTypes: requirements.requiredDocumentTypes,
+    optionalDocumentTypes: requirements.optionalDocumentTypes,
+    requestedDocumentTypes: requirements.requestedDocumentTypes,
+    outstandingDocumentTypes: requirements.outstandingDocumentTypes,
+    documentRequirements: requirements.documentRequirements,
+    minimumDocumentCounts: requirements.minimumDocumentCounts,
   };
 };
 

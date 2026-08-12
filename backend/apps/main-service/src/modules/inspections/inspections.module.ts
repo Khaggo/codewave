@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { BookingsModule } from '@main-modules/bookings/bookings.module';
+import { LoyaltyModule } from '@main-modules/loyalty/loyalty.module';
 import { VehiclesModule } from '@main-modules/vehicles/vehicles.module';
 
 import { InspectionsController } from './controllers/inspections.controller';
@@ -9,7 +10,7 @@ import { InspectionEvidenceStorageService } from './services/inspection-evidence
 import { InspectionsService } from './services/inspections.service';
 
 @Module({
-  imports: [VehiclesModule, BookingsModule],
+  imports: [VehiclesModule, BookingsModule, LoyaltyModule],
   controllers: [InspectionsController],
   providers: [InspectionsRepository, InspectionEvidenceStorageService, InspectionsService],
   exports: [InspectionsRepository, InspectionsService],

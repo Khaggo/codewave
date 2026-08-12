@@ -50,14 +50,23 @@ class AuditTrailAnalyticsEntryResponseDto {
   @ApiProperty({ example: 'b0f9f3b5-d313-4fbb-b95c-c53ca8f6f90d' })
   sourceId!: string;
 
+  @ApiProperty({ example: 'SA-1002' })
+  sourceReference!: string;
+
   @ApiProperty({ example: 'user' })
   targetEntityType!: string;
 
   @ApiProperty({ example: '5d0ef74e-bfe0-4fcb-89cb-0bc2530b19e2' })
   targetEntityId!: string;
 
+  @ApiProperty({ example: 'JO-2026-000123' })
+  targetReference!: string;
+
   @ApiProperty({ example: ['quality-gate-1'], type: [String] })
   relatedEntityIds!: string[];
+
+  @ApiProperty({ example: ['INV-SVC-20260808-103015123'], type: [String] })
+  relatedReferences!: string[];
 }
 
 export class AuditTrailAnalyticsResponseDto {

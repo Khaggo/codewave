@@ -72,6 +72,15 @@ export class AccessoriesCatalogRepository {
           from accessory_variants v
           where v.product_id = ${accessoryProducts.id} and v.is_active = true
         )`,
+        availableQuantity: sql<number>`coalesce((
+          select sum(greatest(
+            coalesce(i.on_hand_quantity, 0) - coalesce(i.reserved_quantity, 0),
+            0
+          ))
+          from accessory_variants v
+          left join accessory_inventory_balances i on i.variant_id = v.id
+          where v.product_id = ${accessoryProducts.id} and v.is_active = true
+        ), 0)`,
         mediaId: sql<string | null>`(
           select m.id
           from accessory_product_media m

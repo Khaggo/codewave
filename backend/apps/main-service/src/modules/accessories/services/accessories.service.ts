@@ -53,16 +53,32 @@ const customerCategory = (category: Record<string, any>) => ({
   displayOrder: category.displayOrder,
 });
 
-const customerProduct = (product: Record<string, any>) => ({
+const customerAvailability = (availableQuantity: unknown) => {
+  const normalized = Number(availableQuantity);
+  const safeQuantity = Number.isFinite(normalized) ? Math.max(0, Math.trunc(normalized)) : 0;
+  return {
+    availableQuantity: safeQuantity,
+    inStock: safeQuantity > 0,
+  };
+};
+
+const customerProduct = (
+  product: Record<string, any>,
+  availability?: ReturnType<typeof customerAvailability>,
+) => ({
   id: product.id,
   categoryId: product.categoryId,
   slug: product.slug,
   name: product.name,
   description: product.description,
   isLighting: product.isLighting,
+  ...(availability ? { availability } : {}),
 });
 
-const customerVariant = (variant: Record<string, any>) => ({
+const customerVariant = (
+  variant: Record<string, any>,
+  availability?: ReturnType<typeof customerAvailability>,
+) => ({
   id: variant.id,
   productId: variant.productId,
   sku: variant.sku,
@@ -70,6 +86,7 @@ const customerVariant = (variant: Record<string, any>) => ({
   attributes: variant.attributes,
   priceCents: variant.priceCents,
   currencyCode: variant.currencyCode,
+  ...(availability ? { availability } : {}),
 });
 
 const customerOrderSummary = (order: Record<string, any>) => ({
@@ -127,10 +144,11 @@ export class AccessoriesService {
       items: admin
         ? page.rows
         : page.rows.map((row) => ({
-            product: customerProduct(row.product),
+            product: customerProduct(row.product, customerAvailability(row.availableQuantity)),
             category: customerCategory(row.category),
-            startingPriceCents: row.startingPriceCents,
-            media: row.mediaId ? [{ id: row.mediaId, altText: row.product.name }] : [],
+          startingPriceCents: row.startingPriceCents,
+          availability: customerAvailability(row.availableQuantity),
+          media: row.mediaId ? [{ id: row.mediaId, altText: row.product.name }] : [],
           })),
       nextCursor:
         page.hasMore && last
@@ -151,21 +169,28 @@ export class AccessoriesService {
       );
     }
     if (admin) return product;
-    return {
-      product: customerProduct(product.product),
-      category: customerCategory(product.category),
-      variants: product.variants
-        .filter((row) => row.variant.isActive)
-        .map((row) => ({
-          variant: customerVariant(row.variant),
+    const variants = product.variants
+      .filter((row) => row.variant.isActive)
+      .map((row) => {
+        const availability = customerAvailability(
+          Number(row.inventory?.onHandQuantity ?? 0) -
+            Number(row.inventory?.reservedQuantity ?? 0),
+        );
+        return {
+          variant: customerVariant(row.variant, availability),
+          availability,
           inventory: {
-            availableQuantity: Math.max(
-              0,
-              Number(row.inventory?.onHandQuantity ?? 0) -
-                Number(row.inventory?.reservedQuantity ?? 0),
-            ),
+            availableQuantity: availability.availableQuantity,
           },
-        })),
+        };
+      });
+    const productAvailability = customerAvailability(
+      variants.reduce((total, row) => total + row.availability.availableQuantity, 0),
+    );
+    return {
+      product: customerProduct(product.product, productAvailability),
+      category: customerCategory(product.category),
+      variants,
       media: product.media.map((media) => ({
         id: media.id,
         altText: media.altText,
@@ -736,26 +761,40 @@ export class AccessoriesService {
   }
 
   private toCustomerCart(cart: Awaited<ReturnType<AccessoriesRepository['getCart']>>) {
-    return {
-      selectedVehicleId: cart.selectedVehicleId,
-      version: cart.version,
-      updatedAt: cart.updatedAt,
-      items: cart.items.map((row) => ({
+    const items = cart.items.map((row) => {
+      const quantity = Math.max(0, Math.trunc(Number(row.item.quantity) || 0));
+      const unitPriceCents = Math.max(0, Math.trunc(Number(row.variant.priceCents) || 0));
+      const lineTotalCents = quantity * unitPriceCents;
+      const availability = customerAvailability(
+        Number(row.inventory?.onHandQuantity ?? 0) -
+          Number(row.inventory?.reservedQuantity ?? 0),
+      );
+      return {
         item: {
           id: row.item.id,
           variantId: row.item.variantId,
           quantity: row.item.quantity,
         },
-        variant: customerVariant(row.variant),
-        product: customerProduct(row.product),
+        variant: customerVariant(row.variant, availability),
+        product: customerProduct(row.product, availability),
+        availability,
         inventory: {
-          availableQuantity: Math.max(
-            0,
-            Number(row.inventory?.onHandQuantity ?? 0) -
-              Number(row.inventory?.reservedQuantity ?? 0),
-          ),
+          availableQuantity: availability.availableQuantity,
         },
-      })),
+        unitPriceCents,
+        lineSubtotalCents: lineTotalCents,
+        lineTotalCents,
+      };
+    });
+    const subtotalCents = items.reduce((total, row) => total + row.lineTotalCents, 0);
+    return {
+      selectedVehicleId: cart.selectedVehicleId,
+      version: cart.version,
+      updatedAt: cart.updatedAt,
+      currencyCode: items[0]?.variant.currencyCode ?? 'PHP',
+      subtotalCents,
+      totalCents: subtotalCents,
+      items,
     };
   }
 

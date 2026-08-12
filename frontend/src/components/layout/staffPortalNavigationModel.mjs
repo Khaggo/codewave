@@ -22,6 +22,26 @@ const navigationOrderByKey = new Map(
   STAFF_PORTAL_NAVIGATION_ORDER.map((key, index) => [key, index]),
 )
 
+export function isStaffPortalNavigationActive(pathname, href) {
+  const currentPath = String(pathname ?? '')
+  const targetPath = String(href ?? '')
+  return currentPath === targetPath || (targetPath === '/admin/job-orders' && currentPath.startsWith('/admin/job-orders/'))
+}
+
+export function shouldHandleStaffPortalNavigation({
+  pathname,
+  href,
+  button = 0,
+  defaultPrevented = false,
+  metaKey = false,
+  ctrlKey = false,
+  shiftKey = false,
+  altKey = false,
+} = {}) {
+  if (defaultPrevented || button !== 0 || metaKey || ctrlKey || shiftKey || altKey) return false
+  return !isStaffPortalNavigationActive(pathname, href)
+}
+
 export function orderStaffPortalNavigationEntries(entries = []) {
   return entries
     .map((entry, sourceIndex) => ({ entry, sourceIndex }))

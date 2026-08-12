@@ -2,11 +2,24 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  ACCESSORY_CATALOG_DISABLED_CODE,
+  ACCESSORIES_NETWORK_UNAVAILABLE_CODE,
+  getAccessoryApiErrorCode,
+  getAccessoryCatalogViewState,
   getAccessoryOrderNextAction,
   normalizeAccessoryAdminCategories,
   normalizeAccessoryAdminPage,
   normalizeAccessoryStaffOrderDetail,
 } from './accessoriesAdminModel.mjs'
+
+test('accessory catalog presentation distinguishes disabled, unauthorized, network, error, and empty states', () => {
+  assert.equal(getAccessoryCatalogViewState({ requestStatus: 'error', errorCode: ACCESSORY_CATALOG_DISABLED_CODE, errorStatus: 403 }), 'disabled')
+  assert.equal(getAccessoryCatalogViewState({ requestStatus: 'error', errorStatus: 403 }), 'unauthorized')
+  assert.equal(getAccessoryCatalogViewState({ requestStatus: 'error', errorCode: ACCESSORIES_NETWORK_UNAVAILABLE_CODE, errorStatus: 0 }), 'network-error')
+  assert.equal(getAccessoryCatalogViewState({ requestStatus: 'error', errorStatus: 500 }), 'error')
+  assert.equal(getAccessoryCatalogViewState({ requestStatus: 'ready', itemCount: 0 }), 'empty')
+  assert.equal(getAccessoryApiErrorCode({ details: { message: { code: ACCESSORY_CATALOG_DISABLED_CODE } } }), ACCESSORY_CATALOG_DISABLED_CODE)
+})
 
 test('staff accessory lists render at most one bounded server page', () => {
   const result = normalizeAccessoryAdminPage({

@@ -17,7 +17,7 @@ export function AccessoriesHeader({ title, description, actions }) {
 export function AccessoriesState({ status, title, message, onRetry }) {
   const loading = status === 'loading'
   return (
-    <div className="flex min-h-64 flex-col items-center justify-center gap-3 border-y border-surface-border px-6 py-10 text-center" role={status === 'error' ? 'alert' : 'status'}>
+    <div className="flex min-h-48 flex-col items-center justify-center gap-3 border-y border-surface-border px-6 py-10 text-center" role={status === 'error' ? 'alert' : 'status'} aria-live={status === 'loading' ? 'polite' : undefined}>
       {loading ? <LoaderCircle className="animate-spin text-brand-orange" size={26} /> : status === 'error' ? <AlertCircle className="text-status-danger" size={28} /> : <PackageSearch className="text-ink-muted" size={28} />}
       <h2 className="text-base font-semibold text-ink-primary">{title}</h2>
       <p className="max-w-xl text-sm leading-6 text-ink-secondary">{message}</p>
@@ -28,7 +28,7 @@ export function AccessoriesState({ status, title, message, onRetry }) {
 
 export function AccessoriesNotice({ tone = 'info', children }) {
   const toneClass = tone === 'error' ? 'border-status-danger/40 bg-status-danger/10 text-status-danger' : tone === 'success' ? 'border-status-success/40 bg-status-success/10 text-status-success' : 'border-surface-border bg-surface-raised text-ink-secondary'
-  return <div className={`border px-4 py-3 text-sm ${toneClass}`} role={tone === 'error' ? 'alert' : 'status'}>{children}</div>
+  return <div className={`border px-4 py-3 text-sm ${toneClass}`} role={tone === 'error' ? 'alert' : 'status'} aria-live={tone === 'error' ? 'assertive' : 'polite'}>{children}</div>
 }
 
 export function StatusBadge({ value }) {

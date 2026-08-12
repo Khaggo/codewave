@@ -11,6 +11,8 @@ export function toJobOrderClaimSummary({ claim, entityId, entityType = 'job_orde
     id,
     entityId: normalizedEntityId,
     entityType: normalizedEntityType,
+    ...(claim?.ownerUserId ? { ownerUserId: claim.ownerUserId } : {}),
+    ...(claim?.ownerName ? { ownerName: claim.ownerName } : {}),
     leaseExpiresAt: claim?.leaseExpiresAt ?? null,
   }
 }

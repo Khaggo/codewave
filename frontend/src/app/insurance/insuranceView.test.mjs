@@ -17,6 +17,8 @@ import {
   summarizeInsuranceReminderResult,
   formatStatusLabel,
   getInsuranceDetailTabs,
+  getInsuranceDocumentActionState,
+  openAuthorizedInsuranceDocument,
   getInsuranceReviewStepNote,
   getInsuranceSummaryCards,
 } from './insuranceView.mjs'
@@ -160,6 +162,13 @@ test('getInsuranceReviewStepNote distinguishes review workflow progress from doc
 test('buildInsuranceDocumentReviewState tracks required and supporting claim files', () => {
   const reviewState = buildInsuranceDocumentReviewState({
     purpose: 'claim',
+    documentRequirements: [
+      { documentType: 'or_cr', minimumCount: 1, uploadedCount: 1, outstandingCount: 0, required: true, satisfied: true },
+      { documentType: 'policy', minimumCount: 1, uploadedCount: 0, outstandingCount: 1, required: true, satisfied: false },
+      { documentType: 'valid_id', minimumCount: 1, uploadedCount: 1, outstandingCount: 0, required: true, satisfied: true },
+      { documentType: 'photo', minimumCount: 1, uploadedCount: 1, outstandingCount: 0, required: true, satisfied: true },
+      { documentType: 'estimate', minimumCount: 0, uploadedCount: 1, outstandingCount: 0, required: false, satisfied: true },
+    ],
     documents: [
       { documentType: 'or_cr' },
       { documentType: 'photo' },
@@ -167,20 +176,124 @@ test('buildInsuranceDocumentReviewState tracks required and supporting claim fil
     ],
   })
 
-  assert.equal(reviewState.allRequiredReady, true)
-  assert.equal(reviewState.requiredReadyCount, 1)
-  assert.equal(reviewState.requiredTotalCount, 1)
+  assert.equal(reviewState.allRequiredReady, false)
+  assert.equal(reviewState.requiredReadyCount, 3)
+  assert.equal(reviewState.requiredTotalCount, 4)
   assert.deepEqual(
-    reviewState.missingRequiredItems,
-    [],
+    reviewState.missingRequiredItems.map((item) => item.type),
+    ['policy'],
   )
   assert.deepEqual(
     reviewState.supportingItems
       .filter((item) => item.complete)
       .map((item) => item.type)
       .sort(),
-    ['estimate', 'photo'],
+    ['estimate'],
   )
+})
+
+test('document review shows a requested police report as outstanding until received', () => {
+  const pending = buildInsuranceDocumentReviewState({
+    documentRequirements: [
+      { documentType: 'police_report', minimumCount: 1, uploadedCount: 0, outstandingCount: 1, required: true, requested: true, conditional: true, satisfied: false },
+    ],
+  })
+  const received = buildInsuranceDocumentReviewState({
+    documentRequirements: [
+      { documentType: 'police_report', minimumCount: 1, uploadedCount: 1, outstandingCount: 0, required: true, requested: true, conditional: true, satisfied: true },
+    ],
+  })
+
+  assert.equal(pending.missingRequiredItems[0].requested, true)
+  assert.equal(pending.allRequiredReady, false)
+  assert.equal(received.allRequiredReady, true)
+})
+
+test('document review never treats missing authoritative requirements as complete or renders a misleading zero-of-zero state', () => {
+  const reviewState = buildInsuranceDocumentReviewState({
+    purpose: 'claim',
+    documentStatus: 'complete',
+    documents: [{ documentType: 'or_cr' }],
+  })
+
+  assert.equal(reviewState.requirementsAvailable, false)
+  assert.equal(reviewState.allRequiredReady, false)
+  assert.equal(reviewState.displayStatus, 'requirements_unavailable')
+})
+
+test('staff normalizer preserves the authoritative claim matrix', () => {
+  const inquiry = insuranceStaffClient.normalizeInsuranceInquiryForStaff({
+    id: 'inq-claim',
+    purpose: 'claim',
+    documentRequirements: [
+      { documentType: 'or_cr', minimumCount: 1, uploadedCount: 1, outstandingCount: 0, required: true, satisfied: true },
+      { documentType: 'policy', minimumCount: 1, uploadedCount: 0, outstandingCount: 1, required: true, satisfied: false },
+      { documentType: 'valid_id', minimumCount: 1, uploadedCount: 0, outstandingCount: 1, required: true, satisfied: false },
+      { documentType: 'photo', minimumCount: 1, uploadedCount: 0, outstandingCount: 1, required: true, satisfied: false },
+    ],
+  })
+  const reviewState = buildInsuranceDocumentReviewState(inquiry)
+
+  assert.deepEqual(reviewState.requiredItems.map((item) => item.type), ['or_cr', 'policy', 'valid_id', 'photo'])
+  assert.equal(reviewState.requiredReadyCount, 1)
+  assert.equal(reviewState.requiredTotalCount, 4)
+  assert.equal(reviewState.allRequiredReady, false)
+})
+
+test('actual staff DTO documents preserve only the authorized route and expose an accessible open action', () => {
+  const inquiry = insuranceStaffClient.normalizeInsuranceInquiryForStaff({
+    documents: [{
+      id: 'server-only-id',
+      inquiryId: 'inquiry-id',
+      uploadedByUserId: 'staff-id',
+      downloadUrl: '/api/insurance/documents/server-only-id/file',
+      fileName: 'claim-photo.jpg',
+      documentType: 'photo',
+      createdAt: '2026-08-11T01:00:00.000Z',
+    }],
+  })
+  const document = inquiry.documents[0]
+
+  assert.deepEqual(getInsuranceDocumentActionState(document), {
+    visible: true,
+    disabled: false,
+    label: 'Open document',
+  })
+  assert.equal(getInsuranceDocumentActionState(document, 'loading').disabled, true)
+  assert.equal(getInsuranceDocumentActionState(document, 'failed').label, 'Retry open')
+  assert.equal(document.downloadRoute, '/api/insurance/documents/server-only-id/file')
+  assert.equal('id' in document, false)
+  assert.equal('inquiryId' in document, false)
+  assert.equal('uploadedByUserId' in document, false)
+})
+
+test('authorized document opening reports fetch, popup, and error outcomes safely', async () => {
+  const document = { downloadRoute: '/api/insurance/documents/opaque/file' }
+  const replaced = []
+  const previewWindow = { opener: {}, location: { replace: (url) => replaced.push(url) }, closeCalled: false, close() { this.closeCalled = true } }
+  const opened = await openAuthorizedInsuranceDocument({
+    document,
+    fetchDocument: async (route) => ({ blob: { route } }),
+    openWindow: () => previewWindow,
+    createObjectUrl: () => 'blob:authorized-preview',
+    revokeObjectUrl: () => {},
+    scheduleRevoke: () => {},
+  })
+  assert.deepEqual(opened, { status: 'opened' })
+  assert.deepEqual(replaced, ['blob:authorized-preview'])
+
+  const popupBlocked = await openAuthorizedInsuranceDocument({ document, openWindow: () => null })
+  assert.equal(popupBlocked.status, 'failed')
+  assert.match(popupBlocked.message, /blocked/i)
+
+  const fetchFailed = await openAuthorizedInsuranceDocument({
+    document,
+    fetchDocument: async () => { throw new Error('Authorized fetch failed') },
+    openWindow: () => previewWindow,
+  })
+  assert.equal(fetchFailed.status, 'failed')
+  assert.equal(fetchFailed.message, 'Authorized fetch failed')
+  assert.equal(previewWindow.closeCalled, true)
 })
 
 test('getNextInsuranceWorkspaceViewState rehydrates draft from saved inquiry state when the same inquiry refreshes after save', () => {

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-import { userRoleEnum } from '../schemas/users.schema';
+import { userIdentityKindEnum, userRoleEnum } from '../schemas/users.schema';
 
 import { AddressResponseDto } from './address-response.dto';
 import { UserProfileResponseDto } from './user-profile-response.dto';
@@ -13,14 +13,21 @@ export class UserResponseDto {
 
   @ApiProperty({
     example: 'customer@example.com',
+    nullable: true,
   })
-  email!: string;
+  email?: string | null;
 
   @ApiProperty({
     enum: userRoleEnum.enumValues,
     example: 'customer',
   })
   role!: string;
+
+  @ApiProperty({
+    enum: userIdentityKindEnum.enumValues,
+    example: 'registered',
+  })
+  identityKind!: (typeof userIdentityKindEnum.enumValues)[number];
 
   @ApiPropertyOptional({
     example: 'SA-0012',

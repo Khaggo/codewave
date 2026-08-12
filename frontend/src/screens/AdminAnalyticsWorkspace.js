@@ -1,4 +1,8 @@
 'use client'
+import {
+  getAnalyticsSourceDomainDisplayLabel,
+  getInvoiceDisplayReference,
+} from '@/lib/analyticsPresentation.mjs'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
@@ -244,7 +248,7 @@ function AuditTrailTimeline({ entries }) {
               </p>
               <h3 className="mt-2 text-base font-bold text-ink-primary">{entry.summary}</h3>
               <p className="mt-2 text-sm text-ink-muted">
-                {entry.actionLabel} · {entry.occurredAtLabel}
+                {entry.actionLabel} - {entry.occurredAtLabel}
               </p>
             </div>
             <span className="badge badge-blue">{entry.actorRoleLabel ?? 'System Event'}</span>
@@ -261,7 +265,9 @@ function AuditTrailTimeline({ entries }) {
             </div>
             <div className="rounded-xl border border-surface-border px-3 py-3">
               <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Source Domain</p>
-              <p className="mt-1 text-sm text-ink-primary break-all">{entry.sourceDomain}</p>
+              <p className="mt-1 text-sm text-ink-primary break-all">
+                {getAnalyticsSourceDomainDisplayLabel(entry.sourceDomain)}
+              </p>
             </div>
           </div>
 
@@ -677,13 +683,12 @@ export default function AdminAnalyticsWorkspace() {
             emptyMessage="Service-demand previews will appear after bookings accumulate in the derived snapshot."
           >
             <DataTable
-              headers={['Service', 'Bookings', 'Share', 'Trace Booking IDs']}
+              headers={['Service', 'Bookings', 'Share', 'Source bookings']}
               emptyLabel="No service-demand rows are present in the latest dashboard snapshot."
               rows={dashboard.serviceDemandPreview.map((entry) => (
                 <tr key={entry.serviceId} className="hover:bg-surface-hover transition-colors">
                   <td className="px-4 py-3.5">
-                    <p className="font-semibold text-ink-primary">{entry.serviceName}</p>
-                    <p className="text-xs text-ink-muted">{entry.serviceId}</p>
+                    <p className="font-semibold text-ink-primary">{entry.displayLabel}</p>
                   </td>
                   <td className="px-4 py-3.5 font-bold text-ink-primary">{formatNumber(entry.bookingCount)}</td>
                   <td className="px-4 py-3.5 text-ink-secondary">{entry.bookingSharePercent}%</td>
@@ -707,8 +712,7 @@ export default function AdminAnalyticsWorkspace() {
               rows={dashboard.peakHoursPreview.map((entry) => (
                 <tr key={entry.timeSlotId} className="hover:bg-surface-hover transition-colors">
                   <td className="px-4 py-3.5">
-                    <p className="font-semibold text-ink-primary">{entry.label}</p>
-                    <p className="text-xs text-ink-muted">{entry.timeSlotId}</p>
+                    <p className="font-semibold text-ink-primary">{entry.displayLabel}</p>
                   </td>
                   <td className="px-4 py-3.5 text-ink-secondary">{entry.timeWindowLabel}</td>
                   <td className="px-4 py-3.5 font-bold text-ink-primary">{formatNumber(entry.bookingCount)}</td>
@@ -765,7 +769,7 @@ export default function AdminAnalyticsWorkspace() {
               emptyLabel="No operational slot rows are present in the latest snapshot."
               rows={operations.peakHours.map((entry) => (
                 <tr key={entry.timeSlotId} className="hover:bg-surface-hover transition-colors">
-                  <td className="px-4 py-3.5 font-semibold text-ink-primary">{entry.label}</td>
+                  <td className="px-4 py-3.5 font-semibold text-ink-primary">{entry.displayLabel}</td>
                   <td className="px-4 py-3.5 text-ink-secondary">{entry.timeWindowLabel}</td>
                   <td className="px-4 py-3.5 font-bold text-ink-primary">{formatNumber(entry.bookingCount)}</td>
                   <td className="px-4 py-3.5 text-ink-secondary">{entry.fillPercentLabel}</td>
@@ -784,11 +788,11 @@ export default function AdminAnalyticsWorkspace() {
               emptyMessage="Service demand rows will appear after booking traffic accumulates in the snapshot."
             >
               <DataTable
-                headers={['Service', 'Bookings', 'Last Booked', 'Trace Booking IDs']}
+                headers={['Service', 'Bookings', 'Last Booked', 'Source bookings']}
                 emptyLabel="No service-demand rows are present in the operations snapshot."
               rows={operations.serviceDemand.map((entry) => (
                   <tr key={entry.serviceId} className="hover:bg-surface-hover transition-colors">
-                    <td className="px-4 py-3.5 font-semibold text-ink-primary">{entry.serviceName}</td>
+                    <td className="px-4 py-3.5 font-semibold text-ink-primary">{entry.displayLabel}</td>
                     <td className="px-4 py-3.5 font-bold text-ink-primary">{formatNumber(entry.bookingCount)}</td>
                     <td className="px-4 py-3.5 text-ink-secondary">{entry.lastBookedAtLabel}</td>
                     <td className="px-4 py-3.5 text-ink-secondary">{formatNumber(entry.sourceBookingIds.length)}</td>
@@ -1057,7 +1061,9 @@ export default function AdminAnalyticsWorkspace() {
               emptyLabel="No tracked reminder-policy rows are present in the latest snapshot."
               rows={invoiceAging.trackedInvoicePolicies.map((entry) => (
                 <tr key={entry.invoiceId} className="hover:bg-surface-hover transition-colors">
-                  <td className="px-4 py-3.5 font-semibold text-ink-primary break-all">{entry.invoiceId}</td>
+                  <td className="px-4 py-3.5 font-semibold text-ink-primary">
+                    {getInvoiceDisplayReference(entry)}
+                  </td>
                   <td className="px-4 py-3.5 text-ink-secondary">{entry.latestReminderStatus}</td>
                   <td className="px-4 py-3.5 text-ink-secondary">{entry.latestScheduledForLabel}</td>
                   <td className="px-4 py-3.5 text-ink-secondary">{formatNumber(entry.reminderRuleIds.length)}</td>

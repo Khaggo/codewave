@@ -1,5 +1,12 @@
+import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+
+import {
+  JOB_ORDER_INVOICE_PAYMENT_METHODS,
+  normalizeJobOrderInvoicePaymentMethod,
+} from './payment-methods';
+import type { JobOrderInvoicePaymentMethod } from './payment-methods';
 
 export class FinalizeJobOrderDto {
   @ApiPropertyOptional({
@@ -22,11 +29,13 @@ export class FinalizeJobOrderDto {
 
   @ApiPropertyOptional({
     example: 'cash',
-    enum: ['cash', 'bank_transfer', 'check', 'other'],
+    enum: JOB_ORDER_INVOICE_PAYMENT_METHODS,
+    description: 'Canonical values are cash, bank_transfer, check, and other; legacy separators and cheque are accepted.',
   })
   @IsOptional()
-  @IsIn(['cash', 'bank_transfer', 'check', 'other'])
-  paymentMethod?: 'cash' | 'bank_transfer' | 'check' | 'other';
+  @Transform(({ value }) => normalizeJobOrderInvoicePaymentMethod(value))
+  @IsIn([...JOB_ORDER_INVOICE_PAYMENT_METHODS])
+  paymentMethod?: JobOrderInvoicePaymentMethod;
 
   @ApiPropertyOptional({
     example: 'GCASH-TEST-1234',

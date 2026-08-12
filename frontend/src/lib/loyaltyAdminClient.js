@@ -1,4 +1,5 @@
 import { ApiError } from './authClient'
+import { normalizeLoyaltyQualificationAudit } from './loyaltyQualificationModel.mjs'
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '')
 
@@ -321,3 +322,8 @@ export const updateLoyaltyEarningRuleStatus = async ({ ruleId, status, reason },
 
 export const getLoyaltyAnalytics = async (accessToken) =>
   normalizeLoyaltyAnalytics(await request('/api/analytics/loyalty', { accessToken }))
+
+export const listLoyaltyQualificationAudits = async (accessToken) =>
+  asArray(await request('/api/admin/loyalty/qualifications', { accessToken }))
+    .map(normalizeLoyaltyQualificationAudit)
+    .filter(Boolean)

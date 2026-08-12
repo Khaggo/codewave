@@ -15,6 +15,9 @@ class AnalyticsServiceDemandEntryResponseDto {
   @ApiProperty({ example: 'Wheel Alignment' })
   serviceName!: string;
 
+  @ApiProperty({ example: 'Wheel Alignment' })
+  displayReference!: string;
+
   @ApiProperty({ example: 6 })
   bookingCount!: number;
 
@@ -31,6 +34,9 @@ class AnalyticsPeakHourEntryResponseDto {
 
   @ApiProperty({ example: '10:00 AM - 12:00 PM' })
   label!: string;
+
+  @ApiProperty({ example: '10:00 AM - 12:00 PM' })
+  displayReference!: string;
 
   @ApiProperty({ example: '10:00' })
   startTime!: string;
@@ -51,6 +57,9 @@ class AnalyticsPeakHourEntryResponseDto {
 class AnalyticsServiceAdviserLoadEntryResponseDto {
   @ApiProperty({ example: 'SA-0001' })
   serviceAdviserCode!: string;
+
+  @ApiProperty({ example: 'SA-0001' })
+  displayReference!: string;
 
   @ApiProperty({ example: '4fd6d233-c252-445e-a458-844a3f850cdc' })
   serviceAdviserUserId!: string;

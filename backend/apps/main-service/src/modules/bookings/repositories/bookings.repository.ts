@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gte, inArray, isNull, lte, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -10,6 +10,7 @@ import { CreateBookingDateClosureDto } from '../dto/create-booking-date-closure.
 import { CreateServiceCategoryDto } from '../dto/create-service-category.dto';
 import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
+import { ListServiceManagementQueryDto, ServiceManagementStatus } from '../dto/list-service-management-query.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { UpdateBookingDateClosureDto } from '../dto/update-booking-date-closure.dto';
 import { UpdateServiceCategoryDto } from '../dto/update-service-category.dto';
@@ -62,7 +63,51 @@ export class BookingsRepository extends BaseRepository {
   }
 
   async listServices() {
-    return this.db.select().from(services).orderBy(asc(services.name));
+    return this.db
+      .select()
+      .from(services)
+      .where(eq(services.isActive, true))
+      .orderBy(asc(services.name));
+  }
+
+  async listServiceManagement(query: ListServiceManagementQueryDto) {
+    const filters = [];
+    const search = query.search?.trim();
+
+    if (search) {
+      const searchPattern = `%${search}%`;
+      filters.push(or(ilike(services.name, searchPattern), ilike(services.description, searchPattern)));
+    }
+    if (query.categoryId) {
+      filters.push(eq(services.categoryId, query.categoryId));
+    }
+    if (query.status === ServiceManagementStatus.Active) {
+      filters.push(eq(services.isActive, true));
+    } else if (query.status === ServiceManagementStatus.Inactive) {
+      filters.push(eq(services.isActive, false));
+    }
+
+    const where = filters.length ? and(...filters) : undefined;
+    const offset = (query.page - 1) * query.limit;
+    const [items, countRows] = await Promise.all([
+      this.db
+        .select()
+        .from(services)
+        .where(where)
+        .orderBy(asc(services.name))
+        .limit(query.limit)
+        .offset(offset),
+      this.db.select({ count: sql<number>`count(*)` }).from(services).where(where),
+    ]);
+
+    const total = Number(countRows[0]?.count ?? 0);
+    return {
+      items,
+      page: query.page,
+      limit: query.limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.limit)),
+    };
   }
 
   async listServiceCategories() {
@@ -77,13 +122,13 @@ export class BookingsRepository extends BaseRepository {
 
   async findServiceCategoryByName(name: string) {
     return this.db.query.serviceCategories.findFirst({
-      where: eq(serviceCategories.name, name),
+      where: ilike(serviceCategories.name, name),
     });
   }
 
   async findServiceByName(name: string) {
     return this.db.query.services.findFirst({
-      where: eq(services.name, name),
+      where: ilike(services.name, name),
     });
   }
 

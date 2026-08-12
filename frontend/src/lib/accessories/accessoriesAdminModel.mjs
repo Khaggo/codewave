@@ -1,6 +1,27 @@
 export const MAX_ACCESSORY_ADMIN_PAGE_SIZE = 25
+export const ACCESSORY_CATALOG_DISABLED_CODE = 'ACCESSORY_CATALOG_DISABLED'
+export const ACCESSORIES_NETWORK_UNAVAILABLE_CODE = 'ACCESSORIES_NETWORK_UNAVAILABLE'
 
 const isObject = (value) => Boolean(value) && typeof value === 'object'
+
+export function getAccessoryApiErrorCode(error) {
+  const candidates = [
+    error?.code,
+    error?.details?.code,
+    error?.details?.message?.code,
+  ]
+  return candidates.find((code) => typeof code === 'string' && code.trim()) ?? ''
+}
+
+export function getAccessoryCatalogViewState({ requestStatus, errorCode, errorStatus, itemCount = 0 } = {}) {
+  if (requestStatus === 'loading') return 'loading'
+  if (errorCode === ACCESSORY_CATALOG_DISABLED_CODE) return 'disabled'
+  if (requestStatus === 'error' && [401, 403].includes(Number(errorStatus))) return 'unauthorized'
+  if (requestStatus === 'error' && (errorCode === ACCESSORIES_NETWORK_UNAVAILABLE_CODE || Number(errorStatus) === 0)) return 'network-error'
+  if (requestStatus === 'error') return 'error'
+  if (Number(itemCount) === 0) return 'empty'
+  return 'ready'
+}
 
 export function normalizeAccessoryAdminPage(
   page,

@@ -10,6 +10,7 @@ import {
   normalizeJobOrderForWorkbench,
   normalizeJobOrderWorkbenchSummary,
 } from './jobOrderWorkbenchNormalization.mjs';
+import { requireJobOrderInvoicePaymentMethod } from './jobOrderInvoiceClient.js';
 
 export {
   normalizeJobOrderForWorkbench,
@@ -19,6 +20,8 @@ export { getJobOrderAssetUrl } from './jobOrderClientTransport.js';
 export {
   exportJobOrderInvoicePdf,
   getJobOrderInvoiceLookup,
+  normalizeJobOrderInvoicePaymentMethod,
+  requireJobOrderInvoicePaymentMethod,
   reconcileJobOrderInvoicePaymongoCheckout,
   recordJobOrderInvoicePayment,
   startJobOrderInvoicePaymongoCheckout,
@@ -179,6 +182,19 @@ export const sendBookingToWorkshop = async ({ bookingId, accessToken }) => {
   }
 
   return request(`/api/job-orders/booking-handoffs/${bookingId}`, {
+    method: 'POST',
+    headers: buildAuthorizedHeaders(accessToken),
+  });
+};
+
+export const sendIntakeToWorkshop = async ({ inspectionId, accessToken }) => {
+  if (!inspectionId) {
+    throw new ApiError('Complete an intake before sending it to the workshop.', 400, {
+      path: '/api/job-orders/intake-handoffs/:inspectionId',
+    });
+  }
+
+  return request(`/api/job-orders/intake-handoffs/${inspectionId}`, {
     method: 'POST',
     headers: buildAuthorizedHeaders(accessToken),
   });
@@ -413,7 +429,12 @@ export const finalizeJobOrder = async ({
       body: {
         summary: trimOrUndefined(summary),
         amountPaid: Number.isInteger(Number(amountPaid)) && Number(amountPaid) > 0 ? Number(amountPaid) : undefined,
-        paymentMethod: trimOrUndefined(paymentMethod),
+        paymentMethod: trimOrUndefined(paymentMethod)
+          ? requireJobOrderInvoicePaymentMethod(
+              paymentMethod,
+              '/api/job-orders/:id/finalize',
+            )
+          : undefined,
         paymentReference: trimOrUndefined(paymentReference),
         receivedAt: trimOrUndefined(receivedAt) ? new Date(receivedAt).toISOString() : undefined,
         expectedUpdatedAt: trimOrUndefined(expectedUpdatedAt),
@@ -436,3 +457,46 @@ export const exportTechnicianChecklistPdf = async ({ jobOrderId, assignmentId, a
     responseType: 'blob',
   });
 };
+
+export const recordInvoicePaymentReversal = async ({
+  jobOrderId,
+  invoiceId,
+  version,
+  reason,
+  reversalReference,
+  accessToken,
+  idempotencyKey,
+}) => normalizeJobOrderForWorkbench(
+  await request(`/api/job-orders/${jobOrderId}/invoices/${invoiceId}/payment-reversal`, {
+    method: 'POST',
+    headers: {
+      ...buildAuthorizedHeaders(accessToken),
+      'If-Match': String(version),
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: {
+      reason: reason.trim(),
+      reversalReference: reversalReference.trim(),
+      completedAt: new Date().toISOString(),
+    },
+  }),
+);
+
+export const reissueJobOrderInvoice = async ({
+  jobOrderId,
+  invoiceId,
+  version,
+  correctionReason,
+  accessToken,
+  idempotencyKey,
+}) => normalizeJobOrderForWorkbench(
+  await request(`/api/job-orders/${jobOrderId}/invoices/${invoiceId}/reissue`, {
+    method: 'POST',
+    headers: {
+      ...buildAuthorizedHeaders(accessToken),
+      'If-Match': String(version),
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: { correctionReason: correctionReason.trim() },
+  }),
+);

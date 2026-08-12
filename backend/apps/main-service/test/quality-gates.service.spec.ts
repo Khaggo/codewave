@@ -72,7 +72,17 @@ describe('QualityGatesService', () => {
         jobId: expect.stringContaining('quality-gate__job-order-1__'),
       }),
     );
-    expect(qualityGatesQueue.add.mock.calls[0][2].jobId).not.toContain(':');
+    const firstQueueCall = qualityGatesQueue.add.mock.calls[0];
+    expect(firstQueueCall).toBeDefined();
+    if (!firstQueueCall) {
+      throw new Error('Expected the quality gate audit queue to receive a call.');
+    }
+    const queueOptions = firstQueueCall[2];
+    expect(queueOptions).toBeDefined();
+    if (!queueOptions) {
+      throw new Error('Expected the quality gate audit queue call to include options.');
+    }
+    expect(queueOptions.jobId).not.toContain(':');
     expect(result.status).toBe('pending');
   });
 
@@ -195,7 +205,17 @@ describe('QualityGatesService', () => {
         jobId: expect.stringContaining('quality-gate__job-order-1__'),
       }),
     );
-    expect(qualityGatesQueue.add.mock.calls[0][2].jobId).not.toContain(':');
+    const firstQueueCall = qualityGatesQueue.add.mock.calls[0];
+    expect(firstQueueCall).toBeDefined();
+    if (!firstQueueCall) {
+      throw new Error('Expected the quality gate audit queue to receive a call.');
+    }
+    const queueOptions = firstQueueCall[2];
+    expect(queueOptions).toBeDefined();
+    if (!queueOptions) {
+      throw new Error('Expected the quality gate audit queue call to include options.');
+    }
+    expect(queueOptions.jobId).not.toContain(':');
     expect(qualityGatesRepository.completeAudit).toHaveBeenCalledWith(
       'job-order-1',
       expect.objectContaining({

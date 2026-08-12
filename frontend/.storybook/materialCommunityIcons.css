@@ -1,0 +1,8 @@
+@font-face {
+  font-family: 'MaterialCommunityIcons';
+  src: url('../../node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf')
+    format('truetype');
+  font-display: block;
+  font-style: normal;
+  font-weight: normal;
+}

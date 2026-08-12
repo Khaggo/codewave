@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, desc, eq, gte, inArray, lt } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
 import { BaseRepository } from '@shared/base/base.repository';
@@ -17,6 +17,8 @@ import { UpdateJobOrderWorkshopStageDto } from '../dto/update-job-order-workshop
 import {
   jobOrders,
   jobOrderAssignments,
+  jobOrderInvoiceCorrections,
+  jobOrderInvoiceLineItemSnapshots,
   jobOrderInvoiceRecords,
   jobOrderItems,
   jobOrderPhotos,
@@ -61,6 +63,37 @@ type FinalizeJobOrderPersistenceInput = FinalizeJobOrderDto & {
   partsAmountCents: number;
   reservationFeeDeductionCents: number;
   totalAmountCents: number;
+  lineItemSnapshots: InvoiceLineItemSnapshotInput[];
+};
+
+type InvoiceLineItemSnapshotInput = {
+  sourceJobOrderItemId?: string | null;
+  category: 'service' | 'labor' | 'part' | 'other';
+  description: string;
+  quantity: number;
+  unitAmountCents: number;
+  lineAmountCents: number;
+};
+
+type InvoiceCorrectionPersistenceInput = {
+  expectedVersion: number;
+  idempotencyKey: string;
+  requestFingerprint: string;
+  actorUserId: string;
+  reason: string;
+};
+
+type VoidAndReissueInvoicePersistenceInput = InvoiceCorrectionPersistenceInput & {
+  invoiceReference: string;
+  officialReceiptReference: string;
+  summary?: string;
+  reservationFeeDeductionCents?: number;
+  lineItemSnapshots?: InvoiceLineItemSnapshotInput[];
+};
+
+type CompleteInvoicePaymentReversalPersistenceInput = InvoiceCorrectionPersistenceInput & {
+  reversalReference: string;
+  completedAt: Date;
 };
 
 type RecordJobOrderInvoicePaymentPersistenceInput = Omit<
@@ -163,6 +196,13 @@ export class JobOrdersRepository extends BaseRepository {
     });
 
     return this.assertFound(jobOrder, 'Job order not found');
+  }
+
+  async findLatestByIntakeSourceId(intakeId: string) {
+    return this.db.query.jobOrders.findFirst({
+      where: and(eq(jobOrders.sourceType, 'intake'), eq(jobOrders.sourceId, intakeId)),
+      orderBy: [desc(jobOrders.createdAt), desc(jobOrders.id)],
+    });
   }
 
   async findOptionalById(id: string) {
@@ -311,6 +351,15 @@ export class JobOrdersRepository extends BaseRepository {
     return Boolean(existingJobOrder);
   }
 
+  async hasIntakeSource(sourceId: string) {
+    const existing = await this.db.query.jobOrders.findFirst({
+      columns: { id: true },
+      where: and(eq(jobOrders.sourceType, 'intake'), eq(jobOrders.sourceId, sourceId)),
+    });
+
+    return Boolean(existing);
+  }
+
   async findLatestByBookingSourceId(sourceId: string) {
     return this.db.query.jobOrders.findFirst({
       where: and(eq(jobOrders.sourceType, 'booking'), eq(jobOrders.sourceId, sourceId)),
@@ -430,7 +479,19 @@ export class JobOrdersRepository extends BaseRepository {
         photos: {
           orderBy: desc(jobOrderPhotos.createdAt),
         },
-        invoiceRecord: true,
+        invoiceRecord: {
+          with: {
+            lineItemSnapshots: {
+              orderBy: [
+                asc(jobOrderInvoiceLineItemSnapshots.invoiceVersion),
+                asc(jobOrderInvoiceLineItemSnapshots.sortOrder),
+              ],
+            },
+            correctionHistory: {
+              orderBy: desc(jobOrderInvoiceCorrections.createdAt),
+            },
+          },
+        },
       },
     });
   }
@@ -596,47 +657,330 @@ export class JobOrdersRepository extends BaseRepository {
   }
 
   async finalize(id: string, payload: FinalizeJobOrderPersistenceInput) {
-    const jobOrder = await this.findById(id);
-    if (!matchesUpdatedAtWithinMillisecond(jobOrder.updatedAt, payload.expectedUpdatedAt)) {
-      throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
-    }
+    return this.db.transaction(async (tx) => {
+      const jobOrder = await this.findById(id, tx);
+      if (!matchesUpdatedAtWithinMillisecond(jobOrder.updatedAt, payload.expectedUpdatedAt)) {
+        throw new ConflictException('Another staff member already updated this job order. Reload and try again.');
+      }
 
-    await this.db.insert(jobOrderInvoiceRecords).values({
-      jobOrderId: id,
-      invoiceReference: payload.invoiceReference,
-      officialReceiptReference: payload.officialReceiptReference,
-      sourceType: jobOrder.sourceType,
-      sourceId: jobOrder.sourceId,
-      customerUserId: jobOrder.customerUserId,
-      vehicleId: jobOrder.vehicleId,
-      serviceAdviserUserId: jobOrder.serviceAdviserUserId,
-      serviceAdviserCode: jobOrder.serviceAdviserCode,
-      finalizedByUserId: payload.finalizedByUserId,
-      paymentStatus: 'pending_payment',
-      currencyCode: 'PHP',
-      subtotalAmountCents: payload.subtotalAmountCents,
-      laborAmountCents: payload.laborAmountCents,
-      partsAmountCents: payload.partsAmountCents,
-      reservationFeeDeductionCents: payload.reservationFeeDeductionCents,
-      totalAmountCents: payload.totalAmountCents,
-      amountPaidCents: null,
-      paymentMethod: null,
-      paymentReference: null,
-      paidAt: null,
-      recordedByUserId: null,
-      summary: payload.summary ?? null,
+      const [invoiceRecord] = await tx.insert(jobOrderInvoiceRecords).values({
+        jobOrderId: id,
+        invoiceReference: payload.invoiceReference,
+        officialReceiptReference: payload.officialReceiptReference,
+        sourceType: jobOrder.sourceType,
+        sourceId: jobOrder.sourceId,
+        customerUserId: jobOrder.customerUserId,
+        vehicleId: jobOrder.vehicleId,
+        serviceAdviserUserId: jobOrder.serviceAdviserUserId,
+        serviceAdviserCode: jobOrder.serviceAdviserCode,
+        finalizedByUserId: payload.finalizedByUserId,
+        paymentStatus: 'pending_payment',
+        currencyCode: 'PHP',
+        subtotalAmountCents: payload.subtotalAmountCents,
+        laborAmountCents: payload.laborAmountCents,
+        partsAmountCents: payload.partsAmountCents,
+        reservationFeeDeductionCents: payload.reservationFeeDeductionCents,
+        totalAmountCents: payload.totalAmountCents,
+        amountPaidCents: null,
+        paymentMethod: null,
+        paymentReference: null,
+        paidAt: null,
+        recordedByUserId: null,
+        summary: payload.summary ?? null,
+      }).returning();
+      const createdInvoice = this.assertFound(invoiceRecord, 'Job order invoice record not found');
+
+      await tx.insert(jobOrderInvoiceLineItemSnapshots).values(
+        payload.lineItemSnapshots.map((lineItem, sortOrder) => ({
+          ...lineItem,
+          invoiceRecordId: createdInvoice.id,
+          invoiceVersion: 1,
+          sortOrder,
+        })),
+      );
+
+      const [updatedJobOrder] = await tx
+        .update(jobOrders)
+        .set({ status: 'finalized', updatedAt: new Date() })
+        .where(eq(jobOrders.id, id))
+        .returning();
+
+      this.assertFound(updatedJobOrder, 'Job order not found');
+      return this.findById(id, tx);
+    });
+  }
+
+  async completeInvoicePaymentReversal(
+    id: string,
+    payload: CompleteInvoicePaymentReversalPersistenceInput,
+  ) {
+    await this.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM job_order_invoice_records WHERE job_order_id = ${id} FOR UPDATE`);
+      const invoice = await tx.query.jobOrderInvoiceRecords.findFirst({
+        where: eq(jobOrderInvoiceRecords.jobOrderId, id),
+        with: { lineItemSnapshots: true },
+      });
+      const currentInvoice = this.assertFound(invoice, 'Job order invoice record not found');
+      const replay = await tx.query.jobOrderInvoiceCorrections.findFirst({
+        where: and(
+          eq(jobOrderInvoiceCorrections.invoiceRecordId, currentInvoice.id),
+          eq(jobOrderInvoiceCorrections.idempotencyKey, payload.idempotencyKey),
+        ),
+      });
+      if (replay) {
+        if (replay.requestFingerprint !== payload.requestFingerprint) {
+          throw new ConflictException({
+            code: 'INVOICE_IDEMPOTENCY_CONFLICT',
+            message: 'This Idempotency-Key was already used with a different invoice request.',
+          });
+        }
+        return;
+      }
+      if (currentInvoice.version !== payload.expectedVersion) {
+        throw new ConflictException({
+          code: 'INVOICE_VERSION_CONFLICT',
+          message: 'The invoice changed. Reload it and retry with the current version.',
+          currentVersion: currentInvoice.version,
+        });
+      }
+      if (currentInvoice.paymentStatus !== 'paid') {
+        throw new ConflictException({
+          code: 'PAYMENT_REVERSAL_NOT_APPLICABLE',
+          message: 'Only a paid invoice can record a completed reversal or refund.',
+        });
+      }
+
+      const nextVersion = currentInvoice.version + 1;
+      const currentLines = currentInvoice.lineItemSnapshots.filter(
+        (lineItem) => lineItem.invoiceVersion === currentInvoice.version,
+      );
+      const beforeSnapshot = { ...currentInvoice, lineItemSnapshots: currentLines };
+      const afterSnapshot = {
+        ...beforeSnapshot,
+        version: nextVersion,
+        paymentReversalStatus: 'completed',
+        paymentReversalReference: payload.reversalReference,
+        paymentReversalReason: payload.reason,
+        paymentReversalCompletedAt: payload.completedAt,
+        paymentReversalCompletedByUserId: payload.actorUserId,
+      };
+
+      await tx.update(jobOrderInvoiceRecords).set({
+        version: nextVersion,
+        paymentReversalStatus: 'completed',
+        paymentReversalReference: payload.reversalReference,
+        paymentReversalReason: payload.reason,
+        paymentReversalCompletedAt: payload.completedAt,
+        paymentReversalCompletedByUserId: payload.actorUserId,
+        updatedAt: new Date(),
+      }).where(eq(jobOrderInvoiceRecords.id, currentInvoice.id));
+
+      if (currentLines.length > 0) {
+        await tx.insert(jobOrderInvoiceLineItemSnapshots).values(
+          currentLines.map((lineItem) => ({
+            invoiceRecordId: currentInvoice.id,
+            invoiceVersion: nextVersion,
+            sourceJobOrderItemId: lineItem.sourceJobOrderItemId,
+            category: lineItem.category,
+            description: lineItem.description,
+            quantity: lineItem.quantity,
+            unitAmountCents: lineItem.unitAmountCents,
+            lineAmountCents: lineItem.lineAmountCents,
+            sortOrder: lineItem.sortOrder,
+          })),
+        );
+      }
+
+      await tx.insert(jobOrderInvoiceCorrections).values({
+        invoiceRecordId: currentInvoice.id,
+        lineageId: currentInvoice.lineageId,
+        action: 'payment_reversal_completed',
+        fromVersion: currentInvoice.version,
+        toVersion: nextVersion,
+        idempotencyKey: payload.idempotencyKey,
+        requestFingerprint: payload.requestFingerprint,
+        previousInvoiceReference: currentInvoice.invoiceReference,
+        newInvoiceReference: currentInvoice.invoiceReference,
+        reason: payload.reason,
+        actorUserId: payload.actorUserId,
+        beforeSnapshot,
+        afterSnapshot,
+      });
     });
 
-    const [updatedJobOrder] = await this.db
-      .update(jobOrders)
-      .set({
-        status: 'finalized',
-        updatedAt: new Date(),
-      })
-      .where(eq(jobOrders.id, id))
-      .returning();
+    return this.findById(id);
+  }
 
-    this.assertFound(updatedJobOrder, 'Job order not found');
+  async voidAndReissueInvoice(id: string, payload: VoidAndReissueInvoicePersistenceInput) {
+    await this.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM job_order_invoice_records WHERE job_order_id = ${id} FOR UPDATE`);
+      const invoice = await tx.query.jobOrderInvoiceRecords.findFirst({
+        where: eq(jobOrderInvoiceRecords.jobOrderId, id),
+        with: { lineItemSnapshots: true },
+      });
+      const currentInvoice = this.assertFound(invoice, 'Job order invoice record not found');
+      const replay = await tx.query.jobOrderInvoiceCorrections.findFirst({
+        where: and(
+          eq(jobOrderInvoiceCorrections.invoiceRecordId, currentInvoice.id),
+          eq(jobOrderInvoiceCorrections.idempotencyKey, payload.idempotencyKey),
+        ),
+      });
+      if (replay) {
+        if (replay.requestFingerprint !== payload.requestFingerprint) {
+          throw new ConflictException({
+            code: 'INVOICE_IDEMPOTENCY_CONFLICT',
+            message: 'This Idempotency-Key was already used with a different invoice request.',
+          });
+        }
+        return;
+      }
+      if (currentInvoice.version !== payload.expectedVersion) {
+        throw new ConflictException({
+          code: 'INVOICE_VERSION_CONFLICT',
+          message: 'The invoice changed. Reload it and retry with the current version.',
+          currentVersion: currentInvoice.version,
+        });
+      }
+      if (
+        currentInvoice.paymentStatus === 'paid'
+        && currentInvoice.paymentReversalStatus !== 'completed'
+      ) {
+        throw new ConflictException({
+          code: 'PAYMENT_REVERSAL_REQUIRED',
+          message: 'Complete and record the payment reversal or refund before voiding this paid invoice.',
+          invoiceReference: currentInvoice.invoiceReference,
+        });
+      }
+
+      const now = new Date();
+      const nextVersion = currentInvoice.version + 1;
+      const existingLines = currentInvoice.lineItemSnapshots.filter(
+        (lineItem) => lineItem.invoiceVersion === currentInvoice.version,
+      );
+      const existingLineInputs = existingLines.map((lineItem) => ({
+        sourceJobOrderItemId: lineItem.sourceJobOrderItemId,
+        category: lineItem.category,
+        description: lineItem.description,
+        quantity: lineItem.quantity,
+        unitAmountCents: lineItem.unitAmountCents,
+        lineAmountCents: lineItem.lineAmountCents,
+      }));
+      const lineItems = payload.lineItemSnapshots
+        ?? (existingLineInputs.length > 0
+          ? existingLineInputs
+          : [{
+              sourceJobOrderItemId: null,
+              category: 'service' as const,
+              description: currentInvoice.summary || 'Service invoice',
+              quantity: 1,
+              unitAmountCents: currentInvoice.subtotalAmountCents,
+              lineAmountCents: currentInvoice.subtotalAmountCents,
+            }]);
+      const subtotalAmountCents = payload.lineItemSnapshots
+        ? lineItems.reduce((sum, lineItem) => sum + lineItem.lineAmountCents, 0)
+        : currentInvoice.subtotalAmountCents;
+      const laborAmountCents = payload.lineItemSnapshots
+        ? lineItems.filter((lineItem) => ['service', 'labor', 'other'].includes(lineItem.category))
+          .reduce((sum, lineItem) => sum + lineItem.lineAmountCents, 0)
+        : currentInvoice.laborAmountCents;
+      const partsAmountCents = payload.lineItemSnapshots
+        ? lineItems.filter((lineItem) => lineItem.category === 'part')
+          .reduce((sum, lineItem) => sum + lineItem.lineAmountCents, 0)
+        : currentInvoice.partsAmountCents;
+      const reservationFeeDeductionCents =
+        payload.reservationFeeDeductionCents ?? currentInvoice.reservationFeeDeductionCents;
+      const totalAmountCents = Math.max(subtotalAmountCents - reservationFeeDeductionCents, 0);
+      const beforeSnapshot = { ...currentInvoice, lineItemSnapshots: existingLines };
+      const afterSnapshot = {
+        ...beforeSnapshot,
+        version: nextVersion,
+        invoiceReference: payload.invoiceReference,
+        previousInvoiceReference: currentInvoice.invoiceReference,
+        paymentStatus: 'pending_payment',
+        subtotalAmountCents,
+        laborAmountCents,
+        partsAmountCents,
+        reservationFeeDeductionCents,
+        totalAmountCents,
+        summary: payload.summary ?? currentInvoice.summary,
+        lastVoidedAt: now,
+        lastVoidedByUserId: payload.actorUserId,
+        lastVoidReason: payload.reason,
+        reissuedAt: now,
+        reissuedByUserId: payload.actorUserId,
+        lineItemSnapshots: lineItems,
+      };
+
+      await tx.update(jobOrderInvoiceRecords).set({
+        version: nextVersion,
+        lifecycleStatus: 'issued',
+        invoiceReference: payload.invoiceReference,
+        previousInvoiceReference: currentInvoice.invoiceReference,
+        officialReceiptReference: payload.officialReceiptReference,
+        paymentStatus: 'pending_payment',
+        subtotalAmountCents,
+        laborAmountCents,
+        partsAmountCents,
+        reservationFeeDeductionCents,
+        totalAmountCents,
+        amountPaidCents: null,
+        paymentMethod: null,
+        paymentChannel: null,
+        paymentReference: null,
+        paidAt: null,
+        recordedByUserId: null,
+        onlinePaymentProvider: null,
+        onlinePaymentStatus: null,
+        onlinePaymentSessionId: null,
+        onlinePaymentCheckoutUrl: null,
+        onlinePaymentReference: null,
+        onlinePaymentPaidAt: null,
+        onlinePaymentFailureReason: null,
+        paymentReversalStatus: 'not_required',
+        paymentReversalReference: null,
+        paymentReversalReason: null,
+        paymentReversalCompletedAt: null,
+        paymentReversalCompletedByUserId: null,
+        summary: payload.summary ?? currentInvoice.summary,
+        lastVoidedAt: now,
+        lastVoidedByUserId: payload.actorUserId,
+        lastVoidReason: payload.reason,
+        reissuedAt: now,
+        reissuedByUserId: payload.actorUserId,
+        pdfGeneratedAt: null,
+        pdfEmailSentAt: null,
+        pdfEmailError: null,
+        updatedAt: now,
+      }).where(eq(jobOrderInvoiceRecords.id, currentInvoice.id));
+
+      if (lineItems.length > 0) {
+        await tx.insert(jobOrderInvoiceLineItemSnapshots).values(
+          lineItems.map((lineItem, sortOrder) => ({
+            ...lineItem,
+            invoiceRecordId: currentInvoice.id,
+            invoiceVersion: nextVersion,
+            sortOrder,
+          })),
+        );
+      }
+
+      await tx.insert(jobOrderInvoiceCorrections).values({
+        invoiceRecordId: currentInvoice.id,
+        lineageId: currentInvoice.lineageId,
+        action: 'void_and_reissue',
+        fromVersion: currentInvoice.version,
+        toVersion: nextVersion,
+        idempotencyKey: payload.idempotencyKey,
+        requestFingerprint: payload.requestFingerprint,
+        previousInvoiceReference: currentInvoice.invoiceReference,
+        newInvoiceReference: payload.invoiceReference,
+        reason: payload.reason,
+        actorUserId: payload.actorUserId,
+        beforeSnapshot,
+        afterSnapshot,
+      });
+    });
+
     return this.findById(id);
   }
 

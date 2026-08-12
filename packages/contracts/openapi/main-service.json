@@ -379,6 +379,10 @@
             "example": 7,
             "type": "number"
           },
+          "displayReference": {
+            "example": "10:00 AM - 12:00 PM",
+            "type": "string"
+          },
           "endTime": {
             "example": "12:00",
             "type": "string"
@@ -409,6 +413,7 @@
         "required": [
           "timeSlotId",
           "label",
+          "displayReference",
           "startTime",
           "endTime",
           "bookingCount",
@@ -419,6 +424,10 @@
       },
       "AnalyticsServiceAdviserLoadEntryResponseDto": {
         "properties": {
+          "displayReference": {
+            "example": "SA-0001",
+            "type": "string"
+          },
           "finalizedCount": {
             "example": 2,
             "type": "number"
@@ -438,6 +447,7 @@
         },
         "required": [
           "serviceAdviserCode",
+          "displayReference",
           "serviceAdviserUserId",
           "jobOrderCount",
           "finalizedCount"
@@ -449,6 +459,10 @@
           "bookingCount": {
             "example": 6,
             "type": "number"
+          },
+          "displayReference": {
+            "example": "Wheel Alignment",
+            "type": "string"
           },
           "lastBookedAt": {
             "example": "2026-04-16T10:30:00.000Z",
@@ -476,6 +490,7 @@
         "required": [
           "serviceId",
           "serviceName",
+          "displayReference",
           "bookingCount",
           "lastBookedAt",
           "sourceBookingIds"
@@ -542,12 +557,25 @@
             },
             "type": "array"
           },
+          "relatedReferences": {
+            "example": [
+              "INV-SVC-20260808-103015123"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "sourceDomain": {
             "example": "main-service.auth",
             "type": "string"
           },
           "sourceId": {
             "example": "b0f9f3b5-d313-4fbb-b95c-c53ca8f6f90d",
+            "type": "string"
+          },
+          "sourceReference": {
+            "example": "SA-1002",
             "type": "string"
           },
           "summary": {
@@ -561,6 +589,10 @@
           "targetEntityType": {
             "example": "user",
             "type": "string"
+          },
+          "targetReference": {
+            "example": "JO-2026-000123",
+            "type": "string"
           }
         },
         "required": [
@@ -573,9 +605,12 @@
           "summary",
           "sourceDomain",
           "sourceId",
+          "sourceReference",
           "targetEntityType",
           "targetEntityId",
-          "relatedEntityIds"
+          "targetReference",
+          "relatedEntityIds",
+          "relatedReferences"
         ],
         "type": "object"
       },
@@ -907,10 +942,24 @@
             "example": "4382f56d-35ab-4b8b-8fca-879741a0ad67",
             "type": "string"
           },
+          "originalJobOrderReference": {
+            "example": "JO-2026-000123",
+            "type": "string"
+          },
           "sourceBackJobIds": {
             "example": [
               "back-job-1",
               "back-job-2"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sourceBackJobReferences": {
+            "example": [
+              "BJ-2026-000021",
+              "BJ-2026-000034"
             ],
             "items": {
               "type": "string"
@@ -924,9 +973,11 @@
         },
         "required": [
           "originalJobOrderId",
+          "originalJobOrderReference",
           "backJobCount",
           "unresolvedCount",
-          "sourceBackJobIds"
+          "sourceBackJobIds",
+          "sourceBackJobReferences"
         ],
         "type": "object"
       },
@@ -1738,6 +1789,29 @@
         ],
         "type": "object"
       },
+      "CompleteInvoicePaymentReversalDto": {
+        "properties": {
+          "completedAt": {
+            "example": "2026-08-08T10:30:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "reason": {
+            "example": "Refund completed before invoice correction.",
+            "type": "string"
+          },
+          "reversalReference": {
+            "example": "REFUND-2026-000123",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "reversalReference",
+          "completedAt"
+        ],
+        "type": "object"
+      },
       "ConfirmBookingReservationPaymentDto": {
         "properties": {
           "provider": {
@@ -2277,6 +2351,14 @@
             "example": "a3cce1f2-a6eb-4fdd-bf11-8b17d3ddfc17",
             "type": "string"
           },
+          "intakeData": {
+            "$ref": "#/components/schemas/IntakeInspectionDataDto"
+          },
+          "intakeDataVersion": {
+            "description": "Version of the structured intake data. Required for completed intake records.",
+            "example": 1,
+            "type": "number"
+          },
           "notes": {
             "example": "Initial intake inspection before service work begins.",
             "maxLength": 1000,
@@ -2475,6 +2557,7 @@
           "sourceType": {
             "enum": [
               "booking",
+              "intake",
               "back_job"
             ],
             "example": "booking",
@@ -2729,6 +2812,7 @@
             "type": "string"
           },
           "password": {
+            "description": "Legacy compatibility override. Omit this field to receive a server-generated temporary password.",
             "example": "SecurePass123",
             "minLength": 8,
             "type": "string"
@@ -2757,7 +2841,6 @@
           }
         },
         "required": [
-          "password",
           "role",
           "firstName",
           "lastName"
@@ -3648,6 +3731,10 @@
             "example": 5,
             "type": "number"
           },
+          "displayReference": {
+            "example": "08:00 AM - 10:00 AM",
+            "type": "string"
+          },
           "endTime": {
             "example": "10:00",
             "type": "string"
@@ -3678,6 +3765,7 @@
         "required": [
           "timeSlotId",
           "label",
+          "displayReference",
           "startTime",
           "endTime",
           "bookingCount",
@@ -3720,6 +3808,10 @@
             "example": 8,
             "type": "number"
           },
+          "displayReference": {
+            "example": "Oil Change",
+            "type": "string"
+          },
           "serviceId": {
             "example": "33c8cd7e-8d4a-43aa-8d33-55e03f39577c",
             "type": "string"
@@ -3742,6 +3834,7 @@
         "required": [
           "serviceId",
           "serviceName",
+          "displayReference",
           "bookingCount",
           "sourceBookingIds"
         ],
@@ -4205,6 +4298,49 @@
         ],
         "type": "object"
       },
+      "InspectionEvidenceResponseDto": {
+        "properties": {
+          "byteSize": {
+            "example": 483922,
+            "type": "number"
+          },
+          "createdAt": {
+            "example": "2026-04-13T09:00:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "fileUrl": {
+            "example": "/api/intake-inspections/inspection-id/evidence/evidence-id/file",
+            "type": "string"
+          },
+          "id": {
+            "example": "7e6952bf-f72e-4f84-97b5-61dbef2ca4cc",
+            "type": "string"
+          },
+          "mimeType": {
+            "example": "image/jpeg",
+            "type": "string"
+          },
+          "originalName": {
+            "example": "front-arrival.jpg",
+            "type": "string"
+          },
+          "slot": {
+            "example": "front",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slot",
+          "originalName",
+          "mimeType",
+          "byteSize",
+          "fileUrl",
+          "createdAt"
+        ],
+        "type": "object"
+      },
       "InspectionFindingResponseDto": {
         "properties": {
           "category": {
@@ -4279,10 +4415,21 @@
             "example": "b520dba5-5bfb-4d34-a931-70bd811f7725",
             "type": "object"
           },
+          "completedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "object"
+          },
           "createdAt": {
             "example": "2026-04-13T09:00:00.000Z",
             "format": "date-time",
             "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/InspectionEvidenceResponseDto"
+            },
+            "type": "array"
           },
           "findings": {
             "items": {
@@ -4292,6 +4439,10 @@
           },
           "id": {
             "example": "c6dff175-c86d-4d61-b472-5457d7fa85d4",
+            "type": "string"
+          },
+          "inspectionReference": {
+            "example": "INSP-2026-000001",
             "type": "string"
           },
           "inspectionType": {
@@ -4307,6 +4458,20 @@
           "inspectorUserId": {
             "example": "a3cce1f2-a6eb-4fdd-bf11-8b17d3ddfc17",
             "type": "object"
+          },
+          "intakeData": {
+            "nullable": true,
+            "type": "object"
+          },
+          "intakeDataVersion": {
+            "example": 1,
+            "nullable": true,
+            "type": "object"
+          },
+          "legacyRecord": {
+            "description": "True when the row predates structured intake data and remains read-only compatible.",
+            "example": false,
+            "type": "boolean"
           },
           "notes": {
             "example": "Vehicle condition documented before release.",
@@ -4330,14 +4495,21 @@
           "vehicleId": {
             "example": "7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d",
             "type": "string"
+          },
+          "version": {
+            "example": 1,
+            "type": "number"
           }
         },
         "required": [
           "id",
+          "inspectionReference",
           "vehicleId",
           "inspectionType",
           "status",
           "attachmentRefs",
+          "legacyRecord",
+          "version",
           "createdAt",
           "updatedAt"
         ],
@@ -4812,6 +4984,99 @@
         ],
         "type": "object"
       },
+      "IntakeInspectionDataDto": {
+        "properties": {
+          "arrivalType": {
+            "enum": [
+              "with_booking",
+              "walk_in"
+            ],
+            "example": "walk_in",
+            "type": "string"
+          },
+          "currentOdometerKm": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "customerAcknowledged": {
+            "type": "boolean"
+          },
+          "customerItems": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "customerSignatureName": {
+            "maxLength": 160,
+            "type": "string"
+          },
+          "damageAreas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "damageNotes": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "fuelLevel": {
+            "maxLength": 20,
+            "type": "string"
+          },
+          "isRepeatVisit": {
+            "type": "boolean"
+          },
+          "missingRequirementsNote": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "paperChecklistStatus": {
+            "enum": [
+              "not_started",
+              "in_progress",
+              "transcribed",
+              "reviewed"
+            ],
+            "type": "string"
+          },
+          "preServiceChecklist": {
+            "type": "object"
+          },
+          "reasonForVisit": {
+            "maxLength": 160,
+            "type": "string"
+          },
+          "requestedServiceSummary": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "requirementsChecklist": {
+            "type": "object"
+          },
+          "serviceConcern": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "urgencyFlag": {
+            "type": "boolean"
+          },
+          "visitType": {
+            "enum": [
+              "regular_service",
+              "insurance_related",
+              "back_job_complaint",
+              "inspection_only"
+            ],
+            "example": "regular_service",
+            "type": "string"
+          }
+        },
+        "required": [
+          "arrivalType",
+          "visitType"
+        ],
+        "type": "object"
+      },
       "InvoiceAgingAnalyticsBucketResponseDto": {
         "properties": {
           "bucket": {
@@ -4831,8 +5096,16 @@
       },
       "InvoiceAgingAnalyticsInvoiceEntryResponseDto": {
         "properties": {
+          "displayReference": {
+            "example": "INV-SVC-20260808-103015123",
+            "type": "string"
+          },
           "invoiceId": {
             "example": "invoice-123",
+            "type": "string"
+          },
+          "invoiceReference": {
+            "example": "INV-SVC-20260808-103015123",
             "type": "string"
           },
           "latestReminderStatus": {
@@ -4856,6 +5129,8 @@
         },
         "required": [
           "invoiceId",
+          "invoiceReference",
+          "displayReference",
           "latestReminderStatus",
           "latestScheduledFor",
           "reminderRuleIds"
@@ -5024,6 +5299,105 @@
         ],
         "type": "object"
       },
+      "JobOrderInvoiceCorrectionHistoryResponseDto": {
+        "properties": {
+          "action": {
+            "enum": [
+              "payment_reversal_completed",
+              "void_and_reissue"
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "example": "2026-08-08T11:15:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "fromVersion": {
+            "example": 1,
+            "type": "number"
+          },
+          "id": {
+            "example": "invoice-correction-1",
+            "type": "string"
+          },
+          "newInvoiceReference": {
+            "example": "INV-SVC-20260808-111500123",
+            "nullable": true,
+            "type": "object"
+          },
+          "previousInvoiceReference": {
+            "example": "INV-SVC-20260808-103015123",
+            "type": "string"
+          },
+          "reason": {
+            "example": "Corrected an incorrectly billed quantity.",
+            "type": "string"
+          },
+          "toVersion": {
+            "example": 2,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "fromVersion",
+          "toVersion",
+          "previousInvoiceReference",
+          "reason",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "JobOrderInvoiceLineItemSnapshotResponseDto": {
+        "properties": {
+          "category": {
+            "enum": [
+              "service",
+              "labor",
+              "part",
+              "other"
+            ],
+            "example": "labor",
+            "type": "string"
+          },
+          "description": {
+            "example": "Brake system diagnosis and repair",
+            "type": "string"
+          },
+          "id": {
+            "example": "line-item-snapshot-1",
+            "type": "string"
+          },
+          "invoiceVersion": {
+            "example": 2,
+            "type": "number"
+          },
+          "lineAmountCents": {
+            "example": 125000,
+            "type": "number"
+          },
+          "quantity": {
+            "example": 1,
+            "type": "number"
+          },
+          "unitAmountCents": {
+            "example": 125000,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "invoiceVersion",
+          "category",
+          "description",
+          "quantity",
+          "unitAmountCents",
+          "lineAmountCents"
+        ],
+        "type": "object"
+      },
       "JobOrderInvoiceLookupResponseDto": {
         "properties": {
           "createdAt": {
@@ -5069,6 +5443,7 @@
           "sourceType": {
             "enum": [
               "booking",
+              "intake",
               "back_job"
             ],
             "example": "booking",
@@ -5120,6 +5495,12 @@
             "nullable": true,
             "type": "object"
           },
+          "correctionHistory": {
+            "items": {
+              "$ref": "#/components/schemas/JobOrderInvoiceCorrectionHistoryResponseDto"
+            },
+            "type": "array"
+          },
           "createdAt": {
             "example": "2026-04-13T12:30:00.000Z",
             "format": "date-time",
@@ -5152,6 +5533,34 @@
           "laborAmountCents": {
             "example": 180000,
             "type": "number"
+          },
+          "lastVoidedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "object"
+          },
+          "lastVoidReason": {
+            "example": "Corrected an incorrectly billed quantity.",
+            "nullable": true,
+            "type": "object"
+          },
+          "lifecycleStatus": {
+            "enum": [
+              "issued",
+              "voided"
+            ],
+            "example": "issued",
+            "type": "string"
+          },
+          "lineageId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lineItemSnapshots": {
+            "items": {
+              "$ref": "#/components/schemas/JobOrderInvoiceLineItemSnapshotResponseDto"
+            },
+            "type": "array"
           },
           "officialReceiptReference": {
             "example": "OR-2026-0001",
@@ -5236,6 +5645,23 @@
             "nullable": true,
             "type": "object"
           },
+          "paymentReversalCompletedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "object"
+          },
+          "paymentReversalReference": {
+            "example": "REFUND-2026-000123",
+            "nullable": true,
+            "type": "object"
+          },
+          "paymentReversalStatus": {
+            "enum": [
+              "not_required",
+              "completed"
+            ],
+            "type": "string"
+          },
           "paymentStatus": {
             "enum": [
               "pending_payment",
@@ -5258,8 +5684,18 @@
             "format": "date-time",
             "type": "object"
           },
+          "previousInvoiceReference": {
+            "example": "INV-SVC-20260808-103015123",
+            "nullable": true,
+            "type": "object"
+          },
           "recordedByUserId": {
             "example": "cashier-1",
+            "nullable": true,
+            "type": "object"
+          },
+          "reissuedAt": {
+            "format": "date-time",
             "nullable": true,
             "type": "object"
           },
@@ -5303,10 +5739,17 @@
           "vehicleId": {
             "example": "7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d",
             "type": "string"
+          },
+          "version": {
+            "example": 2,
+            "type": "number"
           }
         },
         "required": [
           "id",
+          "lineageId",
+          "version",
+          "lifecycleStatus",
           "jobOrderId",
           "invoiceReference",
           "sourceType",
@@ -5323,6 +5766,8 @@
           "partsAmountCents",
           "reservationFeeDeductionCents",
           "totalAmountCents",
+          "lineItemSnapshots",
+          "correctionHistory",
           "createdAt",
           "updatedAt"
         ],
@@ -5753,9 +6198,14 @@
             "example": "b520dba5-5bfb-4d34-a931-70bd811f7725",
             "type": "string"
           },
+          "sourceIntakeReference": {
+            "example": "INSP-2026-000001",
+            "type": "object"
+          },
           "sourceType": {
             "enum": [
               "booking",
+              "intake",
               "back_job"
             ],
             "example": "booking",
@@ -5870,6 +6320,7 @@
           "sourceType": {
             "enum": [
               "booking",
+              "intake",
               "back_job"
             ],
             "example": "booking",
@@ -6125,6 +6576,10 @@
       },
       "LoyaltyAnalyticsRewardUsageResponseDto": {
         "properties": {
+          "displayReference": {
+            "example": "Free Car Wash",
+            "type": "string"
+          },
           "redemptionCount": {
             "example": 3,
             "type": "number"
@@ -6155,6 +6610,7 @@
         "required": [
           "rewardId",
           "rewardName",
+          "displayReference",
           "rewardStatus",
           "redemptionCount",
           "sourceRedemptionIds"
@@ -6445,6 +6901,12 @@
       },
       "NotificationResponseDto": {
         "properties": {
+          "archivedAt": {
+            "example": "2026-04-20T09:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "object"
+          },
           "attempts": {
             "items": {
               "$ref": "#/components/schemas/NotificationDeliveryAttemptResponseDto"
@@ -6496,6 +6958,12 @@
           "message": {
             "example": "Your booking is scheduled tomorrow at 9:00 AM.",
             "type": "string"
+          },
+          "readAt": {
+            "example": "2026-04-20T08:45:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "object"
           },
           "scheduledFor": {
             "example": "2026-04-20T08:30:00.000Z",
@@ -7115,6 +7583,47 @@
         ],
         "type": "object"
       },
+      "ReissuedInvoiceLineItemDto": {
+        "properties": {
+          "category": {
+            "enum": [
+              "service",
+              "labor",
+              "part",
+              "other"
+            ],
+            "example": "labor",
+            "type": "string"
+          },
+          "description": {
+            "example": "Brake system diagnosis and repair",
+            "maxLength": 240,
+            "type": "string"
+          },
+          "quantity": {
+            "example": 1,
+            "maximum": 999,
+            "minimum": 1,
+            "type": "number"
+          },
+          "sourceJobOrderItemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "unitAmountCents": {
+            "example": 125000,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "category",
+          "description",
+          "quantity",
+          "unitAmountCents"
+        ],
+        "type": "object"
+      },
       "ReplaceAccessoryCartDto": {
         "properties": {
           "items": {
@@ -7526,6 +8035,25 @@
           "createdByUserId",
           "createdAt",
           "updatedAt"
+        ],
+        "type": "object"
+      },
+      "SaveIntakeInspectionDraftDto": {
+        "properties": {
+          "bookingId": {
+            "description": "Required only for a booked arrival.",
+            "type": "string"
+          },
+          "intakeData": {
+            "$ref": "#/components/schemas/IntakeInspectionDataDto"
+          },
+          "notes": {
+            "maxLength": 1000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "intakeData"
         ],
         "type": "object"
       },
@@ -8604,28 +9132,53 @@
         "properties": {},
         "type": "object"
       },
+      "UploadInspectionPhotoDto": {
+        "properties": {
+          "slot": {
+            "description": "Optional inspection photo slot label. Defaults to general when omitted.",
+            "example": "front",
+            "maxLength": 40,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "UploadInspectionPhotoResponseDto": {
         "properties": {
-          "attachmentRef": {
-            "description": "Attachment reference that can be stored on an inspection record later.",
-            "example": "upload://vehicle/7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d/front/1f5bc7f9-2d87-4d5f-9a5c-1d28a4d4367a.jpg",
+          "byteSize": {
+            "example": 248112,
+            "type": "number"
+          },
+          "fileUrl": {
+            "description": "Authenticated file route. Internal storage paths are never returned.",
+            "example": "/api/intake-inspections/inspection-id/evidence/evidence-id/file",
+            "type": "string"
+          },
+          "id": {
+            "example": "evidence-id",
+            "type": "string"
+          },
+          "mimeType": {
+            "example": "image/jpeg",
+            "type": "string"
+          },
+          "originalName": {
+            "example": "vehicle-front.jpg",
             "type": "string"
           },
           "slot": {
             "description": "Slot label associated with the uploaded inspection photo.",
             "example": "front",
             "type": "string"
-          },
-          "storageKey": {
-            "description": "Relative storage path for the persisted image.",
-            "example": "7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d/front/1f5bc7f9-2d87-4d5f-9a5c-1d28a4d4367a.jpg",
-            "type": "string"
           }
         },
         "required": [
+          "id",
           "slot",
-          "attachmentRef",
-          "storageKey"
+          "originalName",
+          "mimeType",
+          "byteSize",
+          "fileUrl"
         ],
         "type": "object"
       },
@@ -9208,6 +9761,33 @@
         "required": [
           "enrollmentId",
           "otp"
+        ],
+        "type": "object"
+      },
+      "VoidAndReissueJobOrderInvoiceDto": {
+        "properties": {
+          "correctionReason": {
+            "example": "Corrected an incorrectly billed brake-pad quantity.",
+            "type": "string"
+          },
+          "lineItems": {
+            "items": {
+              "$ref": "#/components/schemas/ReissuedInvoiceLineItemDto"
+            },
+            "type": "array"
+          },
+          "reservationFeeDeductionCents": {
+            "example": 50000,
+            "minimum": 0,
+            "type": "number"
+          },
+          "summary": {
+            "example": "Corrected service invoice after supervisor review.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "correctionReason"
         ],
         "type": "object"
       }
@@ -14141,6 +14721,166 @@
         ]
       }
     },
+    "/api/intake-inspections/{id}": {
+      "patch": {
+        "operationId": "InspectionsController_updateIntakeDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveIntakeInspectionDraftDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectionResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Update a pending intake draft using optimistic concurrency.",
+        "tags": [
+          "inspections"
+        ]
+      }
+    },
+    "/api/intake-inspections/{id}/complete": {
+      "post": {
+        "operationId": "InspectionsController_completeIntakeDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectionResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Validate and complete a structured intake draft.",
+        "tags": [
+          "inspections"
+        ]
+      }
+    },
+    "/api/intake-inspections/{id}/evidence": {
+      "post": {
+        "operationId": "InspectionsController_uploadEvidence",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadInspectionPhotoDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadInspectionPhotoResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Attach authenticated image evidence to an inspection.",
+        "tags": [
+          "inspections"
+        ]
+      }
+    },
+    "/api/intake-inspections/{id}/evidence/{evidenceId}/file": {
+      "get": {
+        "operationId": "InspectionsController_readEvidence",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "evidenceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Stream authorized inspection evidence.",
+        "tags": [
+          "inspections"
+        ]
+      }
+    },
+    "/api/intake-inspections/drafts": {
+      "get": {
+        "operationId": "InspectionsController_findIntakeDrafts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Recover a pending booked intake draft.",
+        "tags": [
+          "inspections"
+        ]
+      }
+    },
     "/api/job-orders": {
       "post": {
         "operationId": "JobOrdersController_create",
@@ -14667,6 +15407,154 @@
           }
         ],
         "summary": "Generate and stream the invoice PDF for a finalized job order.",
+        "tags": [
+          "job-orders"
+        ]
+      }
+    },
+    "/api/job-orders/{id}/invoices/{invoiceId}/payment-reversal": {
+      "post": {
+        "operationId": "JobOrdersController_completeInvoicePaymentReversal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invoiceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current integer invoice version.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteInvoicePaymentReversalDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOrderResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "description": "The invoice is unpaid, stale, or the idempotency key conflicts."
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Record a completed full refund or manual payment reversal before invoice correction.",
+        "tags": [
+          "job-orders"
+        ]
+      }
+    },
+    "/api/job-orders/{id}/invoices/{invoiceId}/reissue": {
+      "post": {
+        "operationId": "JobOrdersController_voidAndReissueInvoice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invoiceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current integer invoice version.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidAndReissueJobOrderInvoiceDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOrderResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "409": {
+            "description": "The invoice is stale, already corrected, or still requires payment reversal."
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Void the current service invoice and issue a corrected immutable version.",
         "tags": [
           "job-orders"
         ]
@@ -15328,6 +16216,55 @@
           }
         ],
         "summary": "Idempotently create or reopen the workshop job order for a confirmed booking.",
+        "tags": [
+          "job-orders"
+        ]
+      }
+    },
+    "/api/job-orders/intake-handoffs/{inspectionId}": {
+      "post": {
+        "operationId": "JobOrdersController_sendIntakeToWorkshop",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "inspectionId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingWorkshopHandoffResponseDto"
+                }
+              }
+            },
+            "description": "The completed intake was handed off to its focused job-order workspace."
+          },
+          "401": {
+            "description": "Missing or invalid access token."
+          },
+          "403": {
+            "description": "Only service advisers or super admins can hand work to the workshop."
+          },
+          "404": {
+            "description": "The intake, vehicle, booking, or staff account was not found."
+          },
+          "409": {
+            "description": "The intake is incomplete or is not a service intake."
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Idempotently hand a completed intake inspection to the workshop.",
         "tags": [
           "job-orders"
         ]
@@ -16861,6 +17798,138 @@
         ]
       }
     },
+    "/api/users/{id}/notifications/{notificationId}/archive": {
+      "patch": {
+        "operationId": "NotificationsController_archiveNotification",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "notificationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Archive one notification without changing its read state.",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/users/{id}/notifications/{notificationId}/read": {
+      "patch": {
+        "operationId": "NotificationsController_markNotificationRead",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "notificationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Mark one notification as read.",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/users/{id}/notifications/archive-all-read": {
+      "post": {
+        "operationId": "NotificationsController_archiveAllReadNotifications",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Archive all read notifications without changing read timestamps.",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/users/{id}/notifications/read-all": {
+      "post": {
+        "operationId": "NotificationsController_markAllNotificationsRead",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Mark all notifications as read.",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
     "/api/users/{userId}/vehicles": {
       "get": {
         "operationId": "VehiclesController_findByUserId",
@@ -17252,6 +18321,63 @@
         ]
       }
     },
+    "/api/vehicles/{id}/inspection-history": {
+      "get": {
+        "operationId": "InspectionsController_findHistoryPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "completed",
+                "needs_followup",
+                "void"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List a bounded keyset page of vehicle inspection history.",
+        "tags": [
+          "inspections"
+        ]
+      }
+    },
     "/api/vehicles/{id}/inspections": {
       "get": {
         "operationId": "InspectionsController_findByVehicleId",
@@ -17265,21 +18391,44 @@
               "example": "7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "completed",
+                "needs_followup",
+                "void"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/InspectionResponseDto"
-                  },
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Inspections attached to the vehicle."
+            "description": "Bounded keyset page of inspections attached to the vehicle."
           },
           "404": {
             "description": "Vehicle not found."
@@ -17457,6 +18606,47 @@
         "summary": "List tracked insurance records for a vehicle.",
         "tags": [
           "insurance"
+        ]
+      }
+    },
+    "/api/vehicles/{id}/intake-inspections/drafts": {
+      "post": {
+        "operationId": "InspectionsController_createIntakeDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveIntakeInspectionDraftDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectionResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Create a resumable structured intake draft.",
+        "tags": [
+          "inspections"
         ]
       }
     },

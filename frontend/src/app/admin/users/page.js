@@ -55,8 +55,8 @@ export default function AdminUsersPage() {
     <div className="ops-page-shell">
       <PageHeader
         eyebrow="Super Admin"
-        title="User Administration Workspace"
-        description="Provision adviser/admin accounts, manage the technician profile directory, and keep workshop staffing ready for service-adviser assignment."
+        title="User Administration"
+        description="Create staff accounts, control access, and maintain the technician directory."
       />
 
       <section className="ops-summary-grid">

@@ -1,7 +1,25 @@
 import { relations, sql } from 'drizzle-orm';
-import { integer, jsonb, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 
+import { vehicleInspections } from '@main-modules/inspections/schemas/inspections.schema';
+import { vehicles } from '@main-modules/vehicles/schemas/vehicles.schema';
 import { users } from '@main-modules/users/schemas/users.schema';
+
+export const vehicleStickerObservationEnum = pgEnum('vehicle_sticker_observation', [
+  'verified_present',
+  'not_present',
+]);
 
 export const loyaltyTransactionTypeEnum = pgEnum('loyalty_transaction_type', [
   'accrual',
@@ -54,6 +72,7 @@ export type LoyaltyTransactionMetadata = {
   rewardNameSnapshot?: string;
   redeemedByUserId?: string;
   note?: string | null;
+  noAwardReason?: 'vehicle_sticker_not_verified' | 'vehicle_not_owned' | 'missing_vehicle_reference';
 };
 
 export type RewardCatalogSnapshot = {
@@ -162,6 +181,37 @@ export const loyaltyTransactions = pgTable('loyalty_transactions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const vehicleStickerObservations = pgTable(
+  'vehicle_sticker_observations',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    vehicleId: uuid('vehicle_id')
+      .notNull()
+      .references(() => vehicles.id, { onDelete: 'cascade' }),
+    inspectionId: uuid('inspection_id')
+      .notNull()
+      .references(() => vehicleInspections.id, { onDelete: 'restrict' }),
+    intakeReference: varchar('intake_reference', { length: 40 }).notNull(),
+    observation: vehicleStickerObservationEnum('observation').notNull(),
+    verifiedByUserId: uuid('verified_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    observedAt: timestamp('observed_at', { withTimezone: true }).notNull(),
+    reason: varchar('reason', { length: 240 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    inspectionUnique: uniqueIndex('vehicle_sticker_observations_inspection_idx').on(
+      table.inspectionId,
+    ),
+    vehicleLatestIndex: index('vehicle_sticker_observations_vehicle_latest_idx').on(
+      table.vehicleId,
+      table.observedAt,
+      table.id,
+    ),
+  }),
+);
+
 export const rewardRedemptions = pgTable('reward_redemptions', {
   id: uuid('id').defaultRandom().primaryKey(),
   loyaltyAccountId: uuid('loyalty_account_id')
@@ -236,6 +286,24 @@ export const loyaltyTransactionsRelations = relations(loyaltyTransactions, ({ on
     references: [rewardRedemptions.transactionId],
   }),
 }));
+
+export const vehicleStickerObservationsRelations = relations(
+  vehicleStickerObservations,
+  ({ one }) => ({
+    vehicle: one(vehicles, {
+      fields: [vehicleStickerObservations.vehicleId],
+      references: [vehicles.id],
+    }),
+    inspection: one(vehicleInspections, {
+      fields: [vehicleStickerObservations.inspectionId],
+      references: [vehicleInspections.id],
+    }),
+    verifiedByUser: one(users, {
+      fields: [vehicleStickerObservations.verifiedByUserId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const rewardsRelations = relations(rewards, ({ one, many }) => ({
   createdByUser: one(users, {

@@ -1,7 +1,9 @@
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 import { jobOrderInvoicePaymentMethodEnum } from '../schemas/job-orders.schema';
+import { normalizeJobOrderInvoicePaymentMethod } from './payment-methods';
 
 export class RecordJobOrderInvoicePaymentDto {
   @ApiProperty({
@@ -15,7 +17,9 @@ export class RecordJobOrderInvoicePaymentDto {
   @ApiProperty({
     enum: jobOrderInvoicePaymentMethodEnum.enumValues,
     example: 'cash',
+    description: 'Canonical values are cash, bank_transfer, check, and other; legacy separators and cheque are accepted.',
   })
+  @Transform(({ value }) => normalizeJobOrderInvoicePaymentMethod(value))
   @IsEnum(jobOrderInvoicePaymentMethodEnum.enumValues)
   paymentMethod!: (typeof jobOrderInvoicePaymentMethodEnum.enumValues)[number];
 

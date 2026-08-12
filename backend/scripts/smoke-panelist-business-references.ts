@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import pg from 'pg';
 
+async function main(): Promise<void> {
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error('DATABASE_URL is required for the business-reference smoke test.');
@@ -152,3 +153,9 @@ try {
   }
   await pool.end();
 }
+}
+
+void main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});

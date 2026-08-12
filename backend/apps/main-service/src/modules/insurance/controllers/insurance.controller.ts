@@ -228,8 +228,8 @@ export class InsuranceController {
     type: InsuranceRequirementsResponseDto,
   })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
-  getRequirements(@Query() query: InsuranceRequirementsQueryDto) {
-    return this.insuranceService.getRequirements(query);
+  getRequirements(@Query() query: InsuranceRequirementsQueryDto, @Req() request: Request) {
+    return this.insuranceService.getRequirements(query, request.user as { userId: string; role: string });
   }
 
   @Get('insurance/inquiries/:id')

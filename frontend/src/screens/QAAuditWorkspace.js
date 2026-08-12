@@ -24,6 +24,7 @@ import {
 } from '@/lib/jobOrderClaimState.mjs'
 import {
   getJobOrderQualityGate,
+  requestJobOrderQualityGatePreCheckSummary,
   overrideJobOrderQualityGate,
   recordJobOrderQualityGateVerdict,
 } from '@/lib/qualityGateClient'
@@ -45,6 +46,11 @@ import {
   createQaReviewRequestCoordinator,
   isQaReviewTargetCurrent,
 } from './qaReviewRequestCoordinator.mjs'
+import {
+  getQaAiSummaryAction,
+  getQaAiSummaryState,
+  getQaAiSummaryStatusLabel,
+} from './qaAiSummaryPresentation.mjs'
 import {
   EmptyPanelState,
   formatDateTime,
@@ -101,6 +107,10 @@ export default function QAAuditWorkspace() {
   const [qaState, setQaState] = useState(initialQaState)
   const [verdictState, setVerdictState] = useState(initialVerdictState)
   const [overrideState, setOverrideState] = useState(initialOverrideState)
+  const [aiSummaryActionState, setAiSummaryActionState] = useState({
+    status: 'ai_summary_ready',
+    message: '',
+  })
   const requestCoordinatorRef = useRef(null)
   if (!requestCoordinatorRef.current) {
     requestCoordinatorRef.current = createQaReviewRequestCoordinator()
@@ -156,6 +166,12 @@ export default function QAAuditWorkspace() {
     && canActOnLoadedGate
     && qualityGate?.status === 'blocked',
   )
+  const aiSummary = getQaAiSummaryState(qualityGate)
+  const aiSummaryAction = getQaAiSummaryAction({
+    qualityGate,
+    canGenerate: Boolean(canActOnLoadedGate && activeClaimId && canRecordLiveVerdict),
+    actionStatus: aiSummaryActionState.status,
+  })
   const pendingReviewGuidance = getPendingReviewGuidance({
     qualityGate,
     blockingFindings,
@@ -273,6 +289,33 @@ export default function QAAuditWorkspace() {
       })
     }
   }, [canReadLiveQa, jobOrderId, user?.accessToken])
+
+  const handleRequestAiSummary = useCallback(async () => {
+    if (!jobOrderId || !activeClaimId || aiSummaryAction.disabled) return
+    const regenerate = aiSummary.status === 'ready'
+    setAiSummaryActionState({ status: 'ai_summary_loading', message: '' })
+    try {
+      const nextGate = await requestJobOrderQualityGatePreCheckSummary({
+        jobOrderId,
+        accessToken: user?.accessToken,
+        claimId: activeClaimId,
+        regenerate,
+      })
+      setQaDetailState((current) => ({ ...current, gate: nextGate }))
+      setAiSummaryActionState({
+        status: 'ai_summary_queued',
+        message: 'Summary generation queued. It remains advisory; the adviser decides the verdict.',
+      })
+    } catch (error) {
+      const unavailable = error instanceof ApiError && (error.details?.code ?? error.data?.code) === 'AI_SUMMARY_UNAVAILABLE'
+      setAiSummaryActionState({
+        status: unavailable ? 'ai_summary_unavailable' : 'ai_summary_failed',
+        message: unavailable
+          ? 'AI summary is unavailable. Configure the OpenAI-compatible provider or continue with deterministic QA checks.'
+          : error?.message || 'AI summary generation failed. Retry or continue with deterministic QA checks.',
+      })
+    }
+  }, [activeClaimId, aiSummary.status, aiSummaryAction.disabled, jobOrderId, user?.accessToken])
 
   async function handleOverrideQualityGate() {
     if (!qualityGate || !canActOnLoadedGate) {
@@ -727,6 +770,46 @@ export default function QAAuditWorkspace() {
                   </ul>
                 </div>
               ) : null}
+              <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-ink-primary">AI Pre-Check Summary</p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      Advisory only. The service adviser decides the QA verdict.
+                    </p>
+                  </div>
+                  <span className="badge badge-gray">{getQaAiSummaryStatusLabel(aiSummary.status)}</span>
+                </div>
+                {aiSummary.summaryText ? (
+                  <p className="mt-3 text-sm leading-6 text-ink-secondary">{aiSummary.summaryText}</p>
+                ) : (
+                  <p className="mt-3 text-sm text-ink-muted">
+                    {aiSummary.status === 'unavailable'
+                      ? 'AI summary is unavailable; deterministic QA checks remain available.'
+                      : aiSummary.status === 'stale'
+                        ? 'Evidence changed since the last summary. Generate a fresh advisory summary.'
+                        : aiSummary.status === 'generation_failed'
+                          ? 'Generation failed. Retry when the provider is available.'
+                          : 'No AI summary has been generated for this evidence yet.'}
+                  </p>
+                )}
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted">
+                  <span>Evidence: {aiSummary.evidenceFingerprint || 'Not recorded'}</span>
+                  <span>Generated: {formatDateTime(aiSummary.generatedAt)}</span>
+                </div>
+                {aiSummaryActionState.message ? (
+                  <p className="mt-3 text-xs text-ink-muted">{aiSummaryActionState.message}</p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={handleRequestAiSummary}
+                  disabled={aiSummaryAction.disabled}
+                  className="ops-action-secondary mt-4 inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {aiSummaryActionState.status === 'ai_summary_loading' ? <RefreshCw size={15} className="animate-spin" /> : null}
+                  {aiSummaryAction.label}
+                </button>
+              </div>
             </div>
           ) : (
             <EmptyPanelState

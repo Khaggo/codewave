@@ -7,6 +7,7 @@ import { AuthModule } from '@main-modules/auth/auth.module';
 import { JobOrdersModule } from '@main-modules/job-orders/job-orders.module';
 import { StaffWorkQueuesModule } from '@main-modules/staff-work-queues/staff-work-queues.module';
 import { UsersModule } from '@main-modules/users/users.module';
+import { VehicleLifecycleSummaryProviderService } from '@main-modules/vehicle-lifecycle/services/vehicle-lifecycle-summary-provider.service';
 
 import { QualityGatesController } from './controllers/quality-gates.controller';
 import { QualityGatesRepository } from './repositories/quality-gates.repository';
@@ -29,6 +30,7 @@ import { QualityGatesService } from './services/quality-gates.service';
     QualityGatesRepository,
     QualityGateDiscrepancyEngineService,
     QualityGateSemanticAuditorService,
+    VehicleLifecycleSummaryProviderService,
     QualityGatesService,
   ],
   exports: [QualityGatesRepository, QualityGatesService],

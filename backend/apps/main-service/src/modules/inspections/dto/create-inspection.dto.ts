@@ -3,6 +3,7 @@ import {
   ArrayUnique,
   IsArray,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   MaxLength,
@@ -13,6 +14,7 @@ import { Type } from 'class-transformer';
 import { inspectionStatusEnum, inspectionTypeEnum } from '../schemas/inspections.schema';
 
 import { CreateInspectionFindingDto } from './create-inspection-finding.dto';
+import { IntakeInspectionDataDto } from './intake-inspection.dto';
 
 type InspectionStatus = (typeof inspectionStatusEnum.enumValues)[number];
 type InspectionType = (typeof inspectionTypeEnum.enumValues)[number];
@@ -71,6 +73,21 @@ export class CreateInspectionDto {
   @ArrayUnique()
   @IsString({ each: true })
   attachmentRefs?: string[];
+
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'Version of the structured intake data. Required for completed intake records.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  intakeDataVersion?: number;
+
+  @ApiPropertyOptional({ type: IntakeInspectionDataDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => IntakeInspectionDataDto)
+  intakeData?: IntakeInspectionDataDto;
 
   @ApiPropertyOptional({
     type: () => CreateInspectionFindingDto,

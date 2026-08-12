@@ -35,6 +35,7 @@ import { CreateServiceCategoryDto } from '../dto/create-service-category.dto';
 import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { DailyScheduleQueryDto, type DailyScheduleScope } from '../dto/daily-schedule-query.dto';
+import { ListServiceManagementQueryDto } from '../dto/list-service-management-query.dto';
 import { QueueCurrentQueryDto } from '../dto/queue-current-query.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { UpdateBookingDateClosureDto } from '../dto/update-booking-date-closure.dto';
@@ -133,7 +134,25 @@ export class BookingsService {
   ) {}
 
   async listServices() {
-    return this.bookingsRepository.listServices();
+    const services = await this.bookingsRepository.listServices();
+
+    return services.map((service) => ({
+      ...service,
+      isPublished: service.isActive === true,
+    }));
+  }
+
+  async listServiceManagement(query: ListServiceManagementQueryDto, actorUserId: string) {
+    await this.assertStaffActor(actorUserId);
+    const page = await this.bookingsRepository.listServiceManagement(query);
+
+    return {
+      ...page,
+      items: page.items.map((service) => ({
+        ...service,
+        isPublished: service.isActive === true,
+      })),
+    };
   }
 
   async listServiceCategories() {

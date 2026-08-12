@@ -34,6 +34,9 @@ describe('StaffWorkQueuesRepository finalization ownership', () => {
     expect(listSql).toContain("gate.reviewer_verdict = 'passed'");
     expect(listSql).toContain("'QA cleared; ready to finalize'");
     expect(listSql).not.toContain("gate.status IN ('pending_review', 'blocked')");
+    expect(listSql).toContain("job.job_order_reference, 'Reference unavailable'");
+    expect(listSql).not.toContain("LEFT(job.id::text, 8)");
+    expect(listSql).not.toContain("LEFT(booking.id::text, 8)");
 
     execute.mockClear();
     await repository.getQueueSummary('job_order', 'staff-1');

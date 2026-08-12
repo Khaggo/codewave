@@ -6,7 +6,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 import { BackJobsRepository } from '@main-modules/back-jobs/repositories/back-jobs.repository';
 import { BookingsRepository } from '@main-modules/bookings/repositories/bookings.repository';
@@ -20,6 +20,7 @@ import { VehiclesRepository } from '@main-modules/vehicles/repositories/vehicles
 import { AddJobOrderPhotoDto } from '../dto/add-job-order-photo.dto';
 import { AddJobOrderProgressDto } from '../dto/add-job-order-progress.dto';
 import { CreateJobOrderDto } from '../dto/create-job-order.dto';
+import { CompleteInvoicePaymentReversalDto } from '../dto/complete-invoice-payment-reversal.dto';
 import { FinalizeJobOrderDto } from '../dto/finalize-job-order.dto';
 import {
   ListJobOrderWorkbenchQueryDto,
@@ -30,6 +31,7 @@ import { ReplaceJobOrderAssignmentsDto } from '../dto/replace-job-order-assignme
 import { UpdateJobOrderStatusDto } from '../dto/update-job-order-status.dto';
 import { UpdateJobOrderWorkshopStageDto } from '../dto/update-job-order-workshop-stage.dto';
 import { UploadJobOrderPhotoDto } from '../dto/upload-job-order-photo.dto';
+import { VoidAndReissueJobOrderInvoiceDto } from '../dto/void-and-reissue-job-order-invoice.dto';
 import { JobOrdersRepository } from '../repositories/job-orders.repository';
 import { jobOrderStatusEnum } from '../schemas/job-orders.schema';
 import {
@@ -100,6 +102,7 @@ export class JobOrdersService {
     private readonly qualityGatesService: QualityGatesService,
     private readonly eventBus: AutocareEventBusService,
     private readonly staffWorkQueuesService: StaffWorkQueuesService,
+    private readonly inspectionsRepository: InspectionsRepository,
     @Optional()
     private readonly evidenceStorageService: JobOrderEvidenceStorageService,
     @Optional()
@@ -110,7 +113,6 @@ export class JobOrdersService {
     private readonly mailDeliveryService: MailDeliveryService,
     @Optional()
     private readonly jobOrderInvoicePaymongoService: JobOrderInvoicePaymongoService,
-    @Optional() private readonly inspectionsRepository?: InspectionsRepository,
     @Optional() private readonly technicianProfilesService?: TechnicianProfilesService,
   ) {}
 
@@ -149,13 +151,15 @@ export class JobOrdersService {
       return this.jobOrdersRepository.findById(createdJobOrder.id);
     }
 
-    await this.syncBookingLifecycleForJobOrderHandoff(createdJobOrder.sourceId);
-    await this.staffWorkQueuesService.completeClaim(
-      'job_order',
-      'booking_handoff',
-      payload.sourceId,
-      resolvedActor.id,
-    );
+    if (payload.sourceType === 'booking') {
+      await this.syncBookingLifecycleForJobOrderHandoff(createdJobOrder.sourceId);
+      await this.staffWorkQueuesService.completeClaim(
+        'job_order',
+        'booking_handoff',
+        payload.sourceId,
+        resolvedActor.id,
+      );
+    }
 
     return createdJobOrder;
   }
@@ -239,6 +243,87 @@ export class JobOrdersService {
       reference: detail.jobOrderReference,
       created: true,
     };
+  }
+
+  async sendIntakeToWorkshop(inspectionId: string, actor: JobOrderActor) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    const inspection = await this.inspectionsRepository.findById(inspectionId);
+    if (inspection.inspectionType !== 'intake' || inspection.status !== 'completed') {
+      throw new ConflictException('Only completed intake inspections can be sent to the workshop');
+    }
+    if (!resolvedActor.staffCode) {
+      throw new ConflictException('The signed-in staff account requires a staff code before workshop handoff');
+    }
+
+    const intakeData = (inspection.intakeData ?? {}) as Record<string, unknown>;
+    if (intakeData.visitType && intakeData.visitType !== 'regular_service') {
+      throw new ConflictException('Only service intake inspections can be sent to the workshop');
+    }
+
+    const sourceType = inspection.bookingId ? 'booking' as const : 'intake' as const;
+    const sourceId = inspection.bookingId ?? inspection.id;
+    const existingJobOrder = sourceType === 'booking'
+      ? await this.jobOrdersRepository.findLatestByBookingSourceId(sourceId)
+      : await this.jobOrdersRepository.findLatestByIntakeSourceId(sourceId);
+    if (existingJobOrder) {
+      const detail = await this.findById(existingJobOrder.id, actor);
+      return { jobOrderId: detail.id, reference: detail.jobOrderReference, created: false };
+    }
+
+    const vehicle = await this.vehiclesRepository.findById(inspection.vehicleId);
+    if (!vehicle) {
+      throw new NotFoundException('Inspected vehicle not found');
+    }
+    let customerUserId = vehicle.userId;
+    if (inspection.bookingId) {
+      const booking = await this.bookingsRepository.findOptionalById(inspection.bookingId);
+      if (!booking) {
+        throw new NotFoundException('Booking source not found');
+      }
+      if (booking.vehicleId !== inspection.vehicleId) {
+        throw new ConflictException('The intake booking does not belong to the inspected vehicle');
+      }
+      customerUserId = booking.userId;
+    }
+
+    const serviceSummary = String(intakeData.requestedServiceSummary ?? '').trim();
+    const concern = String(intakeData.serviceConcern ?? '').trim();
+    const findingItems = (inspection.findings ?? []).map((finding) => ({
+      name: finding.label,
+      description: finding.notes ?? undefined,
+      estimatedHours: 1,
+    }));
+    const items = findingItems.length > 0
+      ? findingItems
+      : [{
+          name: serviceSummary || 'Workshop service',
+          description: concern || 'Complete the service work recorded during intake.',
+          estimatedHours: 1,
+        }];
+
+    let createdJobOrder;
+    try {
+      createdJobOrder = await this.create({
+        sourceType,
+        sourceId,
+        customerUserId,
+        vehicleId: inspection.vehicleId,
+        serviceAdviserUserId: resolvedActor.id,
+        serviceAdviserCode: resolvedActor.staffCode,
+        notes: concern || inspection.notes || undefined,
+        items,
+      }, actor);
+    } catch (error) {
+      const concurrentJobOrder = sourceType === 'booking'
+        ? await this.jobOrdersRepository.findLatestByBookingSourceId(sourceId)
+        : await this.jobOrdersRepository.findLatestByIntakeSourceId(sourceId);
+      if (!concurrentJobOrder) throw error;
+      const detail = await this.findById(concurrentJobOrder.id, actor);
+      return { jobOrderId: detail.id, reference: detail.jobOrderReference, created: false };
+    }
+
+    const detail = await this.findById(createdJobOrder.id, actor);
+    return { jobOrderId: detail.id, reference: detail.jobOrderReference, created: true };
   }
 
   async listAssignedToTechnician(actor: JobOrderActor) {
@@ -414,6 +499,10 @@ export class JobOrdersService {
       jobOrder.sourceType === 'back_job'
         ? buildBackJobReadableReference(await this.backJobsRepository.findById(jobOrder.sourceId))
         : null;
+    const sourceIntakeReference =
+      jobOrder.sourceType === 'intake' && this.inspectionsRepository
+        ? (await this.inspectionsRepository.findById(jobOrder.sourceId)).inspectionReference
+        : null;
 
     const workshopStageHistory = (jobOrder.progressEntries ?? [])
       .filter((entry) => entry?.entryType === 'stage_update' && entry?.workshopStage)
@@ -433,6 +522,7 @@ export class JobOrdersService {
       vehicleLabel: buildVehicleDisplayLabel(vehicle),
       sourceBookingReference,
       sourceBackJobReference,
+      sourceIntakeReference,
       currentWorkshopStage: jobOrder.currentWorkshopStage ?? null,
       workshopStageHistory,
       jobOrderReference: buildJobOrderReadableReference({
@@ -855,7 +945,12 @@ export class JobOrdersService {
   async finalize(id: string, payload: FinalizeJobOrderDto, actor: JobOrderActor) {
     const resolvedActor = await this.assertStaffActor(actor.userId);
     const jobOrder = await this.jobOrdersRepository.findById(id);
-    const items = jobOrder.items as Array<{ isCompleted: boolean }>;
+    const items = jobOrder.items as Array<{
+      id: string;
+      name: string;
+      description?: string | null;
+      isCompleted: boolean;
+    }>;
     const actorInfo = {
       userId: resolvedActor.id,
       role: resolvedActor.role as JobOrderActorRole,
@@ -903,6 +998,14 @@ export class JobOrdersService {
       partsAmountCents,
       reservationFeeDeductionCents,
       totalAmountCents,
+      lineItemSnapshots: items.map((item, index) => ({
+        sourceJobOrderItemId: item.id,
+        category: 'service' as const,
+        description: item.name || `Service item ${index + 1}`,
+        quantity: 1,
+        unitAmountCents: index === 0 ? subtotalAmountCents : 0,
+        lineAmountCents: index === 0 ? subtotalAmountCents : 0,
+      })),
     });
     await this.staffWorkQueuesService.completeClaim(
       'job_order',
@@ -937,6 +1040,81 @@ export class JobOrdersService {
     }
 
     return finalizedJobOrder;
+  }
+
+  async completeInvoicePaymentReversal(
+    id: string,
+    invoiceId: string,
+    payload: CompleteInvoicePaymentReversalDto,
+    ifMatch: string | undefined,
+    idempotencyKey: string | undefined,
+    actor: JobOrderActor,
+  ) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    if (resolvedActor.role !== 'super_admin') {
+      throw new ForbiddenException('Only super admins can record invoice payment reversals');
+    }
+    await this.assertInvoiceBelongsToJobOrder(id, invoiceId);
+    const expectedVersion = this.parseInvoiceVersion(ifMatch);
+    const normalizedIdempotencyKey = this.requireInvoiceIdempotencyKey(idempotencyKey);
+    const requestFingerprint = this.fingerprintInvoiceCorrection({
+      operation: 'payment_reversal_completed',
+      jobOrderId: id,
+      payload,
+    });
+
+    return this.jobOrdersRepository.completeInvoicePaymentReversal(id, {
+      expectedVersion,
+      idempotencyKey: normalizedIdempotencyKey,
+      requestFingerprint,
+      actorUserId: resolvedActor.id,
+      reason: payload.reason.trim(),
+      reversalReference: payload.reversalReference.trim(),
+      completedAt: new Date(payload.completedAt),
+    });
+  }
+
+  async voidAndReissueInvoice(
+    id: string,
+    invoiceId: string,
+    payload: VoidAndReissueJobOrderInvoiceDto,
+    ifMatch: string | undefined,
+    idempotencyKey: string | undefined,
+    actor: JobOrderActor,
+  ) {
+    const resolvedActor = await this.assertStaffActor(actor.userId);
+    if (resolvedActor.role !== 'super_admin') {
+      throw new ForbiddenException('Only super admins can void and reissue service invoices');
+    }
+    await this.assertInvoiceBelongsToJobOrder(id, invoiceId);
+    const expectedVersion = this.parseInvoiceVersion(ifMatch);
+    const normalizedIdempotencyKey = this.requireInvoiceIdempotencyKey(idempotencyKey);
+    const requestFingerprint = this.fingerprintInvoiceCorrection({
+      operation: 'void_and_reissue',
+      jobOrderId: id,
+      payload,
+    });
+    const lineItemSnapshots = payload.lineItems?.map((lineItem) => ({
+      sourceJobOrderItemId: lineItem.sourceJobOrderItemId ?? null,
+      category: lineItem.category,
+      description: lineItem.description.trim(),
+      quantity: lineItem.quantity,
+      unitAmountCents: lineItem.unitAmountCents,
+      lineAmountCents: lineItem.quantity * lineItem.unitAmountCents,
+    }));
+
+    return this.jobOrdersRepository.voidAndReissueInvoice(id, {
+      expectedVersion,
+      idempotencyKey: normalizedIdempotencyKey,
+      requestFingerprint,
+      actorUserId: resolvedActor.id,
+      reason: payload.correctionReason.trim(),
+      summary: payload.summary?.trim(),
+      reservationFeeDeductionCents: payload.reservationFeeDeductionCents,
+      lineItemSnapshots,
+      invoiceReference: this.generateInvoiceReference(id),
+      officialReceiptReference: this.generateOfficialReceiptReference(id),
+    });
   }
 
   async getPhotoBinary(id: string, photoId: string, actor: JobOrderActor) {
@@ -1315,6 +1493,30 @@ export class JobOrdersService {
       };
     }
 
+    if (payload.sourceType === 'intake') {
+      if (!this.inspectionsRepository) {
+        throw new ConflictException('Intake job-order creation is unavailable');
+      }
+      const intake = await this.inspectionsRepository.findById(payload.sourceId);
+      if (intake.inspectionType !== 'intake' || intake.status !== 'completed') {
+        throw new ConflictException('Job orders can only be created from completed intake inspections');
+      }
+      if (intake.bookingId) {
+        throw new ConflictException('Booked intake must reuse its booking as the job-order source');
+      }
+      if (await this.jobOrdersRepository.hasIntakeSource(payload.sourceId)) {
+        throw new ConflictException('A job order already exists for this intake');
+      }
+      const vehicle = await this.vehiclesRepository.findById(intake.vehicleId);
+      if (!vehicle) {
+        throw new NotFoundException('Intake vehicle not found');
+      }
+      if (intake.vehicleId !== payload.vehicleId || vehicle.userId !== payload.customerUserId) {
+        throw new ConflictException('Intake source does not match the submitted customer or vehicle');
+      }
+      return { jobType: 'normal' as const, parentJobOrderId: null };
+    }
+
     const booking = await this.bookingsRepository.findOptionalById(payload.sourceId);
     if (!booking) {
       throw new NotFoundException('Booking source not found');
@@ -1555,6 +1757,44 @@ export class JobOrdersService {
       now.getSeconds(),
     ).padStart(2, '0')}${String(now.getMilliseconds()).padStart(3, '0')}`;
     return `INV-SVC-${compactDate}-${timeToken}`;
+  }
+
+  private parseInvoiceVersion(value: string | undefined) {
+    const normalized = value?.trim().replace(/^W\//, '').replaceAll('"', '');
+    const version = Number(normalized);
+    if (!Number.isInteger(version) || version < 1) {
+      throw new BadRequestException({
+        code: 'INVOICE_VERSION_REQUIRED',
+        message: 'If-Match must contain the current positive integer invoice version.',
+      });
+    }
+    return version;
+  }
+
+  private requireInvoiceIdempotencyKey(value: string | undefined) {
+    const key = value?.trim();
+    if (!key || key.length < 8 || key.length > 200) {
+      throw new BadRequestException({
+        code: 'INVOICE_IDEMPOTENCY_KEY_REQUIRED',
+        message: 'Idempotency-Key must contain between 8 and 200 characters.',
+      });
+    }
+    return key;
+  }
+
+  private fingerprintInvoiceCorrection(value: unknown) {
+    const stableValue = (input: unknown): unknown => {
+      if (Array.isArray(input)) return input.map(stableValue);
+      if (input && typeof input === 'object') {
+        return Object.fromEntries(
+          Object.entries(input as Record<string, unknown>)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([key, nested]) => [key, stableValue(nested)]),
+        );
+      }
+      return input;
+    };
+    return createHash('sha256').update(JSON.stringify(stableValue(value))).digest('hex');
   }
 
   private generateOfficialReceiptReference(_jobOrderId: string) {
@@ -1814,6 +2054,13 @@ export class JobOrdersService {
     }
 
     return user;
+  }
+
+  private async assertInvoiceBelongsToJobOrder(jobOrderId: string, invoiceId: string) {
+    const jobOrder = await this.jobOrdersRepository.findById(jobOrderId);
+    if (!jobOrder.invoiceRecord || jobOrder.invoiceRecord.id !== invoiceId) {
+      throw new NotFoundException('Service invoice not found for this job order');
+    }
   }
 
   private async assertCustomerReadableActor(userId: string) {

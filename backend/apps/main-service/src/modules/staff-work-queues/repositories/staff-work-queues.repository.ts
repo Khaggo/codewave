@@ -251,6 +251,19 @@ export class StaffWorkQueuesRepository {
 
       await tx.execute(sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`);
 
+      const existingEntityClaim = await tx.query.staffWorkClaims.findFirst({
+        where: and(
+          eq(staffWorkClaims.queueType, queueType),
+          eq(staffWorkClaims.entityType, entityType),
+          eq(staffWorkClaims.entityId, entityId),
+          eq(staffWorkClaims.ownerUserId, userId),
+          eq(staffWorkClaims.status, 'active'),
+        ),
+      });
+      if (existingEntityClaim) {
+        return existingEntityClaim;
+      }
+
       const ownerClaimCountResult = await tx.execute(sql`
         SELECT COUNT(*)::int AS active_count
         FROM staff_work_claims
@@ -312,19 +325,6 @@ export class StaffWorkQueuesRepository {
           code: 'WORK_NOT_ELIGIBLE',
           message: 'This item is no longer eligible for the selected queue.',
         });
-      }
-
-      const existingEntityClaim = await tx.query.staffWorkClaims.findFirst({
-        where: and(
-          eq(staffWorkClaims.queueType, queueType),
-          eq(staffWorkClaims.entityType, entityType),
-          eq(staffWorkClaims.entityId, entityId),
-          eq(staffWorkClaims.ownerUserId, userId),
-          eq(staffWorkClaims.status, 'active'),
-        ),
-      });
-      if (existingEntityClaim) {
-        return existingEntityClaim;
       }
 
       const activeEntityClaim = await tx.query.staffWorkClaims.findFirst({
@@ -866,7 +866,7 @@ export class StaffWorkQueuesRepository {
           'job_order'::text AS entity_type,
           job.id AS job_order_id,
           booking.id AS booking_id,
-          COALESCE(booking.booking_reference, 'JO-' || LEFT(job.id::text, 8)) AS reference,
+          COALESCE(booking.booking_reference, job.job_order_reference, 'Reference unavailable') AS reference,
           job.status::text AS status,
           job.updated_at AS queue_entered_at,
           job.customer_user_id,
@@ -907,7 +907,7 @@ export class StaffWorkQueuesRepository {
           'booking_handoff'::text,
           NULL::uuid,
           booking.id,
-          COALESCE(booking.booking_reference, 'BK-' || LEFT(booking.id::text, 8)),
+          COALESCE(booking.booking_reference, 'Reference unavailable'),
           booking.status::text,
           booking.updated_at,
           booking.user_id,
@@ -954,6 +954,7 @@ export class StaffWorkQueuesRepository {
         AND (${options.view} <> 'blocked' OR candidate.status = 'blocked')
         AND (
           ${search}::text IS NULL
+          OR candidate.entity_id::text ILIKE ${search}
           OR candidate.reference ILIKE ${search}
           OR CONCAT_WS(' ', customer_profile.first_name, customer_profile.last_name) ILIKE ${search}
           OR CONCAT_WS(' ', vehicle.make, vehicle.model, vehicle.plate_number) ILIKE ${search}
@@ -976,7 +977,7 @@ export class StaffWorkQueuesRepository {
         claim.entity_type::text,
         CASE WHEN claim.entity_type = 'job_order' THEN claim.entity_id ELSE NULL END AS job_order_id,
         CASE WHEN claim.entity_type = 'booking_handoff' THEN claim.entity_id ELSE NULL END AS booking_id,
-        COALESCE(booking.booking_reference, 'WORK-' || LEFT(claim.entity_id::text, 8)) AS reference,
+        COALESCE(booking.booking_reference, job.job_order_reference, 'Reference unavailable') AS reference,
         claim.status::text AS status,
         0::int AS risk_score,
         claim.release_reason AS blocking_reason,
@@ -998,7 +999,7 @@ export class StaffWorkQueuesRepository {
       LEFT JOIN user_profiles owner_profile ON owner_profile.user_id = claim.owner_user_id
       WHERE claim.queue_type = ${queueType}
         AND claim.status <> 'active'
-        AND (${search}::text IS NULL OR COALESCE(booking.booking_reference, claim.entity_id::text) ILIKE ${search})
+        AND (${search}::text IS NULL OR COALESCE(booking.booking_reference, job.job_order_reference, '') ILIKE ${search})
       ORDER BY COALESCE(claim.completed_at, claim.released_at, claim.updated_at) DESC, claim.id DESC
       LIMIT ${options.limit + 1}
       OFFSET ${options.offset}

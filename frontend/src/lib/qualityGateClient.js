@@ -84,6 +84,33 @@ export const getJobOrderQualityGate = async ({ jobOrderId, accessToken, signal }
   );
 };
 
+export const requestJobOrderQualityGatePreCheckSummary = async ({
+  jobOrderId,
+  accessToken,
+  claimId,
+  regenerate = false,
+}) => {
+  const normalizedJobOrderId = trimOrUndefined(jobOrderId);
+  if (!normalizedJobOrderId) {
+    throw new ApiError('Load a claimed QA review before generating a summary.', 400, {
+      path: '/api/job-orders/:jobOrderId/qa/pre-check-summary',
+    });
+  }
+
+  return normalizeQualityGateForReview(
+    await request(
+      `/api/job-orders/${normalizedJobOrderId}/qa/pre-check-summary${regenerate ? '?regenerate=true' : ''}`,
+      {
+        method: 'POST',
+        headers: {
+          ...buildAuthorizedHeaders(accessToken),
+          ...requireWorkClaimHeaders(claimId),
+        },
+      },
+    ),
+  );
+};
+
 export const overrideJobOrderQualityGate = async ({ jobOrderId, reason, accessToken }) => {
   const normalizedJobOrderId = trimOrUndefined(jobOrderId);
   const normalizedReason = trimOrUndefined(reason);

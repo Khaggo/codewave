@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, Min } from 'class-validator';
 
 export class CreateServiceDto {
   @ApiPropertyOptional({
@@ -17,6 +17,8 @@ export class CreateServiceDto {
     maxLength: 120,
   })
   @IsString()
+  @IsNotEmpty()
+  @Matches(/\S/, { message: 'name must contain a non-whitespace character' })
   @MaxLength(120)
   name!: string;
 

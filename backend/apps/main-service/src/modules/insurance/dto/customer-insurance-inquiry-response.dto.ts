@@ -6,9 +6,12 @@ import {
   InsuranceInquiryResponseDto,
 } from './insurance-inquiry-response.dto';
 
-export class CustomerInsuranceDocumentResponseDto extends OmitType(InsuranceDocumentResponseDto, [
-  'inquiryId',
-  'uploadedByUserId',
+export class CustomerInsuranceDocumentResponseDto extends PickType(InsuranceDocumentResponseDto, [
+  'fileName',
+  'documentType',
+  'notes',
+  'createdAt',
+  'updatedAt',
 ] as const) {}
 
 export class CustomerInsuranceActivityResponseDto extends PickType(InsuranceActivityResponseDto, [

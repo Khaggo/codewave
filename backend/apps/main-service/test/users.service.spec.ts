@@ -249,6 +249,160 @@ describe('UsersService', () => {
     expect(repository.create).not.toHaveBeenCalled();
   });
 
+  it('allows only staff to create a walk-in identity and vehicle', async () => {
+    const repository = {
+      createWalkInCustomerWithVehicle: jest.fn(),
+    };
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: UsersRepository,
+          useValue: repository,
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(UsersService);
+
+    await expect(
+      service.createWalkInCustomer(
+        {
+          fullName: 'Jane Doe',
+          phone: '0917-123-4567',
+          consentAcknowledged: true,
+          plateNumber: 'ABC-1234',
+          make: 'Toyota',
+          model: 'Vios',
+          year: 2022,
+        },
+        { userId: 'customer-1', role: 'customer' },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repository.createWalkInCustomerWithVehicle).not.toHaveBeenCalled();
+  });
+
+  it('returns non-login walk-in IDs without exposing auth fields', async () => {
+    const repository = {
+      createWalkInCustomerWithVehicle: jest.fn().mockResolvedValue({
+        user: {
+          userId: 'walk-in-user-1',
+          identityKind: 'walk_in',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          email: null,
+        },
+        vehicle: {
+          id: 'vehicle-1',
+          publicReference: 'VEH-2026-000001',
+          plateNumber: 'ABC 1234',
+          make: 'Toyota',
+          model: 'Vios',
+          year: 2022,
+        },
+        customerCreated: true,
+        vehicleCreated: true,
+      }),
+    };
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: UsersRepository,
+          useValue: repository,
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(UsersService);
+    const result = await service.createWalkInCustomer(
+      {
+        fullName: 'Jane Doe',
+        phone: '0917-123-4567',
+        consentAcknowledged: true,
+        plateNumber: 'ABC-1234',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2022,
+      },
+      { userId: 'staff-1', role: 'service_adviser' },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        customerUserId: 'walk-in-user-1',
+        vehicleId: 'vehicle-1',
+        customerIdentityKind: 'walk_in',
+        arrivalType: 'walk_in',
+        customerCreated: true,
+        vehicleCreated: true,
+      }),
+    );
+    expect(result).not.toHaveProperty('passwordHash');
+    expect(repository.createWalkInCustomerWithVehicle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: null,
+        phone: '09171234567',
+        plateNumber: 'ABC-1234',
+        contactConsentAcknowledgedAt: expect.any(Date),
+      }),
+    );
+  });
+
+  it('keeps an existing registered customer classified as walk-in when no booking exists', async () => {
+    const repository = {
+      createWalkInCustomerWithVehicle: jest.fn().mockResolvedValue({
+        user: {
+          userId: 'registered-user-1',
+          identityKind: 'registered',
+          firstName: 'Jane',
+          lastName: 'Doe',
+        },
+        vehicle: {
+          id: 'vehicle-1',
+          publicReference: 'VEH-2026-000001',
+          plateNumber: 'ABC 1234',
+          make: 'Toyota',
+          model: 'Vios',
+          year: 2022,
+        },
+        customerCreated: false,
+        vehicleCreated: false,
+      }),
+    };
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: UsersRepository,
+          useValue: repository,
+        },
+      ],
+    }).compile();
+
+    const result = await moduleRef.get(UsersService).createWalkInCustomer(
+      {
+        fullName: 'Jane Doe',
+        phone: '09171234567',
+        consentAcknowledged: true,
+        plateNumber: 'ABC 1234',
+        make: 'Toyota',
+        model: 'Vios',
+        year: 2022,
+      },
+      { userId: 'staff-1', role: 'service_adviser' },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        customerIdentityKind: 'registered',
+        arrivalType: 'walk_in',
+        customerReused: true,
+        vehicleReused: true,
+      }),
+    );
+  });
+
   it('rejects customer address creation on another user record', async () => {
     const repository = {
       addAddress: jest.fn(),

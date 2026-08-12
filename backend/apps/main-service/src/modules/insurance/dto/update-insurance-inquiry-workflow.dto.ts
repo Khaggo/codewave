@@ -1,11 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsArray, IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 import {
   insuranceDocumentReviewStatusEnum,
   insuranceInquiryStatusEnum,
   insurancePaymentStatusEnum,
   insuranceRenewalStatusEnum,
+  insuranceDocumentTypeEnum,
 } from '../schemas/insurance.schema';
 
 export class UpdateInsuranceInquiryWorkflowDto {
@@ -89,6 +90,16 @@ export class UpdateInsuranceInquiryWorkflowDto {
   @IsString()
   @MaxLength(1000)
   customerMessage?: string;
+
+  @ApiPropertyOptional({
+    enum: insuranceDocumentTypeEnum.enumValues,
+    isArray: true,
+    description: 'Allowlisted document types requested from the customer during review.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(insuranceDocumentTypeEnum.enumValues, { each: true })
+  requestedDocumentTypes?: Array<(typeof insuranceDocumentTypeEnum.enumValues)[number]>;
 
   @ApiPropertyOptional({
     example: '2026-05-18T08:30:00.000Z',

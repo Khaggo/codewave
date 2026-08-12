@@ -38,6 +38,12 @@ export class ServiceResponseDto {
   isActive!: boolean;
 
   @ApiProperty({
+    example: true,
+    description: 'Whether the service is published for customer booking.',
+  })
+  isPublished!: boolean;
+
+  @ApiProperty({
     example: '2026-03-25T15:00:00.000Z',
     format: 'date-time',
   })

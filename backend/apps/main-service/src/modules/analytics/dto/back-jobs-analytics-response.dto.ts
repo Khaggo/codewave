@@ -34,6 +34,9 @@ class BackJobsAnalyticsSourceEntryResponseDto {
   @ApiProperty({ example: '4382f56d-35ab-4b8b-8fca-879741a0ad67' })
   originalJobOrderId!: string;
 
+  @ApiProperty({ example: 'JO-2026-000123' })
+  originalJobOrderReference!: string;
+
   @ApiProperty({ example: 2 })
   backJobCount!: number;
 
@@ -42,6 +45,9 @@ class BackJobsAnalyticsSourceEntryResponseDto {
 
   @ApiProperty({ example: ['back-job-1', 'back-job-2'], type: [String] })
   sourceBackJobIds!: string[];
+
+  @ApiProperty({ example: ['BJ-2026-000021', 'BJ-2026-000034'], type: [String] })
+  sourceBackJobReferences!: string[];
 }
 
 export class BackJobsAnalyticsResponseDto {

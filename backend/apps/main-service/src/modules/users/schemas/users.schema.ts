@@ -9,11 +9,14 @@ export const userRoleEnum = pgEnum('user_role', [
   'super_admin',
 ]);
 
+export const userIdentityKindEnum = pgEnum('user_identity_kind', ['registered', 'walk_in']);
+
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
+  email: varchar('email', { length: 255 }).unique(),
   deletedEmail: varchar('deleted_email', { length: 255 }),
   role: userRoleEnum('role').notNull().default('customer'),
+  identityKind: userIdentityKindEnum('identity_kind').notNull().default('registered'),
   staffCode: varchar('staff_code', { length: 40 }).unique(),
   isActive: boolean('is_active').notNull().default(true),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -30,6 +33,7 @@ export const userProfiles = pgTable('user_profiles', {
   firstName: varchar('first_name', { length: 120 }).notNull(),
   lastName: varchar('last_name', { length: 120 }).notNull(),
   phone: varchar('phone', { length: 30 }),
+  contactConsentAcknowledgedAt: timestamp('contact_consent_acknowledged_at', { withTimezone: true }),
   birthday: date('birthday'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

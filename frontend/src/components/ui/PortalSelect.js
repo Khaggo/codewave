@@ -16,11 +16,10 @@ export default function PortalSelect({
   contentClassName = '',
 }) {
   const normalizedValue = String(value ?? '').trim()
-  const hasValue = normalizedValue.length > 0
 
   return (
     <Select.Root
-      value={hasValue ? normalizedValue : undefined}
+      value={normalizedValue}
       onValueChange={(nextValue) => onValueChange?.(nextValue === EMPTY_OPTION_VALUE ? '' : nextValue)}
       disabled={disabled}
     >

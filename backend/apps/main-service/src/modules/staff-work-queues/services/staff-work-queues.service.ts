@@ -26,7 +26,7 @@ export class StaffWorkQueuesService {
 
   async list(queueTypeValue: string, query: ListStaffWorkQueueQueryDto, actor: StaffActor) {
     const queueType = this.parseQueueType(queueTypeValue);
-    await this.assertStaffActor(actor);
+    const resolvedActor = await this.assertStaffActor(actor);
 
     const limit = query.limit ?? 25;
     const offset = this.decodeCursor(query.cursor);
@@ -64,6 +64,9 @@ export class StaffWorkQueuesService {
           id: claim.id,
           entityId: claim.entityId,
           entityType: claim.entityType,
+          ownerUserId: claim.ownerUserId,
+          ownerName: this.getStaffDisplayName(resolvedActor),
+          isMine: claim.ownerUserId === actor.userId,
           claimedAt: claim.claimedAt.toISOString(),
           leaseExpiresAt: claim.leaseExpiresAt.toISOString(),
         })),
@@ -73,6 +76,9 @@ export class StaffWorkQueuesService {
               id: currentClaim.id,
               entityId: currentClaim.entityId,
               entityType: currentClaim.entityType,
+              ownerUserId: currentClaim.ownerUserId,
+              ownerName: this.getStaffDisplayName(resolvedActor),
+              isMine: currentClaim.ownerUserId === actor.userId,
               claimedAt: currentClaim.claimedAt.toISOString(),
               leaseExpiresAt: currentClaim.leaseExpiresAt.toISOString(),
             }
@@ -87,7 +93,7 @@ export class StaffWorkQueuesService {
     actor: StaffActor,
   ) {
     const queueType = this.parseQueueType(queueTypeValue);
-    await this.assertStaffActor(actor);
+    const resolvedActor = await this.assertStaffActor(actor);
     await this.repository.setSessionAvailability(actor.userId, queueType, true);
     const claim = await this.repository.claimSelected(
       actor.userId,
@@ -100,7 +106,8 @@ export class StaffWorkQueuesService {
     return {
       assigned: true,
       reason: null,
-      claim,
+      claim: this.toClaimOwnership(claim, resolvedActor, actor.userId),
+      ownership: await this.buildCapacitySnapshot(queueType, actor.userId),
     };
   }
 
@@ -112,7 +119,7 @@ export class StaffWorkQueuesService {
 
   async updateSession(queueTypeValue: string, available: boolean, actor: StaffActor) {
     const queueType = this.parseQueueType(queueTypeValue);
-    await this.assertStaffActor(actor);
+    const resolvedActor = await this.assertStaffActor(actor);
     const session = await this.repository.setSessionAvailability(
       actor.userId,
       queueType,
@@ -127,19 +134,25 @@ export class StaffWorkQueuesService {
       capacity,
       activeClaimCount: activeClaims.length,
       remainingCapacity: Math.max(0, capacity - activeClaims.length),
+      activeClaims: activeClaims.map((claim) => ({
+        ...claim,
+        ownerName: this.getStaffDisplayName(resolvedActor),
+        isMine: true,
+      })),
       currentClaimId: activeClaims[0]?.id ?? null,
     };
   }
 
   async dispatch(queueTypeValue: string, actor: StaffActor) {
     const queueType = this.parseQueueType(queueTypeValue);
-    await this.assertStaffActor(actor);
+    const resolvedActor = await this.assertStaffActor(actor);
     const session = await this.repository.touchAvailableSession(actor.userId, queueType);
     if (!session) {
       return {
         assigned: false,
         reason: 'QUEUE_PAUSED',
         claim: null,
+        ownership: await this.buildCapacitySnapshot(queueType, actor.userId),
       };
     }
 
@@ -151,6 +164,7 @@ export class StaffWorkQueuesService {
         reason: 'CAPACITY_REACHED',
         claim: null,
         capacity,
+        ownership: this.toCapacitySnapshot(capacity, activeClaims.length),
       };
     }
 
@@ -158,23 +172,32 @@ export class StaffWorkQueuesService {
     return {
       assigned: Boolean(claim),
       reason: claim ? null : 'NO_ELIGIBLE_WORK',
-      claim,
+      claim: claim ? this.toClaimOwnership(claim, resolvedActor, actor.userId) : null,
+      ownership: await this.buildCapacitySnapshot(queueType, actor.userId),
     };
   }
 
   async heartbeat(claimId: string, actor: StaffActor) {
-    await this.assertStaffActor(actor);
-    return this.repository.heartbeatClaim(claimId, actor.userId);
+    const resolvedActor = await this.assertStaffActor(actor);
+    const claim = await this.repository.heartbeatClaim(claimId, actor.userId);
+    return {
+      ...this.toClaimOwnership(claim, resolvedActor, actor.userId),
+      ownership: await this.buildCapacitySnapshot(claim.queueType, actor.userId),
+    };
   }
 
   async release(claimId: string, reason: string | undefined, actor: StaffActor) {
-    await this.assertStaffActor(actor);
-    return this.repository.releaseClaim(
+    const resolvedActor = await this.assertStaffActor(actor);
+    const claim = await this.repository.releaseClaim(
       claimId,
       actor.userId,
       actor.role === 'super_admin',
       reason,
     );
+    return {
+      ...this.toClaimOwnership(claim, resolvedActor, actor.userId),
+      ownership: await this.buildCapacitySnapshot(claim.queueType, claim.ownerUserId),
+    };
   }
 
   async reassign(
@@ -193,7 +216,7 @@ export class StaffWorkQueuesService {
       throw new BadRequestException('Target staff member is not active or cannot work this queue');
     }
 
-    return this.repository.reassignClaim(
+    const claim = await this.repository.reassignClaim(
       claimId,
       targetUserId,
       reason.trim(),
@@ -202,6 +225,10 @@ export class StaffWorkQueuesService {
         qa: this.getCapacity('qa'),
       },
     );
+    return {
+      ...this.toClaimOwnership(claim, target, actor.userId),
+      ownership: await this.buildCapacitySnapshot(claim.queueType, targetUserId),
+    };
   }
 
   assertActiveClaim(
@@ -285,6 +312,42 @@ export class StaffWorkQueuesService {
     }
 
     return user;
+  }
+
+  private getStaffDisplayName(user: NonNullable<Awaited<ReturnType<UsersService['findById']>>>) {
+    return [user.profile?.firstName, user.profile?.lastName].filter(Boolean).join(' ').trim()
+      || user.staffCode
+      || user.email
+      || 'Assigned staff';
+  }
+
+  private toClaimOwnership(
+    claim: {
+      ownerUserId: string;
+      [key: string]: unknown;
+    },
+    owner: Awaited<ReturnType<UsersService['findById']>>,
+    actorUserId: string,
+  ) {
+    return {
+      ...claim,
+      ownerName: owner ? this.getStaffDisplayName(owner) : 'Assigned staff',
+      isMine: claim.ownerUserId === actorUserId,
+    };
+  }
+
+  private toCapacitySnapshot(limit: number, activeClaimCount: number) {
+    return {
+      limit,
+      activeClaimCount,
+      remaining: Math.max(0, limit - activeClaimCount),
+    };
+  }
+
+  private async buildCapacitySnapshot(queueType: StaffWorkQueueType, ownerUserId: string) {
+    const limit = this.getCapacity(queueType);
+    const activeClaims = await this.repository.getActiveClaimsForOwner(ownerUserId, queueType);
+    return this.toCapacitySnapshot(limit, activeClaims.length);
   }
 
   private encodeCursor(offset: number) {

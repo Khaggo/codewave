@@ -6,6 +6,36 @@ import {
 } from './jobOrderClientTransport.js';
 import { normalizeJobOrderForWorkbench } from './jobOrderWorkbenchNormalization.mjs';
 
+const jobOrderInvoicePaymentMethodAliases = {
+  cash: 'cash',
+  bank_transfer: 'bank_transfer',
+  banktransfer: 'bank_transfer',
+  check: 'check',
+  cheque: 'check',
+  other: 'other',
+};
+const jobOrderInvoicePaymentMethods = ['cash', 'bank_transfer', 'check', 'other'];
+
+export const normalizeJobOrderInvoicePaymentMethod = (value) => {
+  if (typeof value !== 'string') return value;
+  const token = value
+    .trim()
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  return jobOrderInvoicePaymentMethodAliases[token] ?? value;
+};
+
+export const requireJobOrderInvoicePaymentMethod = (value, path) => {
+  const normalized = normalizeJobOrderInvoicePaymentMethod(value);
+  if (!jobOrderInvoicePaymentMethods.includes(normalized)) {
+    throw new ApiError('Choose cash, bank transfer, check, or other for manual invoice payment.', 400, {
+      path,
+    });
+  }
+  return normalized;
+};
+
 export const exportJobOrderInvoicePdf = async ({
   jobOrderId,
   accessToken,
@@ -48,6 +78,10 @@ export const recordJobOrderInvoicePayment = async ({
 
   const normalizedAmount = Number(amountPaid);
   const normalizedReceivedAt = trimOrUndefined(receivedAt);
+  const normalizedPaymentMethod = requireJobOrderInvoicePaymentMethod(
+    paymentMethod,
+    '/api/job-orders/:id/invoice/payments',
+  );
 
   if (!Number.isInteger(normalizedAmount) || normalizedAmount < 1) {
     throw new ApiError('Enter a positive payment amount in pesos.', 400, {
@@ -63,7 +97,7 @@ export const recordJobOrderInvoicePayment = async ({
         headers: buildAuthorizedHeaders(accessToken),
         body: {
           amountPaidCents: normalizedAmount * 100,
-          paymentMethod,
+          paymentMethod: normalizedPaymentMethod,
           reference: trimOrUndefined(reference),
           receivedAt: normalizedReceivedAt
             ? new Date(normalizedReceivedAt).toISOString()

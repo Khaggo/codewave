@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
-import { mkdir, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { createReadStream } from 'fs';
+import { mkdir, stat, writeFile } from 'fs/promises';
+import { isAbsolute, join, normalize, relative, resolve } from 'path';
 
 type SupportedInspectionImageMimeType =
   | 'image/avif'
@@ -42,7 +43,42 @@ export class InspectionEvidenceStorageService {
     return {
       slot: safeSlot,
       storageKey,
-      attachmentRef: `upload://vehicle/${storageKey}`,
+      mimeType: detectedMimeType,
+      byteSize: payload.buffer.length,
+    };
+  }
+
+  async readImage(storageKey: string) {
+    const normalizedKey = normalize(String(storageKey ?? '').replace(/\\/g, '/'));
+    const root = resolve(this.rootDirectory);
+    const absolutePath = resolve(root, normalizedKey);
+    const relativePath = relative(root, absolutePath);
+
+    if (
+      !normalizedKey ||
+      isAbsolute(normalizedKey) ||
+      relativePath.startsWith('..') ||
+      isAbsolute(relativePath)
+    ) {
+      throw new BadRequestException('Invalid inspection evidence storage path');
+    }
+
+    let fileStat;
+    try {
+      fileStat = await stat(absolutePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+        throw new NotFoundException('Inspection evidence file is unavailable');
+      }
+      throw error;
+    }
+    if (!fileStat.isFile()) {
+      throw new BadRequestException('Invalid inspection evidence storage path');
+    }
+
+    return {
+      stream: createReadStream(absolutePath),
+      byteSize: fileStat.size,
     };
   }
 

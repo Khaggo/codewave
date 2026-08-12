@@ -35,6 +35,7 @@ export interface NotificationResponse {
   dedupeKey: string;
   scheduledFor?: string | null;
   deliveredAt?: string | null;
+  readAt?: string | null;
   createdAt: string;
   updatedAt: string;
   attempts: NotificationDeliveryAttemptResponse[];

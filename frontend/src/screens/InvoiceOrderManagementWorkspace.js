@@ -17,6 +17,8 @@ import { getInvoiceAgingAnalytics } from '@/lib/analyticsAdminClient'
 import {
   getJobOrderInvoiceLookup,
   listJobOrderWorkbenchSummaries,
+  recordInvoicePaymentReversal,
+  reissueJobOrderInvoice,
 } from '@/lib/jobOrderWorkbenchClient'
 import { useUser } from '@/lib/userContext'
 import { getJobOrderReference, safeBusinessReference } from '@/lib/businessReferenceDisplay.mjs'
@@ -103,6 +105,8 @@ export default function InvoiceOrderManagementWorkspace() {
     message: '',
     snapshot: null,
   })
+  const [correctionDraft, setCorrectionDraft] = useState({ reason: '', reversalReference: '' })
+  const [correctionState, setCorrectionState] = useState({ status: 'idle', message: '' })
   const autoLoadedIdRef = useRef('')
 
   useEffect(() => {
@@ -206,6 +210,50 @@ export default function InvoiceOrderManagementWorkspace() {
         .includes(normalizedSearch),
     )
   }, [jobOrderOptions, search])
+
+  const runInvoiceCorrection = async (operation) => {
+    const currentJobOrder = invoiceState.jobOrder
+    const currentInvoice = currentJobOrder?.invoiceRecord
+    if (!currentJobOrder?.id || !currentInvoice?.id || !user?.accessToken) return
+
+    const reason = correctionDraft.reason.trim()
+    if (reason.length < 8) {
+      setCorrectionState({ status: 'failed', message: 'Enter an audit reason with at least 8 characters.' })
+      return
+    }
+    if (operation === 'reversal' && correctionDraft.reversalReference.trim().length < 3) {
+      setCorrectionState({ status: 'failed', message: 'Enter the confirmed refund or reversal reference.' })
+      return
+    }
+
+    setCorrectionState({ status: 'loading', message: '' })
+    try {
+      const idempotencyKey = globalThis.crypto?.randomUUID?.() ?? `invoice-correction-${Date.now()}`
+      const updated = operation === 'reversal'
+        ? await recordInvoicePaymentReversal({
+            jobOrderId: currentJobOrder.id,
+            invoiceId: currentInvoice.id,
+            version: currentInvoice.version,
+            reason,
+            reversalReference: correctionDraft.reversalReference,
+            accessToken: user.accessToken,
+            idempotencyKey,
+          })
+        : await reissueJobOrderInvoice({
+            jobOrderId: currentJobOrder.id,
+            invoiceId: currentInvoice.id,
+            version: currentInvoice.version,
+            correctionReason: reason,
+            accessToken: user.accessToken,
+            idempotencyKey,
+          })
+      setInvoiceState({ status: 'loaded', message: operation === 'reversal' ? 'Payment reversal recorded.' : 'Corrected invoice issued.', jobOrder: updated })
+      setCorrectionDraft({ reason: '', reversalReference: '' })
+      setCorrectionState({ status: 'success', message: operation === 'reversal' ? 'The paid invoice can now be reissued.' : 'The prior version remains in correction history.' })
+    } catch (error) {
+      setCorrectionState({ status: 'failed', message: error?.message || 'Invoice correction could not be completed.' })
+    }
+  }
 
   if (!user?.accessToken) {
     return (
@@ -355,6 +403,44 @@ export default function InvoiceOrderManagementWorkspace() {
               <DetailTile label="Official receipt" value={invoice.officialReceiptReference ?? 'Generated on finalization'} />
               <DetailTile label="PDF delivery" value={getInvoicePdfStateLabel(invoice)} />
             </div>
+            {user.role === 'super_admin' ? (
+              <section className="border-t border-surface-border pt-4">
+                <div>
+                  <p className="text-sm font-semibold text-ink-primary">Audited invoice correction</p>
+                  <p className="mt-1 text-sm text-ink-muted">Paid invoices require a confirmed full refund or reversal before reissue.</p>
+                </div>
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <label>
+                    <span className="label">Required audit reason</span>
+                    <textarea className="input min-h-24" value={correctionDraft.reason} onChange={(event) => setCorrectionDraft((current) => ({ ...current, reason: event.target.value }))} placeholder="Explain exactly what was incorrect and what must change." />
+                  </label>
+                  {invoice.paymentStatus === 'paid' && invoice.paymentReversalStatus !== 'completed' ? (
+                    <label>
+                      <span className="label">Refund or reversal reference</span>
+                      <input className="input" value={correctionDraft.reversalReference} onChange={(event) => setCorrectionDraft((current) => ({ ...current, reversalReference: event.target.value }))} placeholder="PayMongo refund or manual reversal reference" />
+                    </label>
+                  ) : null}
+                </div>
+                {correctionState.message ? <div className={`mt-3 status-message ${correctionState.status === 'failed' ? 'status-message-danger' : 'status-message-success'}`}>{correctionState.message}</div> : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {invoice.paymentStatus === 'paid' && invoice.paymentReversalStatus !== 'completed' ? (
+                    <button type="button" className="ops-action-secondary" disabled={correctionState.status === 'loading'} onClick={() => void runInvoiceCorrection('reversal')}>Record completed reversal</button>
+                  ) : (
+                    <button type="button" className="ops-action-primary" disabled={correctionState.status === 'loading'} onClick={() => void runInvoiceCorrection('reissue')}>Void and reissue</button>
+                  )}
+                </div>
+                {invoice.correctionHistory?.length ? (
+                  <div className="mt-4 divide-y divide-surface-border border-y border-surface-border">
+                    {invoice.correctionHistory.map((entry) => (
+                      <div key={entry.id} className="py-3 text-sm">
+                        <p className="font-semibold text-ink-primary">{formatLabel(entry.action)} - version {entry.fromVersion} to {entry.toVersion}</p>
+                        <p className="mt-1 text-ink-secondary">{entry.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
           </div>
         ) : (
           <div className="empty-panel mt-4">

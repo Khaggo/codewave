@@ -32,6 +32,7 @@ import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inqui
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
 import { InsuranceRepository } from '../repositories/insurance.repository';
 import {
+  insuranceDocumentTypeEnum,
   insuranceInquiryStatusEnum,
   insurancePaymentStatusEnum,
   insuranceRenewalStatusEnum,
@@ -44,6 +45,11 @@ import {
   presentInsuranceRecordsForActor,
 } from './insurance-customer-view';
 import { InsuranceDocumentStorageService } from './insurance-document-storage.service';
+import {
+  canonicalizeInsuranceDateTime,
+  isTerminalInsuranceStatus,
+  resolveInsuranceRequirements,
+} from './insurance-workflow-policy';
 type InsuranceActor = {
   userId: string;
   role: string;
@@ -137,15 +143,23 @@ export class InsuranceService {
   ) {}
 
   async create(payload: CreateInsuranceInquiryDto, actor: InsuranceActor) {
-    await this.assertActorCanCreate(payload.userId, actor);
-    await this.assertCustomerAndVehicle(payload.userId, payload.vehicleId);
+    const canonicalPayload = {
+      ...payload,
+      ...(payload.incidentOccurredAt
+        ? { incidentOccurredAt: canonicalizeInsuranceDateTime(payload.incidentOccurredAt) as string }
+        : {}),
+    };
+    await this.assertActorCanCreate(canonicalPayload.userId, actor);
+    await this.assertCustomerAndVehicle(canonicalPayload.userId, canonicalPayload.vehicleId);
+    this.assertValidCreatePayload(canonicalPayload);
 
-    if (payload.clientRequestId) {
+    if (canonicalPayload.clientRequestId) {
       const existingInquiry = await this.insuranceRepository.findByClientRequestId(
-        payload.userId,
-        payload.clientRequestId,
+        canonicalPayload.userId,
+        canonicalPayload.clientRequestId,
       );
       if (existingInquiry) {
+        this.assertIdempotencyPayloadMatches(existingInquiry, canonicalPayload);
         return presentInquiryForActor(
           normalizeInquiryDocumentStatus(existingInquiry),
           actor,
@@ -154,14 +168,15 @@ export class InsuranceService {
     }
 
     const inquiry = await this.insuranceRepository.create({
-      ...payload,
+      ...canonicalPayload,
       createdByUserId: actor.userId,
     });
+    this.assertIdempotencyPayloadMatches(inquiry, canonicalPayload);
 
     return presentInquiryForActor(
       {
         ...inquiry,
-        purpose: inquiry.purpose ?? payload.purpose ?? 'quotation',
+        purpose: inquiry.purpose ?? canonicalPayload.purpose ?? 'quotation',
         documentStatus: inquiry.documentStatus ?? 'incomplete',
         paymentStatus: inquiry.paymentStatus ?? 'not_required',
         renewalStatus: inquiry.renewalStatus ?? 'not_applicable',
@@ -171,20 +186,27 @@ export class InsuranceService {
   }
 
   async createRenewalFollowUp(payload: CreateRenewalFollowUpDto, actor: InsuranceActor) {
+    const canonicalPayload = {
+      ...payload,
+      renewalDueAt: canonicalizeInsuranceDateTime(payload.renewalDueAt) as string,
+      ...(payload.policyExpiryAt
+        ? { policyExpiryAt: canonicalizeInsuranceDateTime(payload.policyExpiryAt) as string }
+        : {}),
+    };
     await this.assertStaffReviewer(actor.userId);
-    await this.assertCustomerAndVehicle(payload.userId, payload.vehicleId);
-    await this.assertAssignableStaff(payload.assignedStaffId);
+    await this.assertCustomerAndVehicle(canonicalPayload.userId, canonicalPayload.vehicleId);
+    await this.assertAssignableStaff(canonicalPayload.assignedStaffId);
 
     const activity = {
       action: 'renewal_follow_up_created' as const,
       actorUserId: actor.userId,
-      notes: payload.notes ?? null,
+      notes: canonicalPayload.notes ?? null,
     };
 
     if (typeof this.insuranceRepository.createRenewalFollowUp === 'function') {
       const createdInquiry = await this.insuranceRepository.createRenewalFollowUp(
         {
-          ...payload,
+          ...canonicalPayload,
           createdByUserId: actor.userId,
         },
         activity,
@@ -204,7 +226,7 @@ export class InsuranceService {
     }
 
     const createdInquiry = await this.insuranceRepository.create({
-      ...payload,
+      ...canonicalPayload,
       purpose: 'renewal',
       createdByUserId: actor.userId,
     });
@@ -216,9 +238,9 @@ export class InsuranceService {
         status: 'for_renewal',
         paymentStatus: 'not_required',
         renewalStatus: 'upcoming',
-        ...(payload.assignedStaffId !== undefined ? { assignedStaffId: payload.assignedStaffId } : {}),
-        ...(payload.policyExpiryAt !== undefined ? { policyExpiryAt: new Date(payload.policyExpiryAt) } : {}),
-        renewalDueAt: new Date(payload.renewalDueAt),
+        ...(canonicalPayload.assignedStaffId !== undefined ? { assignedStaffId: canonicalPayload.assignedStaffId } : {}),
+        ...(canonicalPayload.policyExpiryAt !== undefined ? { policyExpiryAt: new Date(canonicalPayload.policyExpiryAt) } : {}),
+        renewalDueAt: new Date(canonicalPayload.renewalDueAt),
         reviewedByUserId: actor.userId,
         reviewedAt: new Date(),
       } as InsuranceWorkflowUpdatePayload & { purpose: 'renewal' },
@@ -231,7 +253,7 @@ export class InsuranceService {
       purpose: updatedInquiry.purpose ?? 'renewal',
       paymentStatus: updatedInquiry.paymentStatus ?? 'not_required',
       renewalStatus: updatedInquiry.renewalStatus ?? 'upcoming',
-      renewalDueAt: updatedInquiry.renewalDueAt ?? new Date(payload.renewalDueAt),
+      renewalDueAt: updatedInquiry.renewalDueAt ?? new Date(canonicalPayload.renewalDueAt),
     };
 
     await this.emitCustomerReminderTrigger(
@@ -269,8 +291,22 @@ export class InsuranceService {
     return listCustomerInsuranceInquiries(this.insuranceRepository, query, actor);
   }
 
-  getRequirements(query: InsuranceRequirementsQueryDto) {
-    return getInsuranceRequirements(query);
+  async getRequirements(query: InsuranceRequirementsQueryDto, actor: InsuranceActor) {
+    if (!query.inquiryId) {
+      return getInsuranceRequirements(query);
+    }
+
+    const inquiry = await this.insuranceRepository.findById(query.inquiryId);
+    await this.assertCanAccessInquiry(inquiry.userId, actor);
+    const requestedDocumentTypes = inquiry.activities
+      .filter((activity) => activity.action === 'document_requested' && activity.documentType)
+      .map((activity) => activity.documentType as string);
+
+    return getInsuranceRequirements(
+      { ...query, purpose: inquiry.purpose },
+      requestedDocumentTypes,
+      inquiry.documents,
+    );
   }
 
   async listForStaff(query: ListInsuranceInquiriesQueryDto, actor: InsuranceActor) {
@@ -318,7 +354,9 @@ export class InsuranceService {
     await this.assertStaffReviewer(actor.userId);
 
     const inquiry = await this.insuranceRepository.findById(id);
+    this.assertInquiryMutable(inquiry.status);
     this.assertAllowedWorkflowTransition(inquiry.status, payload.status);
+    this.assertInquiryReadyForReview(inquiry, payload.status);
 
     const customerMessage = payload.customerMessage?.trim() || null;
     const statusPatch = {
@@ -348,26 +386,42 @@ export class InsuranceService {
     await this.assertStaffReviewer(actor.userId);
 
     const inquiry = await this.insuranceRepository.findById(id);
+    this.assertInquiryMutable(inquiry.status);
     if (payload.status !== inquiry.status) {
       this.assertAllowedWorkflowTransition(inquiry.status, payload.status);
     }
+    this.assertInquiryReadyForReview(inquiry, payload.status);
+    if (payload.requestedDocumentTypes?.length && !payload.customerMessage?.trim()) {
+      throw new BadRequestException('A customer-visible message is required when requesting documents');
+    }
     await this.assertAssignableStaff(payload.assignedStaffId);
 
+    const workflowActivities = this.buildWorkflowActivities(inquiry, payload, actor.userId);
+    const requirements = resolveInsuranceRequirements({
+      purpose: inquiry.purpose,
+      documents: inquiry.documents,
+      activities: [...inquiry.activities, ...workflowActivities],
+    });
     const workflowPatch: InsuranceWorkflowUpdatePayload = {
       status: payload.status,
-      ...(payload.documentStatus !== undefined ? { documentStatus: payload.documentStatus } : {}),
+      documentStatus: requirements.documentStatus,
       ...(payload.paymentStatus !== undefined ? { paymentStatus: payload.paymentStatus } : {}),
       ...(payload.renewalStatus !== undefined ? { renewalStatus: payload.renewalStatus } : {}),
-      ...(payload.paymentDueAt !== undefined ? { paymentDueAt: new Date(payload.paymentDueAt) } : {}),
-      ...(payload.policyExpiryAt !== undefined ? { policyExpiryAt: new Date(payload.policyExpiryAt) } : {}),
-      ...(payload.renewalDueAt !== undefined ? { renewalDueAt: new Date(payload.renewalDueAt) } : {}),
+      ...(payload.paymentDueAt !== undefined
+        ? { paymentDueAt: new Date(canonicalizeInsuranceDateTime(payload.paymentDueAt) as string) }
+        : {}),
+      ...(payload.policyExpiryAt !== undefined
+        ? { policyExpiryAt: new Date(canonicalizeInsuranceDateTime(payload.policyExpiryAt) as string) }
+        : {}),
+      ...(payload.renewalDueAt !== undefined
+        ? { renewalDueAt: new Date(canonicalizeInsuranceDateTime(payload.renewalDueAt) as string) }
+        : {}),
       ...(payload.assignedStaffId !== undefined ? { assignedStaffId: payload.assignedStaffId } : {}),
       ...(payload.reviewNotes !== undefined ? { reviewNotes: payload.reviewNotes } : {}),
       reviewedByUserId: actor.userId,
       reviewedAt: new Date(),
     };
 
-    const workflowActivities = this.buildWorkflowActivities(inquiry, payload, actor.userId);
     const updatedInquiry = await this.insuranceRepository.updateWorkflow(
       id,
       workflowPatch,
@@ -385,8 +439,8 @@ export class InsuranceService {
     const inquiry = await this.insuranceRepository.findById(id);
     await this.assertCanAccessInquiry(inquiry.userId, actor);
 
-    if (['closed', 'rejected'].includes(inquiry.status)) {
-      throw new ConflictException('Closed or rejected insurance inquiries cannot accept new documents');
+    if (isTerminalInsuranceStatus(inquiry.status)) {
+      throw new ConflictException('Terminal insurance inquiries cannot accept new documents');
     }
 
     let documentUrl: URL;
@@ -418,8 +472,8 @@ export class InsuranceService {
     const inquiry = await this.insuranceRepository.findById(id);
     await this.assertCanAccessInquiry(inquiry.userId, actor);
 
-    if (['closed', 'rejected'].includes(inquiry.status)) {
-      throw new ConflictException('Closed or rejected insurance inquiries cannot accept new documents');
+    if (isTerminalInsuranceStatus(inquiry.status)) {
+      throw new ConflictException('Terminal insurance inquiries cannot accept new documents');
     }
 
     const savedDocument = await this.getInsuranceDocumentStorage().saveDocument({
@@ -993,8 +1047,9 @@ export class InsuranceService {
     actorUserId: string,
   ) {
     const activities: Array<{
-      action: PaymentActivityAction | RenewalActivityAction | 'customer_update';
+      action: PaymentActivityAction | RenewalActivityAction | 'customer_update' | 'document_requested';
       actorUserId: string;
+      documentType?: (typeof insuranceDocumentTypeEnum.enumValues)[number] | null;
       notes: string | null;
       customerMessage?: string | null;
     }> = [];
@@ -1052,7 +1107,99 @@ export class InsuranceService {
       });
     }
 
+    for (const documentType of payload.requestedDocumentTypes ?? []) {
+      activities.push({
+        action: 'document_requested',
+        actorUserId,
+        documentType,
+        notes: payload.reviewNotes ?? null,
+        customerMessage: customerMessage || null,
+      });
+    }
+
     return activities;
+  }
+
+  private assertValidCreatePayload(payload: CreateInsuranceInquiryDto) {
+    if (!payload.subject?.trim() || !payload.description?.trim()) {
+      throw new BadRequestException('Insurance subject and narrative are required');
+    }
+
+    if (payload.purpose === 'claim') {
+      if (!payload.incidentOccurredAt || Number.isNaN(new Date(payload.incidentOccurredAt).getTime())) {
+        throw new BadRequestException('Claim assistance requires a valid incident date and time');
+      }
+      if (!payload.incidentLocation?.trim()) {
+        throw new BadRequestException('Claim assistance requires an incident location');
+      }
+    }
+  }
+
+  private assertIdempotencyPayloadMatches(
+    existing: Record<string, unknown>,
+    payload: CreateInsuranceInquiryDto,
+  ) {
+    const comparable = (value: unknown) => {
+      if (value === undefined || value === null || value === '') return null;
+      if (value instanceof Date) return value.toISOString();
+      return String(value).trim();
+    };
+    const fields: Array<[string, unknown]> = [
+      ['userId', payload.userId],
+      ['vehicleId', payload.vehicleId],
+      ['inquiryType', payload.inquiryType],
+      ['purpose', payload.purpose ?? 'quotation'],
+      ['subject', payload.subject],
+      ['description', payload.description],
+      ['providerName', payload.providerName],
+      ['policyNumber', payload.policyNumber],
+      ['incidentLocation', payload.incidentLocation],
+      ['notes', payload.notes],
+    ];
+    const instantChanged = canonicalizeInsuranceDateTime(
+      existing.incidentOccurredAt as Date | string | null | undefined,
+    ) !== canonicalizeInsuranceDateTime(payload.incidentOccurredAt);
+    if (instantChanged || fields.some(([field, value]) => {
+      const existingValue = field === 'purpose' && existing[field] == null
+        ? 'quotation'
+        : existing[field];
+      return comparable(existingValue) !== comparable(value);
+    })) {
+      throw new ConflictException('clientRequestId is already associated with a different insurance inquiry payload');
+    }
+  }
+
+  private assertInquiryReadyForReview(
+    inquiry: {
+      purpose?: string | null;
+      description?: string | null;
+      incidentOccurredAt?: Date | string | null;
+      incidentLocation?: string | null;
+      documentStatus?: string | null;
+      documents?: Array<{ documentType?: string | null; status?: string | null }> | null;
+      activities?: Array<{ action?: string | null; documentType?: string | null }> | null;
+    },
+    nextStatus: InsuranceInquiryStatus,
+  ) {
+    if (!['under_review', 'for_approval', 'approved', 'payment_pending', 'active', 'closed'].includes(nextStatus)) {
+      return;
+    }
+    const requirements = resolveInsuranceRequirements({
+      purpose: inquiry.purpose as Parameters<typeof resolveInsuranceRequirements>[0]['purpose'],
+      documents: inquiry.documents,
+      activities: inquiry.activities,
+    });
+    if (!requirements.complete) {
+      throw new ConflictException(
+        `Required insurance documents must be complete before this case can advance: ${requirements.outstandingDocumentTypes.join(', ')}`,
+      );
+    }
+    if (
+      inquiry.purpose === 'claim'
+      && (!inquiry.description?.trim() || !inquiry.incidentOccurredAt || !inquiry.incidentLocation?.trim())
+    ) {
+      throw new ConflictException('Claim incident details must be complete before this case can advance');
+    }
   }
 
   private hasPaymentDueDateChanged(
@@ -1250,6 +1397,12 @@ export class InsuranceService {
       throw new ConflictException(
         `Cannot transition insurance inquiry from ${currentStatus} to ${nextStatus}`,
       );
+    }
+  }
+
+  private assertInquiryMutable(status: InsuranceInquiryStatus) {
+    if (isTerminalInsuranceStatus(status)) {
+      throw new ConflictException(`Insurance inquiry in terminal status ${status} is read-only`);
     }
   }
 }

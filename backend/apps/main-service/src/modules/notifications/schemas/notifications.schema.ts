@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  index,
   uniqueIndex,
   uuid,
   varchar,
@@ -89,11 +90,15 @@ export const notifications = pgTable(
     dedupeKey: varchar('dedupe_key', { length: 255 }).notNull(),
     scheduledFor: timestamp('scheduled_for', { withTimezone: true }),
     deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     notificationDedupeUnique: uniqueIndex('notifications_dedupe_key_idx').on(table.dedupeKey),
+    notificationUnreadIndex: index('notifications_user_read_at_idx').on(table.userId, table.readAt),
+    notificationArchiveIndex: index('notifications_user_archived_at_idx').on(table.userId, table.archivedAt),
   }),
 );
 

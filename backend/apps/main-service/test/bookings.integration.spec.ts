@@ -39,6 +39,18 @@ describe('BookingsController integration', () => {
       expect(servicesResponse.status).toBe(200);
       expect(servicesResponse.body.length).toBeGreaterThan(0);
 
+      const serviceCategoriesResponse = await request(app.getHttpServer())
+        .get('/api/service-categories')
+        .set(ownerAuthHeader);
+      expect(serviceCategoriesResponse.status).toBe(200);
+      expect(serviceCategoriesResponse.body.length).toBeGreaterThan(0);
+      expect(serviceCategoriesResponse.body[0]).toEqual(
+        expect.objectContaining({
+          id: expect.any(String),
+          name: expect.any(String),
+        }),
+      );
+
       const timeSlotsResponse = await request(app.getHttpServer()).get('/api/time-slots');
       expect(timeSlotsResponse.status).toBe(200);
       expect(timeSlotsResponse.body.length).toBeGreaterThan(0);

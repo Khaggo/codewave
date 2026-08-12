@@ -3,6 +3,9 @@ import { fileURLToPath } from 'node:url'
 
 const configDirectory = path.dirname(fileURLToPath(import.meta.url))
 const repositoryDirectory = path.resolve(configDirectory, '..', '..')
+const materialCommunityIconsStub = path
+  .join(configDirectory, 'MaterialCommunityIconsStub.jsx')
+  .replaceAll('\\', '/')
 
 const getAbsolutePath = (packageName) =>
   path.dirname(fileURLToPath(import.meta.resolve(`${packageName}/package.json`)))
@@ -10,6 +13,7 @@ const getAbsolutePath = (packageName) =>
 const config = {
   stories: [
     '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)',
+    '../../mobile/src/screens/dashboard/BookingTab.stories.@(js|jsx|mjs|ts|tsx)',
   ],
   addons: [
     getAbsolutePath('@storybook/addon-docs'),
@@ -39,11 +43,17 @@ const config = {
   },
   viteFinal: async (viteConfig) => ({
     ...viteConfig,
+    define: {
+      ...viteConfig.define,
+      __DEV__: true,
+    },
     resolve: {
       ...viteConfig.resolve,
       alias: {
         ...viteConfig.resolve?.alias,
         '@': path.join(repositoryDirectory, 'frontend', 'src'),
+        'react-native': 'react-native-web',
+        '@expo/vector-icons/MaterialCommunityIcons': materialCommunityIconsStub,
       },
     },
     cacheDir: path.join(

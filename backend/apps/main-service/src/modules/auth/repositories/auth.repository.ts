@@ -21,10 +21,10 @@ export class AuthRepository extends BaseRepository {
     super();
   }
 
-  async createAccount(userId: string, passwordHash: string) {
+  async createAccount(userId: string, passwordHash: string, mustChangePassword = false) {
     const [account] = await this.db
       .insert(authAccounts)
-      .values({ userId, passwordHash })
+      .values({ userId, passwordHash, mustChangePassword })
       .returning();
 
     return account;
@@ -49,11 +49,12 @@ export class AuthRepository extends BaseRepository {
     return account ?? null;
   }
 
-  async updatePasswordHash(userId: string, passwordHash: string) {
+  async updatePasswordHash(userId: string, passwordHash: string, mustChangePassword = false) {
     const [account] = await this.db
       .update(authAccounts)
       .set({
         passwordHash,
+        mustChangePassword,
         updatedAt: new Date(),
       })
       .where(eq(authAccounts.userId, userId))

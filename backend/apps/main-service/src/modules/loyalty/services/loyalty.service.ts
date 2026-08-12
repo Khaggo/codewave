@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 
 import { UsersService } from '@main-modules/users/services/users.service';
+import { AppDatabaseExecutor } from '@shared/db/database.types';
 import {
   AnyServiceEventEnvelope,
   isServiceEventEnvelope,
@@ -59,6 +60,9 @@ const CUSTOMER_SAFE_SERVICE_LABELS: Record<string, string> = {
   tire_service: 'Tire service',
 };
 
+export const LOYALTY_STICKER_REQUIRED_CODE = 'LOYALTY_VEHICLE_STICKER_REQUIRED';
+export const LOYALTY_STICKER_NO_AWARD_REASON = 'vehicle_sticker_not_verified' as const;
+
 @Injectable()
 export class LoyaltyService {
   constructor(
@@ -69,7 +73,97 @@ export class LoyaltyService {
 
   async getAccount(userId: string, actor: LoyaltyActor) {
     await this.assertCanAccessAccount(userId, actor);
-    return this.loyaltyRepository.getOrCreateAccount(userId);
+    const account = await this.loyaltyRepository.getOrCreateAccount(userId);
+    return {
+      ...account,
+      qualification: await this.getQualification(userId),
+    };
+  }
+
+  async getQualification(userId: string, actor?: LoyaltyActor) {
+    if (actor) await this.assertCanAccessAccount(userId, actor);
+
+    const observations = await this.loyaltyRepository.listVehicleStickerObservationsForUser(userId);
+    const latestByVehicle = new Map<string, (typeof observations)[number]>();
+    for (const observation of observations) {
+      if (!latestByVehicle.has(observation.vehicleId)) {
+        latestByVehicle.set(observation.vehicleId, observation);
+      }
+    }
+
+    const latest = [...latestByVehicle.values()];
+    const qualified = latest
+      .filter((observation) => observation.observation === 'verified_present')
+      .sort((left, right) => right.observedAt.getTime() - left.observedAt.getTime())[0];
+    const current = qualified ?? latest[0];
+
+    return {
+      status: qualified ? ('qualified' as const) : ('not_qualified' as const),
+      vehiclePublicReference: current?.vehiclePublicReference ?? null,
+      vehicleLabel: current
+        ? `${current.vehicleMake} ${current.vehicleModel} (${current.vehicleYear})`
+        : null,
+      lastVerifiedAt: qualified?.observedAt.toISOString() ?? null,
+      reasonCategory: qualified
+        ? ('sticker_verified' as const)
+        : current
+          ? ('sticker_not_present' as const)
+          : ('no_completed_observation' as const),
+    };
+  }
+
+  async listQualificationAudits(actor: LoyaltyActor) {
+    await this.assertStaffQualificationActor(actor);
+    const observations = await this.loyaltyRepository.listAllVehicleStickerObservations();
+    const grouped = new Map<string, typeof observations>();
+    for (const observation of observations) {
+      const history = grouped.get(observation.vehiclePublicReference) ?? [];
+      history.push(observation);
+      grouped.set(observation.vehiclePublicReference, history);
+    }
+
+    return [...grouped.values()].map((history) => {
+      const current = history[0];
+      const qualified = current.observation === 'verified_present';
+      return {
+        status: qualified ? ('qualified' as const) : ('not_qualified' as const),
+        vehiclePublicReference: current.vehiclePublicReference,
+        vehicleLabel: `${current.vehicleMake} ${current.vehicleModel} (${current.vehicleYear})`,
+        lastVerifiedAt: qualified ? current.observedAt.toISOString() : null,
+        reasonCategory: qualified
+          ? ('sticker_verified' as const)
+          : ('sticker_not_present' as const),
+        history: history.map((item) => ({
+          observation: item.observation,
+          observedAt: item.observedAt.toISOString(),
+          intakeReference: item.intakeReference,
+          reason: item.reason,
+        })),
+      };
+    });
+  }
+
+  async recordVehicleStickerObservation(payload: {
+    vehicleId: string;
+    inspectionId: string;
+    intakeReference: string;
+    observation: 'verified_present' | 'not_present';
+    verifiedByUserId: string;
+    observedAt: Date;
+    reason?: string | null;
+  }, db?: AppDatabaseExecutor, verifierPrevalidated = false) {
+    if (!verifierPrevalidated) {
+      await this.assertCanRecordVehicleStickerObservation(payload.verifiedByUserId);
+    }
+    return this.loyaltyRepository.createVehicleStickerObservation(payload, db);
+  }
+
+  async assertCanRecordVehicleStickerObservation(userId: string) {
+    const verifier = await this.assertActiveActor(userId);
+    if (!['service_adviser', 'super_admin'].includes(verifier.role)) {
+      throw new ForbiddenException('Only authenticated intake staff can verify a vehicle sticker');
+    }
+    return verifier;
   }
 
   async listTransactions(userId: string, actor: LoyaltyActor) {
@@ -93,6 +187,14 @@ export class LoyaltyService {
 
   async redeemReward(payload: RedeemRewardDto, actor: LoyaltyActor) {
     await this.assertRedemptionActor(payload.userId, actor);
+    const qualification = await this.getQualification(payload.userId);
+    if (qualification.status !== 'qualified') {
+      throw new ConflictException({
+        code: LOYALTY_STICKER_REQUIRED_CODE,
+        message:
+          'Reward redemption requires a currently qualified registered vehicle with a verified Cruisers Crib sticker.',
+      });
+    }
     const reward = await this.loyaltyRepository.findRewardById(payload.rewardId);
     if (reward.status !== 'active') {
       throw new ConflictException('Only active rewards can be redeemed');
@@ -157,7 +259,7 @@ export class LoyaltyService {
 
     return {
       summary: rules.length
-        ? 'Points are earned after eligible paid service invoices are settled.'
+        ? 'Points are earned only after a completed paid service invoice is settled for a registered vehicle with the official Cruisers Crib sticker verified during intake.'
         : 'There are no active loyalty earning rules right now.',
       requirements: rules.map((rule) => ({
         formula: this.toCustomerFormula(rule),
@@ -272,6 +374,30 @@ export class LoyaltyService {
     const user = await this.usersService.findById(plan.loyaltyUserId);
     if (!user || !user.isActive) {
       throw new NotFoundException('Loyalty account user not found');
+    }
+
+    const qualification = plan.vehicleId
+      ? await this.loyaltyRepository.findLatestVehicleStickerObservation(
+          plan.vehicleId,
+          plan.loyaltyUserId,
+        )
+      : null;
+    if (!qualification || qualification.observation !== 'verified_present') {
+      const noAwardReason = qualification
+        ? LOYALTY_STICKER_NO_AWARD_REASON
+        : ('vehicle_not_owned' as const);
+      return {
+        ...(await this.loyaltyRepository.applyAccrual({
+          plan,
+          pointsAwarded: 0,
+          occurredAt: this.getOccurredAt(trigger),
+          metadata: { noAwardReason },
+        })),
+        wasAwarded: false,
+        awardedPoints: 0,
+        appliedRuleIds: [],
+        noAwardReason,
+      };
     }
 
     const ruleEvaluation = await this.evaluateEarningRules(plan);
@@ -521,7 +647,10 @@ export class LoyaltyService {
   }
 
   private toCustomerEligibility(rule: LoyaltyEarningRuleRecord) {
-    const conditions = ['Payment must be settled for a service invoice.'];
+    const conditions = [
+      'The registered vehicle must have a current completed intake observation marked verified_present for the official Cruisers Crib sticker.',
+      'Payment must be settled for a completed service invoice.',
+    ];
 
     if (rule.minimumAmountCents && rule.minimumAmountCents > 0) {
       conditions.push(
@@ -604,6 +733,14 @@ export class LoyaltyService {
     }
 
     return actor;
+  }
+
+  private async assertStaffQualificationActor(actor: LoyaltyActor) {
+    const resolvedActor = await this.assertActiveActor(actor.userId);
+    if (!['service_adviser', 'super_admin'].includes(resolvedActor.role)) {
+      throw new ForbiddenException('Only staff roles can review sticker qualification history');
+    }
+    return resolvedActor;
   }
 
   private async assertActiveActor(userId: string) {

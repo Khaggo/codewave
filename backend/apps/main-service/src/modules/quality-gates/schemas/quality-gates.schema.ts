@@ -63,6 +63,64 @@ export type QualityGateFindingProvenance = {
   riskContribution?: number;
 };
 
+export type QualityGateAiSummaryProvenance = {
+  provider: string;
+  model: string;
+  promptVersion: string;
+  evidenceRefs: string[];
+  evidenceSummary: string;
+};
+
+export type QualityGateAiSummary = {
+  status: 'queued' | 'generating' | 'ready' | 'generation_failed' | 'stale';
+  summaryText: string | null;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  evidenceFingerprint: string;
+  generationId: string;
+  jobId: string;
+  requestedAt: string;
+  generatedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  auditJob: AiWorkerJobMetadata;
+  provenance: QualityGateAiSummaryProvenance | null;
+};
+
+export type QualityGateAiGenerationIdentity = {
+  evidenceFingerprint: string;
+  generationId: string;
+  jobId: string;
+  requestedAt: string;
+};
+
+export const matchesQualityGateAiGeneration = (
+  summary: QualityGateAiSummary | null | undefined,
+  identity: QualityGateAiGenerationIdentity,
+): summary is QualityGateAiSummary => Boolean(
+  summary &&
+  summary.evidenceFingerprint === identity.evidenceFingerprint &&
+  summary.generationId === identity.generationId &&
+  summary.jobId === identity.jobId &&
+  summary.requestedAt === identity.requestedAt,
+);
+
+export const shouldReuseQualityGateAiGeneration = (
+  summary: QualityGateAiSummary | null | undefined,
+  evidenceFingerprint: string,
+  regenerate: boolean,
+) => Boolean(
+  summary &&
+  summary.evidenceFingerprint === evidenceFingerprint &&
+  Boolean(summary.generationId && summary.jobId && summary.requestedAt) &&
+  (
+    summary.status === 'queued' ||
+    summary.status === 'generating' ||
+    (summary.status === 'ready' && !regenerate)
+  ),
+);
+
 export type QualityPreCheckSummary = {
   completedWorkItemCount: number;
   totalWorkItemCount: number;
@@ -73,6 +131,7 @@ export type QualityPreCheckSummary = {
   inspectionDiscrepancies: string[];
   automatedRecommendation: 'ready_for_review' | 'manual_review_required';
   infrastructureState: 'available' | 'pre_check_unavailable';
+  aiSummary?: QualityGateAiSummary;
 };
 
 export const jobOrderQualityGates = pgTable(

@@ -261,3 +261,168 @@ describe('AccessoriesService customer cancellation', () => {
     expect(repository.findAssignableStaff).toHaveBeenCalledWith('staff-2');
   });
 });
+
+describe('AccessoriesService customer read shapes', () => {
+  const actor = { userId: 'customer-1', role: 'customer' as const };
+
+  const createReadSubject = (overrides: Record<string, jest.Mock> = {}) => {
+    const feature = {
+      requireCatalog: jest.fn(),
+      requireOrdering: jest.fn(),
+    };
+    const repository = {
+      listProducts: jest.fn(),
+      findProductBySlug: jest.fn(),
+      getCart: jest.fn(),
+      ...overrides,
+    };
+    return {
+      repository,
+      service: new AccessoriesService(feature as never, repository as never, {} as never),
+    };
+  };
+
+  it('returns zero availability without leaking inventory internals', async () => {
+    const { service, repository } = createReadSubject({
+      listProducts: jest.fn().mockResolvedValue({
+        rows: [
+          {
+            product: {
+              id: 'product-1',
+              categoryId: 'category-1',
+              slug: 'fog-lights',
+              name: 'Fog lights',
+              description: null,
+              isLighting: true,
+            },
+            category: { id: 'category-1', slug: 'lighting', name: 'Lighting' },
+            startingPriceCents: 120000,
+            availableQuantity: 0,
+            mediaId: null,
+          },
+        ],
+        hasMore: false,
+      }),
+    });
+
+    const result = await service.listProducts({ limit: 20 }, actor);
+
+    expect(repository.listProducts).toHaveBeenCalledWith(expect.objectContaining({ limit: 20 }));
+    expect(result.items[0]).toMatchObject({
+      availability: { availableQuantity: 0, inStock: false },
+    });
+    expect(result.items[0].product).not.toHaveProperty('inventoryId');
+    expect(result.items[0]).not.toHaveProperty('inventory');
+  });
+
+  it('maps variant availability for null and reserved inventory', async () => {
+    const { service, repository } = createReadSubject({
+      findProductBySlug: jest.fn().mockResolvedValue({
+        product: {
+          id: 'product-1',
+          categoryId: 'category-1',
+          slug: 'fog-lights',
+          name: 'Fog lights',
+          description: 'Test',
+          isLighting: true,
+        },
+        category: { id: 'category-1', slug: 'lighting', name: 'Lighting' },
+        variants: [
+          {
+            variant: {
+              id: 'variant-1',
+              productId: 'product-1',
+              sku: 'LIGHT-1',
+              name: 'Pair',
+              attributes: {},
+              priceCents: 120000,
+              currencyCode: 'PHP',
+              isActive: true,
+            },
+            inventory: { onHandQuantity: 4, reservedQuantity: 4, internalId: 'secret' },
+          },
+          {
+            variant: {
+              id: 'variant-2',
+              productId: 'product-1',
+              sku: 'LIGHT-2',
+              name: 'Single',
+              attributes: {},
+              priceCents: 70000,
+              currencyCode: 'PHP',
+              isActive: true,
+            },
+            inventory: null,
+          },
+        ],
+        media: [],
+      }),
+    });
+
+    const result = await service.getProduct('fog-lights', actor) as {
+      product: { availability: { availableQuantity: number; inStock: boolean } };
+      variants: Array<{
+        availability: { availableQuantity: number; inStock: boolean };
+        inventory: { availableQuantity: number };
+      }>;
+    };
+
+    expect(result.product.availability).toEqual({ availableQuantity: 0, inStock: false });
+    expect(result.variants.map((row) => row.availability)).toEqual([
+      { availableQuantity: 0, inStock: false },
+      { availableQuantity: 0, inStock: false },
+    ]);
+    expect(result.variants[0]).not.toHaveProperty('inventory.internalId');
+  });
+
+  it('returns current server prices, line totals, and cart totals for the authenticated customer', async () => {
+    const { service, repository } = createReadSubject({
+      getCart: jest.fn().mockResolvedValue({
+        userId: actor.userId,
+        selectedVehicleId: 'vehicle-1',
+        version: 7,
+        updatedAt: new Date('2026-08-12T00:00:00.000Z'),
+        items: [
+          {
+            item: { id: 'line-1', variantId: 'variant-1', quantity: 2 },
+            variant: {
+              id: 'variant-1',
+              productId: 'product-1',
+              sku: 'LIGHT-1',
+              name: 'Pair',
+              attributes: {},
+              priceCents: 125000,
+              currencyCode: 'PHP',
+            },
+            product: {
+              id: 'product-1',
+              categoryId: 'category-1',
+              slug: 'fog-lights',
+              name: 'Fog lights',
+              description: null,
+              isLighting: true,
+            },
+            inventory: { onHandQuantity: 5, reservedQuantity: 1 },
+          },
+        ],
+      }),
+    });
+
+    const result = await service.getCart(actor);
+
+    expect(repository.getCart).toHaveBeenCalledWith(actor.userId);
+    expect(result).toMatchObject({
+      selectedVehicleId: 'vehicle-1',
+      currencyCode: 'PHP',
+      subtotalCents: 250000,
+      totalCents: 250000,
+    });
+    expect(result.items[0]).toMatchObject({
+      unitPriceCents: 125000,
+      lineSubtotalCents: 250000,
+      lineTotalCents: 250000,
+      availability: { availableQuantity: 4, inStock: true },
+    });
+    expect(result).not.toHaveProperty('userId');
+  });
+});

@@ -14,7 +14,12 @@ import {
   updateBookingServiceCategory,
 } from '@/lib/bookingServiceAdminClient'
 import { useUser } from '@/lib/userContext'
-import { groupBookingServices } from './bookingServiceAdminView.mjs'
+import {
+  createDefaultBookingServiceListQuery,
+  getBookingServiceListPresentation,
+  getBookingServicePager,
+  groupBookingServices,
+} from './bookingServiceAdminView.mjs'
 
 const EMPTY_CATEGORY_FORM = {
   name: '',
@@ -85,15 +90,15 @@ function SummaryTile({ label, value, sub, icon: Icon }) {
 
 function SectionShell({ title, description, children, action }) {
   return (
-    <section className="card overflow-hidden">
+    <section className="card min-w-0 overflow-hidden">
       <div className="flex items-start justify-between gap-4 border-b border-surface-border bg-surface-raised/70 px-5 py-4">
-        <div>
+        <div className="min-w-0">
           <p className="card-title">{title}</p>
           <p className="mt-1 text-sm text-ink-muted">{description}</p>
         </div>
         {action}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="min-w-0 p-5">{children}</div>
     </section>
   )
 }
@@ -126,8 +131,10 @@ export default function BookingServiceAdmin() {
   const [servicesState, setServicesState] = useState({
     status: 'idle',
     items: [],
+    pagination: { page: 1, limit: 25, total: 0, totalPages: 1 },
     message: '',
   })
+  const [serviceListQuery, setServiceListQuery] = useState(createDefaultBookingServiceListQuery)
   const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY_FORM)
   const [serviceForm, setServiceForm] = useState(EMPTY_SERVICE_FORM)
   const [categoryEditForm, setCategoryEditForm] = useState(EMPTY_CATEGORY_EDIT_FORM)
@@ -138,12 +145,13 @@ export default function BookingServiceAdmin() {
   const [serviceAction, setServiceAction] = useState({ status: 'idle', message: '' })
 
   const loadDirectory = useCallback(async () => {
+    if (!user?.accessToken) return
     setCategoriesState((current) => ({ ...current, status: 'loading', message: '' }))
     setServicesState((current) => ({ ...current, status: 'loading', message: '' }))
 
     const [categoriesResult, servicesResult] = await Promise.allSettled([
       listBookingServiceCategories(),
-      listBookingServices(),
+      listBookingServices({ accessToken: user.accessToken, ...serviceListQuery }),
     ])
 
     if (categoriesResult.status === 'fulfilled') {
@@ -166,20 +174,27 @@ export default function BookingServiceAdmin() {
     if (servicesResult.status === 'fulfilled') {
       setServicesState({
         status: 'success',
-        items: servicesResult.value,
-        message: servicesResult.value.length ? '' : 'No booking services exist yet.',
+        items: servicesResult.value.items,
+        pagination: {
+          page: servicesResult.value.page,
+          limit: servicesResult.value.limit,
+          total: servicesResult.value.total,
+          totalPages: servicesResult.value.totalPages,
+        },
+        message: servicesResult.value.items.length ? '' : 'No booking services match the current filters.',
       })
     } else {
       setServicesState({
         status: 'error',
         items: [],
+        pagination: { page: 1, limit: 25, total: 0, totalPages: 1 },
         message:
           servicesResult.reason instanceof ApiError
             ? servicesResult.reason.message
             : 'Booking services could not be loaded.',
       })
     }
-  }, [])
+  }, [serviceListQuery, user?.accessToken])
 
   useEffect(() => {
     void loadDirectory()
@@ -188,6 +203,22 @@ export default function BookingServiceAdmin() {
   const groupedServices = useMemo(
     () => groupBookingServices(categoriesState.items, servicesState.items),
     [categoriesState.items, servicesState.items],
+  )
+  const serviceListPresentation = useMemo(
+    () => getBookingServiceListPresentation({
+      requestStatus: servicesState.status,
+      itemCount: servicesState.items.length,
+      query: serviceListQuery,
+    }),
+    [serviceListQuery, servicesState.items.length, servicesState.status],
+  )
+  const servicePager = useMemo(
+    () => getBookingServicePager({
+      page: servicesState.pagination.page,
+      totalPages: servicesState.pagination.totalPages,
+      requestStatus: servicesState.status,
+    }),
+    [servicesState.pagination.page, servicesState.pagination.totalPages, servicesState.status],
   )
   const selectedCategory = useMemo(
     () => categoriesState.items.find((category) => category.id === selectedCategoryId) ?? null,
@@ -382,6 +413,11 @@ export default function BookingServiceAdmin() {
     }
   }
 
+  const resetServiceListFilters = () => {
+    setSelectedServiceId('')
+    setServiceListQuery(createDefaultBookingServiceListQuery())
+  }
+
   if (!canManageServices) {
     return (
       <section className="empty-panel text-left">
@@ -409,14 +445,14 @@ export default function BookingServiceAdmin() {
         meta={
           <>
             <span className="badge badge-gray">{categoriesState.items.length} categories</span>
-            <span className="badge badge-gray">{servicesState.items.length} services</span>
+            <span className="badge badge-gray">{servicesState.pagination.total} services</span>
           </>
         }
       />
 
       <section className="ops-summary-grid">
         <SummaryTile label="Service Categories" value={categoriesState.items.length} sub="Live booking taxonomy" icon={FolderPlus} />
-        <SummaryTile label="Booking Services" value={servicesState.items.length} sub="Ready for booking discovery" icon={Wrench} />
+        <SummaryTile label="Booking Services" value={servicesState.pagination.total} sub="Staff catalog records" icon={Wrench} />
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -663,24 +699,79 @@ export default function BookingServiceAdmin() {
 
         <SectionShell
           title="Live Booking Services"
-          description="Review live services, then edit, deactivate, or archive them without exposing raw UUIDs."
+          description="Search every service state, then edit, activate, or deactivate without exposing raw UUIDs."
         >
           <Notice
             tone={serviceAction.status === 'error' ? 'error' : serviceAction.status === 'success' ? 'success' : 'neutral'}
             message={serviceAction.message}
           />
-          {groupedServices.length ? (
+          {serviceListPresentation.showStableList ? (
             <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_220px]">
+                <label>
+                  <span className="label">Search services</span>
+                  <input
+                    className="input"
+                    value={serviceListQuery.search}
+                    placeholder="Name or description"
+                    disabled={servicesState.status === 'loading'}
+                    onChange={(event) => setServiceListQuery((current) => ({ ...current, search: event.target.value, page: 1 }))}
+                  />
+                </label>
+                <label>
+                  <span className="label">Publication</span>
+                  <select
+                    className="select"
+                    value={serviceListQuery.status}
+                    disabled={servicesState.status === 'loading'}
+                    onChange={(event) => setServiceListQuery((current) => ({ ...current, status: event.target.value, page: 1 }))}
+                  >
+                    <option value="all">All states</option>
+                    <option value="active">Active / published</option>
+                    <option value="inactive">Inactive / draft</option>
+                  </select>
+                </label>
+                <label>
+                  <span className="label">Category</span>
+                  <select
+                    className="select"
+                    value={serviceListQuery.categoryId}
+                    disabled={servicesState.status === 'loading'}
+                    onChange={(event) => setServiceListQuery((current) => ({ ...current, categoryId: event.target.value, page: 1 }))}
+                  >
+                    <option value="">All categories</option>
+                    {categoriesState.items.map((category) => (
+                      <option key={category.id} value={category.id}>{category.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="text-xs text-ink-muted">
+                {servicesState.pagination.total} {servicesState.pagination.total === 1 ? 'result' : 'results'}
+              </p>
+              {servicesState.status === 'loading' && !groupedServices.length ? (
+                <div className="empty-panel" role="status">Loading booking services…</div>
+              ) : groupedServices.length ? (
+                <>
+                  <div className="flex flex-wrap gap-2">
                 {groupedServices.map((group) => (
                   <span key={group.key} className="badge badge-gray">
                     {group.label}: {group.services.length}
                   </span>
                 ))}
-              </div>
-              <div className="table-surface">
-                <div className="table-scroll">
-                  <table className="data-table" aria-label="Live booking services">
+                  </div>
+                  <div className="table-surface min-w-0 max-w-full">
+                    <div className="table-scroll min-w-0 max-w-full">
+                      <table className="data-table w-full min-w-[860px] table-fixed" aria-label="Live booking services">
+                    <colgroup>
+                      <col className="w-[28%]" />
+                      <col className="w-[14%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[14%]" />
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>Service</th>
@@ -696,30 +787,30 @@ export default function BookingServiceAdmin() {
                       {groupedServices.flatMap((group) =>
                         group.services.map((service) => (
                           <tr key={service.id}>
-                            <td>
+                            <td className="max-w-0 break-words">
                               <p className="font-semibold text-ink-primary">{service.name}</p>
-                              <p className="mt-1 text-xs text-ink-muted">
+                              <p className="mt-1 break-words text-xs text-ink-muted">
                                 {service.description || 'No description saved yet.'}
                               </p>
                             </td>
-                            <td>{group.label}</td>
-                            <td>{service.durationMinutes} minutes</td>
-                            <td className="font-semibold text-ink-primary">{formatServiceCurrency(service.basePriceCents ?? 0)}</td>
-                            <td>
+                            <td className="max-w-0 break-words">{group.label}</td>
+                            <td className="whitespace-nowrap">{service.durationMinutes} minutes</td>
+                            <td className="whitespace-nowrap font-semibold text-ink-primary">{formatServiceCurrency(service.basePriceCents ?? 0)}</td>
+                            <td className="whitespace-nowrap">
                               <span className={`badge ${service.isActive ? 'badge-green' : 'badge-gray'}`}>
                                 {service.isActive ? 'Active' : 'Inactive'}
                               </span>
                             </td>
-                            <td>
-                              <span className="text-xs font-semibold text-ink-secondary">
+                            <td className="max-w-0">
+                              <span className="block break-all text-xs font-semibold text-ink-secondary">
                                 {buildServiceReference(service)}
                               </span>
                             </td>
-                            <td>
+                            <td className="min-w-0">
                               <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
-                                  className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
+                                  className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
                                   onClick={() => setSelectedServiceId(service.id)}
                                 >
                                   <PencilLine size={14} />
@@ -727,7 +818,7 @@ export default function BookingServiceAdmin() {
                                 </button>
                                 <button
                                   type="button"
-                                  className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
+                                  className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
                                   onClick={() => void handleToggleServiceStatus(service)}
                                 >
                                   <Archive size={14} />
@@ -739,11 +830,11 @@ export default function BookingServiceAdmin() {
                         )),
                       )}
                     </tbody>
-                  </table>
-                </div>
-              </div>
+                      </table>
+                    </div>
+                  </div>
 
-              {selectedService ? (
+                  {selectedService ? (
                 <div className="rounded-2xl border border-surface-border bg-surface-raised p-4">
                   <p className="text-sm font-semibold text-ink-primary">Edit booking service</p>
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -817,7 +908,41 @@ export default function BookingServiceAdmin() {
                     </div>
                   </div>
                 </div>
-              ) : null}
+                  ) : null}
+                </>
+              ) : serviceListPresentation.isFilteredEmpty ? (
+                <div className="empty-panel" role="status">
+                  <p>No services match the current filters.</p>
+                  <button type="button" className="btn-ghost mt-4" onClick={resetServiceListFilters}>
+                    Reset filters
+                  </button>
+                </div>
+              ) : (
+                <div className="empty-panel">
+                  No booking services are available yet. Create the first service using the form above.
+                </div>
+              )}
+              <div className="flex flex-col gap-3 border-t border-surface-border pt-4 sm:flex-row sm:items-center sm:justify-between" aria-label="Booking service pagination">
+                <p className="text-xs text-ink-muted">Page {servicePager.page} of {servicePager.totalPages}</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={servicePager.previousDisabled}
+                    onClick={() => setServiceListQuery((current) => ({ ...current, page: servicePager.page - 1 }))}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={servicePager.nextDisabled}
+                    onClick={() => setServiceListQuery((current) => ({ ...current, page: servicePager.page + 1 }))}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="empty-panel">

@@ -97,6 +97,7 @@ describe('AnalyticsService', () => {
             listForAnalytics: jest.fn().mockResolvedValue([
               {
                 id: 'job-order-1',
+                jobOrderReference: 'JO-2026-000001',
                 status: 'finalized',
                 serviceAdviserUserId: 'adviser-1',
                 serviceAdviserCode: 'SA-1001',
@@ -130,6 +131,7 @@ describe('AnalyticsService', () => {
             listForAnalytics: jest.fn().mockResolvedValue([
               {
                 id: 'back-job-1',
+                backJobReference: 'BJ-2026-000001',
                 originalJobOrderId: 'job-order-1',
                 status: 'reported',
                 createdAt: new Date('2026-04-16T10:00:00.000Z'),
@@ -189,7 +191,7 @@ describe('AnalyticsService', () => {
             listReminderRulesForAnalytics: jest.fn().mockResolvedValue([
               {
                 id: 'rule-1',
-                sourceId: 'invoice-1',
+                sourceId: 'invoice-record-1',
                 status: 'scheduled',
                 scheduledFor: new Date('2026-04-10T09:00:00.000Z'),
               },
@@ -244,6 +246,7 @@ describe('AnalyticsService', () => {
           serviceDemandPreview: expect.arrayContaining([
             expect.objectContaining({
               serviceId: 'service-1',
+              displayReference: 'Oil Change',
             }),
           ]),
         }),
@@ -257,6 +260,12 @@ describe('AnalyticsService', () => {
             trackedInvoices: 1,
             scheduledReminderRules: 1,
           }),
+          trackedInvoicePolicies: [
+            expect.objectContaining({
+              invoiceReference: 'INV-0001',
+              displayReference: 'INV-0001',
+            }),
+          ],
         }),
       }),
     );
@@ -278,10 +287,14 @@ describe('AnalyticsService', () => {
             expect.objectContaining({
               auditType: 'quality_gate_override',
               action: 'quality_gate_overridden',
+              targetReference: 'JO-2026-000001',
+              summary: expect.stringContaining('JO-2026-000001'),
             }),
             expect.objectContaining({
               auditType: 'release_decision',
               action: 'service_invoice_finalized',
+              sourceReference: 'INV-0001',
+              targetReference: 'JO-2026-000001',
             }),
           ]),
         }),

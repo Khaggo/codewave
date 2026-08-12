@@ -36,4 +36,16 @@ export const notificationRoutes: Record<string, RouteContract> = {
     status: 'live',
     source: 'swagger',
   },
+  markNotificationRead: {
+    method: 'PATCH',
+    path: '/api/users/:id/notifications/:notificationId/read',
+    status: 'live',
+    source: 'swagger',
+  },
+  markAllNotificationsRead: {
+    method: 'POST',
+    path: '/api/users/:id/notifications/read-all',
+    status: 'live',
+    source: 'swagger',
+  },
 };

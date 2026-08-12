@@ -59,3 +59,7 @@ export function formatTimeSlotWindow(slot) {
 
   return `${formatClockLabel(slot.startTime)} - ${formatClockLabel(slot.endTime)}`
 }
+
+export function isBookingEligibleForIntake(booking) {
+  return ['confirmed', 'in_service'].includes(String(booking?.status ?? '').trim())
+}

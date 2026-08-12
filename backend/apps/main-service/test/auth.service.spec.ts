@@ -8,6 +8,7 @@ import { AutocareEventBusService } from '@shared/events/autocare-event-bus.servi
 import { AuthRepository } from '@main-modules/auth/repositories/auth.repository';
 import { AuthService } from '@main-modules/auth/services/auth.service';
 import { GoogleIdentityService } from '@main-modules/auth/services/google-identity.service';
+import { MailDeliveryService } from '@main-modules/notifications/services/mail-delivery.service';
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
 import { UsersService } from '@main-modules/users/services/users.service';
 
@@ -245,12 +246,16 @@ describe('AuthService', () => {
       createStaffAdminAuditLog: jest.fn().mockResolvedValue({ id: 'audit-log-1' }),
       revokeActiveRefreshTokens: jest.fn().mockResolvedValue(undefined),
     };
+    const mailDeliveryService = {
+      sendMail: jest.fn().mockResolvedValue({ messageId: 'mail-1' }),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: AuthRepository, useValue: authRepository },
+        { provide: MailDeliveryService, useValue: mailDeliveryService },
         { provide: NotificationsService, useValue: { enqueueAuthOtpDelivery: jest.fn(), deliverNotification: jest.fn() } },
         { provide: GoogleIdentityService, useValue: { verifyIdToken: jest.fn() } },
         { provide: AutocareEventBusService, useValue: { publish: jest.fn() } },
@@ -270,7 +275,6 @@ describe('AuthService', () => {
     const created = await service.provisionStaffAccount(
       {
         email: 'staff@example.com',
-        password: 'password123',
         firstName: 'Maria',
         lastName: 'Santos',
         role: 'service_adviser',
@@ -289,7 +293,7 @@ describe('AuthService', () => {
         staffCode: 'SA-0001',
       }),
     );
-    expect(authRepository.createAccount).toHaveBeenCalledWith('staff-1', expect.any(String));
+    expect(authRepository.createAccount).toHaveBeenCalledWith('staff-1', expect.any(String), true);
     expect(usersService.setActivationStatus).toHaveBeenCalledWith('staff-1', true);
     expect(authRepository.updateAccountStatus).toHaveBeenCalledWith('staff-1', true);
     expect(created?.staffCode).toBe('SA-0001');
@@ -348,7 +352,6 @@ describe('AuthService', () => {
     await expect(
       service.provisionStaffAccount(
         {
-          password: 'password123',
           firstName: 'Helena',
           lastName: 'Cruz',
           role: 'head_technician',

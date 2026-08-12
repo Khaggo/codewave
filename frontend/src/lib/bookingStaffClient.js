@@ -30,7 +30,7 @@ const buildCustomerLabel = (record) => {
     return record.customerEmail;
   }
 
-  return record?.userId ? `User ${record.userId}` : 'Unknown customer';
+  return 'Unknown customer';
 };
 
 const buildVehicleLabel = (record) => {
@@ -42,7 +42,7 @@ const buildVehicleLabel = (record) => {
     return record.plateNumber;
   }
 
-  return record?.vehicleId ? `Vehicle ${record.vehicleId}` : 'Unknown vehicle';
+  return 'Unknown vehicle';
 };
 
 const normalizeStaffBooking = (booking) =>
@@ -173,6 +173,20 @@ export const listVehicleBookings = async (vehicleId, accessToken) => {
   })
 
   return Array.isArray(bookings) ? bookings.map((booking) => normalizeStaffBooking(booking)) : []
+}
+
+export const getStaffBooking = async (bookingId, accessToken) => {
+  if (!bookingId) {
+    throw new ApiError('Provide a booking before loading intake context.', 400, {
+      path: '/api/bookings/:id',
+    })
+  }
+
+  return normalizeStaffBooking(
+    await request(`/api/bookings/${bookingId}`, {
+      accessToken,
+    }),
+  )
 }
 
 export const createTimeSlotDefinition = (payload, accessToken) =>

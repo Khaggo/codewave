@@ -24,6 +24,7 @@ import {
   createLoyaltyEarningRule,
   createLoyaltyReward,
   getLoyaltyAnalytics,
+  listLoyaltyQualificationAudits,
   listLoyaltyEarningRules,
   listLoyaltyRewards,
   updateLoyaltyEarningRule,
@@ -613,6 +614,7 @@ export default function LoyaltyManager() {
     rewards: [],
     earningRules: [],
     analytics: null,
+    qualifications: [],
     errors: {},
   })
   const [rewardQuery, setRewardQuery] = useState('')
@@ -639,10 +641,11 @@ export default function LoyaltyManager() {
       errors: {},
     }))
 
-    const [rewardsResult, rulesResult, analyticsResult] = await Promise.allSettled([
+    const [rewardsResult, rulesResult, analyticsResult, qualificationsResult] = await Promise.allSettled([
       listLoyaltyRewards(user.accessToken),
       listLoyaltyEarningRules(user.accessToken),
       getLoyaltyAnalytics(user.accessToken),
+      listLoyaltyQualificationAudits(user.accessToken),
     ])
     const nextErrors = {}
 
@@ -657,12 +660,22 @@ export default function LoyaltyManager() {
     if (analyticsResult.status === 'rejected') {
       nextErrors.analytics = getErrorMessage(analyticsResult.reason, 'Unable to load loyalty analytics.')
     }
+    if (qualificationsResult.status === 'rejected') {
+      nextErrors.qualifications = getErrorMessage(
+        qualificationsResult.reason,
+        'Unable to load vehicle sticker qualification history.',
+      )
+    }
 
     setState((current) => ({
       status: 'ready',
       rewards: rewardsResult.status === 'fulfilled' ? rewardsResult.value : current.rewards,
       earningRules: rulesResult.status === 'fulfilled' ? rulesResult.value : current.earningRules,
       analytics: analyticsResult.status === 'fulfilled' ? analyticsResult.value : current.analytics,
+      qualifications:
+        qualificationsResult.status === 'fulfilled'
+          ? qualificationsResult.value
+          : current.qualifications,
       errors: nextErrors,
     }))
   }, [user?.accessToken])
@@ -893,13 +906,13 @@ export default function LoyaltyManager() {
       ) : null}
 
       {tab === 'rewards' ? (
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <InfoPanel
             title="Reward config is redemption-only"
             body="Rewards define what customers can redeem with their existing points balance. Reward catalog entries do not create points on their own; active earning rules award points after qualifying paid service invoices."
           />
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex items-center gap-2 bg-surface-card border border-surface-border rounded-lg px-3 py-2 flex-1 max-w-md">
+            <div className="flex min-w-0 max-w-md flex-1 items-center gap-2 rounded-lg border border-surface-border bg-surface-card px-3 py-2">
               <Search size={14} className="text-ink-muted flex-shrink-0" />
               <input
                 value={rewardQuery}
@@ -915,49 +928,89 @@ export default function LoyaltyManager() {
 
           {state.errors.rewards ? <InfoPanel tone="warning" title="Reward catalog issue" body={state.errors.rewards} /> : null}
 
-          <div className="table-surface">
-            <div className="table-scroll">
-              <table className="data-table min-w-[760px]">
+          <div className="table-surface min-w-0 w-full max-w-full">
+            <div className="table-scroll min-w-0 w-full max-w-full overscroll-x-contain">
+              <table
+                aria-busy={state.status === 'loading' || actionState.status === 'saving'}
+                aria-label="Reward catalog configuration"
+                className="data-table w-full min-w-[680px] table-fixed md:min-w-full"
+              >
+                <caption className="sr-only">Reward catalog configuration</caption>
+                <colgroup>
+                  <col className="w-[23%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[18%]" />
+                </colgroup>
                 <thead>
                   <tr>
-                    <th>Reward</th>
-                    <th>Type</th>
-                    <th>Cost</th>
-                    <th>Discount</th>
-                    <th>Status</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
+                    <th scope="col">Reward</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Cost</th>
+                    <th scope="col">Discount</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Updated</th>
+                    <th scope="col" className="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRewards.length ? filteredRewards.map((reward) => (
-                    <tr key={reward.id}>
-                      <td>
-                        <p className="font-semibold text-ink-primary">{reward.name}</p>
-                        <p className="text-xs text-ink-muted max-w-sm truncate">
+                    <tr
+                      key={reward.id}
+                      aria-selected={selected?.id === reward.id}
+                      className={`transition-colors hover:bg-surface-hover focus-within:bg-surface-hover ${
+                        selected?.id === reward.id ? 'bg-surface-hover' : ''
+                      }`}
+                    >
+                      <td className="min-w-0">
+                        <p className="min-w-0 truncate font-semibold text-ink-primary" title={reward.name}>
+                          {reward.name}
+                        </p>
+                        <p
+                          className="min-w-0 truncate text-xs text-ink-muted"
+                          title={reward.description ?? reward.fulfillmentNote ?? 'No description yet.'}
+                        >
                           {reward.description ?? reward.fulfillmentNote ?? 'No description yet.'}
                         </p>
                       </td>
-                      <td><span className="badge badge-blue">{reward.typeLabel}</span></td>
-                      <td className="font-bold tabular-nums" style={{ color: '#f07c00' }}>
+                      <td className="min-w-0">
+                        <span
+                          className="badge badge-blue inline-block max-w-full truncate whitespace-nowrap align-middle"
+                          title={reward.typeLabel}
+                        >
+                          {reward.typeLabel}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-2 font-bold tabular-nums" style={{ color: '#f07c00' }}>
                         {reward.pointsLabel}
                       </td>
-                      <td>{reward.discountLabel}</td>
-                      <td><StatusPill status={reward.status} /></td>
-                      <td className="text-xs text-ink-muted">{reward.updatedAtLabel}</td>
-                      <td>
-                        <div className="flex items-center gap-2">
+                      <td className="whitespace-nowrap px-2">{reward.discountLabel}</td>
+                      <td className="whitespace-nowrap px-2"><StatusPill status={reward.status} /></td>
+                      <td className="max-w-0 whitespace-nowrap px-2 text-xs text-ink-muted">
+                        <span className="block max-w-full truncate" title={reward.updatedAtLabel}>
+                          {reward.updatedAtLabel}
+                        </span>
+                      </td>
+                      <td className="px-2 text-right align-middle">
+                        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                           <button
+                            type="button"
                             onClick={() => openEditReward(reward)}
                             disabled={!isSuperAdmin}
-                            className="p-1.5 rounded-lg text-ink-muted hover:text-ink-primary hover:bg-surface-hover transition-colors disabled:opacity-40"
+                            aria-label={`Edit reward ${reward.name}`}
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-orange disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            <Edit2 size={13} />
+                            <Edit2 size={13} aria-hidden="true" />
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleRewardStatusToggle(reward)}
                             disabled={!isSuperAdmin || actionState.status === 'saving'}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-surface-border text-ink-secondary hover:bg-surface-hover transition-colors disabled:opacity-40"
+                            aria-label={`${reward.status === 'active' ? 'Deactivate' : 'Activate'} reward ${reward.name}`}
+                            className="inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-surface-border px-2 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-orange disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             {reward.status === 'active' ? 'Deactivate' : 'Activate'}
                           </button>
@@ -966,8 +1019,8 @@ export default function LoyaltyManager() {
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={7} className="text-center text-ink-muted text-sm">
-                        No rewards found in the live catalog.
+                      <td colSpan={7} className="h-16 text-center text-sm text-ink-muted">
+                        {state.status === 'loading' ? 'Loading reward catalog...' : 'No rewards found in the live catalog.'}
                       </td>
                     </tr>
                   )}
@@ -1070,13 +1123,66 @@ export default function LoyaltyManager() {
       {tab === 'customers' ? (
         <div className="space-y-4">
           <InfoPanel
-            title="Live account totals"
-            body="This tab reflects the live loyalty analytics snapshot. It stays focused on account totals until a dedicated searchable account directory is added."
+            title="Sticker qualification"
+            body="Customers earn and redeem loyalty only while an official Cruisers Crib sticker is verified on a registered vehicle."
           />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <StatCard label="Known Accounts" value={(state.analytics?.totals.accountCount ?? 0).toLocaleString()} />
             <StatCard label="Total Balance" value={(state.analytics?.totals.totalPointsBalance ?? 0).toLocaleString()} helper="Across all loyalty accounts." />
-            <StatCard label="Manual Adjustment" value="Blocked" helper="Planned for a later staff control." />
+            <StatCard
+              label="Qualified Vehicles"
+              value={state.qualifications.filter((item) => item.status === 'qualified').length.toLocaleString()}
+              helper="Latest completed observation wins."
+            />
+          </div>
+          {state.errors.qualifications ? (
+            <InfoPanel tone="warning" title="Qualification history unavailable" body={state.errors.qualifications} />
+          ) : null}
+          {state.status === 'loading' && !state.qualifications.length ? (
+            <InfoPanel title="Loading qualification status" body="Reading the latest completed vehicle sticker observations." />
+          ) : null}
+          {state.status !== 'loading' && !state.errors.qualifications && !state.qualifications.length ? (
+            <div className="empty-panel text-left">
+              <p className="font-semibold text-ink-primary">No completed sticker observations yet</p>
+              <p className="mt-1 text-sm text-ink-muted">Customers remain unqualified until staff completes an intake observation.</p>
+            </div>
+          ) : null}
+          <div className="grid gap-3 xl:grid-cols-2">
+            {state.qualifications.map((qualification) => (
+              <article key={qualification.vehiclePublicReference} className="card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink-primary">{qualification.vehicleLabel}</p>
+                    <p className="mt-1 text-xs text-ink-muted">{qualification.vehiclePublicReference}</p>
+                  </div>
+                  <span className={`badge ${qualification.status === 'qualified' ? 'badge-green' : 'badge-orange'}`}>
+                    {qualification.status === 'qualified' ? 'Qualified' : 'Not qualified'}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-ink-secondary">
+                  {qualification.status === 'qualified'
+                    ? `Verified ${qualification.lastVerifiedAtLabel}`
+                    : 'The latest completed intake recorded the official sticker as not present.'}
+                </p>
+                <details className="mt-3 border-t border-surface-border pt-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-brand-orange">Review observation history</summary>
+                  <div className="mt-3 space-y-2">
+                    {qualification.history.map((entry, index) => (
+                      <div key={`${entry.intakeReference}-${entry.observedAt ?? index}`} className="rounded-lg bg-surface-raised p-3 text-sm">
+                        <div className="flex flex-wrap justify-between gap-2">
+                          <span className="font-medium text-ink-primary">
+                            {entry.observation === 'verified_present' ? 'Official sticker verified present' : 'Not present'}
+                          </span>
+                          <span className="text-xs text-ink-muted">{entry.observedAtLabel}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-ink-muted">{entry.intakeReference}</p>
+                        {entry.reason ? <p className="mt-1 text-xs text-ink-secondary">{entry.reason}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </article>
+            ))}
           </div>
         </div>
       ) : null}

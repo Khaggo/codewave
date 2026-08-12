@@ -82,6 +82,20 @@ export class NotificationResponseDto {
   })
   createdAt!: string;
 
+  @ApiPropertyOptional({
+    example: '2026-04-20T08:45:00.000Z',
+    format: 'date-time',
+    nullable: true,
+  })
+  readAt?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-04-20T09:00:00.000Z',
+    format: 'date-time',
+    nullable: true,
+  })
+  archivedAt?: string | null;
+
   @ApiProperty({
     example: '2026-04-20T08:30:00.000Z',
     format: 'date-time',

@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -10,20 +11,25 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'node:crypto';
 
 import { CreateUserDto } from '@main-modules/users/dto/create-user.dto';
 import { UsersService } from '@main-modules/users/services/users.service';
 import { NotificationsService } from '@main-modules/notifications/services/notifications.service';
+import { MailDeliveryService } from '@main-modules/notifications/services/mail-delivery.service';
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
 
 import { GoogleSignupStartDto } from '../dto/google-signup-start.dto';
 import { ConfirmStaffPhoneChangeWithOtpDto } from '../dto/confirm-staff-phone-change-with-otp.dto';
 import { DeleteAccountDto } from '../dto/delete-account.dto';
 import { ConfirmChangePasswordWithOtpDto } from '../dto/confirm-change-password-with-otp.dto';
+import { CompleteRequiredStaffPasswordDto } from '../dto/complete-required-staff-password.dto';
 import { LoginDto } from '../dto/login.dto';
+import { ListAdminCustomersQueryDto } from '../dto/list-admin-customers-query.dto';
 import { RequestChangePasswordOtpDto } from '../dto/request-change-password-otp.dto';
 import { RequestPasswordResetOtpDto } from '../dto/request-password-reset-otp.dto';
 import { RequestStaffPhoneChangeOtpDto } from '../dto/request-staff-phone-change-otp.dto';
+import { RetryStaffCredentialDeliveryDto } from '../dto/retry-staff-credential-delivery.dto';
 import { CreateStaffAccountDto } from '../dto/create-staff-account.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
@@ -32,40 +38,21 @@ import { UpdateStaffAccountStatusDto } from '../dto/update-staff-account-status.
 import { VerifyEmailOtpDto } from '../dto/verify-email-otp.dto';
 import { AuthRepository } from '../repositories/auth.repository';
 import { GoogleIdentityService } from './google-identity.service';
+import {
+  MAX_ACTIVE_HEAD_TECHNICIANS,
+  roleFallbackAccountTypes,
+  staffAccountTypeCodePrefixes,
+  staffAccountTypeEmailSegments,
+  type StaffAccountType,
+} from './staff-account-policy';
 
 type TokenPayload = {
   sub: string;
   email: string;
   role: string;
-  type: 'access' | 'refresh';
+  type: 'access' | 'refresh' | 'password_change';
 };
 
-type StaffAccountType = 'staff' | 'mechanic' | 'technician' | 'head_technician' | 'admin';
-
-const staffAccountTypeEmailSegments: Record<StaffAccountType, string> = {
-  staff: 'staff',
-  mechanic: 'mechanic',
-  technician: 'technician',
-  head_technician: 'headtech',
-  admin: 'admin',
-};
-
-const staffAccountTypeCodePrefixes: Record<StaffAccountType, string> = {
-  staff: 'STA',
-  mechanic: 'MEC',
-  technician: 'TEC',
-  head_technician: 'HTC',
-  admin: 'ADM',
-};
-
-const roleFallbackAccountTypes: Record<string, StaffAccountType> = {
-  service_adviser: 'staff',
-  technician: 'technician',
-  head_technician: 'head_technician',
-  super_admin: 'admin',
-};
-
-const MAX_ACTIVE_HEAD_TECHNICIANS = 2;
 const MAX_OTP_ATTEMPTS = 5;
 
 @Injectable()
@@ -83,6 +70,7 @@ export class AuthService {
     private readonly eventBus: AutocareEventBusService,
     private readonly jwtService: JwtService,
     configService: ConfigService,
+    @Optional() private readonly mailDeliveryService?: MailDeliveryService,
   ) {
     this.accessSecret = configService.getOrThrow<string>('jwt.accessSecret');
     this.refreshSecret = configService.getOrThrow<string>('jwt.refreshSecret');
@@ -292,6 +280,10 @@ export class AuthService {
       phone: registerDto.phone,
     } satisfies CreateUserDto);
 
+    if (!user.email) {
+      throw new BadRequestException('Registered customer registration requires an email address');
+    }
+
     const passwordHash = await bcrypt.hash(registerDto.password, 10);
     await this.authRepository.createAccount(user.id, passwordHash);
     await this.usersService.setActivationStatus(user.id, false);
@@ -299,7 +291,7 @@ export class AuthService {
 
     return this.createOtpEnrollment({
       userId: user.id,
-      email: user.email,
+      email: this.requireAuthEmail(user.email, 'Registered customer registration requires an email address'),
       purpose: 'customer_signup',
       activationContext: 'customer_signup',
       status: 'pending_activation',
@@ -359,6 +351,64 @@ export class AuthService {
       wasSuccessful: true,
     });
 
+    if (account.mustChangePassword) {
+      const email = this.requireAuthEmail(user.email, 'This identity has no login email');
+      const passwordChangeToken = await this.jwtService.signAsync(
+        {
+          sub: user.id,
+          email,
+          role: user.role,
+          type: 'password_change',
+        } satisfies TokenPayload,
+        {
+          secret: this.accessSecret,
+          expiresIn: '10m',
+        },
+      );
+
+      return {
+        requiresPasswordChange: true as const,
+        passwordChangeToken,
+        destination: '/api/auth/password/change-required',
+        expiresInSeconds: 600,
+      };
+    }
+
+    return this.issueTokens(user);
+  }
+
+  async completeRequiredStaffPasswordChange(payload: CompleteRequiredStaffPasswordDto) {
+    let tokenPayload: TokenPayload;
+    try {
+      tokenPayload = await this.jwtService.verifyAsync<TokenPayload>(payload.passwordChangeToken, {
+        secret: this.accessSecret,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired password-change token');
+    }
+
+    if (tokenPayload.type !== 'password_change') {
+      throw new UnauthorizedException('Invalid password-change token');
+    }
+
+    const user = await this.usersService.findById(tokenPayload.sub);
+    if (!user || !user.isActive || user.role === 'customer') {
+      throw new UnauthorizedException('Staff account is unavailable');
+    }
+
+    const account = await this.authRepository.findAccountByUserId(user.id);
+    if (!account?.isActive || !account.mustChangePassword) {
+      throw new ConflictException('This account no longer requires an initial password change');
+    }
+
+    if (await bcrypt.compare(payload.newPassword, account.passwordHash)) {
+      throw new BadRequestException('Choose a new password that differs from the temporary password');
+    }
+
+    const passwordHash = await bcrypt.hash(payload.newPassword, 10);
+    await this.authRepository.updatePasswordHash(user.id, passwordHash, false);
+    await this.authRepository.revokeActiveRefreshTokens(user.id);
+
     return this.issueTokens(user);
   }
 
@@ -392,7 +442,7 @@ export class AuthService {
     }
 
     const account = await this.authRepository.findAccountByUserId(user.id);
-    if (!account?.isActive) {
+    if (!account?.isActive || account.mustChangePassword) {
       throw new UnauthorizedException('User not found');
     }
 
@@ -406,6 +456,8 @@ export class AuthService {
       throw new NotFoundException('Account not found');
     }
 
+    const email = this.requireAuthEmail(user.email, 'This identity has no login email');
+
     if (user.role !== 'customer') {
       throw new BadRequestException('Only customer accounts can reset passwords through this flow');
     }
@@ -417,7 +469,7 @@ export class AuthService {
 
     return this.createOtpEnrollment({
       userId: user.id,
-      email: user.email,
+      email,
       purpose: 'forgot_password',
       activationContext: 'forgot_password',
       status: 'pending_reset_verification',
@@ -455,6 +507,8 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
+    const email = this.requireAuthEmail(user.email, 'This identity has no login email');
+
     if (user.role !== 'customer') {
       throw new BadRequestException('Only customer accounts can change passwords through this flow');
     }
@@ -471,7 +525,7 @@ export class AuthService {
 
     return this.createOtpEnrollment({
       userId: user.id,
-      email: user.email,
+      email,
       purpose: 'change_password',
       activationContext: 'change_password',
       status: 'pending_change_verification',
@@ -525,6 +579,8 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
+    const email = this.requireAuthEmail(user.email, 'This identity has no login email');
+
     const account = await this.authRepository.findAccountByUserId(user.id);
     if (!account || !account.isActive) {
       throw new UnauthorizedException('Account is not active');
@@ -537,7 +593,7 @@ export class AuthService {
 
     return this.createOtpEnrollment({
       userId: user.id,
-      email: user.email,
+      email,
       purpose: 'account_delete',
       activationContext: 'account_delete',
       status: 'pending_delete_verification',
@@ -555,6 +611,8 @@ export class AuthService {
 
     this.assertStaffProfileActor(user.role);
 
+    const email = this.requireAuthEmail(user.email, 'Staff accounts require an email address');
+
     const normalizedPhone = this.normalizePhilippineMobile(payload.phone);
     const profile = Array.isArray(user.profile) ? user.profile[0] ?? null : user.profile;
     if (String(profile?.phone ?? '').trim() === normalizedPhone) {
@@ -563,7 +621,7 @@ export class AuthService {
 
     return this.createOtpEnrollment({
       userId: user.id,
-      email: user.email,
+      email,
       purpose: 'staff_phone_change',
       activationContext: 'staff_phone_change',
       status: 'pending_change_verification',
@@ -619,10 +677,19 @@ export class AuthService {
       staffCode,
     });
 
-    const passwordHash = await bcrypt.hash(payload.password, 10);
-    await this.authRepository.createAccount(user.id, passwordHash);
+    const authEmail = this.requireAuthEmail(user.email, 'Staff account provisioning requires an email address');
+
+    const temporaryPassword = this.generateStaffTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+    await this.authRepository.createAccount(user.id, passwordHash, true);
     await this.usersService.setActivationStatus(user.id, true);
     await this.authRepository.updateAccountStatus(user.id, true);
+
+    const delivery = await this.deliverStaffTemporaryCredential({
+      email: authEmail,
+      displayName: this.buildDisplayName(user),
+      temporaryPassword,
+    });
 
     const auditLog = await this.authRepository.createStaffAdminAuditLog({
       action: 'staff_account_provisioned',
@@ -630,7 +697,7 @@ export class AuthService {
       actorRole: 'super_admin',
       targetUserId: user.id,
       targetRole: user.role as 'technician' | 'head_technician' | 'service_adviser' | 'super_admin',
-      targetEmail: user.email,
+      targetEmail: authEmail,
       targetStaffCode: user.staffCode,
       previousIsActive: null,
       nextIsActive: true,
@@ -643,12 +710,74 @@ export class AuthService {
       actorRole: 'super_admin',
       targetUserId: user.id,
       targetRole: user.role as 'technician' | 'head_technician' | 'service_adviser' | 'super_admin',
-      targetEmail: user.email,
+      targetEmail: authEmail,
       targetStaffCode: user.staffCode,
       reason: null,
     });
 
-    return this.usersService.findById(user.id);
+    return {
+      ...this.toManagedStaffAccount(await this.usersService.findById(user.id)),
+      delivery,
+    };
+  }
+
+  async retryStaffCredentialDelivery(
+    payload: RetryStaffCredentialDeliveryDto,
+    actor: { userId: string; role: string },
+  ) {
+    const email = payload.email.trim().toLowerCase();
+    const user = await this.usersService.findByEmail(email);
+    if (!user || user.role === 'customer') {
+      throw new NotFoundException('Staff account not found');
+    }
+
+    const account = await this.authRepository.findAccountByUserId(user.id);
+    if (!account?.isActive) {
+      throw new ConflictException('Activate the staff account before retrying credential delivery');
+    }
+    if (!account.mustChangePassword) {
+      throw new ConflictException('This account no longer requires initial credential delivery');
+    }
+
+    const temporaryPassword = this.generateStaffTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+    await this.authRepository.updatePasswordHash(user.id, passwordHash, true);
+    await this.authRepository.revokeActiveRefreshTokens(user.id);
+
+    const delivery = await this.deliverStaffTemporaryCredential({
+      email,
+      displayName: this.buildDisplayName(user),
+      temporaryPassword,
+    });
+
+    const auditLog = await this.authRepository.createStaffAdminAuditLog({
+      action: 'staff_account_provisioned',
+      actorUserId: actor.userId,
+      actorRole: 'super_admin',
+      targetUserId: user.id,
+      targetRole: user.role as 'technician' | 'head_technician' | 'service_adviser' | 'super_admin',
+      targetEmail: email,
+      targetStaffCode: user.staffCode,
+      previousIsActive: user.isActive,
+      nextIsActive: user.isActive,
+      reason: 'Initial credential delivery retried with a newly generated temporary password.',
+    });
+
+    this.eventBus.publish('staff_account.provisioned', {
+      auditLogId: auditLog.id,
+      actorUserId: actor.userId,
+      actorRole: 'super_admin',
+      targetUserId: user.id,
+      targetRole: user.role as 'technician' | 'head_technician' | 'service_adviser' | 'super_admin',
+      targetEmail: email,
+      targetStaffCode: user.staffCode,
+      reason: 'Initial credential delivery retried with a newly generated temporary password.',
+    });
+
+    return {
+      ...this.toManagedStaffAccount(user),
+      delivery,
+    };
   }
 
   async listStaffAccounts(actor: { userId: string; role: string }) {
@@ -658,10 +787,13 @@ export class AuthService {
       .map((account) => this.toManagedStaffAccount(account));
   }
 
-  async listCustomersWithVehicles(_actor: { userId: string; role: string }) {
-    const customers = await this.usersService.listCustomersWithVehicles();
+  async listCustomersWithVehicles(
+    _actor: { userId: string; role: string },
+    query: ListAdminCustomersQueryDto = new ListAdminCustomersQueryDto(),
+  ) {
+    const result = await this.usersService.listCustomersWithVehicles(query);
 
-    return customers.map((customer) => {
+    const items = result.items.map((customer) => {
       const profile = Array.isArray(customer.profile)
         ? customer.profile[0] ?? null
         : customer.profile;
@@ -678,6 +810,7 @@ export class AuthService {
         vehicleCount: vehicles.length,
       };
     });
+    return query.paged ? { items, pageInfo: { nextCursor: result.nextCursor } } : items;
   }
 
   async updateCustomerAccountStatus(
@@ -833,6 +966,8 @@ export class AuthService {
       throw new BadRequestException('Only staff accounts can be managed through this endpoint');
     }
 
+    const email = this.requireAuthEmail(user.email, 'Staff accounts require an email address');
+
     if (payload.isActive && !user.isActive) {
       await this.assertHeadTechnicianCapacity(user.role, true);
     }
@@ -852,7 +987,7 @@ export class AuthService {
       actorRole: 'super_admin',
       targetUserId: user.id,
       targetRole: user.role as 'technician' | 'head_technician' | 'service_adviser' | 'super_admin',
-      targetEmail: user.email,
+      targetEmail: email,
       targetStaffCode: user.staffCode,
       previousIsActive,
       nextIsActive: payload.isActive,
@@ -865,7 +1000,7 @@ export class AuthService {
       actorRole: 'super_admin',
       targetUserId: user.id,
       targetRole: user.role as 'technician' | 'head_technician' | 'service_adviser' | 'super_admin',
-      targetEmail: user.email,
+      targetEmail: email,
       targetStaffCode: user.staffCode,
       previousIsActive,
       nextIsActive: payload.isActive,
@@ -915,7 +1050,7 @@ export class AuthService {
 
     await this.authRepository.softDeleteUserAccount({
       userId: user.id,
-      email: user.email,
+      email: this.requireAuthEmail(user.email, 'This identity has no login email'),
     });
 
     return {
@@ -979,10 +1114,11 @@ export class AuthService {
     throw new BadRequestException('Invalid OTP');
   }
 
-  private async issueTokens(user: { id: string; email: string; role: string; profile?: unknown }) {
+  private async issueTokens(user: { id: string; email: string | null; role: string; profile?: unknown }) {
+    const email = this.requireAuthEmail(user.email, 'This identity has no login email');
     const accessPayload: TokenPayload = {
       sub: user.id,
-      email: user.email,
+      email,
       role: user.role,
       type: 'access',
     };
@@ -1089,6 +1225,56 @@ export class AuthService {
     return `${randomInt(100000, 1000000)}`;
   }
 
+  private generateStaffTemporaryPassword() {
+    return randomBytes(24).toString('base64url');
+  }
+
+  private async deliverStaffTemporaryCredential(payload: {
+    email: string;
+    displayName: string;
+    temporaryPassword: string;
+  }) {
+    try {
+      if (!this.mailDeliveryService) {
+        throw new Error('Mail delivery is unavailable');
+      }
+
+      await this.mailDeliveryService.sendMail({
+        to: payload.email,
+        subject: 'Your AUTOCARE staff account',
+        text: [
+          `Hello ${payload.displayName},`,
+          '',
+          'Your AUTOCARE staff account is ready.',
+          `Login email: ${payload.email}`,
+          `Temporary password: ${payload.temporaryPassword}`,
+          '',
+          'Sign in and change this temporary password before accessing staff tools.',
+        ].join('\n'),
+      });
+
+      return {
+        status: 'sent' as const,
+        channel: 'email' as const,
+        targetEmail: payload.email,
+        retryable: false as const,
+      };
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'STAFF_CREDENTIAL_DELIVERY_FAILED',
+        message:
+          'The staff account was created, but its temporary credential could not be delivered. Retry credential delivery to rotate and send a new temporary password.',
+        delivery: {
+          status: 'failed',
+          channel: 'email',
+          targetEmail: payload.email,
+          retryable: true,
+          destination: '/api/admin/staff-accounts/credentials/retry',
+        },
+      });
+    }
+  }
+
   private normalizePhilippineMobile(value: string) {
     const normalized = String(value ?? '').replace(/\D/g, '').slice(0, 11);
     if (!/^09\d{9}$/.test(normalized)) {
@@ -1115,5 +1301,13 @@ export class AuthService {
     }
 
     return `${localPart.slice(0, 2)}***@${domainPart}`;
+  }
+
+  private requireAuthEmail(email: string | null | undefined, message: string) {
+    if (!email) {
+      throw new UnauthorizedException(message);
+    }
+
+    return email;
   }
 }

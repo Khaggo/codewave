@@ -1,4 +1,10 @@
 import { ApiError } from './authClient';
+import {
+  getAuditActorDisplayLabel,
+  getAuditTargetDisplayLabel,
+  getPeakHourDisplayLabel,
+  getServiceDemandDisplayLabel,
+} from './analyticsPresentation.mjs';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 
@@ -171,12 +177,14 @@ const normalizeDashboardAnalytics = (payload) => {
     ],
     serviceDemandPreview: sortByBookingCountDescending(payload?.serviceDemandPreview).map((entry) => ({
       ...entry,
+      displayLabel: getServiceDemandDisplayLabel(entry),
       bookingSharePercent:
         totalBookings > 0 ? ((Number(entry?.bookingCount ?? 0) / totalBookings) * 100).toFixed(1) : '0.0',
       sourceBookingCount: Array.isArray(entry?.sourceBookingIds) ? entry.sourceBookingIds.length : 0,
     })),
     peakHoursPreview: sortByBookingCountDescending(payload?.peakHoursPreview).map((entry) => ({
       ...entry,
+      displayLabel: getPeakHourDisplayLabel(entry),
       timeWindowLabel: `${entry?.startTime ?? '--:--'} - ${entry?.endTime ?? '--:--'}`,
       fillPercentLabel: `${Number(entry?.averageFillPercent ?? 0).toFixed(1)}%`,
       sourceBookingCount: Array.isArray(entry?.sourceBookingIds) ? entry.sourceBookingIds.length : 0,
@@ -197,11 +205,13 @@ const normalizeOperationsAnalytics = (payload) => ({
   })),
   peakHours: sortByBookingCountDescending(payload?.peakHours).map((entry) => ({
     ...entry,
+    displayLabel: getPeakHourDisplayLabel(entry),
     timeWindowLabel: `${entry?.startTime ?? '--:--'} - ${entry?.endTime ?? '--:--'}`,
     fillPercentLabel: `${Number(entry?.averageFillPercent ?? 0).toFixed(1)}%`,
   })),
   serviceDemand: sortByBookingCountDescending(payload?.serviceDemand).map((entry) => ({
     ...entry,
+    displayLabel: getServiceDemandDisplayLabel(entry),
     lastBookedAtLabel: formatDateTime(entry?.lastBookedAt),
   })),
   serviceAdviserLoad: [...(payload?.serviceAdviserLoad ?? [])].sort(
@@ -271,11 +281,8 @@ const normalizeAuditTrailAnalytics = (payload) => ({
       auditTypeLabel: formatLabel(entry?.auditType),
       actionLabel: formatLabel(entry?.action),
       actorRoleLabel: entry?.actorRole ? formatLabel(entry.actorRole) : null,
-      actorLabel:
-        entry?.actorUserId && entry?.actorRole
-          ? `${formatLabel(entry.actorRole)} · ${entry.actorUserId}`
-          : entry?.actorUserId ?? 'System',
-      targetLabel: `${formatLabel(entry?.targetEntityType)} · ${entry?.targetEntityId ?? 'Unknown'}`,
+      actorLabel: getAuditActorDisplayLabel(entry, formatLabel),
+      targetLabel: getAuditTargetDisplayLabel(entry, formatLabel),
       relatedCount: Array.isArray(entry?.relatedEntityIds) ? entry.relatedEntityIds.length : 0,
     })),
 });

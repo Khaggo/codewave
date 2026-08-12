@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 const staffRoles = ['technician', 'head_technician', 'service_adviser', 'super_admin'] as const;
 const staffAccountTypes = ['staff', 'mechanic', 'technician', 'head_technician', 'admin'] as const;
@@ -13,14 +13,6 @@ export class CreateStaffAccountDto {
   @IsOptional()
   @IsEmail()
   email?: string;
-
-  @ApiProperty({
-    example: 'SecurePass123',
-    minLength: 8,
-  })
-  @IsString()
-  @MinLength(8)
-  password!: string;
 
   @ApiProperty({
     enum: staffRoles,

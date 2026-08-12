@@ -13,7 +13,6 @@ import { UpdateInsuranceInquiryWorkflowDto } from '../dto/update-insurance-inqui
 import { UpdateInsuranceInquiryStatusDto } from '../dto/update-insurance-inquiry-status.dto';
 import { insuranceActivities } from '../schemas/insurance-activity.schema';
 import {
-  insuranceCasePurposeEnum,
   insuranceDocuments,
   insuranceInquiries,
   insuranceDocumentTypeEnum,
@@ -21,6 +20,10 @@ import {
   insuranceInquiryTypeEnum,
   insuranceRecords,
 } from '../schemas/insurance.schema';
+import {
+  canonicalizeInsuranceDateTime,
+  resolveInsuranceRequirements,
+} from '../services/insurance-workflow-policy';
 
 type CreateInsuranceInquiryPersistenceInput = CreateInsuranceInquiryDto & {
   createdByUserId: string;
@@ -70,16 +73,6 @@ export type UpsertInsuranceRecordInput = {
   status: (typeof insuranceInquiryStatusEnum.enumValues)[number];
 };
 
-const purposeRequiredDocumentTypes: Record<
-  (typeof insuranceCasePurposeEnum.enumValues)[number],
-  Array<(typeof insuranceDocumentTypeEnum.enumValues)[number]>
-> = {
-  renewal: ['or_cr', 'policy'],
-  new_application: ['or_cr'],
-  claim: ['or_cr'],
-  quotation: ['or_cr'],
-};
-
 @Injectable()
 export class InsuranceRepository extends BaseRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: AppDatabase) {
@@ -101,7 +94,9 @@ export class InsuranceRepository extends BaseRepository {
             description: payload.description,
             providerName: payload.providerName ?? null,
             policyNumber: payload.policyNumber ?? null,
-            incidentOccurredAt: payload.incidentOccurredAt ? new Date(payload.incidentOccurredAt) : null,
+            incidentOccurredAt: payload.incidentOccurredAt
+              ? new Date(canonicalizeInsuranceDateTime(payload.incidentOccurredAt) as string)
+              : null,
             incidentLocation: payload.incidentLocation ?? null,
             notes: payload.notes ?? null,
             status: 'submitted' as const,
@@ -602,13 +597,14 @@ export class InsuranceRepository extends BaseRepository {
     tx: AppDatabase,
     nextDocumentType?: (typeof insuranceDocumentTypeEnum.enumValues)[number],
   ) {
-    const nextDocumentStatus = this.computeDocumentReviewStatus({
+    const nextDocumentStatus = resolveInsuranceRequirements({
       purpose: inquiry.purpose,
-      documentTypes: [
-        ...(Array.isArray(inquiry.documents) ? inquiry.documents.map((document) => document.documentType) : []),
-        ...(nextDocumentType ? [nextDocumentType] : []),
+      documents: [
+        ...(Array.isArray(inquiry.documents) ? inquiry.documents : []),
+        ...(nextDocumentType ? [{ documentType: nextDocumentType }] : []),
       ],
-    });
+      activities: inquiry.activities,
+    }).documentStatus;
 
     if (nextDocumentStatus === inquiry.documentStatus) {
       return;
@@ -621,26 +617,6 @@ export class InsuranceRepository extends BaseRepository {
         updatedAt: new Date(),
       })
       .where(eq(insuranceInquiries.id, inquiryId));
-  }
-
-  private computeDocumentReviewStatus({
-    purpose,
-    documentTypes = [],
-  }: {
-    purpose?: (typeof insuranceCasePurposeEnum.enumValues)[number] | null;
-    documentTypes?: Array<(typeof insuranceDocumentTypeEnum.enumValues)[number] | null | undefined>;
-  }) {
-    const requiredDocumentTypes =
-      purposeRequiredDocumentTypes[purpose ?? 'quotation'] ?? purposeRequiredDocumentTypes.quotation;
-    const uploadedDocumentTypes = new Set(
-      (Array.isArray(documentTypes) ? documentTypes : []).filter(
-        (documentType): documentType is (typeof insuranceDocumentTypeEnum.enumValues)[number] => Boolean(documentType),
-      ),
-    );
-
-    return requiredDocumentTypes.every((documentType) => uploadedDocumentTypes.has(documentType))
-      ? 'complete'
-      : 'incomplete';
   }
 
   private buildCustomerDisplayName(

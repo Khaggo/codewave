@@ -104,6 +104,26 @@ export class NotificationsService {
     return notifications.filter((notification) => notification.category !== 'auth_otp');
   }
 
+  async markNotificationRead(userId: string, notificationId: string, actor: NotificationActor) {
+    await this.assertCanAccessUserNotifications(userId, actor);
+    return this.notificationsRepository.markNotificationRead(userId, notificationId);
+  }
+
+  async markAllNotificationsRead(userId: string, actor: NotificationActor) {
+    await this.assertCanAccessUserNotifications(userId, actor);
+    return this.notificationsRepository.markAllNotificationsRead(userId);
+  }
+
+  async archiveNotification(userId: string, notificationId: string, actor: NotificationActor) {
+    await this.assertCanAccessUserNotifications(userId, actor);
+    return this.notificationsRepository.archiveNotification(userId, notificationId);
+  }
+
+  async archiveAllReadNotifications(userId: string, actor: NotificationActor) {
+    await this.assertCanAccessUserNotifications(userId, actor);
+    return this.notificationsRepository.archiveAllReadNotifications(userId);
+  }
+
   async enqueueNotification(payload: EnqueueNotificationInput) {
     const existingNotification = await this.notificationsRepository.findNotificationByDedupeKey(payload.dedupeKey);
     if (existingNotification) {
@@ -206,6 +226,9 @@ export class NotificationsService {
 
   async enqueueAuthOtpDelivery(payload: EnqueueAuthOtpDeliveryInput) {
     const user = await this.assertTargetUser(payload.userId, true);
+    if (!user.email) {
+      throw new ConflictException('Auth OTP delivery requires an email-backed identity');
+    }
     if (user.email.trim().toLowerCase() !== payload.email.trim().toLowerCase()) {
       throw new ConflictException('Auth OTP email target does not match the account email');
     }
@@ -367,6 +390,19 @@ export class NotificationsService {
 
     const user = await this.assertTargetUser(notification.userId, true);
 
+    if (!user.email) {
+      await this.notificationsRepository.createDeliveryAttempt({
+        notificationId,
+        attemptNumber,
+        status: 'skipped',
+        errorMessage: 'No email address is available for email notification delivery',
+      });
+
+      return this.notificationsRepository.updateNotificationStatus(notificationId, {
+        status: 'skipped',
+      });
+    }
+
     try {
       const result = await this.mailDeliveryService.sendMail({
         to: user.email,
@@ -454,6 +490,10 @@ export class NotificationsService {
 
     if (payload.channel === 'email' && !payload.preferences.emailEnabled) {
       return 'Email notifications are disabled for this user';
+    }
+
+    if (payload.channel === 'email' && !payload.user?.email) {
+      return 'No email address is available for email notification delivery';
     }
 
     const categoryEnabledMap: Record<NotificationCategory, boolean> = {

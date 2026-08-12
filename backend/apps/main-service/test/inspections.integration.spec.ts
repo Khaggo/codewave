@@ -54,6 +54,24 @@ describe('InspectionsController integration', () => {
     return { app, customer, adviser, customerLogin, adviserLogin, seedAuthUser };
   }
 
+  async function createWalkInDraft(
+    app: Awaited<ReturnType<typeof createMainServiceTestApp>>['app'],
+    vehicleId: string,
+    accessToken: string,
+  ) {
+    const response = await request(app.getHttpServer())
+      .post(`/api/vehicles/${vehicleId}/intake-inspections/drafts`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        intakeData: {
+          arrivalType: 'walk_in',
+          visitType: 'regular_service',
+        },
+      });
+    expect(response.status).toBe(201);
+    return response;
+  }
+
   afterEach(async () => {
     await rm(join(process.cwd(), '.runtime', 'uploads', 'inspection-evidence'), {
       recursive: true,
@@ -76,9 +94,14 @@ describe('InspectionsController integration', () => {
           year: 2023,
         });
       expect(vehicleResponse.status).toBe(201);
+      const draftResponse = await createWalkInDraft(
+        app,
+        vehicleResponse.body.id,
+        adviserLogin.body.accessToken,
+      );
 
       const uploadResponse = await request(app.getHttpServer())
-        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .post(`/api/intake-inspections/${draftResponse.body.id}/evidence`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .field('slot', 'front')
         .attach('file', JPEG_IMAGE_BYTES, {
@@ -87,11 +110,21 @@ describe('InspectionsController integration', () => {
         });
 
       expect(uploadResponse.status).toBe(200);
-      expect(uploadResponse.body).toEqual({
+      expect(uploadResponse.body).toEqual(expect.objectContaining({
+        id: expect.any(String),
         slot: 'front',
-        attachmentRef: expect.stringMatching(/^upload:\/\/vehicle\//),
-        storageKey: expect.any(String),
-      });
+        originalName: 'front.jpg',
+        mimeType: 'image/jpeg',
+        byteSize: JPEG_IMAGE_BYTES.length,
+        fileUrl: expect.stringMatching(/^\/api\/intake-inspections\//),
+      }));
+      expect(uploadResponse.body).not.toHaveProperty('storageKey');
+
+      const readResponse = await request(app.getHttpServer())
+        .get(uploadResponse.body.fileUrl)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
+      expect(readResponse.status).toBe(200);
+      expect(readResponse.headers['content-type']).toMatch(/^image\/jpeg/);
     } finally {
       await app.close();
     }
@@ -112,9 +145,14 @@ describe('InspectionsController integration', () => {
           year: 2024,
         });
       expect(vehicleResponse.status).toBe(201);
+      const draftResponse = await createWalkInDraft(
+        app,
+        vehicleResponse.body.id,
+        adviserLogin.body.accessToken,
+      );
 
       const uploadResponse = await request(app.getHttpServer())
-        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .post(`/api/intake-inspections/${draftResponse.body.id}/evidence`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .field('slot', 'front')
         .attach('file', AVIF_IMAGE_BYTES, {
@@ -123,11 +161,14 @@ describe('InspectionsController integration', () => {
         });
 
       expect(uploadResponse.status).toBe(200);
-      expect(uploadResponse.body).toEqual({
+      expect(uploadResponse.body).toEqual(expect.objectContaining({
+        id: expect.any(String),
         slot: 'front',
-        attachmentRef: expect.stringMatching(/^upload:\/\/vehicle\//),
-        storageKey: expect.stringMatching(/\.avif$/),
-      });
+        originalName: 'front',
+        mimeType: 'image/avif',
+        fileUrl: expect.any(String),
+      }));
+      expect(uploadResponse.body).not.toHaveProperty('storageKey');
     } finally {
       await app.close();
     }
@@ -148,9 +189,14 @@ describe('InspectionsController integration', () => {
           year: 2021,
         });
       expect(vehicleResponse.status).toBe(201);
+      const draftResponse = await createWalkInDraft(
+        app,
+        vehicleResponse.body.id,
+        adviserLogin.body.accessToken,
+      );
 
       const uploadResponse = await request(app.getHttpServer())
-        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .post(`/api/intake-inspections/${draftResponse.body.id}/evidence`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .field('slot', 'front')
         .attach('file', JPEG_IMAGE_BYTES, {
@@ -159,10 +205,9 @@ describe('InspectionsController integration', () => {
         });
 
       expect(uploadResponse.status).toBe(200);
-      expect(uploadResponse.body.attachmentRef).toMatch(/^upload:\/\/vehicle\/.+\.(jpg|jpeg)$/);
-      expect(uploadResponse.body.storageKey).toMatch(/\.(jpg|jpeg)$/);
-      expect(uploadResponse.body.attachmentRef).not.toMatch(/\.exe$/);
-      expect(uploadResponse.body.storageKey).not.toMatch(/\.exe$/);
+      expect(uploadResponse.body.originalName).toBe('front.exe');
+      expect(uploadResponse.body.mimeType).toBe('image/jpeg');
+      expect(uploadResponse.body).not.toHaveProperty('storageKey');
     } finally {
       await app.close();
     }
@@ -183,9 +228,14 @@ describe('InspectionsController integration', () => {
           year: 2020,
         });
       expect(vehicleResponse.status).toBe(201);
+      const draftResponse = await createWalkInDraft(
+        app,
+        vehicleResponse.body.id,
+        adviserLogin.body.accessToken,
+      );
 
       const uploadResponse = await request(app.getHttpServer())
-        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .post(`/api/intake-inspections/${draftResponse.body.id}/evidence`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .field('slot', 'front')
         .attach('file', Buffer.from('definitely-not-an-image'), {
@@ -214,9 +264,14 @@ describe('InspectionsController integration', () => {
           year: 2018,
         });
       expect(vehicleResponse.status).toBe(201);
+      const draftResponse = await createWalkInDraft(
+        app,
+        vehicleResponse.body.id,
+        adviserLogin.body.accessToken,
+      );
 
       const uploadResponse = await request(app.getHttpServer())
-        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .post(`/api/intake-inspections/${draftResponse.body.id}/evidence`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .field('slot', 'front')
         .attach('file', SVG_IMAGE_BYTES, {
@@ -245,12 +300,17 @@ describe('InspectionsController integration', () => {
           year: 2019,
         });
       expect(vehicleResponse.status).toBe(201);
+      const draftResponse = await createWalkInDraft(
+        app,
+        vehicleResponse.body.id,
+        adviserLogin.body.accessToken,
+      );
 
       const oversizedImageBuffer = Buffer.alloc(MAX_INSPECTION_UPLOAD_BYTES + 1, 0);
       JPEG_IMAGE_BYTES.copy(oversizedImageBuffer);
 
       const uploadResponse = await request(app.getHttpServer())
-        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .post(`/api/intake-inspections/${draftResponse.body.id}/evidence`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .field('slot', 'front')
         .attach('file', oversizedImageBuffer, {
@@ -279,9 +339,14 @@ describe('InspectionsController integration', () => {
           year: 2022,
         });
       expect(vehicleResponse.status).toBe(201);
+      const draftResponse = await createWalkInDraft(
+        app,
+        vehicleResponse.body.id,
+        adviserLogin.body.accessToken,
+      );
 
       const missingVehicleUploadResponse = await request(app.getHttpServer())
-        .post('/api/vehicles/missing-vehicle-id/inspections/photos/upload')
+        .post('/api/intake-inspections/missing-inspection-id/evidence')
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .field('slot', 'front')
         .attach('file', JPEG_IMAGE_BYTES, {
@@ -291,7 +356,7 @@ describe('InspectionsController integration', () => {
       expect(missingVehicleUploadResponse.status).toBe(404);
 
       const nonImageUploadResponse = await request(app.getHttpServer())
-        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .post(`/api/intake-inspections/${draftResponse.body.id}/evidence`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .field('slot', 'front')
         .attach('file', Buffer.from('not-an-image'), {
@@ -301,7 +366,7 @@ describe('InspectionsController integration', () => {
       expect(nonImageUploadResponse.status).toBe(400);
 
       const missingFileUploadResponse = await request(app.getHttpServer())
-        .post(`/api/vehicles/${vehicleResponse.body.id}/inspections/photos/upload`)
+        .post(`/api/intake-inspections/${draftResponse.body.id}/evidence`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
         .field('slot', 'front');
       expect(missingFileUploadResponse.status).toBe(400);
@@ -357,8 +422,34 @@ describe('InspectionsController integration', () => {
           bookingId: bookingResponse.body.id,
           inspectionType: 'intake',
           status: 'completed',
-          inspectorUserId: adviser.id,
+          inspectorUserId: 'spoofed-user-id',
           notes: 'Vehicle received in stable condition.',
+          intakeDataVersion: 1,
+          intakeData: {
+            arrivalType: 'with_booking',
+            visitType: 'regular_service',
+            reasonForVisit: 'Preventive maintenance',
+            reasonForVisits: ['Preventive maintenance'],
+            requestedServiceSummary: 'Oil change and inspection',
+            requestedServiceIds: [servicesResponse.body[0].id],
+            requestedServiceNames: [servicesResponse.body[0].name],
+            serviceConcern: 'Routine service',
+            currentOdometerKm: 24000,
+            customerAcknowledged: true,
+            requirementsChecklist: {
+              customerContactConfirmed: true,
+              authorizationAcknowledged: true,
+              keysHandoffConfirmed: true,
+            },
+            arrivalInspectionItems: [
+              'batteryCondition',
+              'engineOilLevel',
+              'coolantLevel',
+              'tirePressure',
+              'allLightsFunctional',
+              'brakePedalFeel',
+            ].map((key) => ({ key, status: 'ok' })),
+          },
           findings: [
             {
               category: 'body',
@@ -377,8 +468,13 @@ describe('InspectionsController integration', () => {
           bookingId: bookingResponse.body.id,
           inspectionType: 'intake',
           status: 'completed',
+          inspectorUserId: adviser.id,
+          intakeDataVersion: 1,
+          version: 1,
         }),
       );
+      expect(createInspectionResponse.body.inspectorUserId).toBe(adviser.id);
+      expect(createInspectionResponse.body.inspectionReference).toMatch(/^INSP-/);
       expect(createInspectionResponse.body.findings).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -392,13 +488,122 @@ describe('InspectionsController integration', () => {
         .get(`/api/vehicles/${vehicleResponse.body.id}/inspections`)
         .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
       expect(listInspectionsResponse.status).toBe(200);
-      expect(listInspectionsResponse.body).toEqual(
+      expect(listInspectionsResponse.body.items).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             id: createInspectionResponse.body.id,
             inspectionType: 'intake',
           }),
         ]),
+      );
+
+      const historyResponse = await request(app.getHttpServer())
+        .get(`/api/vehicles/${vehicleResponse.body.id}/inspection-history`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`);
+      expect(historyResponse.status).toBe(200);
+      expect(historyResponse.body).toEqual(
+        expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({ id: createInspectionResponse.body.id }),
+          ]),
+          page: expect.objectContaining({ limit: 20, nextCursor: null }),
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('resumes, version-checks, and completes a structured intake draft', async () => {
+    const { app, customer, customerLogin, adviser, adviserLogin } =
+      await createAuthenticatedVehicleContext();
+
+    try {
+      const vehicleResponse = await request(app.getHttpServer())
+        .post('/api/vehicles')
+        .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
+        .send({
+          userId: customer.id,
+          plateNumber: 'DRAFT123',
+          make: 'Toyota',
+          model: 'Raize',
+          year: 2024,
+        });
+      expect(vehicleResponse.status).toBe(201);
+
+      const draftResponse = await createWalkInDraft(
+        app,
+        vehicleResponse.body.id,
+        adviserLogin.body.accessToken,
+      );
+      expect(draftResponse.body).toEqual(
+        expect.objectContaining({
+          status: 'pending',
+          version: 1,
+          inspectorUserId: adviser.id,
+          intakeDataVersion: 1,
+        }),
+      );
+
+      const updatedResponse = await request(app.getHttpServer())
+        .patch(`/api/intake-inspections/${draftResponse.body.id}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .set('If-Match', '"1"')
+        .send({
+          notes: 'Ready for customer confirmation.',
+          intakeData: {
+            arrivalType: 'walk_in',
+            visitType: 'regular_service',
+            reasonForVisit: 'Preventive maintenance',
+            reasonForVisits: ['Preventive maintenance'],
+            requestedServiceSummary: 'Oil change',
+            requestedServiceIds: ['service-1'],
+            requestedServiceNames: ['Oil change'],
+            serviceConcern: 'Routine service',
+            currentOdometerKm: 18000,
+            customerAcknowledged: true,
+            requirementsChecklist: {
+              customerContactConfirmed: true,
+              authorizationAcknowledged: true,
+              keysHandoffConfirmed: true,
+            },
+            arrivalInspectionItems: [
+              'batteryCondition',
+              'engineOilLevel',
+              'coolantLevel',
+              'tirePressure',
+              'allLightsFunctional',
+              'brakePedalFeel',
+            ].map((key) => ({ key, status: 'ok' })),
+          },
+        });
+      expect(updatedResponse.status).toBe(200);
+      expect(updatedResponse.body.version).toBe(2);
+
+      const staleResponse = await request(app.getHttpServer())
+        .patch(`/api/intake-inspections/${draftResponse.body.id}`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .set('If-Match', '"1"')
+        .send({
+          intakeData: {
+            arrivalType: 'walk_in',
+            visitType: 'regular_service',
+          },
+        });
+      expect(staleResponse.status).toBe(412);
+
+      const completeResponse = await request(app.getHttpServer())
+        .post(`/api/intake-inspections/${draftResponse.body.id}/complete`)
+        .set('Authorization', `Bearer ${adviserLogin.body.accessToken}`)
+        .set('If-Match', '"2"');
+      expect(completeResponse.status).toBe(200);
+      expect(completeResponse.body).toEqual(
+        expect.objectContaining({
+          status: 'completed',
+          version: 3,
+          inspectorUserId: adviser.id,
+          completedAt: expect.any(String),
+        }),
       );
     } finally {
       await app.close();

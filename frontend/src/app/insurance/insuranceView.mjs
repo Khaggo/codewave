@@ -33,7 +33,7 @@ const pluralize = (count, singular, plural = `${singular}s`) => `${count} ${coun
 
 const isTerminalInquiry = (inquiry) => TERMINAL_INQUIRY_STATUSES.includes(inquiry?.status)
 
-const INSURANCE_DOCUMENT_LABELS = Object.freeze({
+export const INSURANCE_DOCUMENT_LABELS = Object.freeze({
   or_cr: 'OR/CR',
   policy: 'Policy copy',
   valid_id: 'Valid ID',
@@ -44,39 +44,8 @@ const INSURANCE_DOCUMENT_LABELS = Object.freeze({
   other: 'Other document',
 })
 
-const PURPOSE_REQUIRED_DOCUMENTS = Object.freeze({
-  renewal: [
-    { type: 'or_cr', label: 'OR/CR' },
-    { type: 'policy', label: 'Old policy' },
-  ],
-  new_application: [{ type: 'or_cr', label: 'OR/CR' }],
-  claim: [{ type: 'or_cr', label: 'OR/CR' }],
-  quotation: [{ type: 'or_cr', label: 'OR/CR' }],
-})
-
-const PURPOSE_SUPPORTING_DOCUMENTS = Object.freeze({
-  renewal: [
-    { type: 'estimate', label: 'Renewal quote notes' },
-    { type: 'other', label: 'Other document' },
-  ],
-  new_application: [
-    { type: 'policy', label: 'Old policy (if available)' },
-    { type: 'estimate', label: 'Quotation or estimate' },
-    { type: 'other', label: 'Other document' },
-  ],
-  claim: [
-    { type: 'policy', label: 'Policy copy' },
-    { type: 'photo', label: 'Damage photo' },
-    { type: 'estimate', label: 'Repair estimate' },
-    { type: 'police_report', label: 'Police report (if requested)' },
-    { type: 'other', label: 'Other claim document' },
-  ],
-  quotation: [
-    { type: 'policy', label: 'Policy copy (if available)' },
-    { type: 'estimate', label: 'Existing estimate' },
-    { type: 'other', label: 'Other document' },
-  ],
-})
+export const getInsuranceDocumentTypeOptions = () =>
+  Object.entries(INSURANCE_DOCUMENT_LABELS).map(([value, label]) => ({ value, label }))
 
 export const shouldIncludeInsuranceInquiryInLiveQueue = ({
   inquiry = null,
@@ -172,18 +141,22 @@ export function getInsuranceReviewStepNote(inquiry) {
 }
 
 export function buildInsuranceDocumentReviewState(inquiry = null) {
-  const purpose = inquiry?.purpose ?? 'quotation'
   const documents = Array.isArray(inquiry?.documents) ? inquiry.documents : []
-  const uploadedTypes = new Set(documents.map((document) => document?.documentType).filter(Boolean))
-  const requiredItems = (PURPOSE_REQUIRED_DOCUMENTS[purpose] ?? PURPOSE_REQUIRED_DOCUMENTS.quotation).map((item) => ({
-    ...item,
-    complete: uploadedTypes.has(item.type),
-  }))
-  const supportingItems = (PURPOSE_SUPPORTING_DOCUMENTS[purpose] ?? []).map((item) => ({
-    ...item,
-    complete: uploadedTypes.has(item.type),
-  }))
+  const requirements = Array.isArray(inquiry?.documentRequirements) ? inquiry.documentRequirements : []
+  const toReviewItem = (requirement) => ({
+    type: requirement.documentType,
+    label: INSURANCE_DOCUMENT_LABELS[requirement.documentType] ?? formatStatusLabel(requirement.documentType),
+    minimumCount: Number(requirement.minimumCount ?? 0),
+    uploadedCount: Number(requirement.uploadedCount ?? 0),
+    outstandingCount: Number(requirement.outstandingCount ?? 0),
+    requested: Boolean(requirement.requested),
+    conditional: Boolean(requirement.conditional),
+    complete: Boolean(requirement.satisfied),
+  })
+  const requiredItems = requirements.filter((item) => item?.required).map(toReviewItem)
+  const supportingItems = requirements.filter((item) => !item?.required).map(toReviewItem)
   const missingRequiredItems = requiredItems.filter((item) => !item.complete)
+  const requirementsAvailable = requirements.length > 0
   const uncategorizedDocuments = documents.filter((document) => {
     const type = document?.documentType
     return !Object.prototype.hasOwnProperty.call(INSURANCE_DOCUMENT_LABELS, type ?? '')
@@ -195,9 +168,51 @@ export function buildInsuranceDocumentReviewState(inquiry = null) {
     missingRequiredItems,
     requiredReadyCount: requiredItems.filter((item) => item.complete).length,
     requiredTotalCount: requiredItems.length,
-    allRequiredReady: requiredItems.every((item) => item.complete),
+    requirementsAvailable,
+    allRequiredReady: requirementsAvailable && requiredItems.length > 0 && requiredItems.every((item) => item.complete),
+    displayStatus: !requirementsAvailable
+      ? 'requirements_unavailable'
+      : missingRequiredItems.length
+        ? 'incomplete'
+        : 'complete',
     uploadedCount: documents.length,
     uncategorizedDocuments,
+  }
+}
+
+export function getInsuranceDocumentActionState(document, state = 'idle') {
+  const visible = Boolean(document?.downloadRoute)
+
+  return {
+    visible,
+    disabled: !visible || state === 'loading',
+    label: state === 'loading' ? 'Opening document…' : state === 'failed' ? 'Retry open' : 'Open document',
+  }
+}
+
+export async function openAuthorizedInsuranceDocument({
+  document,
+  fetchDocument,
+  openWindow,
+  createObjectUrl,
+  revokeObjectUrl,
+  scheduleRevoke,
+}) {
+  if (!document?.downloadRoute) return { status: 'unavailable', message: 'Authorized document route is unavailable.' }
+
+  const previewWindow = openWindow()
+  if (!previewWindow) return { status: 'failed', message: 'Your browser blocked the document window. Allow pop-ups and retry.' }
+  previewWindow.opener = null
+
+  try {
+    const { blob } = await fetchDocument(document.downloadRoute)
+    const blobUrl = createObjectUrl(blob)
+    previewWindow.location.replace(blobUrl)
+    scheduleRevoke(() => revokeObjectUrl(blobUrl), 60_000)
+    return { status: 'opened' }
+  } catch (error) {
+    previewWindow.close()
+    return { status: 'failed', message: error?.message || 'Document could not be opened securely.' }
   }
 }
 

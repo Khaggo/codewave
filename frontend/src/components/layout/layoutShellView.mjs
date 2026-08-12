@@ -78,7 +78,8 @@ const SIDEBAR_EXPANDED_WIDTH = 256
 const SIDEBAR_COLLAPSED_WIDTH = 72
 
 export function getShellRouteMeta(pathname) {
-  return ROUTE_META[pathname] ?? DEFAULT_ROUTE_META
+  return ROUTE_META[pathname]
+    ?? (pathname.startsWith('/admin/job-orders/') ? ROUTE_META['/admin/job-orders'] : DEFAULT_ROUTE_META)
 }
 
 export function getSidebarWidth(collapsed) {

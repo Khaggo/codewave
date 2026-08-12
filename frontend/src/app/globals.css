@@ -343,6 +343,12 @@
     background-color: rgb(var(--surface-input));
   }
 
+  /* Shared class used by the accessory workspaces and compact admin forms. */
+  .input-field {
+    @apply w-full min-h-11 rounded-lg border border-surface-border px-3.5 py-2.5 text-sm text-ink-primary outline-none transition-colors duration-150;
+    background-color: rgb(var(--surface-input));
+  }
+
   .input::placeholder,
   .textarea::placeholder {
     color: rgb(var(--ink-muted));
@@ -353,6 +359,23 @@
   .textarea:focus {
     border-color: rgb(var(--brand-orange) / 0.56);
     box-shadow: 0 0 0 3px rgb(var(--brand-orange) / 0.12);
+  }
+
+  .input-field:focus {
+    border-color: rgb(var(--brand-orange) / 0.56);
+    box-shadow: 0 0 0 3px rgb(var(--brand-orange) / 0.12);
+  }
+
+  .input-field::placeholder {
+    color: rgb(var(--ink-muted));
+  }
+
+  .input-field:disabled {
+    @apply cursor-not-allowed opacity-60;
+  }
+
+  select.input-field {
+    color-scheme: inherit;
   }
 
   .label {

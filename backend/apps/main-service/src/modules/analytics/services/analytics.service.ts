@@ -40,6 +40,7 @@ type AnalyticsRefreshResult = {
 };
 
 const ANALYTICS_STALE_WINDOW_MS = 15 * 60 * 1000;
+const DISPLAY_REFERENCE_UNAVAILABLE = 'Reference unavailable';
 
 const SNAPSHOT_TYPES = [...analyticsSnapshotTypeEnum.enumValues];
 
@@ -354,6 +355,7 @@ export class AnalyticsService {
       {
         serviceAdviserUserId: string;
         serviceAdviserCode: string;
+        displayReference: string;
         jobOrderCount: number;
         finalizedCount: number;
       }
@@ -364,6 +366,7 @@ export class AnalyticsService {
       const existingEntry = serviceAdviserLoadMap.get(key) ?? {
         serviceAdviserUserId: jobOrder.serviceAdviserUserId,
         serviceAdviserCode: jobOrder.serviceAdviserCode,
+        displayReference: jobOrder.serviceAdviserCode || DISPLAY_REFERENCE_UNAVAILABLE,
         jobOrderCount: 0,
         finalizedCount: 0,
       };
@@ -391,17 +394,30 @@ export class AnalyticsService {
 
   private buildBackJobsPayload(sourceState: AnalyticsSourceState, refreshJobId: string) {
     const closedStatuses = new Set(['resolved', 'closed', 'rejected']);
+    const jobOrderReferences = new Map(
+      sourceState.jobOrders.map((jobOrder) => [jobOrder.id, jobOrder.jobOrderReference]),
+    );
     const repeatSourcesMap = new Map<
       string,
-      { originalJobOrderId: string; backJobCount: number; unresolvedCount: number; sourceBackJobIds: string[] }
+      {
+        originalJobOrderId: string;
+        originalJobOrderReference: string;
+        backJobCount: number;
+        unresolvedCount: number;
+        sourceBackJobIds: string[];
+        sourceBackJobReferences: string[];
+      }
     >();
 
     for (const backJob of sourceState.backJobs) {
       const existingEntry = repeatSourcesMap.get(backJob.originalJobOrderId) ?? {
         originalJobOrderId: backJob.originalJobOrderId,
+        originalJobOrderReference:
+          jobOrderReferences.get(backJob.originalJobOrderId) ?? DISPLAY_REFERENCE_UNAVAILABLE,
         backJobCount: 0,
         unresolvedCount: 0,
         sourceBackJobIds: [],
+        sourceBackJobReferences: [],
       };
 
       existingEntry.backJobCount += 1;
@@ -409,6 +425,9 @@ export class AnalyticsService {
         existingEntry.unresolvedCount += 1;
       }
       existingEntry.sourceBackJobIds.push(backJob.id);
+      existingEntry.sourceBackJobReferences.push(
+        backJob.backJobReference || DISPLAY_REFERENCE_UNAVAILABLE,
+      );
       repeatSourcesMap.set(backJob.originalJobOrderId, existingEntry);
     }
 
@@ -454,6 +473,7 @@ export class AnalyticsService {
       {
         rewardId: string;
         rewardName: string;
+        displayReference: string;
         rewardStatus: string;
         redemptionCount: number;
         sourceRedemptionIds: string[];
@@ -477,6 +497,8 @@ export class AnalyticsService {
       const existingEntry = rewardUsageMap.get(redemption.rewardId) ?? {
         rewardId: redemption.rewardId,
         rewardName: reward?.name ?? redemption.rewardNameSnapshot,
+        displayReference:
+          reward?.name ?? redemption.rewardNameSnapshot ?? DISPLAY_REFERENCE_UNAVAILABLE,
         rewardStatus: reward?.status ?? 'inactive',
         redemptionCount: 0,
         sourceRedemptionIds: [],
@@ -515,6 +537,14 @@ export class AnalyticsService {
 
   private buildInvoiceAgingPayload(sourceState: AnalyticsSourceState, refreshJobId: string) {
     const now = new Date();
+    const invoiceReferences = new Map(
+      sourceState.jobOrders
+        .filter((jobOrder) => jobOrder.invoiceRecord)
+        .map((jobOrder) => [
+          jobOrder.invoiceRecord!.id,
+          jobOrder.invoiceRecord!.invoiceReference,
+        ]),
+    );
     const bucketCounts = new Map<string, number>([
       ['due_today_or_future', 0],
       ['overdue_1_7', 0],
@@ -525,6 +555,8 @@ export class AnalyticsService {
       string,
       {
         invoiceId: string;
+        invoiceReference: string;
+        displayReference: string;
         latestReminderStatus: string;
         latestScheduledFor: string;
         reminderRuleIds: string[];
@@ -539,6 +571,10 @@ export class AnalyticsService {
       if (!existingEntry || existingEntry.latestScheduledFor < reminderRule.scheduledFor.toISOString()) {
         trackedInvoicesMap.set(reminderRule.sourceId, {
           invoiceId: reminderRule.sourceId,
+          invoiceReference:
+            invoiceReferences.get(reminderRule.sourceId) ?? DISPLAY_REFERENCE_UNAVAILABLE,
+          displayReference:
+            invoiceReferences.get(reminderRule.sourceId) ?? DISPLAY_REFERENCE_UNAVAILABLE,
           latestReminderStatus: reminderRule.status,
           latestScheduledFor: reminderRule.scheduledFor.toISOString(),
           reminderRuleIds: existingEntry
@@ -577,6 +613,9 @@ export class AnalyticsService {
   }
 
   private buildAuditTrailPayload(sourceState: AnalyticsSourceState, refreshJobId: string) {
+    const jobOrderReferences = new Map(
+      sourceState.jobOrders.map((jobOrder) => [jobOrder.id, jobOrder.jobOrderReference]),
+    );
     const entries = [
       ...sourceState.staffAdminAuditLogs.map((auditLog) => ({
         auditType: 'staff_admin_action' as const,
@@ -591,9 +630,14 @@ export class AnalyticsService {
             : `Super admin ${auditLog.nextIsActive ? 'activated' : 'deactivated'} staff account ${auditLog.targetStaffCode ?? auditLog.targetEmail}.`,
         sourceDomain: 'main-service.auth',
         sourceId: auditLog.id,
+        sourceReference:
+          auditLog.targetStaffCode ?? auditLog.targetEmail ?? DISPLAY_REFERENCE_UNAVAILABLE,
         targetEntityType: 'user',
         targetEntityId: auditLog.targetUserId ?? auditLog.id,
+        targetReference:
+          auditLog.targetStaffCode ?? auditLog.targetEmail ?? DISPLAY_REFERENCE_UNAVAILABLE,
         relatedEntityIds: auditLog.targetUserId ? [auditLog.targetUserId] : [],
+        relatedReferences: [],
       })),
       ...sourceState.qualityGateOverrides.map((override) => ({
         auditType: 'quality_gate_override' as const,
@@ -602,12 +646,21 @@ export class AnalyticsService {
         actorUserId: override.actorUserId,
         actorRole: override.actorRole,
         reason: override.reason,
-        summary: `Super admin overrode blocked QA for job order ${override.qualityGate.jobOrderId}.`,
+        summary: `Super admin overrode blocked QA for job order ${
+          jobOrderReferences.get(override.qualityGate.jobOrderId) ?? DISPLAY_REFERENCE_UNAVAILABLE
+        }.`,
         sourceDomain: 'main-service.quality-gates',
         sourceId: override.id,
+        sourceReference:
+          jobOrderReferences.get(override.qualityGate.jobOrderId) ?? DISPLAY_REFERENCE_UNAVAILABLE,
         targetEntityType: 'quality_gate',
         targetEntityId: override.qualityGateId,
+        targetReference:
+          jobOrderReferences.get(override.qualityGate.jobOrderId) ?? DISPLAY_REFERENCE_UNAVAILABLE,
         relatedEntityIds: [override.qualityGate.jobOrderId],
+        relatedReferences: [
+          jobOrderReferences.get(override.qualityGate.jobOrderId) ?? DISPLAY_REFERENCE_UNAVAILABLE,
+        ],
       })),
       ...sourceState.jobOrders
         .filter((jobOrder) => jobOrder.invoiceRecord)
@@ -618,12 +671,17 @@ export class AnalyticsService {
           actorUserId: jobOrder.invoiceRecord!.finalizedByUserId,
           actorRole: null,
           reason: jobOrder.invoiceRecord!.summary ?? null,
-          summary: `Service release was finalized for job order ${jobOrder.id} as invoice ${jobOrder.invoiceRecord!.invoiceReference}.`,
+          summary: `Service release was finalized for job order ${
+            jobOrder.jobOrderReference || DISPLAY_REFERENCE_UNAVAILABLE
+          } as invoice ${jobOrder.invoiceRecord!.invoiceReference}.`,
           sourceDomain: 'main-service.job-orders',
           sourceId: jobOrder.invoiceRecord!.id,
+          sourceReference: jobOrder.invoiceRecord!.invoiceReference,
           targetEntityType: 'job_order',
           targetEntityId: jobOrder.id,
+          targetReference: jobOrder.jobOrderReference || DISPLAY_REFERENCE_UNAVAILABLE,
           relatedEntityIds: [jobOrder.invoiceRecord!.id],
+          relatedReferences: [jobOrder.invoiceRecord!.invoiceReference],
         })),
     ]
       .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
@@ -647,6 +705,7 @@ export class AnalyticsService {
       {
         serviceId: string;
         serviceName: string;
+        displayReference: string;
         bookingCount: number;
         lastBookedAt: string;
         sourceBookingIds: string[];
@@ -658,6 +717,7 @@ export class AnalyticsService {
         const existingEntry = serviceDemandMap.get(requestedService.serviceId) ?? {
           serviceId: requestedService.serviceId,
           serviceName: requestedService.service.name,
+          displayReference: requestedService.service.name || DISPLAY_REFERENCE_UNAVAILABLE,
           bookingCount: 0,
           lastBookedAt: booking.createdAt.toISOString(),
           sourceBookingIds: [],
@@ -712,6 +772,7 @@ export class AnalyticsService {
       .map((slotUsage) => ({
         timeSlotId: slotUsage.timeSlotId,
         label: slotUsage.label,
+        displayReference: slotUsage.label || DISPLAY_REFERENCE_UNAVAILABLE,
         startTime: slotUsage.startTime,
         endTime: slotUsage.endTime,
         bookingCount: slotUsage.bookingCount,

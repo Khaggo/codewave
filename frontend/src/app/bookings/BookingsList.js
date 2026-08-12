@@ -46,6 +46,7 @@ import {
   formatPesoFromCents,
   formatTimeSlotWindow,
   getReservationPaymentStatusLabel,
+  isBookingEligibleForIntake,
 } from './bookingOperationsFormat.mjs'
 
 const STAFF_BOOKING_ROLES = new Set(['service_adviser', 'super_admin'])
@@ -994,7 +995,7 @@ function AttentionQueue({
         {bookings.map((booking) => {
           const statusActions = getBookingStatusActions(booking.status)
           const isBusy = busyBookingId === booking.id
-          const isReadyForIntake = ['confirmed', 'rescheduled'].includes(booking.status)
+          const isReadyForIntake = isBookingEligibleForIntake(booking)
           const shouldOpenJobOrder = Boolean(booking.jobOrderId) || booking.status === 'in_service'
           const primaryStatusAction =
             !isReadyForIntake && !shouldOpenJobOrder ? statusActions[0] ?? null : null
@@ -1052,7 +1053,7 @@ function AttentionQueue({
                       onClick={() => onOpenIntake(booking)}
                     >
                       <CheckCircle2 size={13} />
-                      Start Intake
+                      {booking.status === 'in_service' ? 'Resume Intake' : 'Start Intake'}
                     </button>
                   ) : shouldOpenJobOrder ? (
                     <button
@@ -2266,7 +2267,7 @@ export default function BookingsList() {
               <ChevronLeft size={18} />
             </button>
             <label className="block min-w-0 sm:min-w-[230px]">
-              <span className="sr-only">Schedule date</span>
+              <span className="label">Schedule date</span>
               <input
                 type="date"
                 value={selectedDate}

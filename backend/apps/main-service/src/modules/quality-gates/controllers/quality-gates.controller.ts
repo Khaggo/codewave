@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import {
   ApiBearerAuth,
@@ -51,6 +51,33 @@ export class QualityGatesController {
     return this.qualityGatesService.getByJobOrderId(
       jobOrderId,
       request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post('pre-check-summary')
+  @UseGuards(JwtAuthGuard, RolesGuard, StaffWorkClaimGuard)
+  @RequiresWorkClaim({
+    queueType: 'qa',
+    entityType: 'job_order',
+    entityIdKey: 'jobOrderId',
+  })
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Queue an advisory AI summary of the QA pre-check evidence.' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'jobOrderId', description: 'Job-order identifier.' })
+  @ApiOkResponse({ description: 'The queued or existing QA pre-check summary.', type: JobOrderQualityGateResponseDto })
+  @ApiForbiddenResponse({ description: 'The adviser must hold the QA claim for this job order.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  @ApiConflictResponse({ description: 'The job order is not eligible for QA summary generation.' })
+  requestPreCheckSummary(
+    @Param('jobOrderId') jobOrderId: string,
+    @Query('regenerate') regenerate: string | undefined,
+    @Req() request: Request,
+  ) {
+    return this.qualityGatesService.requestPreCheckSummary(
+      jobOrderId,
+      request.user as { userId: string; role: string },
+      regenerate === 'true',
     );
   }
 

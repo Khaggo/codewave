@@ -10,22 +10,21 @@ import Login from '@/screens/Login'
 import { UserProvider } from '@/lib/userContext'
 import {
   clearStoredSession,
-  fetchAuthenticatedUser,
-  hydrateStoredSessionFromAuthenticatedUser,
   loadStoredSession,
   STAFF_SESSION_UNAUTHORIZED_EVENT,
   refreshAuthSession,
   saveStoredSession,
   updateStaffPortalProfile,
 } from '@/lib/authClient'
+import { requireAuthoritativeStaffPhone } from '@/lib/staffProfileSession.mjs'
 import {
   getStaffPortalAccessState,
   isActiveStaffPortalState,
   staffPortalStateMessages,
 } from '@/lib/api/generated/auth/staff-web-session'
 import { getStaffPortalRouteGuardDecision } from '@/lib/api/generated/auth/client-surface-guardrails'
-import { isPublicPaymentReturnRoute } from './publicPaymentRouteAccess.mjs'
 import { getSidebarWidth } from './layoutShellView.mjs'
+import { isPublicPaymentReturnRoute } from './publicPaymentRouteAccess.mjs'
 import {
   heartbeatStaffWorkClaim,
   listStaffWorkQueue,
@@ -225,35 +224,10 @@ export default function AppShell({ children }) {
       }
 
       try {
-        const authenticatedUser = await fetchAuthenticatedUser(savedSession.accessToken)
-        if (isMounted) {
-          const restoredSession = hydrateStoredSessionFromAuthenticatedUser(
-            savedSession,
-            authenticatedUser,
-          )
-          const accessState = getStaffPortalAccessState(restoredSession?.user)
-          if (isActiveStaffPortalState(accessState)) {
-            saveStoredSession(restoredSession)
-            setSession(restoredSession)
-            setAuthError('')
-          } else {
-            applyBlockedAccess(accessState)
-          }
-        }
+        const restoredSession = await refreshPortalSession(savedSession)
+        if (isMounted && !restoredSession) setSession(null)
       } catch {
-        try {
-          const refreshedSession = await refreshPortalSession(savedSession)
-
-          if (isMounted) {
-            if (!refreshedSession) {
-              setSession(null)
-            }
-          }
-        } catch {
-          if (isMounted) {
-            setSession(null)
-          }
-        }
+        if (isMounted) setSession(null)
       } finally {
         if (isMounted) {
           setAuthReady(true)
@@ -363,6 +337,19 @@ export default function AppShell({ children }) {
   async function handleUserProfileUpdate(profileUpdates) {
     if (!session?.user?.id || !session?.accessToken) {
       throw new Error('Sign in again before saving profile changes.')
+    }
+
+    if (profileUpdates?.confirmedPhone) {
+      const confirmedPhone = requireAuthoritativeStaffPhone(
+        profileUpdates.confirmedUser,
+        profileUpdates.confirmedPhone,
+      )
+      const refreshedSession = await refreshPortalSession(session)
+      if (!refreshedSession?.user) {
+        throw new Error('The updated profile could not be reloaded from the server.')
+      }
+      requireAuthoritativeStaffPhone(refreshedSession.user, confirmedPhone)
+      return refreshedSession.user
     }
 
     if (profileUpdates?.profileSnapshot) {

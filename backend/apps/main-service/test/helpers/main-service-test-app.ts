@@ -78,6 +78,7 @@ import {
 import { InsuranceService } from '../../src/modules/insurance/services/insurance.service';
 import { InspectionsController } from '../../src/modules/inspections/controllers/inspections.controller';
 import { CreateInspectionDto } from '../../src/modules/inspections/dto/create-inspection.dto';
+import { SaveIntakeInspectionDraftDto } from '../../src/modules/inspections/dto/intake-inspection.dto';
 import { InspectionsRepository } from '../../src/modules/inspections/repositories/inspections.repository';
 import {
   inspectionFindingSeverityEnum,
@@ -239,6 +240,7 @@ type AuthAccountRecord = {
   userId: string;
   passwordHash: string;
   isActive: boolean;
+  mustChangePassword: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -388,6 +390,7 @@ type InspectionFindingSeverity = (typeof inspectionFindingSeverityEnum.enumValue
 
 type InspectionRecord = {
   id: string;
+  inspectionReference: string;
   vehicleId: string;
   bookingId: string | null;
   inspectionType: InspectionType;
@@ -395,8 +398,24 @@ type InspectionRecord = {
   inspectorUserId: string | null;
   notes: string | null;
   attachmentRefs: string[];
+  intakeDataVersion: number | null;
+  intakeData: Record<string, unknown> | null;
+  version: number;
+  completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type InspectionEvidenceRecord = {
+  id: string;
+  inspectionId: string;
+  slot: string;
+  originalName: string;
+  mimeType: string;
+  byteSize: number;
+  storageKey: string;
+  createdByUserId: string;
+  createdAt: Date;
 };
 
 type InspectionFindingRecord = {
@@ -1014,14 +1033,19 @@ class InMemoryUsersRepository {
       .filter(Boolean);
   }
 
-  async listCustomersWithVehicles() {
-    return Array.from(this.users.values())
+  async listCustomersWithVehicles(query: { search?: string; limit?: number; customerId?: string } = {}) {
+    const search = String(query.search ?? '').toLowerCase();
+    const items = Array.from(this.users.values())
       .filter((user) => user.role === 'customer' && !user.deletedAt)
+      .filter((user) => !query.customerId || user.id === query.customerId)
+      .filter((user) => !search || [user.email, user.profile?.firstName, user.profile?.lastName].some((value) => String(value ?? '').toLowerCase().includes(search)))
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .slice(0, query.limit ?? 25)
       .map((user) => ({
         ...cloneUser(user),
         vehicles: [],
       }));
+    return { items, nextCursor: null };
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
@@ -1145,13 +1169,14 @@ class InMemoryAuthRepository {
 
   constructor(private readonly usersRepository: InMemoryUsersRepository) {}
 
-  async createAccount(userId: string, passwordHash: string) {
+  async createAccount(userId: string, passwordHash: string, mustChangePassword = false) {
     const now = new Date();
     const account: AuthAccountRecord = {
       id: randomUUID(),
       userId,
       passwordHash,
       isActive: true,
+      mustChangePassword,
       createdAt: now,
       updatedAt: now,
     };
@@ -1172,6 +1197,19 @@ class InMemoryAuthRepository {
     }
 
     account.isActive = isActive;
+    account.updatedAt = new Date();
+    this.accounts.set(userId, account);
+    return { ...account };
+  }
+
+  async updatePasswordHash(userId: string, passwordHash: string, mustChangePassword = false) {
+    const account = this.accounts.get(userId);
+    if (!account) {
+      return null;
+    }
+
+    account.passwordHash = passwordHash;
+    account.mustChangePassword = mustChangePassword;
     account.updatedAt = new Date();
     this.accounts.set(userId, account);
     return { ...account };
@@ -1453,6 +1491,21 @@ class InMemoryBookingsRepository {
     return Array.from(this.services.values())
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((service) => ({ ...service }));
+  }
+
+  async listServiceCategories() {
+    const timestamp = new Date('2026-01-01T00:00:00.000Z');
+
+    return [
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        name: 'Maintenance',
+        description: 'Routine maintenance services.',
+        isActive: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ];
   }
 
   async listTimeSlots() {
@@ -2754,18 +2807,24 @@ class InMemoryBackJobsRepository {
 class InMemoryInspectionsRepository {
   private readonly inspections = new Map<string, InspectionRecord>();
   private readonly findings: InspectionFindingRecord[] = [];
+  private readonly evidence: InspectionEvidenceRecord[] = [];
 
-  async create(vehicleId: string, payload: CreateInspectionDto) {
+  async create(vehicleId: string, payload: CreateInspectionDto, actorUserId?: string) {
     const now = new Date();
     const inspection: InspectionRecord = {
       id: randomUUID(),
+      inspectionReference: `INSP-${now.getUTCFullYear()}-${String(this.inspections.size + 1).padStart(6, '0')}`,
       vehicleId,
       bookingId: payload.bookingId ?? null,
       inspectionType: payload.inspectionType,
       status: payload.status ?? 'completed',
-      inspectorUserId: payload.inspectorUserId ?? null,
+      inspectorUserId: actorUserId ?? payload.inspectorUserId ?? null,
       notes: payload.notes ?? null,
       attachmentRefs: payload.attachmentRefs ?? [],
+      intakeDataVersion: payload.intakeDataVersion ?? null,
+      intakeData: payload.intakeData as unknown as Record<string, unknown> ?? null,
+      version: 1,
+      completedAt: (payload.status ?? 'completed') === 'completed' ? now : null,
       createdAt: now,
       updatedAt: now,
     };
@@ -2797,6 +2856,10 @@ class InMemoryInspectionsRepository {
 
     return {
       ...inspection,
+      evidence: this.evidence
+        .filter((item) => item.inspectionId === inspection.id)
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .map((item) => ({ ...item })),
       findings: this.findings
         .filter((finding) => finding.inspectionId === inspection.id)
         .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
@@ -2810,11 +2873,114 @@ class InMemoryInspectionsRepository {
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((inspection) => ({
         ...inspection,
+        evidence: this.evidence
+          .filter((item) => item.inspectionId === inspection.id)
+          .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+          .map((item) => ({ ...item })),
         findings: this.findings
           .filter((finding) => finding.inspectionId === inspection.id)
           .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
           .map((finding) => ({ ...finding })),
       }));
+  }
+
+  async createIntakeDraft(
+    vehicleId: string,
+    payload: SaveIntakeInspectionDraftDto,
+    actorUserId: string,
+  ) {
+    return this.create(
+      vehicleId,
+      {
+        inspectionType: 'intake',
+        status: 'pending',
+        bookingId: payload.bookingId,
+        notes: payload.notes,
+        intakeDataVersion: 1,
+        intakeData: payload.intakeData,
+      },
+      actorUserId,
+    );
+  }
+
+  async updateIntakeDraft(
+    inspectionId: string,
+    expectedVersion: number,
+    payload: SaveIntakeInspectionDraftDto,
+    actorUserId: string,
+  ) {
+    const inspection = this.inspections.get(inspectionId);
+    if (
+      !inspection ||
+      inspection.inspectionType !== 'intake' ||
+      inspection.status !== 'pending' ||
+      inspection.version !== expectedVersion
+    ) {
+      return null;
+    }
+    this.inspections.set(inspectionId, {
+      ...inspection,
+      bookingId: payload.bookingId ?? null,
+      inspectorUserId: actorUserId,
+      notes: payload.notes ?? null,
+      intakeDataVersion: 1,
+      intakeData: payload.intakeData as unknown as Record<string, unknown>,
+      version: inspection.version + 1,
+      updatedAt: new Date(),
+    });
+    return this.findById(inspectionId);
+  }
+
+  async completeIntakeDraft(
+    inspectionId: string,
+    expectedVersion: number,
+    actorUserId: string,
+  ) {
+    const inspection = this.inspections.get(inspectionId);
+    if (!inspection || inspection.status !== 'pending' || inspection.version !== expectedVersion) {
+      return null;
+    }
+    const now = new Date();
+    this.inspections.set(inspectionId, {
+      ...inspection,
+      status: 'completed',
+      inspectorUserId: actorUserId,
+      completedAt: now,
+      version: inspection.version + 1,
+      updatedAt: now,
+    });
+    return this.findById(inspectionId);
+  }
+
+  async findHistoryPage(payload: {
+    vehicleId: string;
+    limit: number;
+    status?: string;
+    cursor?: { createdAt: Date; id: string };
+  }) {
+    return (await this.findByVehicleId(payload.vehicleId))
+      .filter((inspection) => !payload.status || inspection.status === payload.status)
+      .filter(
+        (inspection) =>
+          !payload.cursor ||
+          inspection.createdAt < payload.cursor.createdAt ||
+          (inspection.createdAt.getTime() === payload.cursor.createdAt.getTime() &&
+            inspection.id < payload.cursor.id),
+      )
+      .slice(0, payload.limit + 1);
+  }
+
+  async createEvidence(payload: Omit<InspectionEvidenceRecord, 'id' | 'createdAt'>) {
+    const created = { id: randomUUID(), ...payload, createdAt: new Date() };
+    this.evidence.push(created);
+    return { ...created };
+  }
+
+  async findEvidence(inspectionId: string, evidenceId: string) {
+    const evidence = this.evidence.find(
+      (item) => item.inspectionId === inspectionId && item.id === evidenceId,
+    );
+    return evidence ? { ...evidence } : undefined;
   }
 }
 

@@ -55,6 +55,9 @@ class DashboardServiceDemandEntryResponseDto {
   @ApiProperty({ example: 'Oil Change' })
   serviceName!: string;
 
+  @ApiProperty({ example: 'Oil Change' })
+  displayReference!: string;
+
   @ApiProperty({ example: 8 })
   bookingCount!: number;
 
@@ -68,6 +71,9 @@ class DashboardPeakHourEntryResponseDto {
 
   @ApiProperty({ example: '08:00 AM - 10:00 AM' })
   label!: string;
+
+  @ApiProperty({ example: '08:00 AM - 10:00 AM' })
+  displayReference!: string;
 
   @ApiProperty({ example: '08:00' })
   startTime!: string;

@@ -1,10 +1,68 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+class JobOrderInvoiceLineItemSnapshotResponseDto {
+  @ApiProperty({ example: 'line-item-snapshot-1' })
+  id!: string;
+
+  @ApiProperty({ example: 2 })
+  invoiceVersion!: number;
+
+  @ApiProperty({ enum: ['service', 'labor', 'part', 'other'], example: 'labor' })
+  category!: 'service' | 'labor' | 'part' | 'other';
+
+  @ApiProperty({ example: 'Brake system diagnosis and repair' })
+  description!: string;
+
+  @ApiProperty({ example: 1 })
+  quantity!: number;
+
+  @ApiProperty({ example: 125000 })
+  unitAmountCents!: number;
+
+  @ApiProperty({ example: 125000 })
+  lineAmountCents!: number;
+}
+
+class JobOrderInvoiceCorrectionHistoryResponseDto {
+  @ApiProperty({ example: 'invoice-correction-1' })
+  id!: string;
+
+  @ApiProperty({ enum: ['payment_reversal_completed', 'void_and_reissue'] })
+  action!: 'payment_reversal_completed' | 'void_and_reissue';
+
+  @ApiProperty({ example: 1 })
+  fromVersion!: number;
+
+  @ApiProperty({ example: 2 })
+  toVersion!: number;
+
+  @ApiProperty({ example: 'INV-SVC-20260808-103015123' })
+  previousInvoiceReference!: string;
+
+  @ApiPropertyOptional({ example: 'INV-SVC-20260808-111500123', nullable: true })
+  newInvoiceReference!: string | null;
+
+  @ApiProperty({ example: 'Corrected an incorrectly billed quantity.' })
+  reason!: string;
+
+  @ApiProperty({ example: '2026-08-08T11:15:00.000Z', format: 'date-time' })
+  createdAt!: string;
+}
+
 export class JobOrderInvoiceRecordResponseDto {
   @ApiProperty({
     example: '44934b97-b1d0-4f85-8666-a2df86f2613b',
   })
   id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  lineageId!: string;
+
+  @ApiProperty({ example: 2 })
+  version!: number;
+
+  @ApiProperty({ enum: ['issued', 'voided'], example: 'issued' })
+  lifecycleStatus!: 'issued' | 'voided';
 
   @ApiProperty({
     example: '7bc8926d-8eb7-4c97-85ab-4597a58e1f43',
@@ -16,10 +74,13 @@ export class JobOrderInvoiceRecordResponseDto {
   })
   invoiceReference!: string;
 
+  @ApiPropertyOptional({ example: 'INV-SVC-20260808-103015123', nullable: true })
+  previousInvoiceReference!: string | null;
+
   @ApiProperty({
     example: 'booking',
   })
-  sourceType!: 'booking' | 'back_job';
+  sourceType!: 'booking' | 'intake' | 'back_job';
 
   @ApiProperty({
     example: 'b520dba5-5bfb-4d34-a931-70bd811f7725',
@@ -168,6 +229,24 @@ export class JobOrderInvoiceRecordResponseDto {
   })
   recordedByUserId!: string | null;
 
+  @ApiPropertyOptional({ enum: ['not_required', 'completed'] })
+  paymentReversalStatus!: 'not_required' | 'completed';
+
+  @ApiPropertyOptional({ example: 'REFUND-2026-000123', nullable: true })
+  paymentReversalReference!: string | null;
+
+  @ApiPropertyOptional({ format: 'date-time', nullable: true })
+  paymentReversalCompletedAt!: string | null;
+
+  @ApiPropertyOptional({ format: 'date-time', nullable: true })
+  lastVoidedAt!: string | null;
+
+  @ApiPropertyOptional({ example: 'Corrected an incorrectly billed quantity.', nullable: true })
+  lastVoidReason!: string | null;
+
+  @ApiPropertyOptional({ format: 'date-time', nullable: true })
+  reissuedAt!: string | null;
+
   @ApiPropertyOptional({
     example: '2026-05-14T10:30:00.000Z',
     format: 'date-time',
@@ -179,6 +258,12 @@ export class JobOrderInvoiceRecordResponseDto {
     example: 'All planned work items completed and ready for invoice generation.',
   })
   summary?: string | null;
+
+  @ApiProperty({ type: () => JobOrderInvoiceLineItemSnapshotResponseDto, isArray: true })
+  lineItemSnapshots!: JobOrderInvoiceLineItemSnapshotResponseDto[];
+
+  @ApiProperty({ type: () => JobOrderInvoiceCorrectionHistoryResponseDto, isArray: true })
+  correctionHistory!: JobOrderInvoiceCorrectionHistoryResponseDto[];
 
   @ApiPropertyOptional({
     example: '2026-05-05T10:30:00.000Z',

@@ -4,6 +4,7 @@ import { afterEach, test } from 'node:test';
 import {
   exportJobOrderInvoicePdf,
   getJobOrderInvoiceLookup,
+  normalizeJobOrderInvoicePaymentMethod,
   reconcileJobOrderInvoicePaymongoCheckout,
   recordJobOrderInvoicePayment,
   startJobOrderInvoicePaymongoCheckout,
@@ -90,6 +91,26 @@ test('recording invoice payment sends normalized cents and optional metadata', a
     expectedUpdatedAt: '2026-08-01T10:00:00.000Z',
   });
   assert.equal(result.id, 'jo-2');
+});
+
+test('invoice payment aliases normalize before submission and loading', async () => {
+  assert.equal(normalizeJobOrderInvoicePaymentMethod('bank-transfer'), 'bank_transfer');
+  assert.equal(normalizeJobOrderInvoicePaymentMethod('cheque'), 'check');
+
+  let request = null;
+  globalThis.fetch = async (url, options) => {
+    request = { url, options };
+    return jsonResponse({ id: 'jo-alias', status: 'finalized' });
+  };
+
+  await recordJobOrderInvoicePayment({
+    jobOrderId: 'jo-alias',
+    amountPaid: '1250',
+    paymentMethod: 'bank-transfer',
+    accessToken: 'token-alias',
+  });
+
+  assert.equal(JSON.parse(request.options.body).paymentMethod, 'bank_transfer');
 });
 
 test('invoice PDF export returns a blob and validates missing Job Order context', async () => {

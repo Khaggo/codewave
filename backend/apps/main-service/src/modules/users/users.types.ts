@@ -10,3 +10,24 @@ export type CreateManagedUserInput = {
   role: UserRole;
   staffCode?: string;
 };
+
+export type CreateWalkInCustomerInput = {
+  email?: string | null;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  contactConsentAcknowledgedAt: Date;
+  plateNumber: string;
+  make: string;
+  model: string;
+  year: number;
+  color?: string | null;
+  requestKey?: string;
+};
+
+export type ListCustomersWithVehiclesQuery = {
+  search?: string;
+  cursor?: string;
+  limit?: number;
+  customerId?: string;
+};

@@ -7,6 +7,18 @@ export interface CreateUserRequest {
   phone?: string;
 }
 
+export interface CreateWalkInCustomerRequest {
+  fullName: string;
+  phone: string;
+  email?: string;
+  consentAcknowledged: true;
+  plateNumber: string;
+  make: string;
+  model: string;
+  year: number;
+  color?: string;
+}
+
 export interface UpdateUserRequest {
   firstName?: string;
   lastName?: string;
@@ -30,6 +42,12 @@ export const usersRoutes: Record<string, RouteContract> = {
   createUser: {
     method: 'POST',
     path: '/api/users',
+    status: 'live',
+    source: 'swagger',
+  },
+  createWalkInCustomer: {
+    method: 'POST',
+    path: '/api/users/walk-in',
     status: 'live',
     source: 'swagger',
   },
@@ -64,4 +82,3 @@ export const usersRoutes: Record<string, RouteContract> = {
     source: 'swagger',
   },
 };
-

@@ -31,6 +31,7 @@ import {
   getInsuranceDocumentFile,
   getInsuranceInquiryById,
   listInsuranceInquiries,
+  requestInsuranceInquiryDocuments,
   sendInsuranceBroadcasts,
   sendInsuranceReminders,
   updateInsuranceInquiryStatus,
@@ -47,6 +48,8 @@ import {
   buildInsuranceReminderRequest,
   buildInsuranceTableRow,
   formatStatusLabel,
+  getInsuranceDocumentActionState,
+  getInsuranceDocumentTypeOptions,
   getInsuranceBroadcastComposerState,
   getInsuranceDetailTabs,
   getNextInsuranceWorkspaceViewState,
@@ -59,6 +62,7 @@ import {
   summarizeInsuranceBroadcastResult,
   summarizeInsuranceReminderResult,
   shouldIncludeInsuranceInquiryInLiveQueue,
+  openAuthorizedInsuranceDocument,
 } from './insuranceView.mjs'
 import InsuranceNotesFields from './InsuranceNotesFields'
 
@@ -126,6 +130,7 @@ const DEFAULT_UPDATE_DRAFT = {
 const DEFAULT_REMINDER_TYPE = 'missing_documents'
 const DEFAULT_REMINDER_TARGET_MODE = 'selected_cases'
 const DEFAULT_BROADCAST_TARGET_MODE = 'selected_cases'
+const INSURANCE_DOCUMENT_TYPE_OPTIONS = getInsuranceDocumentTypeOptions()
 
 const normalizeFilterValue = (value) => (value && value !== 'all' ? value : undefined)
 
@@ -179,29 +184,6 @@ const formatDateOnly = (value) => {
     day: 'numeric',
     year: 'numeric',
   })
-}
-
-const getOpenableInsuranceDocumentUrl = (document, resolvedDocumentUrl = null) => {
-  if (resolvedDocumentUrl) {
-    return resolvedDocumentUrl
-  }
-
-  const normalizedDownloadUrl = String(document?.downloadUrl ?? '').trim()
-  if (normalizedDownloadUrl) {
-    return normalizedDownloadUrl
-  }
-
-  const normalizedFileUrl = String(document?.fileUrl ?? '').trim()
-
-  if (!normalizedFileUrl) {
-    return null
-  }
-
-  if (/^https?:\/\//i.test(normalizedFileUrl) || normalizedFileUrl.startsWith('/')) {
-    return normalizedFileUrl
-  }
-
-  return null
 }
 
 const getTimelineItems = (inquiry) => [
@@ -470,7 +452,7 @@ function CompactActionPanel({
     </Collapsible.Root>
   )
 }
-function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} }) {
+function InsuranceDetailTabContent({ inquiry, tabKey, documentOpenStates = {}, documentOpenErrors = {}, onOpenDocument }) {
   if (!inquiry) {
     return (
       <EmptyPanel
@@ -514,11 +496,13 @@ function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} 
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-semibold text-ink-primary">Document review status</p>
-                <WorkflowBadge value={inquiry.documentStatus} />
+                <WorkflowBadge value={documentReviewState.displayStatus} />
                 <span className="badge badge-gray">{inquiry.documentCount} file(s)</span>
               </div>
               <p className="text-xs leading-5 text-ink-muted">
-                {documentReviewState.allRequiredReady
+                {!documentReviewState.requirementsAvailable
+                  ? 'Authoritative requirements are unavailable. Refresh this case before review or advancement.'
+                  : documentReviewState.allRequiredReady
                   ? 'All required files for this case are already on file.'
                   : `Still needed before review is clean: ${documentReviewState.missingRequiredItems.map((item) => item.label).join(', ')}.`}
               </p>
@@ -527,10 +511,14 @@ function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} 
               <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-ink-muted">Required Coverage</p>
                 <p className="mt-2 text-lg font-black tracking-tight text-ink-primary">
-                  {documentReviewState.requiredReadyCount}/{documentReviewState.requiredTotalCount}
+                  {documentReviewState.requirementsAvailable
+                    ? `${documentReviewState.requiredReadyCount}/${documentReviewState.requiredTotalCount}`
+                    : 'Unavailable'}
                 </p>
                 <p className="mt-1 text-xs text-ink-muted">
-                  {documentReviewState.allRequiredReady ? 'Ready for review' : 'Missing at least one core file'}
+                  {documentReviewState.requirementsAvailable
+                    ? documentReviewState.allRequiredReady ? 'Ready for review' : 'Missing at least one core file'
+                    : 'Refresh required'}
                 </p>
               </div>
               <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
@@ -554,9 +542,12 @@ function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} 
                   key={item.type}
                   className="flex items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-card px-3 py-2"
                 >
-                  <span className="text-sm text-ink-primary">{item.label}</span>
+                  <span className="min-w-0 text-sm text-ink-primary">
+                    {item.label}
+                    {item.requested ? <span className="ml-2 text-xs font-semibold text-[#f07c00]">Requested by staff</span> : null}
+                  </span>
                   <span className={`badge ${item.complete ? 'badge-green' : 'badge-gray'}`}>
-                    {item.complete ? 'On file' : 'Missing'}
+                    {item.uploadedCount}/{item.minimumCount} {item.complete ? 'received' : 'received · outstanding'}
                   </span>
                 </div>
               ))}
@@ -597,14 +588,14 @@ function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} 
               <div className="space-y-3">
                 {inquiry.documents.map((document) => {
                   const DocumentIcon = getInsuranceDocumentIcon(document.documentType)
-                  const openableDocumentUrl = getOpenableInsuranceDocumentUrl(
+                  const documentActionState = getInsuranceDocumentActionState(
                     document,
-                    document.id ? resolvedDocumentUrls[document.id] ?? null : null,
+                    documentOpenStates[document.localKey] ?? 'idle',
                   )
 
                   return (
                     <article
-                      key={document.id ?? `${document.fileName}-${document.fileUrl}`}
+                      key={document.localKey}
                       className="min-w-0 overflow-hidden rounded-2xl border border-surface-border bg-surface-card p-4 shadow-card-sm"
                     >
                       <div className="flex items-start gap-3">
@@ -646,19 +637,19 @@ function InsuranceDetailTabContent({ inquiry, tabKey, resolvedDocumentUrls = {} 
                             <span className="rounded-full border border-surface-border bg-surface-raised px-2.5 py-1">
                               Ready for review
                             </span>
-                            {openableDocumentUrl ? (
-                              <a
-                                href={openableDocumentUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="rounded-full border border-[#f07c00]/20 bg-[#f07c00]/10 px-2.5 py-1 font-semibold text-[#f07c00] transition hover:bg-[#f07c00]/15"
+                            {documentActionState.visible ? (
+                              <button
+                                type="button"
+                                onClick={() => void onOpenDocument?.(document)}
+                                disabled={documentActionState.disabled}
+                                aria-label={`${documentActionState.label}: ${document.fileName || 'insurance document'}`}
+                                className="min-h-11 rounded-full border border-[#f07c00]/20 bg-[#f07c00]/10 px-3 py-2 font-semibold text-[#f07c00] transition hover:bg-[#f07c00]/15 disabled:cursor-wait disabled:opacity-60"
                               >
-                                Open file
-                              </a>
-                            ) : document.fileUrl ? (
-                              <span className="rounded-full border border-surface-border bg-surface-raised px-2.5 py-1">
-                                Stored in insurance uploads
-                              </span>
+                                {documentActionState.label}
+                              </button>
+                            ) : null}
+                            {documentOpenErrors[document.localKey] ? (
+                              <span role="alert" className="text-xs text-red-600">{documentOpenErrors[document.localKey]}</span>
                             ) : null}
                           </div>
                         </div>
@@ -791,7 +782,12 @@ export default function InsuranceContent() {
   const [broadcastResults, setBroadcastResults] = useState([])
   const [isReminderPanelOpen, setIsReminderPanelOpen] = useState(false)
   const [isBroadcastPanelOpen, setIsBroadcastPanelOpen] = useState(false)
-  const [resolvedDocumentUrls, setResolvedDocumentUrls] = useState({})
+  const [documentOpenStates, setDocumentOpenStates] = useState({})
+  const [documentOpenErrors, setDocumentOpenErrors] = useState({})
+  const [requestedDocumentType, setRequestedDocumentType] = useState('police_report')
+  const [requestedDocumentMessage, setRequestedDocumentMessage] = useState('Please upload this document so we can continue reviewing your insurance assistance request.')
+  const [requestDocumentState, setRequestDocumentState] = useState('idle')
+  const [requestDocumentStatusMessage, setRequestDocumentStatusMessage] = useState('')
   const previousSelectedInquiryIdRef = useRef('')
   const selectedInquiryIdRef = useRef('')
   const workspaceStateRef = useRef({
@@ -914,65 +910,23 @@ export default function InsuranceContent() {
     [filteredInquiries, selectedInquiryId],
   )
 
-  useEffect(() => {
-    let isMounted = true
-    const blobUrlsToRevoke = []
+  const handleOpenDocument = async (document) => {
+    if (!document?.downloadRoute || !document?.localKey || !user?.accessToken) return
+    const localKey = document.localKey
+    setDocumentOpenStates((current) => ({ ...current, [localKey]: 'loading' }))
+    setDocumentOpenErrors((current) => ({ ...current, [localKey]: '' }))
 
-    const revokeResolvedUrls = () => {
-      blobUrlsToRevoke.forEach((url) => {
-        try {
-          URL.revokeObjectURL(url)
-        } catch {}
-      })
-    }
-
-    const loadResolvedDocumentUrls = async () => {
-      if (!selectedInquiry?.documents?.length || !user?.accessToken) {
-        if (isMounted) {
-          setResolvedDocumentUrls({})
-        }
-        return
-      }
-
-      const uploadedDocuments = selectedInquiry.documents.filter(
-        (document) => document?.id && String(document?.fileUrl ?? '').startsWith('upload://insurance/'),
-      )
-
-      if (!uploadedDocuments.length) {
-        if (isMounted) {
-          setResolvedDocumentUrls({})
-        }
-        return
-      }
-
-      const nextResolvedUrls = {}
-
-      for (const document of uploadedDocuments) {
-        try {
-          const { blob } = await getInsuranceDocumentFile({
-            documentId: document.id,
-            accessToken: user.accessToken,
-          })
-          const blobUrl = URL.createObjectURL(blob)
-          blobUrlsToRevoke.push(blobUrl)
-          nextResolvedUrls[document.id] = blobUrl
-        } catch {}
-      }
-
-      if (isMounted) {
-        setResolvedDocumentUrls(nextResolvedUrls)
-      } else {
-        revokeResolvedUrls()
-      }
-    }
-
-    void loadResolvedDocumentUrls()
-
-    return () => {
-      isMounted = false
-      revokeResolvedUrls()
-    }
-  }, [selectedInquiry?.id, selectedInquiry?.documents, user?.accessToken])
+    const result = await openAuthorizedInsuranceDocument({
+      document,
+      fetchDocument: (downloadRoute) => getInsuranceDocumentFile({ downloadRoute, accessToken: user.accessToken }),
+      openWindow: () => window.open('', '_blank'),
+      createObjectUrl: (blob) => URL.createObjectURL(blob),
+      revokeObjectUrl: (url) => URL.revokeObjectURL(url),
+      scheduleRevoke: (callback, delay) => window.setTimeout(callback, delay),
+    })
+    setDocumentOpenStates((current) => ({ ...current, [localKey]: result.status }))
+    setDocumentOpenErrors((current) => ({ ...current, [localKey]: result.message ?? '' }))
+  }
 
   const nextStatuses = useMemo(
     () => getAllowedInsuranceStatusTargets(selectedInquiry?.status ?? 'closed'),
@@ -1339,6 +1293,34 @@ export default function InsuranceContent() {
       }
 
       setUpdateMessage(error?.message || 'Insurance workflow could not be updated.')
+    }
+  }
+
+  const handleRequestDocument = async () => {
+    if (!selectedInquiry?.id || !user?.accessToken || !requestedDocumentType || !requestedDocumentMessage.trim()) {
+      setRequestDocumentState('failed')
+      setRequestDocumentStatusMessage('Choose a document and provide a customer-visible reason.')
+      return
+    }
+
+    const requestInquiryId = selectedInquiry.id
+    setRequestDocumentState('submitting')
+    setRequestDocumentStatusMessage('')
+
+    try {
+      const updatedInquiry = await requestInsuranceInquiryDocuments({
+        inquiryId: requestInquiryId,
+        documentTypes: [requestedDocumentType],
+        customerMessage: requestedDocumentMessage.trim(),
+        expectedUpdatedAt: selectedInquiry.updatedAt,
+        accessToken: user.accessToken,
+      })
+      setInquiries((current) => current.map((inquiry) => inquiry.id === updatedInquiry.id ? updatedInquiry : inquiry))
+      setRequestDocumentState('saved')
+      setRequestDocumentStatusMessage(`${formatStatusLabel(requestedDocumentType)} requested. The case remains blocked until the required count is received.`)
+    } catch (error) {
+      setRequestDocumentState('failed')
+      setRequestDocumentStatusMessage(error?.message || 'The document request could not be saved.')
     }
   }
 
@@ -1893,7 +1875,9 @@ export default function InsuranceContent() {
                       <InsuranceDetailTabContent
                         inquiry={selectedInquiry}
                         tabKey={tab.key}
-                        resolvedDocumentUrls={resolvedDocumentUrls}
+                        documentOpenStates={documentOpenStates}
+                        documentOpenErrors={documentOpenErrors}
+                        onOpenDocument={handleOpenDocument}
                       />
                     </ScrollAreaPrimitives.Viewport>
                     <ScrollAreaPrimitives.Scrollbar orientation="vertical" className="primitive-scrollbar">
@@ -1990,6 +1974,50 @@ export default function InsuranceContent() {
                     : 'View-only terminal case'}
               </span>
             </div>
+
+            <details className="mt-5 rounded-2xl border border-surface-border bg-surface-raised px-4 py-4">
+              <summary className="cursor-pointer text-sm font-semibold text-ink-primary">
+                Request another document
+              </summary>
+              <p className="mt-2 text-xs leading-5 text-ink-muted">
+                Police reports are conditional. Once requested, this case cannot advance until the server-required count is received.
+              </p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <label className="label">
+                  Document
+                  <PortalSelect
+                    value={requestedDocumentType}
+                    onValueChange={setRequestedDocumentType}
+                    items={INSURANCE_DOCUMENT_TYPE_OPTIONS}
+                    disabled={!selectedInquiry || !nextStatuses.length || requestDocumentState === 'submitting'}
+                  />
+                </label>
+                <label className="label">
+                  Customer-visible message
+                  <textarea
+                    value={requestedDocumentMessage}
+                    onChange={(event) => setRequestedDocumentMessage(event.target.value)}
+                    rows={3}
+                    className="input min-h-24 resize-y"
+                    disabled={!selectedInquiry || !nextStatuses.length || requestDocumentState === 'submitting'}
+                  />
+                </label>
+              </div>
+              {requestDocumentStatusMessage ? (
+                <div className={`mt-3 ${requestDocumentState === 'saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}`}>
+                  {requestDocumentStatusMessage}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleRequestDocument()}
+                disabled={!selectedInquiry || !nextStatuses.length || requestDocumentState === 'submitting'}
+                className="ops-action-secondary mt-4 min-h-11"
+              >
+                {requestDocumentState === 'submitting' ? <RefreshCw size={14} className="animate-spin" /> : <FileClock size={14} />}
+                Request document
+              </button>
+            </details>
 
             <div className="mt-5 rounded-2xl border border-surface-border bg-surface-raised px-4 py-4">
               <div className="flex flex-col gap-2">

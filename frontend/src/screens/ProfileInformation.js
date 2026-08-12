@@ -1,17 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Building2, Mail, Phone, Save, ShieldCheck, User } from 'lucide-react'
 import { normalizePhoneNumber, validatePhoneNumber } from '@autocare/shared'
 import { useUserContext } from '@/lib/userContext.jsx'
 import { useToast } from '@/components/Toast.jsx'
 import { confirmStaffPhoneChangeOtp, requestStaffPhoneChangeOtp } from '@/lib/authClient'
+import {
+  getStaffPhoneNumber,
+  requireAuthoritativeStaffPhone,
+} from '@/lib/staffProfileSession.mjs'
 
 export default function ProfileInformation() {
   const { user, updateUser } = useUserContext()
   const { toast } = useToast()
   const [name, setName] = useState(user?.name || '')
-  const [phone, setPhone] = useState(user?.phone || '')
+  const [phone, setPhone] = useState(getStaffPhoneNumber(user))
   const [loading, setLoading] = useState(false)
   const [otpDraft, setOtpDraft] = useState({
     enrollmentId: '',
@@ -20,6 +24,10 @@ export default function ProfileInformation() {
   })
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
   const [phoneVerifyLoading, setPhoneVerifyLoading] = useState(false)
+
+  useEffect(() => {
+    setPhone(getStaffPhoneNumber(user))
+  }, [user?.phone])
 
   async function handleSave() {
     if (!name.trim()) {
@@ -71,7 +79,7 @@ export default function ProfileInformation() {
       return
     }
 
-    if (normalizedPhone === normalizePhoneNumber(user?.profile?.phone || '')) {
+    if (normalizedPhone === getStaffPhoneNumber(user)) {
       toast({ type: 'error', title: 'No Change Detected', message: 'Enter a new phone number before requesting verification.' })
       return
     }
@@ -82,6 +90,9 @@ export default function ProfileInformation() {
         accessToken: user.accessToken,
         phoneNumber: normalizedPhone,
       })
+      if (!response?.enrollmentId) {
+        throw new Error('The server did not confirm the phone verification request. Please try again.')
+      }
       setOtpDraft({
         enrollmentId: response?.enrollmentId ?? '',
         otp: '',
@@ -123,9 +134,12 @@ export default function ProfileInformation() {
         phoneNumber: otpDraft.pendingPhone,
       })
 
-      await updateUser({
-        profileSnapshot: updatedUser?.profile,
+      const refreshedUser = await updateUser({
+        confirmedPhone: otpDraft.pendingPhone,
+        confirmedUser: updatedUser,
       })
+      const persistedPhone = requireAuthoritativeStaffPhone(refreshedUser, otpDraft.pendingPhone)
+      setPhone(persistedPhone)
       setOtpDraft({ enrollmentId: '', otp: '', pendingPhone: '' })
       toast({
         type: 'success',

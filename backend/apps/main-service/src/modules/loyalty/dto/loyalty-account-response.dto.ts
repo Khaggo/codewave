@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+import { LoyaltyQualificationResponseDto } from './loyalty-qualification-response.dto';
+
 export class LoyaltyAccountResponseDto {
   @ApiProperty({
     example: '4d18cf50-617d-42de-9df4-d7cd2945ce7c',
@@ -43,4 +45,7 @@ export class LoyaltyAccountResponseDto {
     format: 'date-time',
   })
   updatedAt!: string;
+
+  @ApiProperty({ type: () => LoyaltyQualificationResponseDto })
+  qualification!: LoyaltyQualificationResponseDto;
 }

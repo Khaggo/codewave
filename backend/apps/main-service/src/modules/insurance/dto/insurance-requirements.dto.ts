@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import { IsEnum, IsOptional, IsUUID } from 'class-validator';
 
 import {
   insuranceCasePurposeEnum,
@@ -22,6 +22,31 @@ export class InsuranceRequirementsQueryDto {
   @IsOptional()
   @IsEnum(insuranceInquiryTypeEnum.enumValues)
   inquiryType?: (typeof insuranceInquiryTypeEnum.enumValues)[number];
+
+  @ApiPropertyOptional({
+    example: '4c559c0b-4d1b-492f-a11f-e61271f4a32d',
+    description: 'Optional inquiry whose customer-visible document requests should be included.',
+  })
+  @IsOptional()
+  @IsUUID()
+  inquiryId?: string;
+}
+
+export class InsuranceDocumentRequirementResponseDto {
+  @ApiProperty({ enum: insuranceDocumentTypeEnum.enumValues, example: 'police_report' })
+  documentType!: (typeof insuranceDocumentTypeEnum.enumValues)[number];
+
+  @ApiProperty({ example: 1 })
+  minimumCount!: number;
+
+  @ApiProperty({ example: true })
+  required!: boolean;
+
+  @ApiProperty({ example: true })
+  conditional!: boolean;
+
+  @ApiProperty({ example: false })
+  requested!: boolean;
 }
 
 export class InsuranceRequirementsResponseDto {
@@ -50,4 +75,13 @@ export class InsuranceRequirementsResponseDto {
     example: ['valid_id', 'police_report', 'photo', 'estimate', 'proof_of_payment', 'other'],
   })
   optionalDocumentTypes!: Array<(typeof insuranceDocumentTypeEnum.enumValues)[number]>;
+
+  @ApiProperty({ type: InsuranceDocumentRequirementResponseDto, isArray: true })
+  documentRequirements!: InsuranceDocumentRequirementResponseDto[];
+
+  @ApiProperty({ example: [] })
+  requestedDocumentTypes!: Array<(typeof insuranceDocumentTypeEnum.enumValues)[number]>;
+
+  @ApiProperty({ example: { or_cr: 1, valid_id: 1, policy: 1, photo: 0 } })
+  minimumDocumentCounts!: Record<string, number>;
 }

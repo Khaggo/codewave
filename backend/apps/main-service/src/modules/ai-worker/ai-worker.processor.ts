@@ -6,6 +6,7 @@ import { QualityGatesService } from '@main-modules/quality-gates/services/qualit
 import { VehicleLifecycleService } from '@main-modules/vehicle-lifecycle/services/vehicle-lifecycle.service';
 import {
   AI_WORKER_QUEUE_NAME,
+  GENERATE_QUALITY_GATE_PRECHECK_SUMMARY_JOB_NAME,
   GENERATE_VEHICLE_LIFECYCLE_SUMMARY_JOB_NAME,
   RUN_QUALITY_GATE_AUDIT_JOB_NAME,
 } from '@shared/queue/ai-worker.constants';
@@ -18,6 +19,12 @@ type AiWorkerJobData =
   }
   | {
     summaryId: string;
+    requestedAt: string;
+  }
+  | {
+    jobOrderId: string;
+    evidenceFingerprint: string;
+    generationId: string;
     requestedAt: string;
   };
 
@@ -44,6 +51,21 @@ export class AiWorkerProcessor extends WorkerHost {
         return;
       }
 
+      if (
+        job.name === GENERATE_QUALITY_GATE_PRECHECK_SUMMARY_JOB_NAME &&
+        'jobOrderId' in job.data &&
+        'evidenceFingerprint' in job.data &&
+        'generationId' in job.data
+      ) {
+        await this.qualityGatesService.runPreCheckSummaryGeneration(
+          job.data.jobOrderId,
+          job.data.evidenceFingerprint,
+          job.data.generationId,
+          processingJob,
+        );
+        return;
+      }
+
       if (job.name === GENERATE_VEHICLE_LIFECYCLE_SUMMARY_JOB_NAME && 'summaryId' in job.data) {
         await this.vehicleLifecycleService.runLifecycleSummaryGeneration(job.data.summaryId, processingJob);
         return;
@@ -65,6 +87,20 @@ export class AiWorkerProcessor extends WorkerHost {
           job.data.jobOrderId,
           failedJob,
           message,
+        );
+      }
+
+      if (
+        job.name === GENERATE_QUALITY_GATE_PRECHECK_SUMMARY_JOB_NAME &&
+        'jobOrderId' in job.data &&
+        'evidenceFingerprint' in job.data &&
+        'generationId' in job.data
+      ) {
+        await this.qualityGatesService.handlePreCheckSummaryWorkerFailure(
+          job.data.jobOrderId,
+          job.data.evidenceFingerprint,
+          job.data.generationId,
+          failedJob,
         );
       }
 

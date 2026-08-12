@@ -21,7 +21,7 @@ export interface ServiceInvoiceFinalizedEventPayload {
   serviceAdviserUserId: string;
   serviceAdviserCode: string;
   finalizedByUserId: string;
-  sourceType: 'booking' | 'back_job';
+  sourceType: 'booking' | 'intake' | 'back_job';
   sourceId: string;
 }
 
@@ -34,7 +34,7 @@ export interface ServicePaymentRecordedEventPayload {
   serviceAdviserUserId: string;
   serviceAdviserCode: string;
   recordedByUserId: string | null;
-  sourceType: 'booking' | 'back_job';
+  sourceType: 'booking' | 'intake' | 'back_job';
   sourceId: string;
   amountPaidCents: number;
   currencyCode: 'PHP';

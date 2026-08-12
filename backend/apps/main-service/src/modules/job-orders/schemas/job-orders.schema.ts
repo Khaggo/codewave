@@ -17,7 +17,7 @@ import { users } from '@main-modules/users/schemas/users.schema';
 import { technicianProfiles } from '@main-modules/technician-profiles/schemas/technician-profiles.schema';
 import { vehicles } from '@main-modules/vehicles/schemas/vehicles.schema';
 
-export const jobOrderSourceTypeEnum = pgEnum('job_order_source_type', ['booking', 'back_job']);
+export const jobOrderSourceTypeEnum = pgEnum('job_order_source_type', ['booking', 'intake', 'back_job']);
 export const jobOrderTypeEnum = pgEnum('job_order_type', ['normal', 'back_job']);
 
 export const jobOrderStatusEnum = pgEnum('job_order_status', [
@@ -68,6 +68,24 @@ export const jobOrderInvoiceOnlinePaymentStatusEnum = pgEnum('job_order_invoice_
   'expired',
   'cancelled',
   'unavailable',
+]);
+export const jobOrderInvoiceLifecycleStatusEnum = pgEnum('job_order_invoice_lifecycle_status', [
+  'issued',
+  'voided',
+]);
+export const jobOrderInvoicePaymentReversalStatusEnum = pgEnum(
+  'job_order_invoice_payment_reversal_status',
+  ['not_required', 'completed'],
+);
+export const jobOrderInvoiceLineItemCategoryEnum = pgEnum('job_order_invoice_line_item_category', [
+  'service',
+  'labor',
+  'part',
+  'other',
+]);
+export const jobOrderInvoiceCorrectionActionEnum = pgEnum('job_order_invoice_correction_action', [
+  'payment_reversal_completed',
+  'void_and_reissue',
 ]);
 
 export const jobOrderPhotoLinkTypeEnum = pgEnum('job_order_photo_link_type', [
@@ -202,10 +220,14 @@ export const jobOrderInvoiceRecords = pgTable(
   'job_order_invoice_records',
   {
     id: uuid('id').defaultRandom().primaryKey(),
+    lineageId: uuid('lineage_id').notNull().defaultRandom(),
+    version: integer('version').notNull().default(1),
+    lifecycleStatus: jobOrderInvoiceLifecycleStatusEnum('lifecycle_status').notNull().default('issued'),
     jobOrderId: uuid('job_order_id')
       .notNull()
       .references(() => jobOrders.id, { onDelete: 'cascade' }),
     invoiceReference: varchar('invoice_reference', { length: 40 }).notNull(),
+    previousInvoiceReference: varchar('previous_invoice_reference', { length: 40 }),
     sourceType: jobOrderSourceTypeEnum('source_type').notNull(),
     sourceId: uuid('source_id').notNull(),
     customerUserId: uuid('customer_user_id')
@@ -242,6 +264,19 @@ export const jobOrderInvoiceRecords = pgTable(
     onlinePaymentFailureReason: text('online_payment_failure_reason'),
     paidAt: timestamp('paid_at', { withTimezone: true }),
     recordedByUserId: uuid('recorded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    lastVoidedAt: timestamp('last_voided_at', { withTimezone: true }),
+    lastVoidedByUserId: uuid('last_voided_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    lastVoidReason: text('last_void_reason'),
+    reissuedAt: timestamp('reissued_at', { withTimezone: true }),
+    reissuedByUserId: uuid('reissued_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    paymentReversalStatus: jobOrderInvoicePaymentReversalStatusEnum('payment_reversal_status')
+      .notNull()
+      .default('not_required'),
+    paymentReversalReference: varchar('payment_reversal_reference', { length: 120 }),
+    paymentReversalReason: text('payment_reversal_reason'),
+    paymentReversalCompletedAt: timestamp('payment_reversal_completed_at', { withTimezone: true }),
+    paymentReversalCompletedByUserId: uuid('payment_reversal_completed_by_user_id')
+      .references(() => users.id, { onDelete: 'set null' }),
     summary: text('summary'),
     pdfGeneratedAt: timestamp('pdf_generated_at', { withTimezone: true }),
     pdfEmailSentAt: timestamp('pdf_email_sent_at', { withTimezone: true }),
@@ -252,6 +287,63 @@ export const jobOrderInvoiceRecords = pgTable(
   (table) => ({
     jobOrderInvoiceRecordUnique: uniqueIndex('job_order_invoice_records_job_order_id_idx').on(table.jobOrderId),
     invoiceReferenceUnique: uniqueIndex('job_order_invoice_records_invoice_reference_idx').on(table.invoiceReference),
+  }),
+);
+
+export const jobOrderInvoiceLineItemSnapshots = pgTable(
+  'job_order_invoice_line_item_snapshots',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    invoiceRecordId: uuid('invoice_record_id')
+      .notNull()
+      .references(() => jobOrderInvoiceRecords.id, { onDelete: 'cascade' }),
+    invoiceVersion: integer('invoice_version').notNull(),
+    sourceJobOrderItemId: uuid('source_job_order_item_id').references(() => jobOrderItems.id, {
+      onDelete: 'set null',
+    }),
+    category: jobOrderInvoiceLineItemCategoryEnum('category').notNull(),
+    description: varchar('description', { length: 240 }).notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    unitAmountCents: integer('unit_amount_cents').notNull().default(0),
+    lineAmountCents: integer('line_amount_cents').notNull().default(0),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    invoiceVersionSortUnique: uniqueIndex('job_order_invoice_line_items_version_sort_idx').on(
+      table.invoiceRecordId,
+      table.invoiceVersion,
+      table.sortOrder,
+    ),
+  }),
+);
+
+export const jobOrderInvoiceCorrections = pgTable(
+  'job_order_invoice_corrections',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    invoiceRecordId: uuid('invoice_record_id')
+      .notNull()
+      .references(() => jobOrderInvoiceRecords.id, { onDelete: 'cascade' }),
+    lineageId: uuid('lineage_id').notNull(),
+    action: jobOrderInvoiceCorrectionActionEnum('action').notNull(),
+    fromVersion: integer('from_version').notNull(),
+    toVersion: integer('to_version').notNull(),
+    idempotencyKey: varchar('idempotency_key', { length: 200 }).notNull(),
+    requestFingerprint: varchar('request_fingerprint', { length: 64 }).notNull(),
+    previousInvoiceReference: varchar('previous_invoice_reference', { length: 40 }).notNull(),
+    newInvoiceReference: varchar('new_invoice_reference', { length: 40 }),
+    reason: text('reason').notNull(),
+    actorUserId: uuid('actor_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+    beforeSnapshot: jsonb('before_snapshot').$type<Record<string, unknown>>().notNull(),
+    afterSnapshot: jsonb('after_snapshot').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    invoiceIdempotencyUnique: uniqueIndex('job_order_invoice_corrections_idempotency_idx').on(
+      table.invoiceRecordId,
+      table.idempotencyKey,
+    ),
   }),
 );
 
@@ -342,7 +434,7 @@ export const jobOrderPhotosRelations = relations(jobOrderPhotos, ({ one }) => ({
   }),
 }));
 
-export const jobOrderInvoiceRecordsRelations = relations(jobOrderInvoiceRecords, ({ one }) => ({
+export const jobOrderInvoiceRecordsRelations = relations(jobOrderInvoiceRecords, ({ one, many }) => ({
   jobOrder: one(jobOrders, {
     fields: [jobOrderInvoiceRecords.jobOrderId],
     references: [jobOrders.id],
@@ -365,6 +457,33 @@ export const jobOrderInvoiceRecordsRelations = relations(jobOrderInvoiceRecords,
   }),
   recordedBy: one(users, {
     fields: [jobOrderInvoiceRecords.recordedByUserId],
+    references: [users.id],
+  }),
+  lineItemSnapshots: many(jobOrderInvoiceLineItemSnapshots),
+  correctionHistory: many(jobOrderInvoiceCorrections),
+}));
+
+export const jobOrderInvoiceLineItemSnapshotsRelations = relations(
+  jobOrderInvoiceLineItemSnapshots,
+  ({ one }) => ({
+    invoiceRecord: one(jobOrderInvoiceRecords, {
+      fields: [jobOrderInvoiceLineItemSnapshots.invoiceRecordId],
+      references: [jobOrderInvoiceRecords.id],
+    }),
+    sourceJobOrderItem: one(jobOrderItems, {
+      fields: [jobOrderInvoiceLineItemSnapshots.sourceJobOrderItemId],
+      references: [jobOrderItems.id],
+    }),
+  }),
+);
+
+export const jobOrderInvoiceCorrectionsRelations = relations(jobOrderInvoiceCorrections, ({ one }) => ({
+  invoiceRecord: one(jobOrderInvoiceRecords, {
+    fields: [jobOrderInvoiceCorrections.invoiceRecordId],
+    references: [jobOrderInvoiceRecords.id],
+  }),
+  actor: one(users, {
+    fields: [jobOrderInvoiceCorrections.actorUserId],
     references: [users.id],
   }),
 }));

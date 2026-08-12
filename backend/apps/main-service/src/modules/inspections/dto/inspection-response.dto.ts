@@ -3,12 +3,16 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { inspectionStatusEnum, inspectionTypeEnum } from '../schemas/inspections.schema';
 
 import { InspectionFindingResponseDto } from './inspection-finding-response.dto';
+import { InspectionEvidenceResponseDto } from './inspection-evidence-response.dto';
 
 export class InspectionResponseDto {
   @ApiProperty({
     example: 'c6dff175-c86d-4d61-b472-5457d7fa85d4',
   })
   id!: string;
+
+  @ApiProperty({ example: 'INSP-2026-000001' })
+  inspectionReference!: string;
 
   @ApiProperty({
     example: '7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d',
@@ -48,6 +52,30 @@ export class InspectionResponseDto {
     example: ['upload://vehicle/photo-1'],
   })
   attachmentRefs!: string[];
+
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  intakeData?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({ example: 1, nullable: true })
+  intakeDataVersion?: number | null;
+
+  @ApiProperty({
+    example: false,
+    description: 'True when the row predates structured intake data and remains read-only compatible.',
+  })
+  legacyRecord!: boolean;
+
+  @ApiProperty({ example: 1 })
+  version!: number;
+
+  @ApiPropertyOptional({ format: 'date-time', nullable: true })
+  completedAt?: string | null;
+
+  @ApiPropertyOptional({
+    type: () => InspectionEvidenceResponseDto,
+    isArray: true,
+  })
+  evidence?: InspectionEvidenceResponseDto[];
 
   @ApiPropertyOptional({
     type: () => InspectionFindingResponseDto,

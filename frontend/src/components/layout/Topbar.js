@@ -6,6 +6,13 @@ import { ArrowRight, Bell, ChevronDown, ClipboardList, LogOut, Menu, Search, X }
 import PortalLink from '@/components/PortalLink'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import { safeBusinessReference } from '@/lib/businessReferenceDisplay.mjs'
+import {
+  archiveAllReadStaffNotifications,
+  archiveStaffNotification,
+  listStaffNotifications,
+  markAllStaffNotificationsRead,
+  markStaffNotificationRead,
+} from '@/lib/notificationsClient'
 import { getShellRouteMeta } from './layoutShellView.mjs'
 
 const SEARCH_DESTINATIONS = [
@@ -24,6 +31,17 @@ const SEARCH_DESTINATIONS = [
   { label: 'Analytics', sub: 'Operational summaries and dashboard metrics', href: '/admin/summaries' },
   { label: 'Settings', sub: 'Session and portal preferences', href: '/settings' },
 ]
+
+const formatRelativeTime = (value) => {
+  const timestamp = new Date(value).getTime()
+  if (!Number.isFinite(timestamp)) return 'Time unavailable'
+  const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60000))
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.round(hours / 24)}d ago`
+}
 
 function GlobalSearch() {
   const [query, setQuery] = useState('')
@@ -165,11 +183,83 @@ export default function Topbar({ onMenuToggle, user, onLogout, workState }) {
     workState?.summary?.overdue ?? 0,
   ].join(':')
   const [seenNotificationKey, setSeenNotificationKey] = useState('')
-  const unread = notificationKey !== '::' && notificationKey !== seenNotificationKey ? 1 : 0
+  const [notifications, setNotifications] = useState([])
+  const [notificationBusy, setNotificationBusy] = useState(false)
+  const unread = notifications.filter((notification) => !notification.readAt).length
+    + (notificationKey !== '::' && notificationKey !== seenNotificationKey ? 1 : 0)
 
   useEffect(() => {
     setSeenNotificationKey(window.localStorage.getItem('autocare:staff-work-notification') ?? '')
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!user?.id || !user?.accessToken) {
+      setNotifications([])
+      return undefined
+    }
+
+    void listStaffNotifications({ userId: user.id, accessToken: user.accessToken })
+      .then((items) => {
+        if (!cancelled) setNotifications(Array.isArray(items) ? items.filter((item) => item.category !== 'auth_otp') : [])
+      })
+      .catch(() => {
+        if (!cancelled) setNotifications([])
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.accessToken, user?.id])
+
+  const markNotificationRead = async (notificationId) => {
+    if (!user?.id || !user?.accessToken) return
+    setNotificationBusy(true)
+    try {
+      const updated = await markStaffNotificationRead({
+        userId: user.id,
+        notificationId,
+        accessToken: user.accessToken,
+      })
+      setNotifications((current) => current.map((item) => item.id === notificationId ? { ...item, readAt: updated.readAt ?? new Date().toISOString() } : item))
+    } finally {
+      setNotificationBusy(false)
+    }
+  }
+
+  const markAllNotificationsRead = async () => {
+    if (!user?.id || !user?.accessToken) return
+    setNotificationBusy(true)
+    try {
+      await markAllStaffNotificationsRead({ userId: user.id, accessToken: user.accessToken })
+      const readAt = new Date().toISOString()
+      setNotifications((current) => current.map((item) => ({ ...item, readAt })))
+    } finally {
+      setNotificationBusy(false)
+    }
+  }
+
+  const archiveNotification = async (notificationId) => {
+    if (!user?.id || !user?.accessToken) return
+    setNotificationBusy(true)
+    try {
+      await archiveStaffNotification({ userId: user.id, notificationId, accessToken: user.accessToken })
+      setNotifications((current) => current.filter((item) => item.id !== notificationId))
+    } finally {
+      setNotificationBusy(false)
+    }
+  }
+
+  const archiveReadNotifications = async () => {
+    if (!user?.id || !user?.accessToken) return
+    setNotificationBusy(true)
+    try {
+      await archiveAllReadStaffNotifications({ userId: user.id, accessToken: user.accessToken })
+      setNotifications((current) => current.filter((item) => !item.readAt))
+    } finally {
+      setNotificationBusy(false)
+    }
+  }
 
   const initials = user?.name
     ? user.name.split(' ').map((word) => word[0]).slice(0, 2).join('').toUpperCase()
@@ -182,7 +272,7 @@ export default function Topbar({ onMenuToggle, user, onLogout, workState }) {
 
   return (
     <header className="sticky top-0 z-20 border-b border-surface-border bg-surface-bg/88 backdrop-blur">
-      <div className="flex h-[72px] items-center gap-3 px-4 md:px-6 xl:px-8">
+      <div className="flex h-[72px] min-w-0 items-center gap-3 px-4 md:px-6 xl:px-8">
         <button
           onClick={onMenuToggle}
           className="rounded-xl p-2 text-ink-muted hover:bg-surface-hover md:hidden"
@@ -191,7 +281,7 @@ export default function Topbar({ onMenuToggle, user, onLogout, workState }) {
           <Menu size={20} />
         </button>
 
-        <div className="mr-auto min-w-0">
+        <div className="mr-auto min-w-0 flex-1">
           <p className="truncate text-base font-semibold tracking-tight text-ink-primary">{routeMeta.title}</p>
           <p className="hidden truncate text-xs text-ink-muted xl:block">{routeMeta.subtitle}</p>
         </div>
@@ -202,7 +292,7 @@ export default function Topbar({ onMenuToggle, user, onLogout, workState }) {
         {workClaim ? (
           <PortalLink
             href={workHref}
-            className="hidden min-h-10 max-w-[220px] items-center gap-2 border border-emerald-500/25 bg-emerald-500/10 px-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/15 lg:flex"
+            className="hidden min-h-10 max-w-[220px] items-center gap-2 border border-emerald-500/25 bg-emerald-500/10 px-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/15 xl:flex"
             title={`Resume ${workReference || 'active work'}`}
           >
             <ClipboardList size={15} className="shrink-0" />
@@ -211,7 +301,7 @@ export default function Topbar({ onMenuToggle, user, onLogout, workState }) {
           </PortalLink>
         ) : null}
 
-        <div className="relative">
+        <div className="relative min-w-0 max-w-[168px] shrink-0 lg:max-w-[150px] xl:max-w-[230px]">
           <button
             type="button"
             onClick={() => {
@@ -233,12 +323,35 @@ export default function Topbar({ onMenuToggle, user, onLogout, workState }) {
             <>
               <div className="fixed inset-0 z-10" onClick={close} />
               <div className="absolute right-0 z-20 mt-2 w-80 overflow-hidden rounded-2xl border border-surface-border bg-surface-card shadow-card-md animate-slide-up">
-                <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+                <div className="flex items-center justify-between gap-3 border-b border-surface-border px-4 py-3">
                   <p className="text-sm font-semibold text-ink-primary">Notifications</p>
-                  <span className="badge badge-gray">Updates</span>
+                  <div className="flex items-center gap-3">
+                    <button type="button" className="text-xs font-semibold text-ink-secondary disabled:opacity-50" onClick={() => void archiveReadNotifications()} disabled={notificationBusy || !notifications.some((item) => item.readAt)}>
+                      Archive read
+                    </button>
+                    <button type="button" className="text-xs font-semibold text-brand-orange disabled:opacity-50" onClick={() => void markAllNotificationsRead()} disabled={notificationBusy || !notifications.some((item) => !item.readAt)}>
+                      Mark all read
+                    </button>
+                  </div>
                 </div>
-                {workClaim || (workState?.summary?.blocked ?? 0) > 0 || (workState?.summary?.overdue ?? 0) > 0 ? (
+                {notifications.length || workClaim || (workState?.summary?.blocked ?? 0) > 0 || (workState?.summary?.overdue ?? 0) > 0 ? (
                   <div className="divide-y divide-surface-border">
+                    {notifications.slice(0, 6).map((notification) => (
+                      <div key={notification.id} className={`flex gap-3 px-4 py-4 ${notification.readAt ? 'opacity-70' : ''}`}>
+                        <Bell size={17} className="mt-0.5 shrink-0 text-brand-orange" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-ink-primary">{notification.title}</p>
+                          <p className="mt-1 text-xs leading-5 text-ink-muted">{notification.message}</p>
+                          <p className="mt-2 text-[11px] text-ink-muted" title={notification.createdAt}>{formatRelativeTime(notification.createdAt)}</p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-2">
+                          {!notification.readAt ? <button type="button" className="min-h-8 text-[11px] font-semibold text-brand-orange" onClick={() => void markNotificationRead(notification.id)} disabled={notificationBusy}>Read</button> : null}
+                          <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink-primary" onClick={() => void archiveNotification(notification.id)} disabled={notificationBusy} aria-label={`Archive ${notification.title}`} title="Archive notification">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                     {workClaim ? (
                       <PortalLink href={workHref} className="flex gap-3 px-4 py-4 hover:bg-surface-hover">
                         <ClipboardList size={17} className="mt-0.5 shrink-0 text-emerald-300" />
@@ -292,7 +405,8 @@ export default function Topbar({ onMenuToggle, user, onLogout, workState }) {
               setProfileOpen((value) => !value)
               setNotifOpen(false)
             }}
-            className="flex items-center gap-2 rounded-xl border border-transparent px-2 py-1.5 transition-colors hover:bg-surface-hover"
+            aria-label={`Open account menu for ${user?.name ?? 'Admin'}`}
+            className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-transparent px-2 py-1.5 transition-colors hover:bg-surface-hover"
           >
             <div
               className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
@@ -300,13 +414,13 @@ export default function Topbar({ onMenuToggle, user, onLogout, workState }) {
             >
               {initials}
             </div>
-            <div className="hidden text-left md:block">
-              <p className="text-xs font-semibold leading-none text-ink-primary">{user?.name ?? 'Admin'}</p>
-              <p className="mt-1 text-[11px] text-ink-muted">
+            <div className="hidden min-w-0 flex-1 text-left md:block">
+              <p className="truncate whitespace-nowrap text-xs font-semibold leading-none text-ink-primary" title={user?.name ?? 'Admin'}>{user?.name ?? 'Admin'}</p>
+              <p className="mt-1 truncate whitespace-nowrap text-[11px] text-ink-muted" title={user?.roleLabel ?? user?.role ?? 'Administrator'}>
                 {user?.roleLabel ?? user?.role ?? 'Administrator'}
               </p>
             </div>
-            <ChevronDown size={13} className="hidden text-ink-dim md:block" />
+            <ChevronDown size={13} className="hidden shrink-0 text-ink-dim md:block" />
           </button>
 
           {profileOpen ? (

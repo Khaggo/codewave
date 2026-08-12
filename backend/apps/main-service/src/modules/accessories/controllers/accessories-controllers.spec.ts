@@ -72,6 +72,7 @@ describe('Accessories controllers security contracts', () => {
   it('uses the authenticated request actor instead of trusting payload identity', async () => {
     const service = {
       getOrder: jest.fn().mockResolvedValue({ id: 'order-1' }),
+      getCart: jest.fn().mockResolvedValue({ items: [] }),
       checkout: jest.fn().mockResolvedValue({ id: 'order-1' }),
     };
     const controller = new CustomerAccessoriesController(
@@ -81,9 +82,11 @@ describe('Accessories controllers security contracts', () => {
     );
 
     await controller.getOrder('order-1', requestFor(customer));
+    await controller.getCart(requestFor(customer));
     await controller.checkout(checkoutPayload as never, 'checkout-identity-1', requestFor(customer));
 
     expect(service.getOrder).toHaveBeenCalledWith('order-1', customer);
+    expect(service.getCart).toHaveBeenCalledWith(customer);
     expect(service.checkout).toHaveBeenCalledWith(
       checkoutPayload,
       'checkout-identity-1',

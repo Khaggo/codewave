@@ -11,6 +11,7 @@ export const authAccounts = pgTable('auth_accounts', {
     .unique(),
   passwordHash: text('password_hash').notNull(),
   isActive: boolean('is_active').notNull().default(true),
+  mustChangePassword: boolean('must_change_password').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

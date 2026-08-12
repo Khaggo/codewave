@@ -35,6 +35,9 @@ class LoyaltyAnalyticsRewardUsageResponseDto {
   @ApiProperty({ example: 'Free Car Wash' })
   rewardName!: string;
 
+  @ApiProperty({ example: 'Free Car Wash' })
+  displayReference!: string;
+
   @ApiProperty({ example: 'active' })
   rewardStatus!: string;
 

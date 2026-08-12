@@ -63,24 +63,22 @@ const normalizeInsuranceDocumentForStaff = (document) => {
     return null;
   }
 
-  const normalizedDocumentId = document.id ?? null
-  const normalizedFileUrl = String(document.fileUrl ?? '').trim()
-  const downloadUrl =
-    normalizedDocumentId && normalizedFileUrl.startsWith('upload://insurance/')
-      ? `${API_BASE_URL}/api/insurance/documents/${normalizedDocumentId}/file`
-      : null
+  const fileName = String(document.fileName ?? '').trim()
+  const documentType = document.documentType ?? 'other'
+  const createdAt = document.createdAt ?? null
+  const normalizedDownloadRoute = String(document.downloadRoute ?? document.downloadUrl ?? '').trim()
+  const downloadRoute = normalizedDownloadRoute.startsWith('/api/insurance/documents/') && normalizedDownloadRoute.endsWith('/file')
+    ? normalizedDownloadRoute
+    : null
 
   return {
-    id: normalizedDocumentId,
-    inquiryId: document.inquiryId ?? null,
-    fileName: String(document.fileName ?? '').trim(),
-    fileUrl: normalizedFileUrl,
-    downloadUrl,
-    documentType: document.documentType ?? 'other',
-    documentTypeLabel: formatDocumentTypeLabel(document.documentType),
+    localKey: [documentType, fileName, createdAt ?? '', downloadRoute ?? ''].join('|'),
+    fileName,
+    downloadRoute,
+    documentType,
+    documentTypeLabel: formatDocumentTypeLabel(documentType),
     notes: trimOrNull(document.notes),
-    uploadedByUserId: document.uploadedByUserId ?? null,
-    createdAt: document.createdAt ?? null,
+    createdAt,
     updatedAt: document.updatedAt ?? null,
   };
 };
@@ -153,6 +151,25 @@ export const normalizeInsuranceInquiryForStaff = (inquiry) => {
   const activities = Array.isArray(inquiry.activities)
     ? inquiry.activities.map(normalizeInsuranceActivityForStaff).filter(Boolean)
     : [];
+  const documentRequirements = Array.isArray(inquiry.documentRequirements)
+    ? inquiry.documentRequirements
+        .map((requirement) => {
+          const documentType = String(requirement?.documentType ?? '').trim()
+          if (!documentType) return null
+
+          return {
+            documentType,
+            minimumCount: Math.max(0, Number(requirement.minimumCount ?? 0)),
+            uploadedCount: Math.max(0, Number(requirement.uploadedCount ?? 0)),
+            outstandingCount: Math.max(0, Number(requirement.outstandingCount ?? 0)),
+            required: Boolean(requirement.required),
+            conditional: Boolean(requirement.conditional),
+            requested: Boolean(requirement.requested),
+            satisfied: Boolean(requirement.satisfied),
+          }
+        })
+        .filter(Boolean)
+    : []
 
   return {
     id: inquiry.id ?? null,
@@ -176,6 +193,13 @@ export const normalizeInsuranceInquiryForStaff = (inquiry) => {
     reviewNotes: trimOrNull(inquiry.reviewNotes),
     assignedStaffId: inquiry.assignedStaffId ?? null,
     documentCount: documents.length,
+    documentRequirements,
+    requestedDocumentTypes: Array.isArray(inquiry.requestedDocumentTypes)
+      ? inquiry.requestedDocumentTypes.map(String)
+      : [],
+    outstandingDocumentTypes: Array.isArray(inquiry.outstandingDocumentTypes)
+      ? inquiry.outstandingDocumentTypes.map(String)
+      : [],
     documents,
     activities,
     createdAt: inquiry.createdAt ?? null,
@@ -264,14 +288,15 @@ export const updateInsuranceInquiryStatus = async ({
   );
 };
 
-export const getInsuranceDocumentFile = async ({ documentId, accessToken }) => {
-  if (!documentId) {
+export const getInsuranceDocumentFile = async ({ downloadRoute, accessToken }) => {
+  const normalizedDownloadRoute = String(downloadRoute ?? '').trim()
+  if (!normalizedDownloadRoute.startsWith('/api/insurance/documents/') || !normalizedDownloadRoute.endsWith('/file')) {
     throw new ApiError('Select an insurance document before opening it.', 400, {
       path: '/api/insurance/documents/:documentId/file',
     })
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/insurance/documents/${documentId}/file`, {
+  const response = await fetch(`${API_BASE_URL}${normalizedDownloadRoute}`, {
     method: 'GET',
     headers: {
       ...(buildAuthorizedHeaders(accessToken) ?? {}),
@@ -360,6 +385,8 @@ export const updateInsuranceInquiryWorkflow = async ({
   renewalDueAt,
   assignedStaffId,
   reviewNotes,
+  customerMessage,
+  requestedDocumentTypes,
   expectedUpdatedAt,
   accessToken,
 }) => {
@@ -388,11 +415,32 @@ export const updateInsuranceInquiryWorkflow = async ({
         ...(normalizedRenewalDueAt !== undefined ? { renewalDueAt: normalizedRenewalDueAt } : {}),
         ...(normalizedAssignedStaffId !== undefined ? { assignedStaffId: normalizedAssignedStaffId } : {}),
         reviewNotes: trimOrNull(reviewNotes) ?? undefined,
+        customerMessage: trimOrNull(customerMessage) ?? undefined,
+        ...(Array.isArray(requestedDocumentTypes) && requestedDocumentTypes.length
+          ? { requestedDocumentTypes }
+          : {}),
         expectedUpdatedAt: trimOrNull(expectedUpdatedAt) ?? undefined,
       },
     }),
   );
 };
+
+export const requestInsuranceInquiryDocuments = async ({
+  inquiryId,
+  documentTypes,
+  customerMessage,
+  reviewNotes,
+  expectedUpdatedAt,
+  accessToken,
+}) => updateInsuranceInquiryWorkflow({
+  inquiryId,
+  status: 'needs_documents',
+  requestedDocumentTypes: documentTypes,
+  customerMessage,
+  reviewNotes,
+  expectedUpdatedAt,
+  accessToken,
+});
 
 export const sendInsuranceReminders = async ({
   reminderType,

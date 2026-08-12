@@ -25,6 +25,7 @@ import {
   ApiConsumes,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiHeader,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -45,6 +46,7 @@ import { AddJobOrderPhotoDto } from '../dto/add-job-order-photo.dto';
 import { AddJobOrderProgressDto } from '../dto/add-job-order-progress.dto';
 import { BookingWorkshopHandoffResponseDto } from '../dto/booking-workshop-handoff-response.dto';
 import { CreateJobOrderDto } from '../dto/create-job-order.dto';
+import { CompleteInvoicePaymentReversalDto } from '../dto/complete-invoice-payment-reversal.dto';
 import { CustomerServiceHistoryResponseDto } from '../dto/customer-service-history-response.dto';
 import { FinalizeJobOrderDto } from '../dto/finalize-job-order.dto';
 import { JobOrderInvoiceLookupResponseDto } from '../dto/job-order-invoice-lookup-response.dto';
@@ -56,6 +58,7 @@ import { ReplaceJobOrderAssignmentsDto } from '../dto/replace-job-order-assignme
 import { UpdateJobOrderStatusDto } from '../dto/update-job-order-status.dto';
 import { UpdateJobOrderWorkshopStageDto } from '../dto/update-job-order-workshop-stage.dto';
 import { UploadJobOrderPhotoDto } from '../dto/upload-job-order-photo.dto';
+import { VoidAndReissueJobOrderInvoiceDto } from '../dto/void-and-reissue-job-order-invoice.dto';
 import { JOB_ORDER_EVIDENCE_MAX_BYTES } from '../services/job-order-evidence-storage.service';
 import { JobOrdersService } from '../services/job-orders.service';
 
@@ -110,6 +113,29 @@ export class JobOrdersController {
   sendBookingToWorkshop(@Param('bookingId') bookingId: string, @Req() request: Request) {
     return this.jobOrdersService.sendBookingToWorkshop(
       bookingId,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post('intake-handoffs/:inspectionId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({
+    summary: 'Idempotently hand a completed intake inspection to the workshop.',
+  })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'inspectionId', format: 'uuid' })
+  @ApiCreatedResponse({
+    description: 'The completed intake was handed off to its focused job-order workspace.',
+    type: BookingWorkshopHandoffResponseDto,
+  })
+  @ApiConflictResponse({ description: 'The intake is incomplete or is not a service intake.' })
+  @ApiForbiddenResponse({ description: 'Only service advisers or super admins can hand work to the workshop.' })
+  @ApiNotFoundResponse({ description: 'The intake, vehicle, booking, or staff account was not found.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  sendIntakeToWorkshop(@Param('inspectionId') inspectionId: string, @Req() request: Request) {
+    return this.jobOrdersService.sendIntakeToWorkshop(
+      inspectionId,
       request.user as { userId: string; role: string },
     );
   }
@@ -542,6 +568,62 @@ export class JobOrdersController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   finalize(@Param('id') id: string, @Body() payload: FinalizeJobOrderDto, @Req() request: Request) {
     return this.jobOrdersService.finalize(id, payload, request.user as { userId: string; role: string });
+  }
+
+  @Post(':id/invoices/:invoiceId/payment-reversal')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @ApiOperation({ summary: 'Record a completed full refund or manual payment reversal before invoice correction.' })
+  @ApiBearerAuth('access-token')
+  @ApiHeader({ name: 'If-Match', required: true, description: 'Current integer invoice version.' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiOkResponse({ type: JobOrderResponseDto })
+  @ApiConflictResponse({ description: 'The invoice is unpaid, stale, or the idempotency key conflicts.' })
+  completeInvoicePaymentReversal(
+    @Param('id') id: string,
+    @Param('invoiceId') invoiceId: string,
+    @Body() payload: CompleteInvoicePaymentReversalDto,
+    @Headers('if-match') ifMatch: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: Request,
+  ) {
+    return this.jobOrdersService.completeInvoicePaymentReversal(
+      id,
+      invoiceId,
+      payload,
+      ifMatch,
+      idempotencyKey,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post(':id/invoices/:invoiceId/reissue')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @ApiOperation({ summary: 'Void the current service invoice and issue a corrected immutable version.' })
+  @ApiBearerAuth('access-token')
+  @ApiHeader({ name: 'If-Match', required: true, description: 'Current integer invoice version.' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiOkResponse({ type: JobOrderResponseDto })
+  @ApiConflictResponse({ description: 'The invoice is stale, already corrected, or still requires payment reversal.' })
+  voidAndReissueInvoice(
+    @Param('id') id: string,
+    @Param('invoiceId') invoiceId: string,
+    @Body() payload: VoidAndReissueJobOrderInvoiceDto,
+    @Headers('if-match') ifMatch: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: Request,
+  ) {
+    return this.jobOrdersService.voidAndReissueInvoice(
+      id,
+      invoiceId,
+      payload,
+      ifMatch,
+      idempotencyKey,
+      request.user as { userId: string; role: string },
+    );
   }
 
   @Post(':id/invoice/payments')

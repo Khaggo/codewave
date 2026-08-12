@@ -1,10 +1,11 @@
 import { and, desc, eq, gte, isNull, lte, or } from 'drizzle-orm';
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
-import { AppDatabase } from '@shared/db/database.types';
+import { AppDatabase, AppDatabaseExecutor } from '@shared/db/database.types';
 import { LoyaltyAccrualPlan } from '@shared/events/loyalty-accrual-planner.service';
+import { vehicles } from '@main-modules/vehicles/schemas/vehicles.schema';
 
 import { CreateEarningRuleDto } from '../dto/create-earning-rule.dto';
 import { CreateRewardDto } from '../dto/create-reward.dto';
@@ -22,6 +23,7 @@ import {
   RewardCatalogSnapshot,
   rewardRedemptions,
   rewards,
+  vehicleStickerObservations,
 } from '../schemas/loyalty.schema';
 
 type CreateRewardInput = CreateRewardDto & {
@@ -60,6 +62,16 @@ type CreateRedemptionInput = {
   rewardId: string;
   redeemedByUserId: string;
   note?: string | null;
+};
+
+export type CreateVehicleStickerObservationInput = {
+  vehicleId: string;
+  inspectionId: string;
+  intakeReference: string;
+  observation: 'verified_present' | 'not_present';
+  verifiedByUserId: string;
+  observedAt: Date;
+  reason?: string | null;
 };
 
 @Injectable()
@@ -106,6 +118,109 @@ export class LoyaltyRepository extends BaseRepository {
       where: eq(loyaltyTransactions.loyaltyAccountId, account.id),
       orderBy: [desc(loyaltyTransactions.createdAt), desc(loyaltyTransactions.id)],
     });
+  }
+
+  async createVehicleStickerObservation(
+    payload: CreateVehicleStickerObservationInput,
+    db: AppDatabaseExecutor = this.db,
+  ) {
+    const reason = payload.reason?.trim() || null;
+    const [created] = await db
+      .insert(vehicleStickerObservations)
+      .values({ ...payload, reason })
+      .onConflictDoNothing({ target: vehicleStickerObservations.inspectionId })
+      .returning();
+
+    if (created) return created;
+    const existing = await this.findVehicleStickerObservationByInspectionId(payload.inspectionId, db);
+    if (
+      existing.inspectionId !== payload.inspectionId ||
+      existing.vehicleId !== payload.vehicleId ||
+      existing.observation !== payload.observation ||
+      (existing.reason?.trim() || null) !== reason
+    ) {
+      throw new ConflictException({
+        code: 'STICKER_OBSERVATION_CONFLICT',
+        message: 'This completed intake already has a different sticker observation.',
+      });
+    }
+    return existing;
+  }
+
+  async findVehicleStickerObservationByInspectionId(
+    inspectionId: string,
+    db: AppDatabaseExecutor = this.db,
+  ) {
+    const observation = await db.query.vehicleStickerObservations.findFirst({
+      where: eq(vehicleStickerObservations.inspectionId, inspectionId),
+    });
+    return this.assertFound(observation, 'Vehicle sticker observation not found');
+  }
+
+  async findLatestVehicleStickerObservation(vehicleId: string, userId?: string) {
+    const conditions = [eq(vehicleStickerObservations.vehicleId, vehicleId)];
+    if (userId) conditions.push(eq(vehicles.userId, userId));
+
+    const [observation] = await this.db
+      .select({
+        id: vehicleStickerObservations.id,
+        vehicleId: vehicleStickerObservations.vehicleId,
+        vehiclePublicReference: vehicles.publicReference,
+        vehicleMake: vehicles.make,
+        vehicleModel: vehicles.model,
+        vehicleYear: vehicles.year,
+        inspectionId: vehicleStickerObservations.inspectionId,
+        intakeReference: vehicleStickerObservations.intakeReference,
+        observation: vehicleStickerObservations.observation,
+        observedAt: vehicleStickerObservations.observedAt,
+        reason: vehicleStickerObservations.reason,
+      })
+      .from(vehicleStickerObservations)
+      .innerJoin(vehicles, eq(vehicleStickerObservations.vehicleId, vehicles.id))
+      .where(and(...conditions))
+      .orderBy(desc(vehicleStickerObservations.observedAt), desc(vehicleStickerObservations.id))
+      .limit(1);
+
+    return observation ?? null;
+  }
+
+  async listVehicleStickerObservationsForUser(userId: string) {
+    return this.db
+      .select({
+        id: vehicleStickerObservations.id,
+        vehicleId: vehicleStickerObservations.vehicleId,
+        vehiclePublicReference: vehicles.publicReference,
+        vehicleMake: vehicles.make,
+        vehicleModel: vehicles.model,
+        vehicleYear: vehicles.year,
+        inspectionId: vehicleStickerObservations.inspectionId,
+        intakeReference: vehicleStickerObservations.intakeReference,
+        observation: vehicleStickerObservations.observation,
+        observedAt: vehicleStickerObservations.observedAt,
+        reason: vehicleStickerObservations.reason,
+      })
+      .from(vehicleStickerObservations)
+      .innerJoin(vehicles, eq(vehicleStickerObservations.vehicleId, vehicles.id))
+      .where(eq(vehicles.userId, userId))
+      .orderBy(desc(vehicleStickerObservations.observedAt), desc(vehicleStickerObservations.id));
+  }
+
+  async listAllVehicleStickerObservations() {
+    return this.db
+      .select({
+        id: vehicleStickerObservations.id,
+        vehiclePublicReference: vehicles.publicReference,
+        vehicleMake: vehicles.make,
+        vehicleModel: vehicles.model,
+        vehicleYear: vehicles.year,
+        intakeReference: vehicleStickerObservations.intakeReference,
+        observation: vehicleStickerObservations.observation,
+        observedAt: vehicleStickerObservations.observedAt,
+        reason: vehicleStickerObservations.reason,
+      })
+      .from(vehicleStickerObservations)
+      .innerJoin(vehicles, eq(vehicleStickerObservations.vehicleId, vehicles.id))
+      .orderBy(desc(vehicleStickerObservations.observedAt), desc(vehicleStickerObservations.id));
   }
 
   async listAccountsForAnalytics() {
@@ -455,7 +570,9 @@ export class LoyaltyRepository extends BaseRepository {
         .set({
           pointsBalance: nextBalance,
           lifetimePointsEarned: account.lifetimePointsEarned + payload.pointsAwarded,
-          lastAccruedAt: payload.occurredAt ?? new Date(),
+          ...(payload.pointsAwarded > 0
+            ? { lastAccruedAt: payload.occurredAt ?? new Date() }
+            : {}),
           updatedAt: new Date(),
         })
         .where(eq(loyaltyAccounts.id, account.id));

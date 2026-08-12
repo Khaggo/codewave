@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 
 import { BaseRepository } from '@shared/base/base.repository';
 import { DRIZZLE_DB } from '@shared/db/database.constants';
@@ -146,7 +146,7 @@ export class NotificationsRepository extends BaseRepository {
 
   async listNotificationsByUserId(userId: string) {
     return this.db.query.notifications.findMany({
-      where: eq(notifications.userId, userId),
+      where: and(eq(notifications.userId, userId), isNull(notifications.archivedAt)),
       orderBy: desc(notifications.createdAt),
       with: {
         attempts: {
@@ -227,6 +227,58 @@ export class NotificationsRepository extends BaseRepository {
         where: eq(reminderRules.dedupeKey, dedupeKey),
       })) ?? null
     );
+  }
+
+  async markNotificationRead(userId: string, notificationId: string) {
+    const now = new Date();
+    const [updated] = await this.db
+      .update(notifications)
+      .set({ readAt: now, updatedAt: now })
+      .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)))
+      .returning();
+
+    return this.assertFound(updated, 'Notification not found');
+  }
+
+  async markAllNotificationsRead(userId: string) {
+    const now = new Date();
+    const updated = await this.db
+      .update(notifications)
+      .set({ readAt: now, updatedAt: now })
+      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)))
+      .returning({ id: notifications.id });
+
+    return { updatedCount: updated.length };
+  }
+
+  async archiveNotification(userId: string, notificationId: string) {
+    const now = new Date();
+    const [updated] = await this.db
+      .update(notifications)
+      .set({ archivedAt: now, updatedAt: now })
+      .where(and(
+        eq(notifications.id, notificationId),
+        eq(notifications.userId, userId),
+        isNull(notifications.archivedAt),
+      ))
+      .returning();
+
+    return this.assertFound(updated, 'Notification not found');
+  }
+
+  async archiveAllReadNotifications(userId: string) {
+    const now = new Date();
+    const updated = await this.db
+      .update(notifications)
+      .set({ archivedAt: now, updatedAt: now })
+      .where(and(
+        eq(notifications.userId, userId),
+        isNotNull(notifications.readAt),
+        isNull(notifications.archivedAt),
+      ))
+      .returning({ id: notifications.id });
+
+    return { archivedCount: updated.length };
   }
 
   async listReminderRulesForAnalytics(reminderType?: NotificationCategory) {

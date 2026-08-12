@@ -587,4 +587,131 @@ describe('NotificationsService', () => {
     expect(result.triggerName).toBe('back_job.status_changed');
   });
 
+  it('persists one-notification and mark-all read state only for the authorized user', async () => {
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'customer@example.com',
+        role: 'customer',
+        isActive: true,
+      }),
+    };
+    const notificationsRepository = {
+      markNotificationRead: jest.fn().mockResolvedValue({
+        id: 'notification-1',
+        userId: 'user-1',
+        readAt: new Date('2026-08-06T10:00:00.000Z'),
+      }),
+      markAllNotificationsRead: jest.fn().mockResolvedValue({ updatedCount: 3 }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        NotificationsService,
+        NotificationTriggerPlannerService,
+        { provide: NotificationsRepository, useValue: notificationsRepository },
+        { provide: UsersService, useValue: usersService },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
+        { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(NotificationsService);
+    const actor = { userId: 'user-1', role: 'customer' };
+
+    await service.markNotificationRead('user-1', 'notification-1', actor);
+    await service.markAllNotificationsRead('user-1', actor);
+
+    expect(notificationsRepository.markNotificationRead).toHaveBeenCalledWith(
+      'user-1',
+      'notification-1',
+    );
+    expect(notificationsRepository.markAllNotificationsRead).toHaveBeenCalledWith('user-1');
+  });
+
+  it('rejects notification read mutations across users', async () => {
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'user-2',
+        email: 'other@example.com',
+        role: 'customer',
+        isActive: true,
+      }),
+    };
+    const notificationsRepository = {
+      markNotificationRead: jest.fn(),
+      markAllNotificationsRead: jest.fn(),
+    };
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        NotificationsService,
+        NotificationTriggerPlannerService,
+        { provide: NotificationsRepository, useValue: notificationsRepository },
+        { provide: UsersService, useValue: usersService },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
+        { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(NotificationsService);
+
+    await expect(
+      service.markNotificationRead('user-2', 'notification-1', {
+        userId: 'user-1',
+        role: 'customer',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(notificationsRepository.markNotificationRead).not.toHaveBeenCalled();
+  });
+
+  it('archives one notification and all read notifications without rewriting read state', async () => {
+    const originalReadAt = new Date('2026-08-06T10:00:00.000Z');
+    const notificationsRepository = {
+      archiveNotification: jest.fn().mockResolvedValue({
+        id: 'notification-1',
+        userId: 'user-1',
+        readAt: originalReadAt,
+        archivedAt: new Date('2026-08-06T11:00:00.000Z'),
+      }),
+      archiveAllReadNotifications: jest.fn().mockResolvedValue({ archivedCount: 2 }),
+    };
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        NotificationsService,
+        NotificationTriggerPlannerService,
+        { provide: NotificationsRepository, useValue: notificationsRepository },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 'user-1',
+              role: 'customer',
+              isActive: true,
+            }),
+          },
+        },
+        { provide: MailDeliveryService, useValue: { sendMail: jest.fn() } },
+        { provide: getQueueToken(NOTIFICATIONS_QUEUE_NAME), useValue: { add: jest.fn() } },
+      ],
+    }).compile();
+    const service = moduleRef.get(NotificationsService);
+    const notification = await service.archiveNotification(
+      'user-1',
+      'notification-1',
+      { userId: 'user-1', role: 'customer' },
+    );
+    const archiveAll = await service.archiveAllReadNotifications(
+      'user-1',
+      { userId: 'user-1', role: 'customer' },
+    );
+
+    expect(notification.readAt).toBe(originalReadAt);
+    expect(archiveAll).toEqual({ archivedCount: 2 });
+    expect(notificationsRepository.archiveNotification).toHaveBeenCalledWith(
+      'user-1',
+      'notification-1',
+    );
+    expect(notificationsRepository.archiveAllReadNotifications).toHaveBeenCalledWith('user-1');
+  });
+
 });

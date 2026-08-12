@@ -24,6 +24,7 @@ function createService(activeClaims: Array<Record<string, unknown>> = []) {
       id: actor.userId,
       role: actor.role,
       isActive: true,
+      profile: { firstName: 'Jamie', lastName: 'Cruz' },
     }),
   };
   const configService = {
@@ -51,6 +52,7 @@ describe('StaffWorkQueuesService multi-work capacity', () => {
         id: 'claim-2',
         entityId: 'job-2',
         entityType: 'job_order',
+        ownerUserId: actor.userId,
         claimedAt: new Date('2026-07-27T02:00:00.000Z'),
         leaseExpiresAt: new Date('2026-07-27T02:15:00.000Z'),
       },
@@ -58,6 +60,7 @@ describe('StaffWorkQueuesService multi-work capacity', () => {
         id: 'claim-1',
         entityId: 'job-1',
         entityType: 'job_order',
+        ownerUserId: actor.userId,
         claimedAt: new Date('2026-07-27T01:00:00.000Z'),
         leaseExpiresAt: new Date('2026-07-27T01:15:00.000Z'),
       },
@@ -73,6 +76,11 @@ describe('StaffWorkQueuesService multi-work capacity', () => {
       currentClaimId: 'claim-2',
     }));
     expect(result.session.activeClaims).toHaveLength(2);
+    expect(result.session.activeClaims[0]).toEqual(expect.objectContaining({
+      ownerUserId: actor.userId,
+      ownerName: 'Jamie Cruz',
+      isMine: true,
+    }));
   });
 
   it('dispatches another record below capacity and stops at capacity', async () => {
@@ -95,5 +103,35 @@ describe('StaffWorkQueuesService multi-work capacity', () => {
       capacity: 6,
     }));
     expect(atCapacity.repository.dispatchNext).not.toHaveBeenCalled();
+  });
+
+  it('returns an authoritative owner and capacity snapshot after a selected claim', async () => {
+    const context = createService([]);
+    context.repository.claimSelected.mockResolvedValue({
+      id: 'claim-1',
+      queueType: 'job_order',
+      entityType: 'job_order',
+      entityId: 'job-1',
+      ownerUserId: actor.userId,
+      claimedAt: new Date('2026-07-27T01:00:00.000Z'),
+      leaseExpiresAt: new Date('2026-07-27T01:15:00.000Z'),
+    });
+    context.repository.getActiveClaimsForOwner.mockResolvedValue([
+      { id: 'claim-1', ownerUserId: actor.userId },
+      { id: 'claim-2', ownerUserId: actor.userId },
+    ]);
+
+    const result = await context.service.claimSelected(
+      'job_order',
+      { entityType: 'job_order', entityId: 'job-1' },
+      actor,
+    );
+
+    expect(result.claim).toEqual(expect.objectContaining({
+      ownerUserId: actor.userId,
+      ownerName: 'Jamie Cruz',
+      isMine: true,
+    }));
+    expect(result.ownership).toEqual({ limit: 12, activeClaimCount: 2, remaining: 10 });
   });
 });

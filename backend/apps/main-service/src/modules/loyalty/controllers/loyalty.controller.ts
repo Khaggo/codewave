@@ -31,6 +31,8 @@ import { UpdateEarningRuleStatusDto } from '../dto/update-earning-rule-status.dt
 import { UpdateRewardDto } from '../dto/update-reward.dto';
 import { UpdateRewardStatusDto } from '../dto/update-reward-status.dto';
 import { LoyaltyService } from '../services/loyalty.service';
+import { LoyaltyQualificationAuditResponseDto } from '../dto/loyalty-qualification-audit-response.dto';
+import { LoyaltyQualificationResponseDto } from '../dto/loyalty-qualification-response.dto';
 
 @ApiTags('loyalty')
 @Controller()
@@ -50,6 +52,29 @@ export class LoyaltyController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   getEarningPolicy(@Req() request: Request) {
     return this.loyaltyService.getEarningPolicy(
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Get('loyalty/qualification')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Read the current customer-safe vehicle sticker qualification.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ type: LoyaltyQualificationResponseDto })
+  getQualification(@Req() request: Request) {
+    const actor = request.user as { userId: string; role: string };
+    return this.loyaltyService.getQualification(actor.userId, actor);
+  }
+
+  @Get('admin/loyalty/qualifications')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Review vehicle sticker qualification history for staff.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ type: LoyaltyQualificationAuditResponseDto, isArray: true })
+  listQualificationAudits(@Req() request: Request) {
+    return this.loyaltyService.listQualificationAudits(
       request.user as { userId: string; role: string },
     );
   }

@@ -1,6 +1,7 @@
 import request from 'supertest';
 
 import { AutocareEventBusService } from '@shared/events/autocare-event-bus.service';
+import { MailDeliveryService } from '../src/modules/notifications/services/mail-delivery.service';
 import { NotificationsRepository } from '../src/modules/notifications/repositories/notifications.repository';
 
 import { createMainServiceTestApp } from './helpers/main-service-test-app';
@@ -151,11 +152,22 @@ describe('AuthController integration', () => {
       });
       expect(adminLogin.status).toBe(200);
 
+      const rejectedClientPassword = await request(app.getHttpServer())
+        .post('/api/admin/staff-accounts')
+        .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
+        .send({
+          password: 'ClientSuppliedPassword123',
+          firstName: 'Maria',
+          lastName: 'Santos',
+          role: 'service_adviser',
+          accountType: 'staff',
+        });
+      expect(rejectedClientPassword.status).toBe(400);
+
       const createStaffResponse = await request(app.getHttpServer())
         .post('/api/admin/staff-accounts')
         .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
         .send({
-          password: 'SecurePass123',
           firstName: 'Maria',
           lastName: 'Santos',
           role: 'service_adviser',
@@ -169,15 +181,66 @@ describe('AuthController integration', () => {
           role: 'service_adviser',
           staffCode: expect.stringMatching(/^STA-\d{4}$/),
           isActive: true,
+          delivery: {
+            status: 'sent',
+            channel: 'email',
+            targetEmail: expect.stringMatching(/^maria\d{3}\.staff@autocare\.com$/),
+            retryable: false,
+          },
         }),
       );
+      expect(createStaffResponse.body).not.toHaveProperty('temporaryPassword');
+      expect(createStaffResponse.body).not.toHaveProperty('passwordHash');
       const generatedStaffEmail = createStaffResponse.body.email;
+      const mailDelivery = app.get(MailDeliveryService) as unknown as {
+        sentMessages: Array<{ to: string; text: string }>;
+      };
+      const credentialMail = mailDelivery.sentMessages.find((message) => message.to === generatedStaffEmail);
+      const temporaryPassword = credentialMail?.text.match(/Temporary password: ([^\r\n]+)/)?.[1];
+      expect(temporaryPassword).toMatch(/^[A-Za-z0-9_-]{32}$/);
 
       const staffLogin = await request(app.getHttpServer()).post('/api/auth/login').send({
         email: generatedStaffEmail,
-        password: 'SecurePass123',
+        password: temporaryPassword,
       });
       expect(staffLogin.status).toBe(200);
+      expect(staffLogin.body).toEqual(
+        expect.objectContaining({
+          requiresPasswordChange: true,
+          passwordChangeToken: expect.any(String),
+          destination: '/api/auth/password/change-required',
+        }),
+      );
+      expect(staffLogin.body).not.toHaveProperty('accessToken');
+      expect(staffLogin.body).not.toHaveProperty('refreshToken');
+
+      const restrictedDirectory = await request(app.getHttpServer())
+        .get('/api/admin/staff-accounts')
+        .set('Authorization', `Bearer ${staffLogin.body.passwordChangeToken}`);
+      expect(restrictedDirectory.status).toBe(401);
+
+      const passwordChangeResponse = await request(app.getHttpServer())
+        .post('/api/auth/password/change-required')
+        .send({
+          passwordChangeToken: staffLogin.body.passwordChangeToken,
+          newPassword: 'ChangedStaffPassword123',
+        });
+      expect(passwordChangeResponse.status).toBe(200);
+      expect(passwordChangeResponse.body.accessToken).toEqual(expect.any(String));
+      expect(passwordChangeResponse.body.refreshToken).toEqual(expect.any(String));
+
+      const duplicateEmail = await request(app.getHttpServer())
+        .post('/api/admin/staff-accounts')
+        .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
+        .send({
+          email: generatedStaffEmail,
+          staffCode: 'STA-9999',
+          firstName: 'Duplicate',
+          lastName: 'Email',
+          role: 'service_adviser',
+          accountType: 'staff',
+        });
+      expect(duplicateEmail.status).toBe(409);
 
       const staffListResponse = await request(app.getHttpServer())
         .get('/api/admin/staff-accounts')
@@ -254,7 +317,6 @@ describe('AuthController integration', () => {
         .set('Authorization', `Bearer ${customerLogin.body.accessToken}`)
         .send({
           email: 'staff@example.com',
-          password: 'SecurePass123',
           firstName: 'Maria',
           lastName: 'Santos',
           role: 'service_adviser',

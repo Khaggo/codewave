@@ -41,9 +41,23 @@ const toPriceCents = (value) => {
   return Math.round(normalizedValue * 100)
 }
 
-export const listBookingServices = async () => {
-  const services = await request('/api/services', { method: 'GET' })
-  return Array.isArray(services) ? services : []
+export const listBookingServices = async ({ accessToken, search, categoryId, status = 'all', page = 1, limit = 25 } = {}) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit), status })
+  if (search?.trim()) params.set('search', search.trim())
+  if (categoryId) params.set('categoryId', categoryId)
+
+  const response = await request(`/api/admin/services?${params.toString()}`, {
+    method: 'GET',
+    headers: withAuthorization(accessToken),
+  })
+
+  return {
+    items: Array.isArray(response?.items) ? response.items : [],
+    page: Number(response?.page) || page,
+    limit: Number(response?.limit) || limit,
+    total: Number(response?.total) || 0,
+    totalPages: Number(response?.totalPages) || 1,
+  }
 }
 
 export const listBookingServiceCategories = async () => {

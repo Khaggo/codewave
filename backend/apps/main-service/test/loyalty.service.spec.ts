@@ -40,6 +40,10 @@ describe('LoyaltyService', () => {
         userId: 'customer-1',
         pointsBalance: 0,
       }),
+      findLatestVehicleStickerObservation: jest.fn().mockResolvedValue({
+        vehicleId: 'vehicle-1',
+        observation: 'verified_present',
+      }),
       applyAccrual: jest.fn().mockResolvedValue({
         account: { id: 'account-1', userId: 'customer-1', pointsBalance: 125 },
         transaction: { id: 'transaction-1' },
@@ -123,6 +127,10 @@ describe('LoyaltyService', () => {
         userId: 'customer-1',
         pointsBalance: 0,
       }),
+      findLatestVehicleStickerObservation: jest.fn().mockResolvedValue({
+        vehicleId: 'vehicle-1',
+        observation: 'verified_present',
+      }),
       applyAccrual: jest.fn(),
     };
 
@@ -187,6 +195,17 @@ describe('LoyaltyService', () => {
         userId: 'customer-1',
         pointsBalance: 150,
       }),
+      listVehicleStickerObservationsForUser: jest.fn().mockResolvedValue([
+        {
+          vehicleId: 'vehicle-1',
+          vehiclePublicReference: 'VEH-2026-0001',
+          vehicleMake: 'Toyota',
+          vehicleModel: 'Corolla',
+          vehicleYear: 2021,
+          observation: 'verified_present',
+          observedAt: new Date('2026-08-01T00:00:00.000Z'),
+        },
+      ]),
       createRedemption: jest.fn(),
     };
 

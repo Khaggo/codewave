@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Power, RefreshCw, ShieldPlus, UserCog } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, CheckCircle2, Power, RefreshCw, ShieldPlus, UserCog, X } from 'lucide-react'
 
 import {
   ApiError,
   createStaffAccount,
   listStaffAccounts,
+  retryStaffCredentialDelivery,
   updateStaffAccountStatus,
 } from '@/lib/authClient'
+import { credentialRetryTarget } from '@/lib/staffAccountAuthContract.mjs'
 import { useUser } from '@/lib/userContext'
 import {
   buildProvisioningErrors,
@@ -18,7 +20,6 @@ import {
 } from './staffProvisioningView.mjs'
 
 const emptyForm = {
-  password: '',
   accountType: 'staff',
   firstName: '',
   lastName: '',
@@ -55,10 +56,10 @@ const groupedAccountTypes = [
   { value: 'admin', label: 'Admins' },
 ]
 
-function Field({ label, error, children, helper }) {
+function Field({ id, label, error, children, helper }) {
   return (
     <div>
-      <label className="label uppercase tracking-[0.18em]">{label}</label>
+      <label htmlFor={id} className="label uppercase tracking-[0.18em]">{label}</label>
       {children}
       {helper ? <p className="mt-1.5 text-xs leading-5 text-ink-muted">{helper}</p> : null}
       {error ? <p className="mt-1.5 text-xs text-red-400">{error}</p> : null}
@@ -72,24 +73,24 @@ function Notice({ notice }) {
   const isSuccess = notice.tone === 'success'
 
   return (
-    <div className={`flex items-start gap-2.5 ${isSuccess ? 'status-message status-message-success' : 'status-message status-message-danger'}`}>
+    <div role={isSuccess ? 'status' : 'alert'} aria-live="polite" className={`flex items-start gap-2.5 ${isSuccess ? 'status-message status-message-success' : 'status-message status-message-danger'}`}>
       {isSuccess ? <CheckCircle2 size={15} className="mt-0.5 shrink-0" /> : <AlertCircle size={15} className="mt-0.5 shrink-0" />}
       <p>{notice.text}</p>
     </div>
   )
 }
 
-function SectionShell({ title, description, children, action }) {
+function SectionShell({ title, titleId, description, children, action, className = '' }) {
   return (
-    <section className="card overflow-hidden">
+    <section className={`card min-w-0 overflow-hidden ${className}`}>
       <div className="flex items-start justify-between gap-4 border-b border-surface-border bg-surface-raised/70 px-5 py-4">
         <div>
-          <p className="card-title">{title}</p>
+          <p id={titleId} className="card-title">{title}</p>
           <p className="mt-1 text-sm text-ink-muted">{description}</p>
         </div>
         {action}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="flex flex-col p-5">{children}</div>
     </section>
   )
 }
@@ -117,6 +118,8 @@ export default function StaffProvisioningPanel() {
   const [notice, setNotice] = useState(null)
   const [loading, setLoading] = useState(false)
   const [lastProvisionedAccount, setLastProvisionedAccount] = useState(null)
+  const [retryEmail, setRetryEmail] = useState('')
+  const [retryLoading, setRetryLoading] = useState(false)
   const [managedAccounts, setManagedAccounts] = useState([])
   const [directoryState, setDirectoryState] = useState({ status: 'idle', message: '' })
   const [statusForm, setStatusForm] = useState(emptyStatusForm)
@@ -124,6 +127,9 @@ export default function StaffProvisioningPanel() {
   const [statusNotice, setStatusNotice] = useState(null)
   const [statusLoading, setStatusLoading] = useState(false)
   const [statusActionTargetId, setStatusActionTargetId] = useState('')
+  const [isProvisionDrawerOpen, setIsProvisionDrawerOpen] = useState(false)
+  const addAccountButtonRef = useRef(null)
+  const firstNameInputRef = useRef(null)
 
   const canProvision = user?.role === 'super_admin'
   const selectedAccountType = useMemo(
@@ -168,6 +174,19 @@ export default function StaffProvisioningPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.accessToken, canProvision])
 
+  useEffect(() => {
+    if (!isProvisionDrawerOpen) return undefined
+
+    firstNameInputRef.current?.focus()
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return
+      setIsProvisionDrawerOpen(false)
+      addAccountButtonRef.current?.focus()
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [isProvisionDrawerOpen])
+
   if (!canProvision) {
     return null
   }
@@ -208,7 +227,6 @@ export default function StaffProvisioningPanel() {
     try {
       const createdAccount = await createStaffAccount(
         {
-          password: form.password,
           role: selectedAccountType.role,
           accountType: selectedAccountType.value,
           firstName: form.firstName.trim(),
@@ -228,19 +246,47 @@ export default function StaffProvisioningPanel() {
       })
       setNotice({
         tone: 'success',
-        text: `${selectedAccountType.label} account created. Use ${createdAccount?.email} with the password you entered to sign in now.`,
+        text: `${selectedAccountType.label} account created. The temporary sign-in credential was emailed to ${createdAccount.email}.`,
       })
+      setRetryEmail('')
       await loadManagedAccounts()
     } catch (error) {
+      const failedDeliveryEmail = credentialRetryTarget(error)
+      setRetryEmail(failedDeliveryEmail)
       setNotice({
         tone: 'error',
-        text:
-          error instanceof ApiError
+        text: failedDeliveryEmail
+          ? `The account was saved, but its temporary credential could not be emailed to ${failedDeliveryEmail}. Retry delivery to generate and send a new credential.`
+          : error instanceof ApiError
             ? error.message
             : 'Unable to provision the staff account right now.',
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRetryDelivery = async () => {
+    if (!retryEmail) return
+    setRetryLoading(true)
+    setNotice(null)
+    try {
+      const account = await retryStaffCredentialDelivery(retryEmail, user.accessToken)
+      setLastProvisionedAccount(account)
+      setRetryEmail('')
+      setNotice({ tone: 'success', text: `A new temporary sign-in credential was emailed to ${account.email}.` })
+      await loadManagedAccounts()
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        text: credentialRetryTarget(error)
+          ? `Delivery still failed for ${retryEmail}. Check mail configuration and try again.`
+          : error instanceof ApiError
+            ? error.message
+            : 'Unable to retry credential delivery right now.',
+      })
+    } finally {
+      setRetryLoading(false)
     }
   }
 
@@ -324,26 +370,58 @@ export default function StaffProvisioningPanel() {
 
   return (
     <div className="space-y-5">
-      <section className="ops-summary-grid">
-        <MetricCard label="Managed accounts" value={summary.total} hint="All staff-capable accounts in the directory" />
-        <MetricCard label="Active accounts" value={summary.activeCount} hint="Accounts that can sign in right now" />
-        <MetricCard label="Inactive accounts" value={summary.inactiveCount} hint="Accounts currently blocked from sign-in" />
-        <MetricCard label="Legacy workshop logins" value={summary.activeHeadTechnicianCount} hint="Retired technician/head-tech accounts should trend toward zero." />
-        <MetricCard label="Admin accounts" value={summary.adminCount} hint="Protected admin identities in the directory" />
-      </section>
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-bold text-ink-primary">Staff Accounts</h1>
+          <p className="mt-1 text-sm text-ink-muted">Manage access and review the staff directory.</p>
+        </div>
+        <button
+          ref={addAccountButtonRef}
+          type="button"
+          onClick={() => setIsProvisionDrawerOpen(true)}
+          className="ops-action-primary shrink-0"
+          aria-haspopup="dialog"
+          aria-expanded={isProvisionDrawerOpen}
+        >
+          <ShieldPlus size={14} />
+          Add account
+        </button>
+      </header>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+      <section className="min-w-0">
+        {isProvisionDrawerOpen ? (
+          <div className="fixed inset-0 z-50 flex justify-end" role="presentation">
+            <button
+              type="button"
+              aria-label="Close add account drawer"
+              tabIndex={-1}
+              onClick={() => {
+                setIsProvisionDrawerOpen(false)
+                addAccountButtonRef.current?.focus()
+              }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <aside
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="add-staff-account-title"
+              className="relative h-full w-full max-w-md overflow-y-auto border-l border-surface-border bg-surface-bg shadow-2xl"
+            >
         <SectionShell
-          title="Provision Operations Accounts"
+          className="staff-account-drawer min-h-full rounded-none border-y-0 border-r-0"
+          title="Add Staff Account"
+          titleId="add-staff-account-title"
           description="Create service-adviser and admin identities from one protected workspace. Technician access is now handled through the profile directory instead of login accounts."
-          action={
-            <div className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-3 py-2 text-xs font-semibold text-ink-secondary">
-              <ShieldPlus size={14} />
-              Protected provisioning
-            </div>
-          }
+          action={<button type="button" aria-label="Close add account drawer" onClick={() => { setIsProvisionDrawerOpen(false); addAccountButtonRef.current?.focus() }} className="ops-action-secondary h-10 w-10 p-0"><X size={16} /></button>}
         >
           <Notice notice={notice} />
+
+          {retryEmail ? (
+            <button type="button" onClick={handleRetryDelivery} disabled={retryLoading} className="ops-action-secondary mt-4 self-start">
+              {retryLoading ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {retryLoading ? 'Retrying delivery...' : 'Retry credential email'}
+            </button>
+          ) : null}
 
           {lastProvisionedAccount ? (
             <div className="mt-5 rounded-2xl border border-surface-border bg-surface-raised px-4 py-4 md:px-5">
@@ -356,6 +434,7 @@ export default function StaffProvisioningPanel() {
                     {lastProvisionedAccount.displayName || 'Staff Account'}
                   </h3>
                   <p className="mt-1 text-sm text-ink-secondary">{lastProvisionedAccount.email}</p>
+                  <p className="mt-3 text-xs text-green-400">Credential delivery confirmed by the mail service.</p>
                 </div>
                 <span className={`badge ${lastProvisionedAccount.isActive ? 'badge-green' : 'badge-gray'}`}>
                   {lastProvisionedAccount.isActive ? 'Ready to login' : 'Inactive'}
@@ -380,8 +459,10 @@ export default function StaffProvisioningPanel() {
           ) : null}
 
           <form onSubmit={handleSubmit} className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2" noValidate>
-            <Field label="First Name" error={errors.firstName}>
+            <Field id="staff-first-name" label="First Name" error={errors.firstName}>
               <input
+                id="staff-first-name"
+                ref={firstNameInputRef}
                 value={form.firstName}
                 onChange={(event) => handleChange('firstName', event.target.value)}
                 className="input"
@@ -389,8 +470,9 @@ export default function StaffProvisioningPanel() {
               />
             </Field>
 
-            <Field label="Last Name" error={errors.lastName}>
+            <Field id="staff-last-name" label="Last Name" error={errors.lastName}>
               <input
+                id="staff-last-name"
                 value={form.lastName}
                 onChange={(event) => handleChange('lastName', event.target.value)}
                 className="input"
@@ -398,23 +480,14 @@ export default function StaffProvisioningPanel() {
               />
             </Field>
 
-            <Field label="Password" error={errors.password}>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(event) => handleChange('password', event.target.value)}
-                className="input"
-                placeholder="Minimum 8 characters"
-                autoComplete="new-password"
-              />
-            </Field>
-
             <Field
+              id="staff-account-type"
               label="Account Type"
               helper={`Backend access: ${selectedAccountType.roleLabel}. ${selectedAccountType.helper}`}
             >
               <div className="relative">
                 <select
+                  id="staff-account-type"
                   value={form.accountType}
                   onChange={(event) => handleChange('accountType', event.target.value)}
                   className="select"
@@ -440,8 +513,9 @@ export default function StaffProvisioningPanel() {
               ) : null}
             </Field>
 
-            <Field label="Phone Number" error={errors.phone}>
+            <Field id="staff-phone" label="Phone Number" error={errors.phone}>
               <input
+                id="staff-phone"
                 value={form.phone}
                 onChange={(event) => handleChange('phone', event.target.value)}
                 className="input"
@@ -484,10 +558,14 @@ export default function StaffProvisioningPanel() {
             ) : null}
           </form>
         </SectionShell>
+            </aside>
+          </div>
+        ) : null}
 
         <SectionShell
-          title="Account Status Control"
-          description="Choose a staff-capable account from the directory and activate or deactivate access without deleting its history. Admin accounts appear as Admin, not Super Admin."
+          className="order-1 min-w-0"
+          title="Managed Account Directory"
+          description="Review staff-capable accounts first, then use the separate activation controls below when access must change."
           action={
             <button
               type="button"
@@ -501,18 +579,23 @@ export default function StaffProvisioningPanel() {
           }
         >
           {directoryState.message ? (
-            <div className={directoryState.status === 'error' ? 'status-message status-message-danger' : 'status-message status-message-warning'}>
+            <div className={`order-1 ${directoryState.status === 'error' ? 'status-message status-message-danger' : 'status-message status-message-warning'}`}>
               {directoryState.message}
             </div>
           ) : null}
 
-          <div className="mt-5">
+          <div className="order-2 mt-5">
             <Notice notice={statusNotice} />
           </div>
 
-          <form onSubmit={handleStatusSubmit} className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2" noValidate>
-            <Field label="Staff Account" error={statusErrors.userId}>
+          <form onSubmit={handleStatusSubmit} className="order-2 mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2" noValidate>
+            <div className="xl:col-span-2">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">Activation controls</p>
+              <p className="mt-1 text-sm text-ink-secondary">Activate or deactivate access without deleting account history.</p>
+            </div>
+            <Field id="staff-status-account" label="Staff Account" error={statusErrors.userId}>
               <select
+                id="staff-status-account"
                 value={statusForm.userId}
                 onChange={(event) => handleSelectStatusAccount(event.target.value)}
                 className="select"
@@ -536,6 +619,7 @@ export default function StaffProvisioningPanel() {
             </Field>
 
             <Field
+              id="staff-target-status"
               label="Target Status"
               helper={
                 selectedStatusAccount
@@ -547,6 +631,7 @@ export default function StaffProvisioningPanel() {
             >
               <div className="relative">
                 <select
+                  id="staff-target-status"
                   value={statusForm.targetStatus}
                   onChange={(event) => handleStatusChange('targetStatus', event.target.value)}
                   className="select"
@@ -567,8 +652,9 @@ export default function StaffProvisioningPanel() {
             </Field>
 
             <div className="xl:col-span-2">
-              <Field label="Reason (Optional)" error={statusErrors.reason}>
+              <Field id="staff-status-reason" label="Reason (Optional)" error={statusErrors.reason}>
                 <input
+                  id="staff-status-reason"
                   value={statusForm.reason}
                   onChange={(event) => handleStatusChange('reason', event.target.value)}
                   className="input"
@@ -588,15 +674,15 @@ export default function StaffProvisioningPanel() {
             </div>
           </form>
 
-          <div className="mt-6">
+          <div className="order-1 mt-5">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">
               Managed Account Directory
             </p>
             <div className="mt-3">
               {managedAccounts.length ? (
                 <div className="table-surface">
-                  <div className="table-scroll">
-                    <table className="data-table min-w-[760px]">
+                  <div className="min-w-0">
+                    <table className="data-table w-full table-fixed">
                       <thead>
                         <tr>
                           <th>Account</th>
@@ -612,10 +698,9 @@ export default function StaffProvisioningPanel() {
 
                           return (
                             <tr key={account.id}>
-                              <td>
+                              <td className="break-words">
                                 <p className="font-semibold text-ink-primary">{account.displayName || account.email}</p>
-                                <p className="mt-1 text-xs text-ink-secondary">{account.email}</p>
-                                <p className="mt-1 font-mono text-[11px] text-ink-muted">{account.id}</p>
+                                <p className="mt-1 break-all text-xs text-ink-secondary">{account.email}</p>
                               </td>
                               <td>
                                 <span className="badge badge-gray">{account.roleLabel}</span>
@@ -633,7 +718,7 @@ export default function StaffProvisioningPanel() {
                                     onClick={() => handleSelectStatusAccount(account.id)}
                                     className="ops-action-secondary"
                                   >
-                                    Load In Editor
+                                    Edit account
                                   </button>
                                   <button
                                     type="button"
@@ -664,6 +749,14 @@ export default function StaffProvisioningPanel() {
             </div>
           </div>
         </SectionShell>
+      </section>
+
+      <section className="ops-summary-grid 2xl:grid-cols-5" aria-label="Staff account summary">
+        <MetricCard label="Managed accounts" value={summary.total} hint="All staff-capable accounts in the directory" />
+        <MetricCard label="Active accounts" value={summary.activeCount} hint="Accounts that can sign in right now" />
+        <MetricCard label="Inactive accounts" value={summary.inactiveCount} hint="Accounts currently blocked from sign-in" />
+        <MetricCard label="Legacy workshop logins" value={summary.activeHeadTechnicianCount} hint="Retired technician/head-tech accounts should trend toward zero." />
+        <MetricCard label="Admin accounts" value={summary.adminCount} hint="Protected admin identities in the directory" />
       </section>
     </div>
   )

@@ -1,4 +1,11 @@
 import { deriveApiBaseUrl } from './apiBaseUrl.mjs';
+import { normalizeAdminCustomerListResponse } from './adminCustomerListResponse.mjs';
+import {
+  mapAuthoritativeStaffProfile,
+  normalizeStaffPhoneNumber,
+  requireAuthoritativeStaffPhone,
+} from './staffProfileSession.mjs';
+import { normalizeStaffLoginResponse, stripCredentialSecrets } from './staffAccountAuthContract.mjs';
 
 const API_BASE_URL = deriveApiBaseUrl({
   configuredBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3000',
@@ -56,15 +63,15 @@ const buildInitials = (name) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('') || 'AC';
 
-const normalizePhoneNumber = (value) =>
-  String(value ?? '')
-    .replace(/\D/g, '')
-    .slice(0, 11);
+const normalizePhoneNumber = normalizeStaffPhoneNumber;
 
 const normalizeSessionUser = (userResponse = {}, fallbackUser = {}) => {
+  const authoritativeProfile = mapAuthoritativeStaffProfile(userResponse, fallbackUser);
   const mergedUser = {
     ...fallbackUser,
     ...userResponse,
+    profile: authoritativeProfile.profile,
+    phone: authoritativeProfile.phone,
   };
   const name = buildDisplayName(mergedUser);
 
@@ -83,7 +90,8 @@ const normalizeSessionUser = (userResponse = {}, fallbackUser = {}) => {
       mergedUser.isActive !== undefined
         ? mergedUser.isActive
         : fallbackUser.isActive ?? true,
-    profile: mergedUser.profile ?? fallbackUser.profile ?? null,
+    phone: authoritativeProfile.phone,
+    profile: authoritativeProfile.profile,
   };
 };
 
@@ -116,14 +124,15 @@ const accountTypeLabel = {
 };
 
 const normalizeManagedStaffAccount = (account) => {
-  const accountType = inferAccountType(account);
-  const name = buildDisplayName(account);
+  const safeAccount = stripCredentialSecrets(account);
+  const accountType = inferAccountType(safeAccount);
+  const name = buildDisplayName(safeAccount);
 
   return {
-    ...account,
+    ...safeAccount,
     accountType,
-    roleLabel: accountTypeLabel[accountType] ?? formatRoleLabel(account?.role),
-    displayName: account?.displayName ?? name,
+    roleLabel: accountTypeLabel[accountType] ?? formatRoleLabel(safeAccount?.role),
+    displayName: safeAccount?.displayName ?? name,
     initials: buildInitials(name),
   };
 };
@@ -142,6 +151,20 @@ const normalizeCustomerRecord = (customer) => {
     vehicleCount: customer?.vehicleCount ?? vehicles.length,
   };
 };
+
+const normalizeWalkInCustomerResult = (result = {}) => ({
+  customerUserId: result.customerUserId ?? null,
+  customerIdentityKind: result.customerIdentityKind ?? 'walk_in',
+  vehicleId: result.vehicleId ?? null,
+  customerLabel: result.customerLabel ?? 'Customer reference unavailable',
+  vehicleReference: result.vehicleReference ?? 'Vehicle reference unavailable',
+  vehicleLabel: result.vehicleLabel ?? 'Vehicle reference unavailable',
+  arrivalType: result.arrivalType === 'with_booking' ? 'with_booking' : 'walk_in',
+  customerCreated: Boolean(result.customerCreated),
+  customerReused: Boolean(result.customerReused),
+  vehicleCreated: Boolean(result.vehicleCreated),
+  vehicleReused: Boolean(result.vehicleReused),
+});
 
 const normalizeTechnicianProfile = (profile) => ({
   ...profile,
@@ -226,10 +249,19 @@ export const verifyRegistrationOtp = async (payload) =>
   );
 
 export const loginAccount = async (payload) =>
-  normalizeSession(
+  normalizeStaffLoginResponse(
     await request('/api/auth/login', {
       method: 'POST',
       body: payload,
+    }),
+    normalizeSession,
+  );
+
+export const completeRequiredStaffPasswordChange = async ({ passwordChangeToken, newPassword }) =>
+  normalizeSession(
+    await request('/api/auth/password/change-required', {
+      method: 'POST',
+      body: { passwordChangeToken, newPassword },
     }),
   );
 
@@ -259,6 +291,15 @@ export const updateStaffAccountStatus = async (userId, payload, accessToken) =>
       Authorization: `Bearer ${accessToken}`,
     },
     body: payload,
+  }).then(normalizeManagedStaffAccount);
+
+export const retryStaffCredentialDelivery = async (email, accessToken) =>
+  request('/api/admin/staff-accounts/credentials/retry', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: { email },
   }).then(normalizeManagedStaffAccount);
 
 export const listTechnicianProfiles = async (accessToken, options = {}) => {
@@ -300,15 +341,34 @@ export const updateTechnicianProfile = async (profileId, payload, accessToken) =
     body: payload,
   }).then(normalizeTechnicianProfile);
 
-export const listAdminCustomers = async (accessToken) =>
-  request('/api/admin/customers', {
+export const listAdminCustomers = async (accessToken, options = {}) => {
+  const params = new URLSearchParams();
+  if (options.search) params.set('search', String(options.search).trim());
+  if (options.cursor) params.set('cursor', options.cursor);
+  if (options.customerId) params.set('customerId', options.customerId);
+  if (options.limit) params.set('limit', String(options.limit));
+  if (options.paged) params.set('paged', 'true');
+  const query = params.toString();
+  return request('/api/admin/customers' + (query ? '?' + query : ''), {
     method: 'GET',
+    signal: options.signal,
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-  }).then((customers) =>
-    Array.isArray(customers) ? customers.map((customer) => normalizeCustomerRecord(customer)) : [],
-  );
+  }).then((response) => normalizeAdminCustomerListResponse(response, {
+    paged: Boolean(options.paged),
+    normalizeItem: normalizeCustomerRecord,
+  }));
+};
+
+export const createWalkInCustomer = async (payload, accessToken) =>
+  request('/api/users/walk-in', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: payload,
+  }).then(normalizeWalkInCustomerResult);
 
 export const updateAdminCustomerStatus = async (userId, payload, accessToken) =>
   request(`/api/admin/customers/${userId}/status`, {
@@ -357,8 +417,9 @@ export const confirmStaffPhoneChangeOtp = async ({
   enrollmentId,
   otp,
   phoneNumber,
-}) =>
-  normalizeSessionUser(
+}) => {
+  const normalizedPhone = normalizePhoneNumber(phoneNumber);
+  const updatedUser = normalizeSessionUser(
     await request('/api/auth/staff/profile/phone/change/confirm', {
       method: 'POST',
       headers: {
@@ -367,10 +428,13 @@ export const confirmStaffPhoneChangeOtp = async ({
       body: {
         enrollmentId,
         otp: String(otp ?? '').trim(),
-        phone: normalizePhoneNumber(phoneNumber),
+        phone: normalizedPhone,
       },
     }),
   );
+  requireAuthoritativeStaffPhone(updatedUser, normalizedPhone);
+  return updatedUser;
+};
 
 export const refreshAuthSession = async (refreshToken) =>
   normalizeSession(
@@ -390,14 +454,7 @@ export const fetchAuthenticatedUser = async (accessToken) =>
 
 export const hydrateStoredSessionFromAuthenticatedUser = (storedSession, authenticatedUser) => ({
   ...storedSession,
-  user: normalizeSessionUser(
-    {
-      id: authenticatedUser?.id ?? authenticatedUser?.userId,
-      email: authenticatedUser?.email,
-      role: authenticatedUser?.role,
-    },
-    storedSession?.user ?? {},
-  ),
+  user: normalizeSessionUser(authenticatedUser, storedSession?.user ?? {}),
 });
 
 export const loadStoredSession = () => {

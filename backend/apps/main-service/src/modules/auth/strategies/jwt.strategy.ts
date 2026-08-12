@@ -4,12 +4,13 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 
 import { UsersService } from '@main-modules/users/services/users.service';
+import { AuthRepository } from '../repositories/auth.repository';
 
 type JwtPayload = {
   sub: string;
   email: string;
   role: string;
-  type: 'access' | 'refresh';
+  type: 'access' | 'refresh' | 'password_change';
 };
 
 @Injectable()
@@ -17,6 +18,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     configService: ConfigService,
     private readonly usersService: UsersService,
+    private readonly authRepository: AuthRepository,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -26,9 +28,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const user = await this.usersService.findById(payload.sub);
+    if (payload.type !== 'access') {
+      return null;
+    }
 
-    if (!user || !user.isActive) {
+    const [user, account] = await Promise.all([
+      this.usersService.findById(payload.sub),
+      this.authRepository.findAccountByUserId(payload.sub),
+    ]);
+
+    if (!user || !user.isActive || !account?.isActive || account.mustChangePassword) {
       return null;
     }
 

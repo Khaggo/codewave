@@ -35,3 +35,16 @@ export interface UserResponse {
   addresses?: AddressResponse[];
 }
 
+export interface WalkInCustomerVehicleResponse {
+  customerUserId: string;
+  customerIdentityKind: 'walk_in' | 'registered';
+  vehicleId: string;
+  customerLabel: string;
+  vehicleReference: string;
+  vehicleLabel: string;
+  arrivalType: 'walk_in';
+  customerCreated: boolean;
+  customerReused: boolean;
+  vehicleCreated: boolean;
+  vehicleReused: boolean;
+}

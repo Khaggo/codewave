@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { AlertCircle, Eye, EyeOff, LoaderCircle, Lock, Mail, ShieldCheck, UserCog } from 'lucide-react'
 
-import { ApiError, loginAccount } from '@/lib/authClient'
+import { ApiError, completeRequiredStaffPasswordChange, loginAccount } from '@/lib/authClient'
+import { buildRequiredPasswordChangeErrors } from './staffFirstLoginView.mjs'
 
 const emptyLoginForm = {
   email: '',
@@ -90,8 +91,13 @@ export default function Login({ onAuthenticated, initialError, restoring = false
   )
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [passwordChangeState, setPasswordChangeState] = useState(null)
+  const [passwordChangeForm, setPasswordChangeForm] = useState({ newPassword: '', confirmPassword: '' })
+  const [passwordChangeErrors, setPasswordChangeErrors] = useState({})
   const emailInputRef = useRef(null)
   const passwordInputRef = useRef(null)
+  const newPasswordInputRef = useRef(null)
+  const confirmPasswordInputRef = useRef(null)
 
   useEffect(() => {
     if (!initialError) {
@@ -103,6 +109,10 @@ export default function Login({ onAuthenticated, initialError, restoring = false
       text: initialError,
     })
   }, [initialError])
+
+  useEffect(() => {
+    if (passwordChangeState) newPasswordInputRef.current?.focus()
+  }, [passwordChangeState])
 
   const handleApiError = (error, fallback) => {
     if (error instanceof ApiError) {
@@ -137,6 +147,13 @@ export default function Login({ onAuthenticated, initialError, restoring = false
         password: loginForm.password,
       })
 
+      if (session.requiresPasswordChange) {
+        setPasswordChangeState(session)
+        setLoginForm((current) => ({ ...current, password: '' }))
+        setNotice({ tone: 'success', text: 'Identity confirmed. Create a new password to enter the staff portal.' })
+        return
+      }
+
       const result = await onAuthenticated(session)
       if (result?.ok === false) {
         setNotice({
@@ -146,6 +163,38 @@ export default function Login({ onAuthenticated, initialError, restoring = false
       }
     } catch (error) {
       handleApiError(error, 'Unable to sign in right now.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRequiredPasswordChange = async (event) => {
+    event.preventDefault()
+    const nextErrors = buildRequiredPasswordChangeErrors(passwordChangeForm)
+    setPasswordChangeErrors(nextErrors)
+    setNotice(null)
+
+    if (Object.keys(nextErrors).length) {
+      if (nextErrors.newPassword) newPasswordInputRef.current?.focus()
+      else confirmPasswordInputRef.current?.focus()
+      return
+    }
+
+    setLoading(true)
+    try {
+      const session = await completeRequiredStaffPasswordChange({
+        passwordChangeToken: passwordChangeState.passwordChangeToken,
+        newPassword: passwordChangeForm.newPassword,
+      })
+      setNotice({ tone: 'success', text: 'Password changed. Opening your workspace...' })
+      await onAuthenticated(session)
+    } catch (error) {
+      const message = error instanceof ApiError && error.status === 401
+        ? 'This temporary-password session has expired. Return to sign in and request a new credential if needed.'
+        : error instanceof ApiError
+          ? error.message
+          : 'Unable to change the temporary password right now.'
+      setNotice({ tone: 'error', text: message })
     } finally {
       setLoading(false)
     }
@@ -248,7 +297,7 @@ export default function Login({ onAuthenticated, initialError, restoring = false
             Staff & Admin Access Portal
           </p>
           <h2 className="text-3xl font-black text-white leading-tight">
-            {restoring ? 'Opening workspace' : 'Login'}
+            {restoring ? 'Opening workspace' : passwordChangeState ? 'Change temporary password' : 'Login'}
           </h2>
 
           {restoring ? (
@@ -260,17 +309,66 @@ export default function Login({ onAuthenticated, initialError, restoring = false
             <>
               {notice?.text ? (
                 <div
+                  role={notice.tone === 'error' ? 'alert' : 'status'}
+                  aria-live="polite"
                   className="flex items-start gap-2.5 mt-6 mb-5 rounded-xl px-4 py-3"
                   style={{
-                    background: 'rgba(239,68,68,0.08)',
-                    border: '1px solid rgba(239,68,68,0.18)',
+                    background: notice.tone === 'success' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                    border: notice.tone === 'success' ? '1px solid rgba(34,197,94,0.22)' : '1px solid rgba(239,68,68,0.18)',
                   }}
                 >
-                  <AlertCircle size={15} className="text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-400">{notice.text}</p>
+                  <AlertCircle size={15} className={`${notice.tone === 'success' ? 'text-green-400' : 'text-red-400'} flex-shrink-0 mt-0.5`} />
+                  <p className={`text-sm ${notice.tone === 'success' ? 'text-green-400' : 'text-red-400'}`}>{notice.text}</p>
                 </div>
               ) : null}
 
+              {passwordChangeState ? (
+                <form onSubmit={handleRequiredPasswordChange} className="space-y-4 mt-6" noValidate aria-label="Change temporary password">
+                  <p className="text-sm leading-6" style={{ color: 'rgba(255,255,255,0.60)' }}>
+                    Your temporary credential can only unlock this password-change step. Staff tools remain unavailable until this succeeds.
+                  </p>
+                  <InputField
+                    id="staff-new-password"
+                    name="newPassword"
+                    label="New password"
+                    icon={Lock}
+                    value={passwordChangeForm.newPassword}
+                    onChange={(event) => setPasswordChangeForm((current) => ({ ...current, newPassword: event.target.value }))}
+                    type="password"
+                    autoComplete="new-password"
+                    error={passwordChangeErrors.newPassword}
+                    inputRef={newPasswordInputRef}
+                  />
+                  <InputField
+                    id="staff-confirm-password"
+                    name="confirmPassword"
+                    label="Confirm new password"
+                    icon={Lock}
+                    value={passwordChangeForm.confirmPassword}
+                    onChange={(event) => setPasswordChangeForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                    type="password"
+                    autoComplete="new-password"
+                    error={passwordChangeErrors.confirmPassword}
+                    inputRef={confirmPasswordInputRef}
+                  />
+                  <button type="submit" disabled={loading} className="w-full rounded-xl bg-brand-orange py-3.5 text-sm font-bold text-white disabled:opacity-50">
+                    {loading ? 'Changing password...' : 'Change password and continue'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPasswordChangeState(null)
+                      setPasswordChangeForm({ newPassword: '', confirmPassword: '' })
+                      setPasswordChangeErrors({})
+                      setNotice(null)
+                      emailInputRef.current?.focus()
+                    }}
+                    className="w-full rounded-xl py-3 text-sm font-semibold text-ink-secondary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange"
+                  >
+                    Return to sign in
+                  </button>
+                </form>
+              ) : (
               <form onSubmit={handleLoginSubmit} className="space-y-4 mt-6" noValidate>
                 <InputField
                   id="staff-email"
@@ -323,6 +421,7 @@ export default function Login({ onAuthenticated, initialError, restoring = false
                   {loading ? 'Signing in...' : 'Sign In'}
                 </button>
               </form>
+              )}
             </>
           )}
         </div>

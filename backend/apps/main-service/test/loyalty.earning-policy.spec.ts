@@ -74,12 +74,13 @@ describe('LoyaltyService earning policy', () => {
     expect(loyaltyRepository.listActiveEarningRules).toHaveBeenCalledWith();
     expect(loyaltyRepository.listEarningRules).not.toHaveBeenCalled();
     expect(response).toEqual({
-      summary: 'Points are earned after eligible paid service invoices are settled.',
+      summary:
+        'Points are earned only after a completed paid service invoice is settled for a registered vehicle with the official Cruisers Crib sticker verified during intake.',
       requirements: [
         {
           formula: 'Earn 1 point for every PHP 100.00 paid on an eligible service.',
           eligibility:
-            'Payment must be settled for a service invoice. A minimum payment of PHP 500.00 applies. Eligible service types: Collision repair. Eligible service categories: Body work.',
+            'The registered vehicle must have a current completed intake observation marked verified_present for the official Cruisers Crib sticker. Payment must be settled for a completed service invoice. A minimum payment of PHP 500.00 applies. Eligible service types: Collision repair. Eligible service categories: Body work.',
         },
       ],
       exclusions: ['Accessory purchases are not currently eligible for loyalty points.'],
@@ -109,7 +110,7 @@ describe('LoyaltyService earning policy', () => {
     });
 
     expect(response.requirements[0]?.eligibility).toBe(
-      'Payment must be settled for a service invoice. A minimum payment of PHP 500.00 applies. Only qualifying service types selected by the workshop are eligible. Only qualifying service categories selected by the workshop are eligible.',
+      'The registered vehicle must have a current completed intake observation marked verified_present for the official Cruisers Crib sticker. Payment must be settled for a completed service invoice. A minimum payment of PHP 500.00 applies. Only qualifying service types selected by the workshop are eligible. Only qualifying service categories selected by the workshop are eligible.',
     );
     expect(JSON.stringify(response)).not.toContain(internalServiceId);
     expect(JSON.stringify(response)).not.toContain('internal-category-id');
@@ -131,11 +132,13 @@ describe('LoyaltyService earning policy', () => {
     await expect(
       service.getEarningPolicy({ userId: 'actor-1', role: 'service_adviser' }),
     ).resolves.toEqual({
-      summary: 'Points are earned after eligible paid service invoices are settled.',
+          summary:
+            'Points are earned only after a completed paid service invoice is settled for a registered vehicle with the official Cruisers Crib sticker verified during intake.',
       requirements: [
         {
           formula: 'Earn 5 points for each eligible paid service invoice.',
-          eligibility: 'Payment must be settled for a service invoice.',
+          eligibility:
+            'The registered vehicle must have a current completed intake observation marked verified_present for the official Cruisers Crib sticker. Payment must be settled for a completed service invoice.',
         },
       ],
       exclusions: ['Accessory purchases are not currently eligible for loyalty points.'],

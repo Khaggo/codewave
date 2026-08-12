@@ -1,17 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   CarFront,
   MapPin,
-  MoreHorizontal,
   RefreshCw,
   ShieldAlert,
   UserRound,
 } from 'lucide-react'
 
 import PageHeader from '@/components/ui/PageHeader'
-import PortalLink from '@/components/PortalLink'
 import { ApiError, listAdminCustomers, updateAdminCustomerStatus } from '@/lib/authClient'
 import { useUser } from '@/lib/userContext'
 
@@ -22,74 +21,18 @@ import {
   filterCustomers,
   summarizeCustomers,
 } from './customerDirectoryView.mjs'
-
-function MetricCard({ label, value, hint }) {
-  return (
-    <div className="card p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{label}</p>
-      <p className="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">{value}</p>
-      <p className="mt-1 text-xs text-ink-secondary">{hint}</p>
-    </div>
-  )
-}
-
-function RowActionMenu({ customer, isOpen, isUpdating, onOpen, onClose, onToggleStatus }) {
-  const menuRef = useRef(null)
-
-  useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
-    const handlePointerDown = (event) => {
-      if (menuRef.current?.contains(event.target)) {
-        return
-      }
-
-      onClose()
-    }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    return () => document.removeEventListener('mousedown', handlePointerDown)
-  }, [isOpen, onClose])
-
-  return (
-    <div ref={menuRef} className="relative" onClick={(event) => event.stopPropagation()}>
-      <button
-        type="button"
-        onClick={() => (isOpen ? onClose() : onOpen(customer.id))}
-        className="btn-ghost min-h-9 w-9 justify-center px-0"
-      >
-        <MoreHorizontal size={14} />
-      </button>
-      {isOpen ? (
-        <div className="absolute right-0 z-20 mt-2 min-w-[176px] rounded-2xl border border-surface-border bg-surface-card p-2 shadow-2xl">
-          <button
-            type="button"
-            onClick={() => {
-              onToggleStatus(customer)
-              onClose()
-            }}
-            disabled={isUpdating}
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs text-ink-primary hover:bg-surface-raised disabled:opacity-60"
-          >
-            <RefreshCw size={13} className={isUpdating ? 'animate-spin' : ''} />
-            {customer.isActive ? 'Deactivate account' : 'Activate account'}
-          </button>
-        </div>
-      ) : null}
-    </div>
-  )
-}
+import { MetricCard, RowActionMenu } from './CustomerDirectoryComponents'
 
 export default function AdminCustomersPage() {
+  const searchParams = useSearchParams()
+  const requestedCustomerId = searchParams.get('customerUserId') ?? ''
   const user = useUser()
   const canReadCustomers = ['service_adviser', 'super_admin'].includes(user?.role)
   const [state, setState] = useState({ status: 'idle', customers: [], error: '' })
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [vehicleFilter, setVehicleFilter] = useState('all')
-  const [selectedCustomerId, setSelectedCustomerId] = useState('')
+  const [selectedCustomerId, setSelectedCustomerId] = useState(requestedCustomerId)
   const [openMenuCustomerId, setOpenMenuCustomerId] = useState('')
   const [actionState, setActionState] = useState({ status: 'idle', customerId: '', message: '' })
 
@@ -172,24 +115,35 @@ export default function AdminCustomersPage() {
   )
   const summary = useMemo(() => summarizeCustomers(state.customers), [state.customers])
   const selectedCustomer = useMemo(
-    () => filteredCustomers.find((customer) => customer.id === selectedCustomerId) ?? filteredCustomers[0] ?? null,
-    [filteredCustomers, selectedCustomerId],
+    () =>
+      state.customers.find((customer) => customer.id === selectedCustomerId)
+      ?? filteredCustomers[0]
+      ?? null,
+    [filteredCustomers, selectedCustomerId, state.customers],
   )
 
   useEffect(() => {
     if (!filteredCustomers.length) {
-      setSelectedCustomerId('')
+      setSelectedCustomerId(
+        requestedCustomerId && state.customers.some((customer) => customer.id === requestedCustomerId)
+          ? requestedCustomerId
+          : '',
+      )
       return
     }
 
     setSelectedCustomerId((current) => {
+      if (requestedCustomerId && state.customers.some((customer) => customer.id === requestedCustomerId)) {
+        return requestedCustomerId
+      }
+
       if (current && filteredCustomers.some((customer) => customer.id === current)) {
         return current
       }
 
       return filteredCustomers[0]?.id ?? ''
     })
-  }, [filteredCustomers])
+  }, [filteredCustomers, requestedCustomerId, state.customers])
 
   if (!canReadCustomers) {
     return (
@@ -419,10 +373,6 @@ export default function AdminCustomersPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <PortalLink href="/vehicles" className="btn-ghost">
-                <CarFront size={14} />
-                Open Vehicle View
-              </PortalLink>
               <span className={`badge ${selectedCustomer.isActive ? 'badge-green' : 'badge-gray'}`}>
                 {selectedCustomer.isActive ? 'Account Active' : 'Account Inactive'}
               </span>

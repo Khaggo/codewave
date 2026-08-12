@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -50,6 +50,120 @@ export class AccessoryProductPageQueryDto extends AccessoryPageQueryDto {
   @IsOptional()
   @IsUUID()
   categoryId?: string;
+}
+
+export class AccessoryCustomerAvailabilityDto {
+  @ApiProperty({ minimum: 0 })
+  availableQuantity!: number;
+
+  @ApiProperty()
+  inStock!: boolean;
+}
+
+export class AccessoryCustomerProductDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  categoryId!: string;
+
+  @ApiProperty()
+  slug!: string;
+
+  @ApiProperty()
+  name!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  description?: string | null;
+
+  @ApiProperty()
+  isLighting!: boolean;
+
+  @ApiProperty({ type: AccessoryCustomerAvailabilityDto })
+  availability!: AccessoryCustomerAvailabilityDto;
+}
+
+export class AccessoryCustomerVariantDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  productId!: string;
+
+  @ApiProperty()
+  sku!: string;
+
+  @ApiProperty()
+  name!: string;
+
+  @ApiProperty({ type: Object })
+  attributes!: Record<string, string>;
+
+  @ApiProperty({ minimum: 0 })
+  priceCents!: number;
+
+  @ApiProperty()
+  currencyCode!: string;
+
+  @ApiProperty({ type: AccessoryCustomerAvailabilityDto })
+  availability!: AccessoryCustomerAvailabilityDto;
+}
+
+export class AccessoryCustomerCartItemDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  variantId!: string;
+
+  @ApiProperty({ minimum: 1 })
+  quantity!: number;
+}
+
+export class AccessoryCustomerCartLineDto {
+  @ApiProperty({ type: AccessoryCustomerCartItemDto })
+  item!: AccessoryCustomerCartItemDto;
+
+  @ApiProperty({ type: AccessoryCustomerVariantDto })
+  variant!: AccessoryCustomerVariantDto;
+
+  @ApiProperty({ type: AccessoryCustomerProductDto })
+  product!: AccessoryCustomerProductDto;
+
+  @ApiProperty({ type: AccessoryCustomerAvailabilityDto })
+  availability!: AccessoryCustomerAvailabilityDto;
+
+  @ApiProperty({ minimum: 0 })
+  unitPriceCents!: number;
+
+  @ApiProperty({ minimum: 0 })
+  lineSubtotalCents!: number;
+
+  @ApiProperty({ minimum: 0 })
+  lineTotalCents!: number;
+}
+
+export class AccessoryCustomerCartResponseDto {
+  @ApiPropertyOptional({ nullable: true })
+  selectedVehicleId!: string | null;
+
+  @ApiProperty({ minimum: 0 })
+  version!: number;
+
+  @ApiProperty()
+  updatedAt!: Date;
+
+  @ApiProperty()
+  currencyCode!: string;
+
+  @ApiProperty({ minimum: 0 })
+  subtotalCents!: number;
+
+  @ApiProperty({ minimum: 0 })
+  totalCents!: number;
+
+  @ApiProperty({ type: [AccessoryCustomerCartLineDto] })
+  items!: AccessoryCustomerCartLineDto[];
 }
 
 export class AccessoryFitmentQueryDto {
@@ -126,8 +240,32 @@ export enum AccessoryPaymentMethodDtoValue {
   PayAtShop = 'pay_at_shop',
 }
 
+const accessoryPaymentMethodAliases: Record<string, AccessoryPaymentMethodDtoValue> = {
+  paymongo: AccessoryPaymentMethodDtoValue.PayMongo,
+  pay_mongo: AccessoryPaymentMethodDtoValue.PayMongo,
+  paymongo_checkout: AccessoryPaymentMethodDtoValue.PayMongo,
+  online: AccessoryPaymentMethodDtoValue.PayMongo,
+  online_payment: AccessoryPaymentMethodDtoValue.PayMongo,
+  pay_at_shop: AccessoryPaymentMethodDtoValue.PayAtShop,
+  pay_at_store: AccessoryPaymentMethodDtoValue.PayAtShop,
+  pay_at_counter: AccessoryPaymentMethodDtoValue.PayAtShop,
+  manual_counter: AccessoryPaymentMethodDtoValue.PayAtShop,
+  cash: AccessoryPaymentMethodDtoValue.PayAtShop,
+};
+
+export const normalizeAccessoryPaymentMethod = (value: unknown) => {
+  if (typeof value !== 'string') return value;
+  const token = value
+    .trim()
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  return accessoryPaymentMethodAliases[token] ?? value;
+};
+
 export class AccessoryCheckoutDto {
   @ApiProperty({ enum: AccessoryPaymentMethodDtoValue })
+  @Transform(({ value }) => normalizeAccessoryPaymentMethod(value))
   @IsEnum(AccessoryPaymentMethodDtoValue)
   paymentMethod!: AccessoryPaymentMethodDtoValue;
 

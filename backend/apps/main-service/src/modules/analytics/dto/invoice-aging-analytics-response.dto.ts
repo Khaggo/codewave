@@ -26,6 +26,12 @@ class InvoiceAgingAnalyticsInvoiceEntryResponseDto {
   @ApiProperty({ example: 'invoice-123' })
   invoiceId!: string;
 
+  @ApiProperty({ example: 'INV-SVC-20260808-103015123' })
+  invoiceReference!: string;
+
+  @ApiProperty({ example: 'INV-SVC-20260808-103015123' })
+  displayReference!: string;
+
   @ApiProperty({ example: 'scheduled' })
   latestReminderStatus!: string;
 

@@ -160,6 +160,11 @@ export class JobOrderResponseDto {
   })
   sourceBackJobReference?: string | null;
 
+  @ApiPropertyOptional({
+    example: 'INSP-2026-000001',
+  })
+  sourceIntakeReference?: string | null;
+
   @ApiProperty({
     enum: jobOrderStatusEnum.enumValues,
     example: 'assigned',

@@ -1,7 +1,6 @@
 export const buildProvisioningErrors = (form) => {
   const errors = {}
 
-  if (form.password.trim().length < 8) errors.password = 'Password must be at least 8 characters.'
   if (!form.firstName.trim()) errors.firstName = 'First name is required.'
   if (!form.lastName.trim()) errors.lastName = 'Last name is required.'
   if (form.phone.trim() && form.phone.trim().length > 30) errors.phone = 'Phone number is too long.'

@@ -4,14 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronRight,
   ClipboardList,
   FileStack,
-  PanelRightOpen,
   ReceiptText,
   RefreshCw,
-  Save,
-  Users,
 } from 'lucide-react'
 
 import { getDailySchedule } from '@/lib/bookingStaffClient'
@@ -48,6 +44,7 @@ import {
   exportTechnicianChecklistPdf,
   finalizeJobOrder,
   getJobOrderById,
+  normalizeJobOrderInvoicePaymentMethod,
   recordJobOrderInvoicePayment,
   reconcileJobOrderInvoicePaymongoCheckout,
   replaceJobOrderAssignments,
@@ -75,6 +72,7 @@ import JobOrderEvidencePanel from './JobOrderEvidencePanel'
 import JobOrderFinalizationPanel from './JobOrderFinalizationPanel'
 import JobOrderBookingCreatePanel from './JobOrderBookingCreatePanel'
 import JobOrderControlDrawer from './JobOrderControlDrawer'
+import JobOrderCommandBar from './JobOrderCommandBar'
 import JobOrderWorkshopStagePanel from './JobOrderWorkshopStagePanel'
 import JobOrderWorkspaceOverview from './JobOrderWorkspaceOverview'
 import {
@@ -147,6 +145,7 @@ export default function JobOrderWorkbench({
     ? activeQualityGateState.gate
     : null
   const [activeClaim, setActiveClaim] = useState(null)
+  const [claimOwnerName, setClaimOwnerName] = useState('')
   const [claimState, setClaimState] = useState({
     status: 'idle',
     message: '',
@@ -1243,6 +1242,7 @@ export default function JobOrderWorkbench({
     autoFocusedMonthRef.current = ''
     setActiveJobOrder(null)
     setActiveClaim(null)
+    setClaimOwnerName('')
     setManualJobOrderId('')
     setDetailState(initialReadState)
     setShowScheduleTools(nextScope === 'history')
@@ -1274,6 +1274,7 @@ export default function JobOrderWorkbench({
         receivedAt: '',
       })
       setPaymentState(initialPaymentState)
+      setClaimOwnerName('')
       return
     }
 
@@ -1316,7 +1317,7 @@ export default function JobOrderWorkbench({
       amountPaid: activeJobOrder.invoiceRecord?.amountPaidCents
         ? String(Math.round(activeJobOrder.invoiceRecord.amountPaidCents / 100))
         : '',
-      paymentMethod: activeJobOrder.invoiceRecord?.paymentMethod ?? 'cash',
+      paymentMethod: normalizeJobOrderInvoicePaymentMethod(activeJobOrder.invoiceRecord?.paymentMethod) ?? 'cash',
       reference: activeJobOrder.invoiceRecord?.paymentReference ?? '',
       receivedAt: formatDateTimeInputValue(activeJobOrder.invoiceRecord?.paidAt),
     })
@@ -1458,6 +1459,7 @@ export default function JobOrderWorkbench({
   const recoverJobOrderClaim = useCallback(async (jobOrderId, { quiet = false } = {}) => {
     if (!user?.accessToken || !jobOrderId) {
       setActiveClaim(null)
+      setClaimOwnerName('')
       return null
     }
 
@@ -1472,10 +1474,17 @@ export default function JobOrderWorkbench({
       const result = await listStaffWorkQueue({
         queueType: 'job_order',
         accessToken: user.accessToken,
-        view: 'my',
+        view: 'team',
+        search: jobOrderId,
         limit: 25,
       })
       const nextClaim = recoverMatchingJobOrderClaim(result, jobOrderId)
+      const matchingItem = result.items?.find(
+        (item) => item.entityType === 'job_order' && item.entityId === jobOrderId,
+      )
+      setClaimOwnerName(
+        nextClaim?.ownerName || (!nextClaim ? matchingItem?.claim?.ownerName : '') || '',
+      )
 
       setActiveClaim(nextClaim)
       setClaimState({
@@ -1489,6 +1498,7 @@ export default function JobOrderWorkbench({
       return nextClaim
     } catch (error) {
       setActiveClaim(null)
+      setClaimOwnerName('')
       setClaimState({
         status: 'error',
         message: error?.message || 'Current Job Order ownership could not be refreshed.',
@@ -1510,6 +1520,7 @@ export default function JobOrderWorkbench({
       entityId: item.entityId,
       entityType: item.entityType,
     })
+    setClaimOwnerName(nextClaim?.ownerName || item.claim?.ownerName || '')
     if (item.jobOrderId && item.jobOrderId === activeJobOrder?.id) {
       setActiveClaim(nextClaim)
       setClaimState({
@@ -1577,6 +1588,7 @@ export default function JobOrderWorkbench({
       })
     } catch (error) {
       setActiveClaim(null)
+      setClaimOwnerName('')
       setClaimState({
         status: 'error',
         message: getJobOrderClaimConflictMessage(error),
@@ -1591,6 +1603,7 @@ export default function JobOrderWorkbench({
     }
 
     setActiveClaim(null)
+    setClaimOwnerName('')
     setClaimState({
       status: 'error',
       message: getJobOrderClaimConflictMessage(error),
@@ -1670,6 +1683,7 @@ export default function JobOrderWorkbench({
       })
       setActiveJobOrder(jobOrder)
       setActiveClaim(null)
+      setClaimOwnerName('')
       setClaimState({
         status: 'unclaimed',
         message: 'The booking handoff is complete. Claim this Job Order before editing it.',
@@ -1910,6 +1924,7 @@ export default function JobOrderWorkbench({
       setActiveJobOrder(updatedJobOrder)
       if (['ready_for_qa', 'cancelled'].includes(updatedJobOrder.status)) {
         setActiveClaim(null)
+        setClaimOwnerName('')
         setClaimState({
           status: 'unclaimed',
           message: updatedJobOrder.status === 'ready_for_qa'
@@ -1980,10 +1995,12 @@ export default function JobOrderWorkbench({
         accessToken: user.accessToken,
         claimId: activeClaimId,
       })
+      setClaimOwnerName('')
 
       setActiveJobOrder(updatedJobOrder)
       if (updatedJobOrder.status === 'ready_for_qa') {
         setActiveClaim(null)
+        setClaimOwnerName('')
         setClaimState({
           status: 'unclaimed',
           message: 'The Job Order claim was released when work entered QA.',
@@ -2326,6 +2343,7 @@ export default function JobOrderWorkbench({
 
       setActiveJobOrder(updatedJobOrder)
       setActiveClaim(null)
+      setClaimOwnerName('')
       setClaimState({
         status: 'unclaimed',
         message: 'Finalization completed and released this Job Order assignment.',
@@ -2618,7 +2636,7 @@ export default function JobOrderWorkbench({
       const downloadUrl = URL.createObjectURL(pdfBlob)
       const anchor = document.createElement('a')
       anchor.href = downloadUrl
-      anchor.download = `${activeJobOrder.invoiceRecord.invoiceReference || activeJobOrder.id}.pdf`
+      anchor.download = `${activeJobOrder.invoiceRecord.invoiceReference || 'invoice-reference-unavailable'}.pdf`
       document.body.appendChild(anchor)
       anchor.click()
       anchor.remove()
@@ -3148,96 +3166,21 @@ export default function JobOrderWorkbench({
       <section className="space-y-4">
         {activeJobOrder ? (
           <>
-            <div
-              className="border border-surface-border bg-surface-card/95 px-3 py-2 shadow-[0_12px_28px_rgba(0,0,0,0.18)] backdrop-blur"
-              data-testid="job-order-command-bar"
-            >
-              <div className="flex min-h-[64px] items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <p className="truncate text-base font-semibold text-ink-primary">
-                      {formatJobOrderReference(activeJobOrder)}
-                    </p>
-                    <StatusBadge status={activeJobOrder.status} />
-                    {!isTechnician ? (
-                      <span className={`badge ${hasMatchingJobOrderClaim ? 'badge-green' : 'badge-gray'}`}>
-                        {hasMatchingJobOrderClaim ? 'Assigned to you' : 'Unassigned here'}
-                      </span>
-                    ) : null}
-                    {hasUnsavedProgressWork ? <span className="badge badge-orange">Unsaved changes</span> : null}
-                  </div>
-                  <p className="mt-1 truncate text-xs text-ink-secondary">
-                    {WORKBENCH_STAGE_META[currentControlCenterStage]?.label ?? formatStatusLabel(currentControlCenterStage)}
-                    {' - '}
-                    {activeSourceCandidate?.vehicleLabel ?? activeJobOrder.vehicleLabel ?? 'Unknown vehicle'}
-                  </p>
-                </div>
-
-                <div className="hidden shrink-0 items-center gap-2 md:flex">
-                  <button
-                    type="button"
-                    onClick={() => openControlDrawer('my_work')}
-                    className="ops-action-secondary"
-                  >
-                    <Users size={15} />
-                    My Work
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openControlDrawer('overview')}
-                    className="ops-action-secondary"
-                  >
-                    <PanelRightOpen size={15} />
-                    Overview
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleControlCenterPrimaryAction}
-                    className="ops-action-primary hidden xl:inline-flex"
-                  >
-                    {hasUnsavedProgressWork && currentControlCenterStage === 'progress' ? (
-                      <Save size={15} />
-                    ) : (
-                      <ChevronRight size={15} />
-                    )}
-                    {controlCenterPrimaryLabel}
-                  </button>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2 md:hidden">
-                  <button
-                    type="button"
-                    onClick={() => openControlDrawer('my_work')}
-                    className="ops-action-secondary h-10 w-10 px-0"
-                    aria-label="Open My Work"
-                    title="My Work"
-                  >
-                    <Users size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openControlDrawer('overview')}
-                    className="ops-action-secondary h-10 w-10 px-0"
-                    aria-label="Open workflow overview"
-                    title="Workflow overview"
-                  >
-                    <PanelRightOpen size={16} />
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleControlCenterPrimaryAction}
-                className="ops-action-primary mt-2 w-full md:hidden"
-              >
-                {hasUnsavedProgressWork && currentControlCenterStage === 'progress' ? (
-                  <Save size={15} />
-                ) : (
-                  <ChevronRight size={15} />
-                )}
-                {controlCenterPrimaryLabel}
-              </button>
-            </div>
+            <JobOrderCommandBar
+              jobOrderReference={formatJobOrderReference(activeJobOrder)}
+              status={activeJobOrder.status}
+              isTechnician={isTechnician}
+              hasMatchingClaim={hasMatchingJobOrderClaim}
+              claimOwnerName={claimOwnerName}
+              hasUnsavedProgressWork={hasUnsavedProgressWork}
+              stageLabel={WORKBENCH_STAGE_META[currentControlCenterStage]?.label ?? formatStatusLabel(currentControlCenterStage)}
+              currentStage={currentControlCenterStage}
+              vehicleLabel={activeSourceCandidate?.vehicleLabel ?? activeJobOrder.vehicleLabel ?? 'Unknown vehicle'}
+              primaryLabel={controlCenterPrimaryLabel}
+              onOpenMyWork={() => openControlDrawer('my_work')}
+              onOpenOverview={() => openControlDrawer('overview')}
+              onPrimaryAction={handleControlCenterPrimaryAction}
+            />
 
             {!isTechnician && !hasMatchingJobOrderClaim ? (
               <div className="flex flex-col gap-3 border border-surface-border bg-surface-raised px-4 py-3 sm:flex-row sm:items-center sm:justify-between">

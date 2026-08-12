@@ -1,21 +1,27 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UploadInspectionPhotoResponseDto {
+  @ApiProperty({ example: 'evidence-id' })
+  id!: string;
+
   @ApiProperty({
     example: 'front',
     description: 'Slot label associated with the uploaded inspection photo.',
   })
   slot!: string;
 
-  @ApiProperty({
-    example: 'upload://vehicle/7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d/front/1f5bc7f9-2d87-4d5f-9a5c-1d28a4d4367a.jpg',
-    description: 'Attachment reference that can be stored on an inspection record later.',
-  })
-  attachmentRef!: string;
+  @ApiProperty({ example: 'vehicle-front.jpg' })
+  originalName!: string;
+
+  @ApiProperty({ example: 'image/jpeg' })
+  mimeType!: string;
+
+  @ApiProperty({ example: 248112 })
+  byteSize!: number;
 
   @ApiProperty({
-    example: '7e5d3bc0-8e87-4a42-b6d5-59ae8d0eeb6d/front/1f5bc7f9-2d87-4d5f-9a5c-1d28a4d4367a.jpg',
-    description: 'Relative storage path for the persisted image.',
+    example: '/api/intake-inspections/inspection-id/evidence/evidence-id/file',
+    description: 'Authenticated file route. Internal storage paths are never returned.',
   })
-  storageKey!: string;
+  fileUrl!: string;
 }

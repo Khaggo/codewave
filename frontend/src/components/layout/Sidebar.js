@@ -1,7 +1,7 @@
 'use client'
 
 import PortalLink from '@/components/PortalLink'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   BarChart3,
   LayoutDashboard,
@@ -29,7 +29,11 @@ import {
   getStaffPortalNavigationForRole,
   isStaffPortalRole,
 } from '@/lib/api/generated/auth/staff-web-session'
-import { orderStaffPortalNavigationEntries } from './staffPortalNavigationModel.mjs'
+import {
+  isStaffPortalNavigationActive,
+  orderStaffPortalNavigationEntries,
+  shouldHandleStaffPortalNavigation,
+} from './staffPortalNavigationModel.mjs'
 
 const GROUP_ORDER = ['Overview', 'Front Desk Flow', 'Customer Records', 'Admin']
 
@@ -69,6 +73,7 @@ const LABEL_BY_KEY = {
 
 export default function Sidebar({ collapsed, onToggle, jobWorkCount = 0 }) {
   const pathname = usePathname()
+  const router = useRouter()
   const user = useUser()
   const visiblePaths = new Set(
     getStaffPortalNavigationForRole(user?.role).map((entry) => entry.href),
@@ -131,11 +136,27 @@ export default function Sidebar({ collapsed, onToggle, jobWorkCount = 0 }) {
             ) : null}
             <div className="space-y-1">
               {section.items.map(({ href, label, icon: Icon }) => {
-                const active = pathname === href
+                const active = isStaffPortalNavigationActive(pathname, href)
                 return (
                   <PortalLink
                     key={href}
                     href={href}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={(event) => {
+                      if (href !== '/admin/services') return
+                      if (!shouldHandleStaffPortalNavigation({
+                        pathname,
+                        href,
+                        button: event.button,
+                        defaultPrevented: event.defaultPrevented,
+                        metaKey: event.metaKey,
+                        ctrlKey: event.ctrlKey,
+                        shiftKey: event.shiftKey,
+                        altKey: event.altKey,
+                      })) return
+                      event.preventDefault()
+                      router.push(href)
+                    }}
                     title={collapsed ? label : undefined}
                     className={`
                       relative flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all duration-150

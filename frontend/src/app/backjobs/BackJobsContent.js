@@ -259,8 +259,9 @@ function BackJobDetail({
 }) {
   if (!backJob) {
     return (
-      <div className="empty-panel text-sm text-ink-muted">
-        Load a vehicle list, create a case, or choose a back-job reference to inspect live detail.
+      <div className="empty-panel text-sm text-ink-muted" role="status">
+        <p className="font-semibold text-ink-primary">View Case Details</p>
+        <p className="mt-1">Load a vehicle list, create a case, or choose a back-job reference to inspect live detail.</p>
       </div>
     )
   }
@@ -275,7 +276,7 @@ function BackJobDetail({
     <div className="card p-5 space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-orange">Live Back-Job Detail</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-orange">View Case Details</p>
           <h2 className="mt-2 text-xl font-bold text-ink-primary">{caseReference}</h2>
           <p className="mt-1 text-xs text-ink-muted">Opened {formatShortDate(backJob.createdAt)}</p>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-secondary">{backJob.complaint}</p>
@@ -285,6 +286,7 @@ function BackJobDetail({
           <span className={`badge ${isBackJobCustomerSafe(backJob.status) ? 'badge-green' : 'badge-gray'}`}>
             {visibilityCopy[visibility]}
           </span>
+          <span className="badge badge-gray">Read-only details</span>
         </div>
       </div>
 
@@ -372,6 +374,11 @@ export default function BackJobsContent() {
   const [createState, setCreateState] = useState(initialCreateState)
   const [statusState, setStatusState] = useState(initialStatusState)
   const [reworkState, setReworkState] = useState(initialReworkState)
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('case')
+  const [createPanelOpen, setCreatePanelOpen] = useState(false)
+  const [reworkPanelOpen, setReworkPanelOpen] = useState(false)
+  const caseWorkspaceTabRef = useRef(null)
+  const createWorkspaceTabRef = useRef(null)
   const detailSectionRef = useRef(null)
   const [createDraft, setCreateDraft] = useState({
     customerUserId: '',
@@ -597,6 +604,7 @@ export default function BackJobsContent() {
     setStatusState(initialStatusState)
     setReworkDraft(buildBackJobReworkDraft())
     setReworkState(initialReworkState)
+    setReworkPanelOpen(false)
 
     if (backJob) {
       requestAnimationFrame(() => {
@@ -618,6 +626,7 @@ export default function BackJobsContent() {
     setStatusState(initialStatusState)
     setReworkDraft(buildBackJobReworkDraft())
     setReworkState(initialReworkState)
+    setReworkPanelOpen(false)
   }
 
   async function handleLoadVehicleBackJobs() {
@@ -633,6 +642,7 @@ export default function BackJobsContent() {
         accessToken: user.accessToken,
       })
       setBackJobs(loadedBackJobs)
+      setActiveWorkspaceTab('case')
       if (loadedBackJobs.length > 0) {
         syncActiveBackJob(loadedBackJobs[0])
       } else {
@@ -668,6 +678,7 @@ export default function BackJobsContent() {
         backJobId,
         accessToken: user.accessToken,
       })
+      setActiveWorkspaceTab('case')
       syncActiveBackJob(loadedBackJob)
       setLoadState({
         status: 'back_jobs_loaded',
@@ -954,6 +965,29 @@ export default function BackJobsContent() {
     }
   }
 
+  function handleWorkspaceTabKeyDown(event) {
+    let nextTab = null
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextTab = activeWorkspaceTab === 'case' ? 'create' : 'case'
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextTab = activeWorkspaceTab === 'case' ? 'create' : 'case'
+    } else if (event.key === 'Home') {
+      nextTab = 'case'
+    } else if (event.key === 'End') {
+      nextTab = 'create'
+    }
+
+    if (!nextTab) {
+      return
+    }
+
+    event.preventDefault()
+    setActiveWorkspaceTab(nextTab)
+    const nextTabRef = nextTab === 'case' ? caseWorkspaceTabRef : createWorkspaceTabRef
+    nextTabRef.current?.focus()
+  }
+
   if (!canManage) {
     return (
       <div className="empty-panel text-left">
@@ -1079,6 +1113,8 @@ export default function BackJobsContent() {
 
         {loadState.message ? (
           <div
+            role={['back_jobs_loaded', 'back_jobs_empty'].includes(loadState.status) ? 'status' : 'alert'}
+            aria-live="polite"
             className={`mt-4 ${
               ['back_jobs_loaded', 'back_jobs_empty'].includes(loadState.status)
                 ? 'status-message status-message-success'
@@ -1094,9 +1130,19 @@ export default function BackJobsContent() {
         <section className="table-surface">
           <div className="border-b border-surface-border bg-surface-raised px-5 py-4">
             <p className="text-sm font-bold text-ink-primary">Loaded Vehicle Cases</p>
+            <p className="mt-1 text-xs text-ink-muted">Select Review to open the case workspace for one loaded vehicle record.</p>
           </div>
-          <div className="table-scroll">
-            <table className="data-table min-w-[820px]">
+          <div className="table-scroll w-full">
+            <table className="data-table w-full min-w-[760px] table-fixed">
+              <caption className="sr-only">Loaded vehicle back-job cases</caption>
+              <colgroup>
+                <col className="w-[21%]" />
+                <col className="w-[17%]" />
+                <col className="w-[28%]" />
+                <col className="w-[13%]" />
+                <col className="w-[13%]" />
+                <col className="w-[8%]" />
+              </colgroup>
               <thead>
                 <tr>
                   <th>Back-Job</th>
@@ -1104,7 +1150,7 @@ export default function BackJobsContent() {
                   <th>Complaint</th>
                   <th>Status</th>
                   <th>Visibility</th>
-                  <th>Action</th>
+                  <th className="text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -1114,23 +1160,32 @@ export default function BackJobsContent() {
                   const tableVehicle = vehicleById.get(backJob.vehicleId) ?? null
                   const tableOriginalJobOrder = jobOrderById.get(backJob.originalJobOrderId) ?? null
                   return (
-                    <tr key={backJob.id}>
-                      <td>
-                        <p className="text-sm font-semibold text-brand-orange">
+                    <tr key={backJob.id} className={activeBackJob?.id === backJob.id ? 'bg-brand-orange/5' : undefined} aria-current={activeBackJob?.id === backJob.id ? 'true' : undefined}>
+                      <td className="align-top">
+                        <p className="break-words text-sm font-semibold text-brand-orange">
                           {formatBackJobCaseReference(backJob)}
                         </p>
-                        <p className="mt-1 text-xs text-ink-muted">{formatVehicleDisplayLabel(tableVehicle)}</p>
+                        <p className="mt-1 break-words text-xs text-ink-muted">{formatVehicleDisplayLabel(tableVehicle)}</p>
                       </td>
-                      <td className="text-xs text-ink-secondary">
+                      <td className="align-top break-words text-xs text-ink-secondary">
                         {formatJobOrderDisplayReference(tableOriginalJobOrder, backJob.originalJobOrderId)}
                       </td>
-                      <td>
-                        <p className="max-w-[260px] truncate">{backJob.complaint}</p>
+                      <td className="align-top">
+                        <p className="max-w-none whitespace-normal break-words leading-5">{backJob.complaint}</p>
                       </td>
-                      <td><span className={`badge ${statusMeta.cls}`}>{statusMeta.label}</span></td>
-                      <td><span className="badge badge-gray">{visibilityCopy[visibility]}</span></td>
-                      <td>
-                        <button type="button" className="btn-ghost py-1.5 text-xs" onClick={() => syncActiveBackJob(backJob)}>
+                      <td className="align-top"><span className={`badge ${statusMeta.cls}`}>{statusMeta.label}</span></td>
+                      <td className="align-top"><span className="badge badge-gray whitespace-normal">{visibilityCopy[visibility]}</span></td>
+                      <td className="align-top text-right">
+                        <button
+                          type="button"
+                          className="btn-ghost inline-flex whitespace-nowrap py-1.5 text-xs"
+                          aria-label={`Review ${formatBackJobCaseReference(backJob)}`}
+                          aria-pressed={activeBackJob?.id === backJob.id}
+                          onClick={() => {
+                            setActiveWorkspaceTab('case')
+                            syncActiveBackJob(backJob)
+                          }}
+                        >
                           Review
                         </button>
                       </td>
@@ -1143,7 +1198,49 @@ export default function BackJobsContent() {
         </section>
       ) : null}
 
-      <div ref={detailSectionRef}>
+      <div className="border-b border-surface-border" role="tablist" aria-label="Back-job workspace views" aria-orientation="horizontal">
+        <div className="flex flex-wrap gap-2" role="presentation">
+          <button
+            ref={caseWorkspaceTabRef}
+            id="back-job-tab-details"
+            type="button"
+            role="tab"
+            aria-selected={activeWorkspaceTab === 'case'}
+            aria-controls="back-job-case-details-panel"
+            tabIndex={activeWorkspaceTab === 'case' ? 0 : -1}
+            className={activeWorkspaceTab === 'case' ? 'border-b-2 border-brand-orange px-1 pb-3 text-sm font-bold text-ink-primary' : 'border-b-2 border-transparent px-1 pb-3 text-sm font-semibold text-ink-muted hover:text-ink-primary'}
+            onClick={() => setActiveWorkspaceTab('case')}
+            onKeyDown={handleWorkspaceTabKeyDown}
+          >
+            View Case Details
+          </button>
+          <button
+            ref={createWorkspaceTabRef}
+            id="back-job-tab-create"
+            type="button"
+            role="tab"
+            aria-selected={activeWorkspaceTab === 'create'}
+            aria-controls="back-job-create-panel"
+            tabIndex={activeWorkspaceTab === 'create' ? 0 : -1}
+            className={activeWorkspaceTab === 'create' ? 'border-b-2 border-brand-orange px-1 pb-3 text-sm font-bold text-ink-primary' : 'border-b-2 border-transparent px-1 pb-3 text-sm font-semibold text-ink-muted hover:text-ink-primary'}
+            onClick={() => setActiveWorkspaceTab('create')}
+            onKeyDown={handleWorkspaceTabKeyDown}
+          >
+            Create New Back-Job
+          </button>
+        </div>
+        <p className="pb-3 pt-2 text-xs text-ink-muted">
+          Review one selected case at a time, or open a separate surface to create a new case.
+        </p>
+      </div>
+
+      <div
+        ref={detailSectionRef}
+        id="back-job-case-details-panel"
+        role="tabpanel"
+        aria-labelledby="back-job-tab-details"
+        hidden={activeWorkspaceTab !== 'case'}
+      >
         <BackJobDetail
           backJob={activeBackJob}
           caseReference={activeCaseReference}
@@ -1155,15 +1252,29 @@ export default function BackJobsContent() {
         />
       </div>
 
-      <section className="grid gap-5 xl:grid-cols-2">
-        <form onSubmit={handleCreateBackJob} className="card p-5 space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="card-title">Create Back-Job Case</p>
-              <p className="mt-1 text-xs text-ink-muted">Create an internal return case after staff verifies the customer complaint.</p>
-            </div>
-            <Plus size={18} className="text-brand-orange" />
-          </div>
+      <section className="space-y-5">
+        <div
+          id="back-job-create-panel"
+          role="tabpanel"
+          aria-labelledby="back-job-tab-create"
+          hidden={activeWorkspaceTab !== 'create'}
+        >
+          <details
+            open={createPanelOpen}
+            onToggle={(event) => setCreatePanelOpen(event.currentTarget.open)}
+            className="overflow-hidden rounded-2xl border border-surface-border bg-surface-raised"
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange">
+              <span>
+                <span className="block text-base font-bold text-ink-primary">Create Back-Job Case</span>
+                <span className="mt-1 block text-xs text-ink-muted">Open a focused form for a new internal return case.</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="badge badge-gray">New case</span>
+                <Plus size={18} className="text-brand-orange" aria-hidden="true" />
+              </span>
+            </summary>
+            <form onSubmit={handleCreateBackJob} className="space-y-4 border-t border-surface-border p-5">
           <div className="grid gap-3 md:grid-cols-2">
             <label className="label">
               Customer
@@ -1368,7 +1479,11 @@ export default function BackJobsContent() {
             </div>
           </div>
           {createState.message ? (
-            <div className={createState.status === 'create_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}>
+            <div
+              role={createState.status === 'create_saved' ? 'status' : 'alert'}
+              aria-live="polite"
+              className={createState.status === 'create_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}
+            >
               {createState.message}
             </div>
           ) : null}
@@ -1376,13 +1491,24 @@ export default function BackJobsContent() {
             {createState.status === 'create_submitting' ? <RefreshCw size={15} className="animate-spin" /> : <Plus size={15} />}
             Create Back-Job
           </button>
-        </form>
+            </form>
+          </details>
+        </div>
 
-        <div className="space-y-5">
-          <section className="card p-5 space-y-4">
+        <div
+          id="back-job-case-actions-panel"
+          role="region"
+          aria-labelledby="back-job-tab-details"
+          hidden={activeWorkspaceTab !== 'case'}
+          className="space-y-5"
+        >
+          <section className="space-y-4 rounded-2xl border border-surface-border bg-surface-raised p-5">
             <div>
-              <p className="card-title">Review Status Update</p>
-              <p className="mt-1 text-xs text-ink-muted">Move the selected case through review, approval, or closure.</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-orange">Next action for selected case</p>
+              <p className="mt-2 text-lg font-bold text-ink-primary">{activeBackJob ? activeCaseReference : 'No case selected'}</p>
+              <p className="mt-1 text-sm text-ink-secondary">
+                {activeBackJob ? 'Choose the next allowed review status and save it to the live case.' : 'Choose Review from Loaded Vehicle Cases to enable the contextual status action.'}
+              </p>
             </div>
             <label className="label">
               Next status
@@ -1394,7 +1520,7 @@ export default function BackJobsContent() {
                   value: status,
                   label: backJobStatusLabels[status],
                 }))}
-                disabled={!allowedStatusTargets.length}
+                disabled={!activeBackJob || !allowedStatusTargets.length}
               />
             </label>
             <label className="label">
@@ -1413,35 +1539,45 @@ export default function BackJobsContent() {
                     label: formatReturnInspectionReference(inspection, inspection.id),
                     helper: formatReturnInspectionHelper(inspection),
                   }))}
+                disabled={!activeBackJob}
               />
             </label>
             <label className="label">
               Review notes
-              <textarea value={statusDraft.reviewNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, reviewNotes: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
+              <textarea value={statusDraft.reviewNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, reviewNotes: event.target.value }))} rows={2} disabled={!activeBackJob} className="input min-h-[84px] resize-y" />
             </label>
             <label className="label">
               Resolution notes
-              <textarea value={statusDraft.resolutionNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, resolutionNotes: event.target.value }))} rows={2} className="input min-h-[84px] resize-y" />
+              <textarea value={statusDraft.resolutionNotes} onChange={(event) => setStatusDraft((current) => ({ ...current, resolutionNotes: event.target.value }))} rows={2} disabled={!activeBackJob} className="input min-h-[84px] resize-y" />
             </label>
             {statusState.message ? (
-              <div className={statusState.status === 'status_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}>
+              <div
+                role={statusState.status === 'status_saved' ? 'status' : 'alert'}
+                aria-live="polite"
+                className={statusState.status === 'status_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}
+              >
                 {statusState.message}
               </div>
             ) : null}
-            <button type="button" className="btn-primary" disabled={!activeBackJob || !allowedStatusTargets.length || statusState.status === 'status_submitting'} onClick={handleUpdateStatus}>
+            <button type="button" className="btn-primary" aria-label={activeBackJob ? `Save review status for ${activeCaseReference}` : 'Select a case before saving review status'} disabled={!activeBackJob || !allowedStatusTargets.length || statusState.status === 'status_submitting'} onClick={handleUpdateStatus}>
               {statusState.status === 'status_submitting' ? <RefreshCw size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
               Save Review Status
             </button>
           </section>
 
-          <section className="card p-5 space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="card-title">Create Linked Rework Job Order</p>
-                <p className="mt-1 text-xs text-ink-muted">Create a linked workshop order after the back-job is approved for rework.</p>
-              </div>
-              <Link2 size={18} className="text-brand-orange" />
-            </div>
+          <details
+            open={reworkPanelOpen}
+            onToggle={(event) => setReworkPanelOpen(event.currentTarget.open)}
+            className="overflow-hidden rounded-2xl border border-surface-border bg-surface-raised"
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange">
+              <span>
+                <span className="block text-base font-bold text-ink-primary">Create Linked Rework Job Order</span>
+                <span className="mt-1 block text-xs text-ink-muted">Open only when the selected case is approved for rework.</span>
+              </span>
+              <Link2 size={18} className="text-brand-orange" aria-hidden="true" />
+            </summary>
+            <div className="space-y-4 border-t border-surface-border p-5">
             <div className="rounded-xl border border-surface-border bg-surface-raised px-4 py-3">
               <p className="text-xs text-ink-muted">Service adviser snapshot</p>
               <p className="mt-1 text-sm font-semibold text-ink-primary">
@@ -1528,7 +1664,11 @@ export default function BackJobsContent() {
               </p>
             ) : null}
             {reworkState.message ? (
-              <div className={reworkState.status === 'rework_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}>
+              <div
+                role={reworkState.status === 'rework_saved' ? 'status' : 'alert'}
+                aria-live="polite"
+                className={reworkState.status === 'rework_saved' ? 'status-message status-message-success' : 'status-message status-message-danger'}
+              >
                 {reworkState.message}
               </div>
             ) : null}
@@ -1536,7 +1676,8 @@ export default function BackJobsContent() {
               {reworkState.status === 'rework_submitting' ? <RefreshCw size={15} className="animate-spin" /> : <Wrench size={15} />}
               Create Rework Job Order
             </button>
-          </section>
+            </div>
+          </details>
         </div>
       </section>
 

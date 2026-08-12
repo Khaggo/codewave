@@ -34,11 +34,13 @@ import { CreateServiceDto } from '../dto/create-service.dto';
 import { CreateTimeSlotDto } from '../dto/create-time-slot.dto';
 import { DailyScheduleQueryDto } from '../dto/daily-schedule-query.dto';
 import { DailyScheduleResponseDto } from '../dto/daily-schedule-response.dto';
+import { ListServiceManagementQueryDto } from '../dto/list-service-management-query.dto';
 import { QueueCurrentQueryDto } from '../dto/queue-current-query.dto';
 import { QueueCurrentResponseDto } from '../dto/queue-current-response.dto';
 import { RescheduleBookingDto } from '../dto/reschedule-booking.dto';
 import { ServiceCategoryResponseDto } from '../dto/service-category-response.dto';
 import { ServiceResponseDto } from '../dto/service-response.dto';
+import { ServiceManagementPageResponseDto } from '../dto/service-management-page-response.dto';
 import { TimeSlotResponseDto } from '../dto/time-slot-response.dto';
 import { UpdateBookingDateClosureDto } from '../dto/update-booking-date-closure.dto';
 import { UpdateBookingPaymentPolicyDto } from '../dto/update-booking-payment-policy.dto';
@@ -52,6 +54,19 @@ import { BookingsService } from '../services/bookings.service';
 @Controller()
 export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
+
+  @Get('admin/services')
+  @ApiOperation({ summary: 'List all booking services for staff management.' })
+  @ApiOkResponse({ type: ServiceManagementPageResponseDto })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('service_adviser', 'super_admin')
+  listServiceManagement(@Query() query: ListServiceManagementQueryDto, @Req() request: Request) {
+    return this.bookingsService.listServiceManagement(
+      query,
+      (request.user as { userId: string }).userId,
+    );
+  }
 
   @Get('services')
   @ApiOperation({ summary: 'List available service offerings for bookings.' })

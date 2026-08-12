@@ -16,7 +16,12 @@ import {
   updateAccessoryVariant,
   uploadAccessoryMedia,
 } from '@/lib/accessories/accessoriesAdminClient'
-import { normalizeAccessoryAdminCategories, normalizeAccessoryAdminProductDetail } from '@/lib/accessories/accessoriesAdminModel.mjs'
+import {
+  getAccessoryApiErrorCode,
+  getAccessoryCatalogViewState,
+  normalizeAccessoryAdminCategories,
+  normalizeAccessoryAdminProductDetail,
+} from '@/lib/accessories/accessoriesAdminModel.mjs'
 import { createAccessoryAdminMutationCoordinator } from '@/lib/accessories/accessoriesAdminMutationCoordinator.mjs'
 import { useUser } from '@/lib/userContext'
 import { AccessoriesHeader, AccessoriesNotice, AccessoriesState, StatusBadge } from './AccessoriesWorkspaceChrome'
@@ -27,7 +32,7 @@ const emptyFitment = { variantId: '', status: 'unverified', make: '', model: '',
 
 export default function AccessoryCatalogWorkspace() {
   const user = useUser()
-  const [state, setState] = useState({ status: 'loading', categories: [], products: [], currentCursor: null, nextCursor: null, cursorStack: [], error: '' })
+  const [state, setState] = useState({ status: 'loading', categories: [], products: [], currentCursor: null, nextCursor: null, cursorStack: [], error: '', errorCode: '', errorStatus: null })
   const [selected, setSelected] = useState(null)
   const [productForm, setProductForm] = useState(emptyProduct)
   const [categoryForm, setCategoryForm] = useState({ slug: '', name: '', description: '' })
@@ -48,18 +53,33 @@ export default function AccessoryCatalogWorkspace() {
         listAccessoryAdminProducts({ accessToken: user.accessToken, cursor, limit: 25 }),
       ])
       const safeCategories = normalizeAccessoryAdminCategories(categories)
-      setState({ status: 'ready', categories: safeCategories, products: page.items ?? [], currentCursor: cursor, nextCursor: page.nextCursor ?? null, cursorStack, error: '' })
+      setState({ status: 'ready', categories: safeCategories, products: page.items ?? [], currentCursor: cursor, nextCursor: page.nextCursor ?? null, cursorStack, error: '', errorCode: '', errorStatus: null })
       setProductForm((current) => ({ ...current, categoryId: current.categoryId || safeCategories[0]?.id || '' }))
     } catch (error) {
-      setState((current) => ({ ...current, status: 'error', error: error.message }))
+      setState((current) => ({
+        ...current,
+        status: 'error',
+        error: error.message,
+        errorCode: getAccessoryApiErrorCode(error),
+        errorStatus: error.status ?? null,
+      }))
     }
   }, [user?.accessToken, user?.role])
 
   useEffect(() => { void load() }, [load])
 
   if (user?.role !== 'super_admin') return <AccessoriesState status="error" title="Super-admin access required" message="Catalog, pricing, fitment, publication, and lighting review are restricted." />
-  if (state.status === 'loading') return <AccessoriesState status="loading" title="Loading accessory catalog" message="Retrieving the first bounded catalog page." />
-  if (state.status === 'error') return <AccessoriesState status="error" title="Catalog unavailable" message={state.error} onRetry={() => void load()} />
+  const catalogViewState = getAccessoryCatalogViewState({
+    requestStatus: state.status,
+    errorCode: state.errorCode,
+    errorStatus: state.errorStatus,
+    itemCount: state.products.length,
+  })
+  if (catalogViewState === 'loading') return <AccessoriesState status="loading" title="Loading accessory catalog" message="Retrieving the first bounded catalog page." />
+  if (catalogViewState === 'disabled') return <AccessoriesState status="disabled" title="Accessory catalog is turned off" message="A super admin must enable Accessories catalog mode (catalog or ordering) in server configuration before this workspace can be used, then retry." onRetry={() => void load()} />
+  if (catalogViewState === 'unauthorized') return <AccessoriesState status="error" title="Accessory catalog access denied" message="Your staff session is not authorized to manage the accessory catalog. Sign in with an active super-admin account." onRetry={() => void load()} />
+  if (catalogViewState === 'network-error') return <AccessoriesState status="error" title="Accessory catalog connection unavailable" message="The shop service could not be reached. Check the connection and retry." onRetry={() => void load()} />
+  if (catalogViewState === 'error') return <AccessoriesState status="error" title="Catalog unavailable" message={state.error} onRetry={() => void load()} />
 
   const run = async (key, work, success, after) => {
     const token = mutationCoordinatorRef.current.begin(key)
@@ -92,12 +112,12 @@ export default function AccessoryCatalogWorkspace() {
   }
 
   return (
-    <main className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-6">
+    <main className="mx-auto max-w-[1600px] space-y-5 p-4 lg:p-6">
       <AccessoriesHeader title="Accessory Catalog" description="Publish vehicle accessories only after price, fitment, media, and required lighting review are ready." actions={<button type="button" className="btn-ghost min-h-11" disabled={Boolean(action.busy)} onClick={() => void load()}><RefreshCw size={15} /> Refresh</button>} />
       {action.error ? <AccessoriesNotice tone="error">{action.error}</AccessoriesNotice> : null}
       {action.message ? <AccessoriesNotice tone="success">{action.message}</AccessoriesNotice> : null}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.75fr)]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(420px,0.85fr)]">
         <section className="min-w-0 border-y border-surface-border">
           <div className="flex items-center justify-between px-3 py-3"><div><h2 className="font-semibold text-ink-primary">Products</h2><p className="text-xs text-ink-secondary">Up to 25 records per page</p></div><StatusBadge value={`${state.products.length} loaded`} /></div>
           <div className="overflow-x-auto">
@@ -109,23 +129,23 @@ export default function AccessoryCatalogWorkspace() {
           {!state.products.length ? <AccessoriesState status="empty" title="No products yet" message="Create the first category and product from the setup panel." /> : null}
         </section>
 
-        <aside className="space-y-5">
-          <form className="space-y-3 border-y border-surface-border py-4" onSubmit={(event) => { event.preventDefault(); void run('category', () => createAccessoryCategory({ accessToken: user.accessToken, payload: categoryForm }), 'Category created.', async () => { setCategoryForm({ slug: '', name: '', description: '' }); await load() }) }}>
-            <h2 className="font-semibold text-ink-primary">New category</h2>
-            <input className="input-field" aria-label="Category name" placeholder="Category name" value={categoryForm.name} onChange={(event) => setCategoryForm((current) => ({ ...current, name: event.target.value }))} required />
-            <input className="input-field" aria-label="Category slug" placeholder="category-slug" value={categoryForm.slug} onChange={(event) => setCategoryForm((current) => ({ ...current, slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} required />
-            <textarea className="input-field min-h-20" aria-label="Category description" placeholder="Description" value={categoryForm.description} onChange={(event) => setCategoryForm((current) => ({ ...current, description: event.target.value }))} />
-            <button className="btn-primary min-h-11" disabled={Boolean(action.busy)}><Plus size={15} /> Create category</button>
+        <aside className="space-y-4">
+          <form className="space-y-4 rounded-lg border border-surface-border bg-surface-card p-4" onSubmit={(event) => { event.preventDefault(); void run('category', () => createAccessoryCategory({ accessToken: user.accessToken, payload: categoryForm }), 'Category created.', async () => { setCategoryForm({ slug: '', name: '', description: '' }); await load() }) }}>
+            <div><h2 className="font-semibold text-ink-primary">Create category</h2><p className="mt-1 text-xs leading-5 text-ink-secondary">Group similar accessories so staff and customers can find them quickly.</p></div>
+            <label className="block"><span className="label">Category name</span><input className="input-field" aria-label="Category name" placeholder="e.g. Exterior lighting…" value={categoryForm.name} onChange={(event) => setCategoryForm((current) => ({ ...current, name: event.target.value }))} required /></label>
+            <label className="block"><span className="label">URL slug</span><input className="input-field" aria-label="Category slug" placeholder="exterior-lighting…" value={categoryForm.slug} onChange={(event) => setCategoryForm((current) => ({ ...current, slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} required /></label>
+            <label className="block"><span className="label">Description</span><textarea className="input-field min-h-20" aria-label="Category description" placeholder="Short customer-facing description…" value={categoryForm.description} onChange={(event) => setCategoryForm((current) => ({ ...current, description: event.target.value }))} /></label>
+            <button className="btn-primary min-h-11 w-full sm:w-auto" disabled={Boolean(action.busy)}><Plus size={15} /> Create category</button>
           </form>
 
-          <form className="space-y-3 border-y border-surface-border py-4" onSubmit={(event) => { event.preventDefault(); void run('product', () => createAccessoryProduct({ accessToken: user.accessToken, payload: productForm }), 'Product draft created.', async () => { setProductForm({ ...emptyProduct, categoryId: state.categories[0]?.id || '' }); await load() }) }}>
-            <h2 className="font-semibold text-ink-primary">New product draft</h2>
-            <select className="input-field" aria-label="Product category" value={productForm.categoryId} onChange={(event) => setProductForm((current) => ({ ...current, categoryId: event.target.value }))} required><option value="">Select category</option>{state.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
-            <input className="input-field" aria-label="Product name" placeholder="Product name" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} required />
-            <input className="input-field" aria-label="Product slug" placeholder="product-slug" value={productForm.slug} onChange={(event) => setProductForm((current) => ({ ...current, slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} required />
-            <textarea className="input-field min-h-20" aria-label="Product description" placeholder="Customer-visible description" value={productForm.description} onChange={(event) => setProductForm((current) => ({ ...current, description: event.target.value }))} />
+          <form className="space-y-4 rounded-lg border border-surface-border bg-surface-card p-4" onSubmit={(event) => { event.preventDefault(); void run('product', () => createAccessoryProduct({ accessToken: user.accessToken, payload: productForm }), 'Product draft created.', async () => { setProductForm({ ...emptyProduct, categoryId: state.categories[0]?.id || '' }); await load() }) }}>
+            <div><h2 className="font-semibold text-ink-primary">Create product draft</h2><p className="mt-1 text-xs leading-5 text-ink-secondary">Start with the customer-visible details, then manage variants, fitment, and media after saving.</p></div>
+            <label className="block"><span className="label">Category</span><select className="input-field" aria-label="Product category" value={productForm.categoryId} onChange={(event) => setProductForm((current) => ({ ...current, categoryId: event.target.value }))} required><option value="">Select a category…</option>{state.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+            <label className="block"><span className="label">Product name</span><input className="input-field" aria-label="Product name" placeholder="e.g. LED headlight kit…" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} required /></label>
+            <label className="block"><span className="label">URL slug</span><input className="input-field" aria-label="Product slug" placeholder="led-headlight-kit…" value={productForm.slug} onChange={(event) => setProductForm((current) => ({ ...current, slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} required /></label>
+            <label className="block"><span className="label">Customer description</span><textarea className="input-field min-h-20" aria-label="Product description" placeholder="Explain what the customer receives…" value={productForm.description} onChange={(event) => setProductForm((current) => ({ ...current, description: event.target.value }))} /></label>
             <label className="flex min-h-11 items-center gap-3 text-sm text-ink-secondary"><input type="checkbox" checked={productForm.isLighting} onChange={(event) => setProductForm((current) => ({ ...current, isLighting: event.target.checked }))} /> Lighting product</label>
-            <button className="btn-primary min-h-11" disabled={Boolean(action.busy)}><Plus size={15} /> Create draft</button>
+            <button className="btn-primary min-h-11 w-full sm:w-auto" disabled={Boolean(action.busy)}><Plus size={15} /> Create draft</button>
           </form>
         </aside>
       </div>

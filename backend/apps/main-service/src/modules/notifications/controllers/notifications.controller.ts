@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import {
   ApiBadRequestResponse,
@@ -97,5 +97,63 @@ export class NotificationsController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
   listNotifications(@Param('id') id: string, @Req() request: Request) {
     return this.notificationsService.listNotifications(id, request.user as { userId: string; role: string });
+  }
+
+  @Patch('users/:id/notifications/:notificationId/read')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Mark one notification as read.' })
+  @ApiBearerAuth('access-token')
+  markNotificationRead(
+    @Param('id') id: string,
+    @Param('notificationId') notificationId: string,
+    @Req() request: Request,
+  ) {
+    return this.notificationsService.markNotificationRead(
+      id,
+      notificationId,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post('users/:id/notifications/read-all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Mark all notifications as read.' })
+  @ApiBearerAuth('access-token')
+  markAllNotificationsRead(@Param('id') id: string, @Req() request: Request) {
+    return this.notificationsService.markAllNotificationsRead(
+      id,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Patch('users/:id/notifications/:notificationId/archive')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Archive one notification without changing its read state.' })
+  @ApiBearerAuth('access-token')
+  archiveNotification(
+    @Param('id') id: string,
+    @Param('notificationId') notificationId: string,
+    @Req() request: Request,
+  ) {
+    return this.notificationsService.archiveNotification(
+      id,
+      notificationId,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+  @Post('users/:id/notifications/archive-all-read')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('customer', 'service_adviser', 'super_admin')
+  @ApiOperation({ summary: 'Archive all read notifications without changing read timestamps.' })
+  @ApiBearerAuth('access-token')
+  archiveAllReadNotifications(@Param('id') id: string, @Req() request: Request) {
+    return this.notificationsService.archiveAllReadNotifications(
+      id,
+      request.user as { userId: string; role: string },
+    );
   }
 }

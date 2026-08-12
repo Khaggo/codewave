@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import { Request } from 'express';
 import { seconds, Throttle } from '@nestjs/throttler';
 import {
@@ -7,16 +7,20 @@ import {
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiExtraModels,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
+  ApiServiceUnavailableResponse,
+  getSchemaPath,
 } from '@nestjs/swagger';
 
 import { Roles } from '../decorators/roles.decorator';
 import { ConfirmChangePasswordWithOtpDto } from '../dto/confirm-change-password-with-otp.dto';
+import { CompleteRequiredStaffPasswordDto } from '../dto/complete-required-staff-password.dto';
 import { ConfirmStaffPhoneChangeWithOtpDto } from '../dto/confirm-staff-phone-change-with-otp.dto';
 import { CreateStaffAccountDto } from '../dto/create-staff-account.dto';
 import { DeleteAccountDto } from '../dto/delete-account.dto';
@@ -29,9 +33,13 @@ import { AuthSessionResponseDto } from '../dto/auth-session-response.dto';
 import { GoogleSignupStartDto } from '../dto/google-signup-start.dto';
 import { GoogleSignupStartResponseDto } from '../dto/google-signup-start-response.dto';
 import { LoginDto } from '../dto/login.dto';
+import { FirstLoginPasswordChangeResponseDto } from '../dto/first-login-password-change-response.dto';
+import { ListAdminCustomersQueryDto } from '../dto/list-admin-customers-query.dto';
 import { RequestChangePasswordOtpDto } from '../dto/request-change-password-otp.dto';
 import { RequestPasswordResetOtpDto } from '../dto/request-password-reset-otp.dto';
 import { RequestStaffPhoneChangeOtpDto } from '../dto/request-staff-phone-change-otp.dto';
+import { RetryStaffCredentialDeliveryDto } from '../dto/retry-staff-credential-delivery.dto';
+import { StaffProvisioningResponseDto } from '../dto/staff-provisioning-response.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
 import { ResetPasswordWithOtpDto } from '../dto/reset-password-with-otp.dto';
@@ -41,6 +49,7 @@ import { AuthService } from '../services/auth.service';
 import { UserResponseDto } from '@main-modules/users/dto/user-response.dto';
 
 @ApiTags('auth')
+@ApiExtraModels(AuthSessionResponseDto, FirstLoginPasswordChangeResponseDto)
 @Controller()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -131,14 +140,31 @@ export class AuthController {
   @Throttle({ default: { limit: 30, ttl: seconds(60), blockDuration: seconds(60) } })
   @ApiOperation({ summary: 'Authenticate a user and issue access + refresh tokens.' })
   @ApiOkResponse({
-    description: 'Login succeeded.',
-    type: AuthSessionResponseDto,
+    description: 'Login succeeded with a normal session or a restricted required-password-change state.',
+    schema: {
+      oneOf: [
+        { $ref: getSchemaPath(AuthSessionResponseDto) },
+        { $ref: getSchemaPath(FirstLoginPasswordChangeResponseDto) },
+      ],
+    },
   })
   @ApiBadRequestResponse({ description: 'The login payload is invalid.' })
   @ApiUnauthorizedResponse({ description: 'The credentials are invalid.' })
   @HttpCode(HttpStatus.OK)
   login(@Body() loginDto: LoginDto, @Req() request: Request) {
     return this.authService.login(loginDto, request.ip);
+  }
+
+  @Post('auth/password/change-required')
+  @Throttle({ default: { limit: 5, ttl: seconds(60), blockDuration: seconds(60) } })
+  @ApiOperation({ summary: 'Replace a temporary staff password and issue the first unrestricted session.' })
+  @ApiOkResponse({ description: 'The temporary password was replaced and a normal session was issued.', type: AuthSessionResponseDto })
+  @ApiBadRequestResponse({ description: 'The replacement password is invalid or unchanged.' })
+  @ApiConflictResponse({ description: 'The account no longer requires an initial password change.' })
+  @ApiUnauthorizedResponse({ description: 'The restricted password-change token is invalid or expired.' })
+  @HttpCode(HttpStatus.OK)
+  completeRequiredStaffPasswordChange(@Body() payload: CompleteRequiredStaffPasswordDto) {
+    return this.authService.completeRequiredStaffPasswordChange(payload);
   }
 
   @Post('auth/refresh')
@@ -332,18 +358,44 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   @Post('admin/staff-accounts')
+  @Throttle({ default: { limit: 5, ttl: seconds(60), blockDuration: seconds(60) } })
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   @ApiOperation({ summary: 'Provision a new staff identity and credential pair.' })
   @ApiBearerAuth('access-token')
   @ApiCreatedResponse({
     description: 'The staff account was provisioned successfully.',
-    type: UserResponseDto,
+    type: StaffProvisioningResponseDto,
   })
   @ApiBadRequestResponse({ description: 'The staff payload is invalid.' })
   @ApiConflictResponse({ description: 'The email or staff code already exists.' })
   @ApiForbiddenResponse({ description: 'Only super admins can provision staff accounts.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  @ApiServiceUnavailableResponse({ description: 'The account was created but credential email delivery failed; retry is required.' })
   createStaffAccount(@Body() payload: CreateStaffAccountDto, @Req() request: Request) {
     return this.authService.provisionStaffAccount(
+      payload,
+      request.user as { userId: string; role: string },
+    );
+  }
+
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post('admin/staff-accounts/credentials/retry')
+  @Throttle({ default: { limit: 5, ttl: seconds(60), blockDuration: seconds(60) } })
+  @ApiOperation({ summary: 'Rotate and immediately email a new temporary password after failed initial delivery.' })
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'A new temporary password was generated and delivered.', type: StaffProvisioningResponseDto })
+  @ApiConflictResponse({ description: 'The account is inactive or no longer requires initial credential delivery.' })
+  @ApiForbiddenResponse({ description: 'Only super admins can retry staff credential delivery.' })
+  @ApiNotFoundResponse({ description: 'Staff account not found.' })
+  @ApiServiceUnavailableResponse({ description: 'The newly rotated credential could not be delivered.' })
+  @HttpCode(HttpStatus.OK)
+  retryStaffCredentialDelivery(
+    @Body() payload: RetryStaffCredentialDeliveryDto,
+    @Req() request: Request,
+  ) {
+    return this.authService.retryStaffCredentialDelivery(
       payload,
       request.user as { userId: string; role: string },
     );
@@ -394,9 +446,10 @@ export class AuthController {
       'Only service advisers or super admins can load customer records for staff workflows.',
   })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
-  listAdminCustomers(@Req() request: Request) {
+  listAdminCustomers(@Query() query: ListAdminCustomersQueryDto, @Req() request: Request) {
     return this.authService.listCustomersWithVehicles(
       request.user as { userId: string; role: string },
+      query,
     );
   }
 
