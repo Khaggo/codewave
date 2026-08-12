@@ -19,8 +19,12 @@ import {
   InsuranceSectionDivider,
 } from './InsurancePanelPrimitives'
 import {
+  buildInsuranceRequestReviewModel,
   INSURANCE_REQUEST_STAGES,
   normalizeInsuranceRequestStageIndex,
+  normalizeInsuranceRequestChecklist,
+  normalizeInsuranceRequestDraft,
+  resolveInsuranceRequestStageTransition,
   validateInsuranceRequestStage,
 } from './insuranceRequestFlow.mjs'
 import { InlineNotice, StagedDocumentRow } from './InsuranceRequestParts'
@@ -28,11 +32,12 @@ import styles from './insuranceRequestPanelStyles'
 
 export default function InsuranceRequestPanel({
   bottomInset = 0,
+  requestTitle,
   selectedVehicleLabel,
-  draft,
-  purposeOptions = [],
-  inquiryTypeOptions,
-  requestGuidance,
+  draft: draftProp,
+  purposeOptions: purposeOptionsProp = [],
+  inquiryTypeOptions: inquiryTypeOptionsProp = [],
+  requestGuidance: requestGuidanceProp,
   isRefreshing,
   onRefresh,
   onChangeDraft,
@@ -40,9 +45,9 @@ export default function InsuranceRequestPanel({
   isSubmitting,
   intakeState,
   intakeMessage,
-  checklist,
-  stagedDocuments = [],
-  onFileDocuments = [],
+  checklist: checklistProp,
+  stagedDocuments: stagedDocumentsProp = [],
+  onFileDocuments: onFileDocumentsProp = [],
   hasOnFileRenewalPolicy = false,
   canSubmitRequest = true,
   initialStageIndex = 0,
@@ -50,6 +55,27 @@ export default function InsuranceRequestPanel({
   onStageDocument,
   onRemoveStagedDocument,
 }) {
+  const draft = normalizeInsuranceRequestDraft(draftProp)
+  const checklist = normalizeInsuranceRequestChecklist(checklistProp)
+  const purposeOptions = (Array.isArray(purposeOptionsProp) ? purposeOptionsProp : [])
+    .filter((option) => option && typeof option === 'object' && String(option.value ?? '').trim())
+  const inquiryTypeOptions = (Array.isArray(inquiryTypeOptionsProp) ? inquiryTypeOptionsProp : [])
+    .filter((option) => option && typeof option === 'object' && String(option.value ?? '').trim())
+  const requestGuidance =
+    requestGuidanceProp && typeof requestGuidanceProp === 'object'
+      ? requestGuidanceProp
+      : {}
+  const reviewModel = buildInsuranceRequestReviewModel({
+    draft,
+    requestTitle,
+    selectedVehicleLabel,
+  })
+  const stagedDocuments = Array.isArray(stagedDocumentsProp)
+    ? stagedDocumentsProp.filter((item) => item && typeof item === 'object')
+    : []
+  const onFileDocuments = Array.isArray(onFileDocumentsProp)
+    ? onFileDocumentsProp.filter((item) => item && typeof item === 'object')
+    : []
   const scrollRef = useRef(null)
   const descriptionRef = useRef(null)
   const [stageIndex, setStageIndex] = useState(() =>
@@ -76,6 +102,7 @@ export default function InsuranceRequestPanel({
 
     return {
       ...item,
+      label: item.requested ? `${item.label} · requested by staff` : item.label,
       fileName: stagedDocument?.fileName ?? '',
       fileSizeLabel: stagedDocument?.fileSizeLabel ?? null,
       onFileName: !stagedDocument && allowOnFile ? onFileDocument?.fileName ?? item.label : '',
@@ -109,21 +136,21 @@ export default function InsuranceRequestPanel({
   }
 
   const handleContinue = () => {
-    const validation = validateInsuranceRequestStage({
+    const transition = resolveInsuranceRequestStageTransition({
       stageIndex,
       draft,
       checklist,
     })
 
-    if (validation) {
-      setFieldError(validation)
-      if (validation.field === 'description') {
+    if (transition.error) {
+      setFieldError(transition.error)
+      if (transition.error.field === 'description') {
         descriptionRef.current?.focus()
       }
       return
     }
 
-    moveToStage(stageIndex + 1)
+    moveToStage(transition.stageIndex)
   }
 
   const handleSubmit = () => {
@@ -526,10 +553,10 @@ export default function InsuranceRequestPanel({
 
               <InsuranceSectionDivider title="Review">
                 <View style={styles.reviewCard}>
-                  <Text style={styles.reviewTitle}>{requestTitle}</Text>
-                  <Text style={styles.reviewLine}>{selectedVehicleLabel}</Text>
-                  <Text style={styles.reviewLine}>{draft.inquiryType === 'ctpl' ? 'CTPL' : 'Comprehensive'}</Text>
-                  <Text style={styles.reviewBody}>{draft.description}</Text>
+                  <Text style={styles.reviewTitle}>{reviewModel.title}</Text>
+                  <Text style={styles.reviewLine}>{reviewModel.selectedVehicleLabel}</Text>
+                  <Text style={styles.reviewLine}>{reviewModel.inquiryTypeLabel}</Text>
+                  <Text style={styles.reviewBody}>{reviewModel.description}</Text>
                   <View style={styles.reviewActions}>
                     <TouchableOpacity
                       style={styles.secondaryButton}

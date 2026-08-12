@@ -13,10 +13,11 @@ import {
 } from 'react-native';
 
 import { buildOwnedVehicleInsuranceLabel } from '../../lib/insuranceClient';
+import { getVehicleDisplayLabel, getVehiclePlateLabel } from '../../lib/vehicleDisplay.mjs';
 import { colors, radius } from '../../theme';
 import { filterInsuranceOwnedVehicles } from './insuranceVehicleSelectionModel.mjs';
 
-const VEHICLE_ROW_HEIGHT = 64;
+const VEHICLE_ROW_HEIGHT = 76;
 const INITIAL_RENDER_COUNT = 8;
 
 export default function InsuranceVehiclePicker({
@@ -59,9 +60,14 @@ export default function InsuranceVehiclePicker({
         }}
         style={[styles.vehicleRow, selected && styles.vehicleRowSelected]}
       >
-        <Text numberOfLines={2} style={styles.vehicleLabel}>
-          {vehicleLabel}
-        </Text>
+        <View style={styles.vehicleLabelCopy}>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={styles.vehicleLabel}>
+            {getVehicleDisplayLabel(vehicle)}
+          </Text>
+          <Text numberOfLines={1} style={styles.vehiclePlateLabel}>
+            {getVehiclePlateLabel(vehicle)}
+          </Text>
+        </View>
         {selected ? (
           <View style={styles.currentBadge}>
             <MaterialCommunityIcons name="check" size={14} color={colors.primary} />
@@ -292,6 +298,15 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     fontWeight: '700',
+  },
+  vehicleLabelCopy: {
+    minWidth: 0,
+    flex: 1,
+  },
+  vehiclePlateLabel: {
+    color: colors.mutedText,
+    fontSize: 12,
+    marginTop: 2,
   },
   currentBadge: {
     minHeight: 28,

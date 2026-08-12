@@ -1,5 +1,9 @@
 import { getCustomerVehicleReference } from '../lib/vehicleReference.mjs';
-import { formatVehicleDisplayName } from '../utils/validation';
+import {
+  getVehicleDisplayLabel,
+  getVehicleFullLabel as buildVehicleFullLabel,
+  getVehiclePlateLabel,
+} from '../lib/vehicleDisplay.mjs';
 
 export const createEmptyVehicleDraft = () => ({
   licensePlate: '',
@@ -9,14 +13,10 @@ export const createEmptyVehicleDraft = () => ({
   color: '',
 });
 
-export const getVehicleLabel = (vehicle) =>
-  formatVehicleDisplayName({
-    vehicleMake: vehicle?.make ?? vehicle?.vehicleMake,
-    vehicleModel: vehicle?.model ?? vehicle?.vehicleModel,
-    vehicleYear: vehicle?.year ?? vehicle?.vehicleYear,
-  }) || vehicle?.plateNumber || vehicle?.licensePlate || 'Vehicle';
+export const getVehicleLabel = (vehicle) => getVehicleDisplayLabel(vehicle);
 
-export const getVehiclePlate = (vehicle) =>
-  vehicle?.plateNumber ?? vehicle?.licensePlate ?? 'No plate recorded';
+export const getVehicleFullLabel = (vehicle) => buildVehicleFullLabel(vehicle);
+
+export const getVehiclePlate = (vehicle) => getVehiclePlateLabel(vehicle);
 
 export const getVehicleReference = (vehicle) => getCustomerVehicleReference(vehicle);

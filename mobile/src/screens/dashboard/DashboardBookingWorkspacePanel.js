@@ -59,13 +59,27 @@ export default function DashboardBookingWorkspacePanel({
   onRetryReservationPayment,
 }) {
   const normalizedMode = normalizeBookingWorkspaceMode(mode)
-  const discoveryStateKey = getBookingDiscoveryStateKey(discovery)
-  const selectedVehicle = discovery.vehicles.find((vehicle) => vehicle.id === selectedVehicleId)
-  const selectedServices = getSelectedBookingServices(discovery.services, selectedServiceIds, {
+  const safeDiscovery = {
+    ...(discovery && typeof discovery === 'object' ? discovery : {}),
+    services: Array.isArray(discovery?.services) ? discovery.services : [],
+    timeSlots: Array.isArray(discovery?.timeSlots) ? discovery.timeSlots : [],
+    vehicles: Array.isArray(discovery?.vehicles) ? discovery.vehicles : [],
+    availability: {
+      ...(discovery?.availability && typeof discovery.availability === 'object'
+        ? discovery.availability
+        : {}),
+      days: Array.isArray(discovery?.availability?.days) ? discovery.availability.days : [],
+    },
+  }
+  const safeCreateState = createState && typeof createState === 'object' ? createState : { status: 'idle' }
+  const safeHistory = history && typeof history === 'object' ? history : {}
+  const discoveryStateKey = getBookingDiscoveryStateKey(safeDiscovery)
+  const selectedVehicle = safeDiscovery.vehicles.find((vehicle) => vehicle.id === selectedVehicleId)
+  const selectedServices = getSelectedBookingServices(safeDiscovery.services, selectedServiceIds, {
     activeOnly: false,
   })
-  const selectedTimeSlot = discovery.timeSlots.find((timeSlot) => timeSlot.id === selectedTimeKey)
-  const availability = discovery.availability
+  const selectedTimeSlot = safeDiscovery.timeSlots.find((timeSlot) => timeSlot.id === selectedTimeKey)
+  const availability = safeDiscovery.availability
   const selectedDay = getBookingAvailabilityDayByDate(availability, selectedDateKey)
   const selectedSlotAvailability = getBookingAvailabilitySlotForTime(
     selectedDay,
@@ -78,13 +92,13 @@ export default function DashboardBookingWorkspacePanel({
     minimumDate ||
     parseDateOnly(availability.startDate) ||
     new Date()
-  const vehicleOptions = discovery.vehicles.map((vehicle) => ({
+  const vehicleOptions = safeDiscovery.vehicles.map((vehicle) => ({
     id: vehicle.id,
     title: buildOwnedVehicleLabel(vehicle),
     subtitle: `${vehicle.make} ${vehicle.model} - ${vehicle.year}`,
     plateNumber: vehicle.plateNumber,
   }))
-  const allServiceOptions = discovery.services.map((service) => ({
+  const allServiceOptions = safeDiscovery.services.map((service) => ({
     key: service.id,
     icon: 'wrench-outline',
     title: service.name,
@@ -100,7 +114,7 @@ export default function DashboardBookingWorkspacePanel({
       .join(' - '),
     durationLabel: formatBookingServiceDuration(service.durationMinutes),
   }))
-  const timeSlotOptions = discovery.timeSlots.map((timeSlot) => ({
+  const timeSlotOptions = safeDiscovery.timeSlots.map((timeSlot) => ({
     key: timeSlot.id,
     label: timeSlot.label,
     timeRangeLabel: formatBookingTimeSlotWindow(timeSlot),
@@ -129,7 +143,7 @@ export default function DashboardBookingWorkspacePanel({
     selectedDateKey,
     selectedSlotAvailability,
     selectedDay,
-    createStatus: createState.status,
+    createStatus: safeCreateState.status,
   })
 
   return (
@@ -159,7 +173,7 @@ export default function DashboardBookingWorkspacePanel({
       {normalizedMode === 'book' ? (
         <DashboardBookingCreatePanel
           isCompactPhone={isCompactPhone}
-          discovery={discovery}
+          discovery={safeDiscovery}
           discoveryStateKey={discoveryStateKey}
           serviceOptions={allServiceOptions}
           selectedServiceIds={selectedServiceIds}
@@ -191,7 +205,7 @@ export default function DashboardBookingWorkspacePanel({
           selectedTimeSlot={selectedTimeSlot}
           selectedDateKey={selectedDateKey}
           notes={notes}
-          createState={createState}
+          createState={safeCreateState}
           isReady={isReady}
           onRefreshDiscovery={onRefreshDiscovery}
           onToggleService={onToggleService}
@@ -204,8 +218,8 @@ export default function DashboardBookingWorkspacePanel({
       ) : (
         <DashboardBookingTrackingPanel
           isCompactPhone={isCompactPhone}
-          history={history}
-          vehicles={discovery.vehicles}
+          history={safeHistory}
+          vehicles={safeDiscovery.vehicles}
           selectedHistoryBookingId={selectedHistoryBookingId}
           detailState={detailState}
           reservationPaymentState={reservationPaymentState}

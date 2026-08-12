@@ -8,6 +8,7 @@ import {
 import { colors } from '../theme';
 import styles from './vehicleLifecycleStyles';
 import {
+  getVehicleFullLabel,
   getVehicleLabel,
   getVehiclePlate,
   getVehicleReference,
@@ -76,7 +77,7 @@ export function ActionButton({ icon, label, emphasis = 'secondary', onPress }) {
 export function VehiclePickerRow({ vehicle, isActive, onPress }) {
   return (
     <TouchableOpacity
-      accessibilityLabel={`${getVehicleLabel(vehicle)}, reference ${getVehicleReference(vehicle)}, ${getVehiclePlate(vehicle)}`}
+      accessibilityLabel={`${getVehicleFullLabel(vehicle)}, reference ${getVehicleReference(vehicle)}`}
       accessibilityRole="button"
       accessibilityState={{ selected: isActive }}
       activeOpacity={0.86}
@@ -87,7 +88,9 @@ export function VehiclePickerRow({ vehicle, isActive, onPress }) {
         <MaterialCommunityIcons name="car-outline" size={20} color={colors.primary} />
       </View>
       <View style={styles.vehiclePickerRowCopy}>
-        <Text style={styles.vehiclePickerRowTitle}>{getVehicleLabel(vehicle)}</Text>
+        <Text numberOfLines={2} ellipsizeMode="tail" style={styles.vehiclePickerRowTitle}>
+          {getVehicleLabel(vehicle)}
+        </Text>
         <Text style={styles.vehiclePickerRowMeta}>
           {getVehicleReference(vehicle)} - {getVehiclePlate(vehicle)}
         </Text>

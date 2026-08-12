@@ -17,6 +17,93 @@ export const INSURANCE_REQUEST_STAGES = [
 
 const trimOrEmpty = (value) => String(value ?? '').trim();
 
+export const validateInsuranceIncidentDate = (value, now = Date.now()) => {
+  const normalizedValue = trimOrEmpty(value);
+
+  if (!normalizedValue) {
+    return {
+      field: 'incidentOccurredAt',
+      message: 'Choose the incident date and time before continuing.',
+    };
+  }
+
+  const incidentDate = new Date(normalizedValue);
+  if (Number.isNaN(incidentDate.getTime())) {
+    return {
+      field: 'incidentOccurredAt',
+      message: 'Enter a valid incident date and time.',
+    };
+  }
+
+  if (incidentDate.getTime() > Number(now)) {
+    return {
+      field: 'incidentOccurredAt',
+      message: 'Incident date and time cannot be in the future.',
+    };
+  }
+
+  return null;
+};
+
+export const normalizeInsuranceRequestDraft = (draft) => {
+  const source = draft && typeof draft === 'object' ? draft : {};
+
+  return {
+    ...source,
+    clientRequestId: trimOrEmpty(source.clientRequestId),
+    requestStageIndex: normalizeInsuranceRequestStageIndex(source.requestStageIndex),
+    purpose: trimOrEmpty(source.purpose),
+    inquiryType: trimOrEmpty(source.inquiryType),
+    description: trimOrEmpty(source.description),
+    providerName: trimOrEmpty(source.providerName),
+    policyNumber: trimOrEmpty(source.policyNumber),
+    incidentOccurredAt: trimOrEmpty(source.incidentOccurredAt),
+    incidentLocation: trimOrEmpty(source.incidentLocation),
+    notes: trimOrEmpty(source.notes),
+    renewalPolicyMode: trimOrEmpty(source.renewalPolicyMode),
+  };
+};
+
+export const normalizeInsuranceRequestChecklist = (checklist) => {
+  const source = checklist && typeof checklist === 'object' ? checklist : {};
+  const normalizeItems = (items) =>
+    (Array.isArray(items) ? items : [])
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        ...item,
+        type: trimOrEmpty(item.type),
+        label: trimOrEmpty(item.label) || trimOrEmpty(item.type) || 'Document',
+        complete: Boolean(item.complete),
+      }))
+      .filter((item) => item.type);
+
+  return {
+    ...source,
+    required: normalizeItems(source.required),
+    supporting: normalizeItems(source.supporting),
+    optional: normalizeItems(source.optional),
+    isAuthoritative: Boolean(source.isAuthoritative),
+  };
+};
+
+export const buildInsuranceRequestReviewModel = ({
+  draft,
+  requestTitle,
+  selectedVehicleLabel,
+} = {}) => {
+  const normalizedDraft = normalizeInsuranceRequestDraft(draft);
+  const normalizedTitle = String(requestTitle ?? '').trim();
+  const normalizedVehicleLabel = String(selectedVehicleLabel ?? '').trim();
+
+  return {
+    title: normalizedTitle || 'Insurance request',
+    selectedVehicleLabel: normalizedVehicleLabel || 'Vehicle not selected',
+    inquiryTypeLabel:
+      normalizedDraft.inquiryType === 'ctpl' ? 'CTPL' : 'Comprehensive',
+    description: normalizedDraft.description,
+  };
+};
+
 const getPersistableDocumentPickerUri = (value) => {
   const normalizedUri = trimOrEmpty(value);
   const normalizedPath = normalizedUri.replaceAll('\\\\', '/');
@@ -224,25 +311,65 @@ export const buildAuthoritativeRequirementsChecklist = ({
   uploadedTypes = [],
   documentTypeOptions = [],
 }) => {
-  const uploaded = new Set(uploadedTypes.map(trimOrEmpty).filter(Boolean));
+  const safeUploadedTypes = Array.isArray(uploadedTypes) ? uploadedTypes : [];
+  const safeDocumentTypeOptions = Array.isArray(documentTypeOptions)
+    ? documentTypeOptions
+    : [];
+  const uploadedCounts = safeUploadedTypes.map(trimOrEmpty).filter(Boolean).reduce((counts, type) => {
+    counts[type] = (counts[type] ?? 0) + 1;
+    return counts;
+  }, {});
   const labels = new Map(
-    documentTypeOptions.map((option) => [trimOrEmpty(option?.value), trimOrEmpty(option?.label)]),
+    safeDocumentTypeOptions.map((option) => [trimOrEmpty(option?.value), trimOrEmpty(option?.label)]),
   );
-  const buildItems = (types) =>
-    [...new Set((Array.isArray(types) ? types : []).map(trimOrEmpty).filter(Boolean))].map(
-      (type) => ({
-        type,
-        label: labels.get(type) || type.replaceAll('_', ' '),
-        complete: uploaded.has(type),
-      }),
+  const serverRequirements = Array.isArray(requirements?.documentRequirements)
+    ? requirements.documentRequirements
+    : [];
+  const buildItem = (requirement) => {
+    const type = trimOrEmpty(requirement?.documentType);
+    const minimumCount = Math.max(0, Number(requirement?.minimumCount ?? 0));
+    const uploadedCount = Math.max(
+      Number(requirement?.uploadedCount ?? 0),
+      uploadedCounts[type] ?? 0,
     );
+    const requested = Boolean(requirement?.requested);
+
+    return {
+      type,
+      label: labels.get(type) || type.replaceAll('_', ' '),
+      minimumCount,
+      uploadedCount,
+      outstandingCount: Math.max(0, minimumCount - uploadedCount),
+      requested,
+      conditional: Boolean(requirement?.conditional),
+      complete: minimumCount === 0 || uploadedCount >= minimumCount,
+    };
+  };
+  const legacyRequiredTypes = Array.isArray(requirements?.requiredDocumentTypes)
+    ? requirements.requiredDocumentTypes
+    : [];
+  const legacyOptionalTypes = Array.isArray(requirements?.optionalDocumentTypes)
+    ? requirements.optionalDocumentTypes
+    : [];
+  const legacyRequirements = [
+    ...legacyRequiredTypes.map((documentType) => ({
+      documentType,
+      minimumCount: Number(requirements?.minimumDocumentCounts?.[documentType] ?? 1),
+      required: true,
+    })),
+    ...legacyOptionalTypes.map((documentType) => ({ documentType, minimumCount: 0, required: false })),
+  ];
+  const items = (serverRequirements.length ? serverRequirements : legacyRequirements)
+    .map(buildItem)
+    .filter((item) => item.type);
 
   return {
     purpose: requirements?.purpose ?? null,
-    required: buildItems(requirements?.requiredDocumentTypes),
-    supporting: buildItems(requirements?.optionalDocumentTypes),
-    optional: buildItems(requirements?.optionalDocumentTypes),
+    required: items.filter((item) => item.minimumCount > 0),
+    supporting: items.filter((item) => item.minimumCount === 0),
+    optional: items.filter((item) => item.minimumCount === 0),
     guidance: ['Document requirements are provided by the insurance service.'],
+    isAuthoritative: true,
   };
 };
 
@@ -251,15 +378,18 @@ export const validateInsuranceRequestStage = ({
   draft,
   checklist,
 }) => {
+  const safeDraft = normalizeInsuranceRequestDraft(draft);
+  const safeChecklist = normalizeInsuranceRequestChecklist(checklist);
+
   if (stageIndex === 0) {
-    if (!trimOrEmpty(draft?.purpose)) {
+    if (!safeDraft.purpose) {
       return {
         field: 'purpose',
         message: 'Choose what you need help with.',
       };
     }
 
-    if (!trimOrEmpty(draft?.inquiryType)) {
+    if (!safeDraft.inquiryType) {
       return {
         field: 'inquiryType',
         message: 'Choose a coverage type.',
@@ -267,15 +397,26 @@ export const validateInsuranceRequestStage = ({
     }
   }
 
-  if (stageIndex === 1 && !trimOrEmpty(draft?.description)) {
+  if (stageIndex === 1 && !safeDraft.description) {
     return {
       field: 'description',
       message: 'Describe what happened or what coverage help you need.',
     };
   }
 
+  if (stageIndex === 1 && safeDraft.purpose === 'claim') {
+    return validateInsuranceIncidentDate(safeDraft.incidentOccurredAt);
+  }
+
   if (stageIndex === 2) {
-    const missingRequired = (checklist?.required ?? []).filter((item) => !item.complete);
+    if (!safeChecklist.isAuthoritative) {
+      return {
+        field: 'documents',
+        message: 'Document requirements are still loading. Try again in a moment.',
+      };
+    }
+
+    const missingRequired = safeChecklist.required.filter((item) => !item.complete);
 
     if (missingRequired.length) {
       return {
@@ -288,4 +429,24 @@ export const validateInsuranceRequestStage = ({
   }
 
   return null;
+};
+
+export const resolveInsuranceRequestStageTransition = ({
+  stageIndex,
+  draft,
+  checklist,
+}) => {
+  const currentStageIndex = normalizeInsuranceRequestStageIndex(stageIndex);
+  const error = validateInsuranceRequestStage({
+    stageIndex: currentStageIndex,
+    draft,
+    checklist,
+  });
+
+  return {
+    stageIndex: error
+      ? currentStageIndex
+      : normalizeInsuranceRequestStageIndex(currentStageIndex + 1),
+    error,
+  };
 };

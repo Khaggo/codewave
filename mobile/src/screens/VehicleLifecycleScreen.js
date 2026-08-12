@@ -404,7 +404,7 @@ function VehicleLifecycleContent({
             <Text style={styles.vehicleHeroLabel}>Selected Vehicle</Text>
             <ShowcaseBadge icon="map-marker-path" label={selectedVehicleOrdinalLabel} tone="accent" />
           </View>
-          <Text style={styles.vehicleHeroTitle}>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={styles.vehicleHeroTitle}>
             {selectedVehicle ? getVehicleLabel(selectedVehicle) : 'No vehicle selected'}
           </Text>
           <Text style={styles.vehicleHeroPlate}>

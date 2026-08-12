@@ -5,6 +5,7 @@ import { createInitialCustomerInsuranceDraft } from '../../lib/insuranceClient';
 import {
   getInsuranceRequestDraftStorageKey,
   hydrateInsuranceRequestDraft,
+  normalizeInsuranceRequestDraft,
   serializeInsuranceRequestDraft,
   transferInsuranceRequestDraft,
 } from './insuranceRequestFlow.mjs';
@@ -46,8 +47,9 @@ export default function useInsuranceRequestDraft({
   const setDraft = useCallback((nextDraft) => {
     const resolvedDraft =
       typeof nextDraft === 'function' ? nextDraft(draftRef.current) : nextDraft;
-    draftRef.current = resolvedDraft;
-    setDraftState(resolvedDraft);
+    const normalizedDraft = normalizeInsuranceRequestDraft(resolvedDraft);
+    draftRef.current = normalizedDraft;
+    setDraftState(normalizedDraft);
   }, []);
 
   const setStagedDocuments = useCallback((nextDocuments) => {

@@ -2,14 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildInsuranceRequestReviewModel,
   buildAuthoritativeRequirementsChecklist,
   getInsuranceRequestDraftStorageKey,
   hasUsableStagedDocumentFile,
   hydrateInsuranceRequestDraft,
+  normalizeInsuranceRequestChecklist,
+  normalizeInsuranceRequestDraft,
   normalizeInsuranceRequestStageIndex,
   serializeInsuranceRequestDraft,
   shouldRetainDocumentAfterUploadFailure,
   transferInsuranceRequestDraft,
+  resolveInsuranceRequestStageTransition,
+  validateInsuranceIncidentDate,
   validateInsuranceRequestStage,
 } from './insuranceRequestFlow.mjs';
 
@@ -356,8 +361,11 @@ test('server requirements remain authoritative', () => {
     buildAuthoritativeRequirementsChecklist({
       requirements: {
         purpose: 'renewal',
-        requiredDocumentTypes: ['or_cr', 'policy'],
-        optionalDocumentTypes: ['valid_id'],
+        documentRequirements: [
+          { documentType: 'or_cr', minimumCount: 1, uploadedCount: 0, required: true },
+          { documentType: 'policy', minimumCount: 1, uploadedCount: 0, required: true },
+          { documentType: 'valid_id', minimumCount: 0, uploadedCount: 0, required: false },
+        ],
       },
       uploadedTypes: ['or_cr'],
       documentTypeOptions: [
@@ -366,17 +374,30 @@ test('server requirements remain authoritative', () => {
         { value: 'valid_id', label: 'Valid ID' },
       ],
     }),
-    {
-      purpose: 'renewal',
-      required: [
-        { type: 'or_cr', label: 'OR/CR', complete: true },
-        { type: 'policy', label: 'Current policy', complete: false },
+    buildAuthoritativeRequirementsChecklist({
+      requirements: {
+        purpose: 'renewal',
+        documentRequirements: [
+          { documentType: 'or_cr', minimumCount: 1, uploadedCount: 1, required: true },
+          { documentType: 'policy', minimumCount: 1, uploadedCount: 0, required: true },
+          { documentType: 'valid_id', minimumCount: 0, uploadedCount: 0, required: false },
+        ],
+      },
+      documentTypeOptions: [
+        { value: 'or_cr', label: 'OR/CR' },
+        { value: 'policy', label: 'Current policy' },
+        { value: 'valid_id', label: 'Valid ID' },
       ],
-      supporting: [{ type: 'valid_id', label: 'Valid ID', complete: false }],
-      optional: [{ type: 'valid_id', label: 'Valid ID', complete: false }],
-      guidance: ['Document requirements are provided by the insurance service.'],
-    },
+    }),
   );
+  const checklist = buildAuthoritativeRequirementsChecklist({
+    requirements: {
+      documentRequirements: [{ documentType: 'police_report', minimumCount: 1, uploadedCount: 0, requested: true }],
+    },
+    documentTypeOptions: [{ value: 'police_report', label: 'Police report' }],
+  });
+  assert.equal(checklist.required[0].requested, true);
+  assert.equal(checklist.required[0].outstandingCount, 1);
 });
 
 test('stage validation blocks only the active stage', () => {
@@ -399,4 +420,145 @@ test('stage validation blocks only the active stage', () => {
     }),
     null,
   );
+});
+
+test('Step 2 validation normalizes null and conflicting request state without throwing', () => {
+  const invalidDraft = normalizeInsuranceRequestDraft({
+    purpose: 'claim',
+    inquiryType: 'comprehensive',
+    description: null,
+    notes: null,
+  });
+  const safeChecklist = normalizeInsuranceRequestChecklist({
+    required: null,
+    supporting: [null, { type: 'photo', label: 'Damage photo', complete: false }],
+    isAuthoritative: true,
+  });
+
+  assert.deepEqual(
+    validateInsuranceRequestStage({
+      stageIndex: 1,
+      draft: invalidDraft,
+      checklist: safeChecklist,
+    }),
+    {
+      field: 'description',
+      message: 'Describe what happened or what coverage help you need.',
+    },
+  );
+  assert.equal(
+    validateInsuranceRequestStage({
+      stageIndex: 1,
+      draft: {
+        ...invalidDraft,
+        description: 'Rear bumper damage',
+        incidentOccurredAt: '2026-08-01T09:30:00.000Z',
+      },
+      checklist: safeChecklist,
+    }),
+    null,
+  );
+  assert.deepEqual(
+    validateInsuranceRequestStage({
+      stageIndex: 2,
+      draft: { description: 'Rear bumper damage' },
+      checklist: null,
+    }),
+    {
+      field: 'documents',
+      message: 'Document requirements are still loading. Try again in a moment.',
+    },
+  );
+});
+
+test('restored null draft fields recover as explicit safe values while preserving entered text', () => {
+  const restored = normalizeInsuranceRequestDraft({
+    clientRequestId: null,
+    requestStageIndex: '1',
+    purpose: 'claim',
+    inquiryType: 'comprehensive',
+    description: 'Keep this draft after an API error.',
+    providerName: null,
+    policyNumber: null,
+  });
+
+  assert.equal(restored.requestStageIndex, 1);
+  assert.equal(restored.description, 'Keep this draft after an API error.');
+  assert.equal(restored.providerName, '');
+  assert.equal(restored.policyNumber, '');
+});
+
+test('valid Step 2 details advance to a resolved Step 3 review without losing draft state', () => {
+  const draft = normalizeInsuranceRequestDraft({
+    purpose: 'claim',
+    inquiryType: 'comprehensive',
+    description: 'Rear bumper damage after a low-speed collision.',
+    incidentOccurredAt: '2026-08-01T09:30:00.000Z',
+    notes: 'Keep this customer note.',
+  });
+
+  assert.equal(
+    validateInsuranceRequestStage({
+      stageIndex: 1,
+      draft,
+      checklist: { required: [] },
+    }),
+    null,
+  );
+
+  const review = buildInsuranceRequestReviewModel({
+    draft,
+    requestTitle: 'Comprehensive coverage',
+    selectedVehicleLabel: '2022 Toyota Vios - ABC 1234',
+  });
+
+  assert.deepEqual(review, {
+    title: 'Comprehensive coverage',
+    selectedVehicleLabel: '2022 Toyota Vios - ABC 1234',
+    inquiryTypeLabel: 'Comprehensive',
+    description: 'Rear bumper damage after a low-speed collision.',
+  });
+  assert.equal(draft.notes, 'Keep this customer note.');
+  assert.equal(normalizeInsuranceRequestStageIndex(2), 2);
+});
+
+test('Step 2 keeps invalid or missing claim date-time on the Details stage', () => {
+  const baseDraft = {
+    ...createInitialDraft(),
+    description: 'Rear bumper damage.',
+  };
+
+  assert.deepEqual(
+    resolveInsuranceRequestStageTransition({ stageIndex: 1, draft: baseDraft, checklist: {} }),
+    {
+      stageIndex: 1,
+      error: {
+        field: 'incidentOccurredAt',
+        message: 'Choose the incident date and time before continuing.',
+      },
+    },
+  );
+  assert.deepEqual(
+    resolveInsuranceRequestStageTransition({
+      stageIndex: 1,
+      draft: { ...baseDraft, incidentOccurredAt: 'not-a-date' },
+      checklist: {},
+    }),
+    {
+      stageIndex: 1,
+      error: {
+        field: 'incidentOccurredAt',
+        message: 'Enter a valid incident date and time.',
+      },
+    },
+  );
+  assert.deepEqual(
+    resolveInsuranceRequestStageTransition({
+      stageIndex: 1,
+      draft: { ...baseDraft, incidentOccurredAt: '2026-08-01T09:30:00.000Z' },
+      checklist: {},
+    }),
+    { stageIndex: 2, error: null },
+  );
+  assert.equal(validateInsuranceIncidentDate('2027-01-01T00:00:00.000Z', Date.parse('2026-08-13T00:00:00.000Z')).field, 'incidentOccurredAt');
 });
