@@ -11,7 +11,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://backend-main-production-d592.up.railway.app"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.autocare-cc.com"
       },
       "android": {
         "buildType": "apk"
@@ -19,7 +19,7 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://backend-main-production-d592.up.railway.app"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.autocare-cc.com"
       },
       "autoIncrement": true,
       "android": {
